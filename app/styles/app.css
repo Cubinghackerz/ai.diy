@@ -1,0 +1,373 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "tw-shimmer";
+
+@theme {
+    --font-sans: "DM Sans", system-ui, -apple-system, sans-serif;
+    --font-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", monospace;
+
+    /* Clean dark (default) */
+    --color-background: #0a0a0a;
+    --color-foreground: #f5f5f5;
+    --color-card: #111111;
+    --color-card-foreground: #f5f5f5;
+    --color-sidebar: #0e0e0e;
+    --color-sidebar-foreground: #f5f5f5;
+    --color-popover: #141414;
+    --color-popover-foreground: #f5f5f5;
+    --color-primary: #f5f5f5;
+    --color-primary-foreground: #0a0a0a;
+    --color-secondary: #1a1a1a;
+    --color-secondary-foreground: #f5f5f5;
+    --color-muted: #161616;
+    --color-muted-foreground: #a3a3a3;
+    --color-accent: #1a1a1a;
+    --color-accent-foreground: #f5f5f5;
+    --color-destructive: #ef4444;
+    --color-destructive-foreground: #ffffff;
+    --color-border: #262626;
+    --color-input: #262626;
+    --color-ring: #525252;
+    --color-success: #22c55e;
+    --color-warning: #f59e0b;
+
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.35);
+    --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.45);
+    --shadow-lg: 0 12px 32px -4px rgb(0 0 0 / 0.55);
+    --shadow-glow: 0 0 0 transparent;
+
+    --animate-fade-in: fade-in 0.2s ease-out;
+    --animate-slide-up: slide-up 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    --animate-slide-down: slide-down 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    --animate-scale-in: scale-in 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    --animate-pulse-glow: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes fade-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slide-up {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slide-down {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes scale-in {
+    from {
+        opacity: 0;
+        transform: scale(0.96);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes pulse-glow {
+
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgb(99 102 241 / 0);
+    }
+
+    50% {
+        box-shadow: 0 0 20px -4px rgb(99 102 241 / 0.3);
+    }
+}
+
+/* Light theme — clean white */
+:root:not(.dark) {
+    --color-background: #ffffff;
+    --color-foreground: #0a0a0a;
+    --color-card: #ffffff;
+    --color-card-foreground: #0a0a0a;
+    --color-sidebar: #f7f7f7;
+    --color-sidebar-foreground: #0a0a0a;
+    --color-popover: #ffffff;
+    --color-popover-foreground: #0a0a0a;
+    --color-primary: #0a0a0a;
+    --color-primary-foreground: #ffffff;
+    --color-secondary: #f0f0f0;
+    --color-secondary-foreground: #0a0a0a;
+    --color-muted: #f5f5f5;
+    --color-muted-foreground: #737373;
+    --color-accent: #f0f0f0;
+    --color-accent-foreground: #0a0a0a;
+    --color-destructive: #dc2626;
+    --color-destructive-foreground: #ffffff;
+    --color-border: #e5e5e5;
+    --color-input: #e5e5e5;
+    --color-ring: #a3a3a3;
+    --color-success: #16a34a;
+    --color-warning: #d97706;
+
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+    --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.08);
+    --shadow-lg: 0 12px 32px -4px rgb(0 0 0 / 0.1);
+    --shadow-glow: 0 0 0 transparent;
+}
+
+/* Base styles */
+* {
+    border-color: var(--color-border);
+}
+
+html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+body {
+    font-family: var(--font-sans);
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    overscroll-behavior: none;
+}
+
+/* Selection */
+::selection {
+    background-color: color-mix(in oklab, var(--color-foreground) 18%, transparent);
+    color: var(--color-foreground);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--color-muted-foreground);
+}
+
+/* No focus chrome on text fields — caret only */
+:focus {
+    outline: none;
+}
+
+:focus-visible:not(textarea):not(input):not(select):not(.aui-composer-input):not([data-slot="aui_composer-shell"]) {
+    outline: 1px solid color-mix(in oklab, var(--color-foreground) 28%, transparent);
+    outline-offset: 2px;
+}
+
+textarea,
+input[type="text"],
+input[type="password"],
+input[type="search"],
+input[type="url"],
+input[type="email"],
+.aui-composer-input {
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+textarea:focus,
+textarea:focus-visible,
+input:focus,
+input:focus-visible,
+.aui-composer-input:focus,
+.aui-composer-input:focus-visible,
+[data-slot="aui_composer-shell"]:focus,
+[data-slot="aui_composer-shell"]:focus-within {
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+/* Composer: no focus-within border/glow — quiet shell, caret only */
+[data-slot="aui_composer-shell"] {
+    box-shadow: none !important;
+}
+
+[data-slot="aui_composer-shell"]:focus-within {
+    border-color: var(--color-border) !important;
+}
+
+/* Prose tweaks for markdown */
+.prose {
+    color: var(--color-foreground);
+}
+
+.prose pre {
+    background: var(--color-muted);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 0.875rem 1rem;
+    overflow-x: auto;
+    font-size: 0.8125rem;
+    line-height: 1.6;
+}
+
+.prose code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+}
+
+.prose :not(pre)>code {
+    background: var(--color-muted);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: 1px 5px;
+}
+
+.prose a {
+    color: var(--color-primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.prose ul,
+.prose ol {
+    padding-left: 1.25rem;
+    margin: 0.5rem 0;
+}
+
+.prose li {
+    margin: 0.25rem 0;
+}
+
+.prose blockquote {
+    border-left: 3px solid var(--color-border);
+    padding-left: 0.875rem;
+    color: var(--color-muted-foreground);
+    font-style: italic;
+}
+
+.prose table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0.75rem 0;
+}
+
+.prose th,
+.prose td {
+    border: 1px solid var(--color-border);
+    padding: 0.375rem 0.625rem;
+    text-align: left;
+}
+
+.prose th {
+    background: var(--color-muted);
+    font-weight: 600;
+}
+
+/* Smooth transitions on interactive elements */
+button,
+a,
+select,
+input,
+textarea {
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+/* assistant-ui overrides */
+.aui-thread [data-thread-viewport] {
+    scroll-behavior: smooth;
+}
+
+/* Typing indicator */
+.aui-typing-indicator {
+    display: flex;
+    gap: 4px;
+    padding: 4px 0;
+}
+
+.aui-typing-indicator span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-muted-foreground);
+    animation: typing-bounce 1.4s ease-in-out infinite;
+}
+
+.aui-typing-indicator span:nth-child(2) {
+    animation-delay: 0.15s;
+}
+
+.aui-typing-indicator span:nth-child(3) {
+    animation-delay: 0.3s;
+}
+
+@keyframes typing-bounce {
+
+    0%,
+    60%,
+    100% {
+        transform: translateY(0);
+        opacity: 0.4;
+    }
+
+    30% {
+        transform: translateY(-4px);
+        opacity: 1;
+    }
+}
+
+/* Modal backdrop blur */
+.modal-backdrop {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+@custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
+
+@custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));
+
+@theme inline {
+  @keyframes collapsible-down {
+  from {
+    height: 0;
+        }
+  to {
+    height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
+        }
+    }
+  @keyframes collapsible-up {
+  from {
+    height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
+        }
+  to {
+    height: 0;
+        }
+    }
+}
