@@ -3,7 +3,8 @@ import {
     type AppSettings,
     type ProviderId,
 } from "~/lib/types";
-import { filterToolCapableModels } from "~/lib/model-capabilities";
+import { enrichModelInfo } from "~/lib/model-capabilities";
+import type { ModelInfo } from "~/lib/types";
 
 /** Providers that run locally and do not require a cloud API key. */
 export const LOCAL_PROVIDERS: ProviderId[] = ["ollama", "custom"];
@@ -23,9 +24,9 @@ export function isProviderReady(
     return Boolean(config.apiKey?.trim());
 }
 
-/** Tool-capable models for a provider once it is ready. */
-export function getModelsForProvider(id: ProviderId) {
-    return filterToolCapableModels(DEFAULT_MODELS[id] ?? []);
+/** All models for a provider (live list merged with defaults, enriched with capabilities). */
+export function getModelsForProvider(id: ProviderId): ModelInfo[] {
+    return (DEFAULT_MODELS[id] ?? []).map(enrichModelInfo);
 }
 
 export function hasAnyReadyProvider(settings: AppSettings): boolean {

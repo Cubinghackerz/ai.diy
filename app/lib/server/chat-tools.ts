@@ -18,6 +18,7 @@ export type ToolSettings = {
     pythonEnabled?: boolean;
     webSearchEngine?: SearchEngine;
     searxngUrl?: string;
+    skillsEnabled?: boolean;
 };
 
 function evaluateMath(expression: string): string {
@@ -97,6 +98,68 @@ function artifactPayload(input: {
         content: input.content,
         kind: input.kind,
     });
+}
+
+function skillDocument(input: {
+    name: string;
+    purpose: string;
+    instructions: string;
+    examples?: string;
+}) {
+    const name = input.name.trim().replace(/[^a-zA-Z0-9._ -]/g, "");
+    const purpose = input.purpose.trim();
+    const instructions = input.instructions.trim();
+    const examples = input.examples?.trim();
+
+    return `---
+name: ${name || "custom-skill"}
+description: ${purpose || "Reusable instructions for an AI task."}
+---
+
+# ${name || "Custom Skill"}
+
+## Purpose
+${purpose || "Define the outcome this skill should produce."}
+
+## Instructions
+${instructions || "Describe the task, constraints, inputs, outputs, and validation steps."}
+${examples ? `\n## Examples\n${examples}` : ""}
+
+## Safety
+- Do not request, store, or expose API keys, cookies, tokens, or private files.
+- Confirm destructive, external, or irreversible actions before performing them.
+- Prefer deterministic, testable outputs and state assumptions explicitly.
+`;
+}
+
+function frontendDesignBrief(input: {
+    request: string;
+    surface?: string;
+    constraints?: string;
+}) {
+    return JSON.stringify(
+        {
+            skill: "frontend-design",
+            request: input.request.trim(),
+            surface: input.surface?.trim() || "web interface",
+            constraints: input.constraints?.trim() || "Use the existing design system and preserve accessibility.",
+            workflow: [
+                "Clarify the primary user task and success state.",
+                "Establish hierarchy, layout, responsive behavior, and empty/error/loading states before styling.",
+                "Use a deliberate visual direction with semantic tokens, readable typography, and clear focus states.",
+                "Prefer reusable components and minimal one-off abstractions.",
+                "Validate keyboard access, contrast, reduced motion, mobile layout, and realistic content lengths.",
+            ],
+            output: [
+                "Implementation-ready component structure",
+                "Responsive layout and interaction notes",
+                "Visual tokens and states",
+                "Accessibility and validation checklist",
+            ],
+        },
+        null,
+        2,
+    );
 }
 
 export async function buildChatTools(settings: ToolSettings = {}) {
@@ -193,6 +256,37 @@ export async function buildChatTools(settings: ToolSettings = {}) {
                 description: z.string().optional(),
             }),
             execute: async ({ code }) => runPythonScript(code),
+        });
+    }
+
+    if (settings.skillsEnabled !== false) {
+        tools.create_skill = tool({
+            description:
+                "Create a reusable SKILL.md draft for a specialized AI workflow. Return the complete markdown document; do not write files or access private data.",
+            inputSchema: z.object({
+                name: z.string(),
+                purpose: z.string(),
+                instructions: z.string(),
+                examples: z.string().optional(),
+            }),
+            execute: async (input) =>
+                artifactPayload({
+                    title: `${input.name.trim() || "Custom"} skill`,
+                    filename: "SKILL.md",
+                    content: skillDocument(input),
+                    kind: "markdown",
+                }),
+        });
+
+        tools.frontend_design_skill = tool({
+            description:
+                "Activate a frontend design skill for a UI request. Return an implementation-ready design brief covering hierarchy, responsive behavior, states, accessibility, and reusable components.",
+            inputSchema: z.object({
+                request: z.string(),
+                surface: z.string().optional(),
+                constraints: z.string().optional(),
+            }),
+            execute: async (input) => frontendDesignBrief(input),
         });
     }
 

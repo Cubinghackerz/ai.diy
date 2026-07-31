@@ -15,6 +15,7 @@ import {
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createXai } from "@ai-sdk/xai";
 import { buildChatTools } from "~/lib/server/chat-tools";
 import { closeMcpClients, loadMcpTools } from "~/lib/server/mcp-tools";
 import { validateProviderEndpoint } from "~/lib/server/env";
@@ -43,6 +44,7 @@ interface ChatRequestBody {
         pythonEnabled?: boolean;
         webSearchEngine?: "duckduckgo" | "searxng";
         searxngUrl?: string;
+        skillsEnabled?: boolean;
     };
     mcpServers?: McpServerConfig[];
 }
@@ -64,6 +66,11 @@ function getModelInstance(body: ChatRequestBody) {
             return createOpenAI({
                 apiKey,
                 baseURL: baseUrl || "https://api.groq.com/openai/v1",
+            }).chat(model);
+        case "xai":
+            return createXai({
+                apiKey,
+                baseURL: baseUrl || "https://api.x.ai/v1",
             }).chat(model);
         case "openrouter":
             return createOpenAI({

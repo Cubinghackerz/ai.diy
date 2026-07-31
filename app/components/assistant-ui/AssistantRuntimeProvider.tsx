@@ -84,13 +84,14 @@ export function AssistantRuntimeProvider({
                             maxTokens: s.chat.maxTokens,
                             topP: s.chat.topP,
                             reasoningEffort: s.chat.reasoningEffort,
-                            toolSettings: {
+                             toolSettings: {
                                 webSearchEnabled: s.webSearchEnabled,
                                 calculatorEnabled: s.calculatorEnabled,
                                 pythonEnabled: s.pythonEnabled,
                                 webSearchEngine: s.webSearchEngine,
-                                searxngUrl: s.searxngUrl,
-                            },
+                                 searxngUrl: s.searxngUrl,
+                                 skillsEnabled: true,
+                             },
                             mcpServers: s.mcpServers.filter((m) => m.enabled),
                         },
                     };
@@ -102,6 +103,9 @@ export function AssistantRuntimeProvider({
     const chat = useChat({
         id: threadId ?? "draft",
         transport,
+        onError: (err) => {
+            console.error("[chat]", err);
+        },
     });
 
     const modalities = getModelModalities(

@@ -1,6 +1,7 @@
 "use client";
 
 import "@assistant-ui/react-markdown/styles/dot.css";
+import "katex/dist/katex.min.css";
 
 import {
   type CodeHeaderProps,
@@ -9,7 +10,10 @@ import {
   useIsMarkdownCodeBlock,
 } from "@assistant-ui/react-markdown";
 import remarkGfm from "remark-gfm";
-import { type FC, memo, useState } from "react";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import rehypeRaw from "rehype-raw";
+import { type FC, useState } from "react";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
 import { TooltipIconButton } from "~/components/assistant-ui/tooltip-icon-button";
@@ -18,15 +22,15 @@ import { cn } from "~/lib/utils";
 const MarkdownTextImpl = () => {
   return (
     <MarkdownTextPrimitive
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[rehypeRaw, rehypeKatex]}
       className="aui-md"
       components={defaultComponents}
-      defer
     />
   );
 };
 
-export const MarkdownText = memo(MarkdownTextImpl);
+export const MarkdownText = MarkdownTextImpl;
 
 const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
   const { isCopied, copyToClipboard } = useCopyToClipboard();

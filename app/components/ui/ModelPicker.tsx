@@ -10,16 +10,14 @@ import { useSettings } from "~/lib/providers/SettingsProvider";
 import { DEFAULT_MODELS, type ModelInfo, type ProviderId } from "~/lib/types";
 import {
     enrichModelInfo,
-    filterToolCapableModels,
     inferModelSupportsTools,
-    resolveToolCapableModel,
 } from "~/lib/model-capabilities";
 import { cn } from "~/lib/utils";
 
 export function useProviderModels(provider: ProviderId, enabled: boolean) {
     const { settings } = useSettings();
     const [models, setModels] = useState<ModelInfo[]>(() =>
-        filterToolCapableModels(DEFAULT_MODELS[provider] ?? []),
+        (DEFAULT_MODELS[provider] ?? []).map(enrichModelInfo),
     );
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -29,7 +27,7 @@ export function useProviderModels(provider: ProviderId, enabled: boolean) {
 
     const refresh = useCallback(async () => {
         if (!enabled) {
-            setModels(filterToolCapableModels(DEFAULT_MODELS[provider] ?? []));
+            setModels((DEFAULT_MODELS[provider] ?? []).map(enrichModelInfo));
             return;
         }
         setLoading(true);
@@ -64,20 +62,20 @@ export function useProviderModels(provider: ProviderId, enabled: boolean) {
                               provider,
                           }),
                       )
-                    : (DEFAULT_MODELS[provider] ?? []);
-            const next = filterToolCapableModels(raw);
+                    : (DEFAULT_MODELS[provider] ?? []).map(enrichModelInfo);
+            const next = raw;
             setModels(next);
             if (!res.ok || data.error) {
                 setError(
                     data.error || `Failed to load models (HTTP ${res.status})`,
                 );
                 setModels(
-                    filterToolCapableModels(DEFAULT_MODELS[provider] ?? []),
+                    (DEFAULT_MODELS[provider] ?? []).map(enrichModelInfo),
                 );
             }
         } catch (err) {
             setModels(
-                filterToolCapableModels(DEFAULT_MODELS[provider] ?? []),
+                (DEFAULT_MODELS[provider] ?? []).map(enrichModelInfo),
             );
             setError(
                 err instanceof Error ? err.message : "Failed to load models",
@@ -128,9 +126,11 @@ export function ModelPicker({
     }, [models, value, provider]);
 
     const options = useMemo(() => {
-        const toolModels = filterToolCapableModels(models);
-        if (!value || toolModels.some((m) => m.id === value)) return toolModels;
-        // Keep current selection visible if it was set before filtering.
+        const availableModels = models.map(enrichModelInfo);
+        if (!value || availableModels.some((m) => m.id === value)) {
+            return availableModels;
+        }
+        // Keep current selection visible if it was set before the live catalog loaded.
         if (inferModelSupportsTools(value, provider)) {
             return [
                 enrichModelInfo({
@@ -139,10 +139,10 @@ export function ModelPicker({
                     provider,
                     supportsTools: true,
                 }),
-                ...toolModels,
+                ...availableModels,
             ];
         }
-        return toolModels;
+        return availableModels;
     }, [models, value, provider]);
 
     useEffect(() => {
@@ -226,7 +226,7 @@ export function ModelPicker({
                         ) : null}
                         <Command.List className="overflow-y-auto p-1">
                             <Command.Empty className="px-3 py-6 text-center text-xs text-muted-foreground">
-                                No tool-capable models match.
+                                 No models match.
                             </Command.Empty>
                             {options.map((m) => (
                                 <Command.Item

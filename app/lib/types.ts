@@ -6,7 +6,15 @@
 
 // ─── Provider Types ───────────────────────────────────────────────
 
-export type ProviderId = "openai" | "anthropic" | "gemini" | "groq" | "openrouter" | "ollama" | "custom";
+export type ProviderId =
+    | "openai"
+    | "anthropic"
+    | "gemini"
+    | "groq"
+    | "openrouter"
+    | "xai"
+    | "ollama"
+    | "custom";
 
 export interface ProviderConfig {
     id: ProviderId;
@@ -25,6 +33,10 @@ export interface ModelInfo {
     supportsTools?: boolean;
     supportsVision?: boolean;
     supportsStreaming?: boolean;
+    supportsReasoning?: boolean;
+    supportsStructuredOutputs?: boolean;
+    supportsAudio?: boolean;
+    supportsImageGeneration?: boolean;
 }
 
 /** Reasoning / thinking effort when the selected model supports it. */
@@ -165,6 +177,11 @@ export const PROVIDER_DEFAULTS: Record<ProviderId, Omit<ProviderConfig, "apiKey"
         name: "OpenRouter",
         baseUrl: "https://openrouter.ai/api/v1",
     },
+    xai: {
+        id: "xai",
+        name: "xAI (Grok)",
+        baseUrl: "https://api.x.ai/v1",
+    },
     ollama: {
         id: "ollama",
         name: "Ollama (Local)",
@@ -184,6 +201,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
         gemini: { ...PROVIDER_DEFAULTS.gemini, apiKey: "", enabled: false },
         groq: { ...PROVIDER_DEFAULTS.groq, apiKey: "", enabled: false },
         openrouter: { ...PROVIDER_DEFAULTS.openrouter, apiKey: "", enabled: false },
+        xai: { ...PROVIDER_DEFAULTS.xai, apiKey: "", enabled: false },
         ollama: { ...PROVIDER_DEFAULTS.ollama, apiKey: "ollama", enabled: true },
         custom: { ...PROVIDER_DEFAULTS.custom, apiKey: "custom", enabled: false },
     },
@@ -239,6 +257,12 @@ export const DEFAULT_MODELS: Record<ProviderId, ModelInfo[]> = {
         { id: "openai/gpt-4o", name: "GPT-4o (OpenRouter)", provider: "openrouter", supportsTools: true },
         { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet (OpenRouter)", provider: "openrouter", supportsTools: true },
         { id: "deepseek/deepseek-chat", name: "DeepSeek V3 (OpenRouter)", provider: "openrouter", supportsTools: true },
+    ],
+    xai: [
+        { id: "grok-2", name: "Grok 2", provider: "xai", contextWindow: 131072, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "grok-2-latest", name: "Grok 2 Latest", provider: "xai", contextWindow: 131072, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "grok-2-mini", name: "Grok 2 Mini", provider: "xai", contextWindow: 131072, supportsTools: true, supportsVision: true },
+        { id: "grok-1.5", name: "Grok 1.5", provider: "xai", contextWindow: 131072, supportsTools: true, supportsVision: true },
     ],
     ollama: [
         { id: "llama3", name: "Llama 3 (Local)", provider: "ollama", supportsTools: true },

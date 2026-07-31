@@ -7,6 +7,7 @@ import { generateText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createXai } from "@ai-sdk/xai";
 import type { ProviderId } from "~/lib/types";
 
 interface TitleRequestBody {
@@ -34,6 +35,11 @@ function getModelInstance(body: TitleRequestBody) {
             return createOpenAI({
                 apiKey,
                 baseURL: baseUrl || "https://api.groq.com/openai/v1",
+            }).chat(model);
+        case "xai":
+            return createXai({
+                apiKey,
+                baseURL: baseUrl || "https://api.x.ai/v1",
             }).chat(model);
         case "openrouter":
             return createOpenAI({

@@ -6,7 +6,7 @@
 
 import { DEFAULT_MODELS, type ModelInfo, type ProviderId } from "~/lib/types";
 import { isLocalProvider } from "~/lib/setup";
-import { filterToolCapableModels } from "~/lib/model-capabilities";
+import { enrichModelInfo } from "~/lib/model-capabilities";
 
 export type KeyTestResult = {
     ok: boolean;
@@ -19,14 +19,20 @@ export function looksLikeApiKey(provider: ProviderId, key: string): boolean {
     const k = key.trim();
     if (!k) return false;
     if (isLocalProvider(provider)) return true;
-    if (provider === "openai" || provider === "groq") {
+    if (provider === "openai") {
         return k.startsWith("sk-") && k.length > 20;
+    }
+    if (provider === "groq") {
+        return k.startsWith("gsk_") && k.length > 20;
     }
     if (provider === "anthropic") {
         return k.startsWith("sk-ant-") && k.length > 20;
     }
     if (provider === "openrouter") {
         return k.startsWith("sk-or-") || k.length > 20;
+    }
+    if (provider === "xai") {
+        return k.startsWith("xai-") && k.length > 20;
     }
     return k.length >= 16;
 }
@@ -82,22 +88,24 @@ export async function testProviderKey(options: {
             };
         }
 
-        const models = filterToolCapableModels(
+        const models = (
             data.models && data.models.length > 0
-                ? data.models.map((m) => ({
-                      id: m.id,
-                      name: m.name || m.id,
-                      provider,
-                      supportsTools: m.supportsTools,
-                  }))
-                : (DEFAULT_MODELS[provider] ?? []),
+                ? data.models
+                : (DEFAULT_MODELS[provider] ?? [])
+        ).map((m) =>
+            enrichModelInfo({
+                ...m,
+                id: m.id,
+                name: m.name || m.id,
+                provider,
+            }),
         );
 
         if (models.length === 0) {
             return {
                 ok: false,
                 models: [],
-                error: "No tool-capable models found for this provider.",
+                error: "The provider returned no models for this key.",
             };
         }
 

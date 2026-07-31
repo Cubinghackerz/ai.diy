@@ -31,6 +31,7 @@ const CLOUD_PROVIDERS: ProviderId[] = [
     "gemini",
     "groq",
     "openrouter",
+    "xai",
 ];
 
 const LOCAL_IDS: ProviderId[] = ["ollama", "custom"];

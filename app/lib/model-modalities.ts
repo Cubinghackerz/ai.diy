@@ -3,7 +3,9 @@
  */
 
 import { DEFAULT_MODELS, type ModelInfo, type ProviderId } from "~/lib/types";
-import { inferModelSupportsTools } from "~/lib/model-capabilities";
+import {
+    inferModelSupportsTools,
+} from "~/lib/model-capabilities";
 
 export type ModelModalities = {
     tools: boolean;

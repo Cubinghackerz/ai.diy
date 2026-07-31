@@ -1,8 +1,8 @@
 /**
  * LLM Provider Registry
- * 
+ *
  * Factory for getting the appropriate provider adapter for each ProviderId.
- * Supports 5 providers: OpenAI, Anthropic, Google Gemini, Groq, OpenRouter.
+ * Supports providers: OpenAI, Anthropic, Google Gemini, Groq, OpenRouter, xAI, Ollama, Custom.
  */
 
 import type { LLMProvider } from "./types";
@@ -13,13 +13,13 @@ import { GeminiProvider } from "./gemini";
 
 const providers = new Map<ProviderId, LLMProvider>();
 
-// Register all 5 providers
-// OpenAI, Groq, and OpenRouter all use the OpenAI-compatible API
+// OpenAI, Groq, OpenRouter, xAI, Ollama, and Custom all use the OpenAI-compatible API
 providers.set("openai", new OpenAIProvider("openai"));
 providers.set("anthropic", new AnthropicProvider());
 providers.set("gemini", new GeminiProvider());
 providers.set("groq", new OpenAIProvider("groq"));
 providers.set("openrouter", new OpenAIProvider("openrouter"));
+providers.set("xai", new OpenAIProvider("xai"));
 providers.set("ollama", new OpenAIProvider("ollama"));
 providers.set("custom", new OpenAIProvider("custom"));
 

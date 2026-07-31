@@ -12,6 +12,12 @@ import { useEffect, useRef } from "react";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import { isLocalProvider } from "~/lib/setup";
 
+function fallbackTitle(message: string): string {
+    const cleaned = message.replace(/\s+/g, " ").trim();
+    if (!cleaned) return "New Chat";
+    return cleaned.length > 48 ? `${cleaned.slice(0, 45).trimEnd()}…` : cleaned;
+}
+
 export function ChatLifecycle({
     threadId,
     threadTitle,
@@ -90,13 +96,16 @@ export function ChatLifecycle({
                 const data = (await res.json()) as {
                     title?: string;
                 };
-                const title = data.title?.trim();
+                const title = data.title?.trim() || fallbackTitle(text);
                 if (title && titleThreadId === threadId) {
                     onTitleChange(titleThreadId, title);
                     titledForThread.current = titleThreadId;
                 }
             } catch {
-                // Keep "New Chat" if title generation fails
+                if (titleThreadId === threadId) {
+                    onTitleChange(titleThreadId, fallbackTitle(text));
+                    titledForThread.current = titleThreadId;
+                }
             } finally {
                 pendingTitle.current = false;
             }

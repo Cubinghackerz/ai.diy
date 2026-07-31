@@ -41,6 +41,10 @@ export function modelSupportsReasoning(
         return true;
     }
 
+    if (/grok-2.*thinking|grok-2.*mini.*thinking|grok-1\.5.*vision.*thinking/.test(id)) {
+        return true;
+    }
+
     if (
         /deepseek-r1|deepseek-reasoner|qwq|qwen3|reasoner|r1[-:]/.test(id)
     ) {
@@ -94,6 +98,13 @@ export function buildReasoningProviderOptions(
             return {
                 openai: {
                     reasoningEffort: effort,
+                    reasoningSummary: "auto",
+                },
+            };
+        case "xai":
+            return {
+                xai: {
+                    reasoningEffort: effort === "low" || effort === "medium" || effort === "high" ? effort : "none",
                     reasoningSummary: "auto",
                 },
             };

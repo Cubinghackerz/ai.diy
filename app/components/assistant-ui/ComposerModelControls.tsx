@@ -12,7 +12,7 @@ import {
     type ReasoningEffort,
 } from "~/lib/reasoning";
 import { isProviderReady } from "~/lib/setup";
-import { resolveToolCapableModel } from "~/lib/model-capabilities";
+import { resolveModel } from "~/lib/model-capabilities";
 import type { ProviderId } from "~/lib/types";
 import { cn } from "~/lib/utils";
 import { Brain, CaretDown } from "@phosphor-icons/react";
@@ -33,7 +33,7 @@ export const ComposerModelControls: FC = () => {
             <ProviderPicker
                 value={settings.chat.provider}
                 onChange={(provider: ProviderId) => {
-                    const first = resolveToolCapableModel(
+                    const first = resolveModel(
                         provider,
                         settings.chat.model,
                     );

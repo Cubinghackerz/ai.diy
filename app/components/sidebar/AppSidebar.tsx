@@ -17,7 +17,7 @@ import {
     type McpServerConfig,
     type ProviderId,
 } from "~/lib/types";
-import { filterToolCapableModels, resolveToolCapableModel } from "~/lib/model-capabilities";
+import { enrichModelInfo, resolveModel } from "~/lib/model-capabilities";
 import { cn } from "~/lib/utils";
 import { ModelPicker } from "~/components/ui/ModelPicker";
 import { ProviderPicker } from "~/components/ui/ProviderPicker";
@@ -557,14 +557,14 @@ function KeysSection() {
         message?: string;
     }>({ kind: "idle" });
     const [models, setModels] = useState<ModelInfo[]>(() =>
-        filterToolCapableModels(DEFAULT_MODELS[active] ?? []),
+        (DEFAULT_MODELS[active] ?? []).map(enrichModelInfo),
     );
 
     useEffect(() => {
         const cfg = settings.providers[active];
         setDraftKey(cfg?.apiKey || "");
         setDraftUrl(cfg?.baseUrl || PROVIDER_DEFAULTS[active].baseUrl || "");
-        setModels(filterToolCapableModels(DEFAULT_MODELS[active] ?? []));
+        setModels((DEFAULT_MODELS[active] ?? []).map(enrichModelInfo));
         setStatus({ kind: "idle" });
     }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -581,7 +581,7 @@ function KeysSection() {
             baseUrl: draftUrl,
         });
         setTesting(false);
-        setModels(filterToolCapableModels(result.models));
+        setModels(result.models.map(enrichModelInfo));
 
         if (!result.ok) {
             setStatus({ kind: "error", message: result.error });
@@ -597,10 +597,10 @@ function KeysSection() {
             baseUrl: draftUrl || PROVIDER_DEFAULTS[active].baseUrl,
             enabled: true,
         });
-        const nextModel = resolveToolCapableModel(
+        const nextModel = resolveModel(
             active,
             settings.chat.model,
-            result.models,
+            (DEFAULT_MODELS[active] ?? []).map((m) => ({ ...m, provider: active })),
         );
         updateChat({ provider: active, model: nextModel });
         updateSettings({ setupComplete: true });
@@ -767,9 +767,10 @@ function ProviderModelPickers() {
             <ProviderPicker
                 value={provider}
                 onChange={(next) => {
-                    const first = resolveToolCapableModel(
+                    const first = resolveModel(
                         next,
                         settings.chat.model,
+                        (DEFAULT_MODELS[next] ?? []).map((m) => ({ ...m, provider: next })),
                     );
                     updateChat({ provider: next, model: first });
                 }}
