@@ -103,9 +103,21 @@ export function ChatThreadSync({ threadId }: { threadId: string | null }) {
             if (msg.role !== "assistant") continue;
             for (const part of msg.parts ?? []) {
                 if (!isToolUIPart(part)) continue;
-                if (part.state?.type !== "complete") continue;
-                const toolName = part.type.replace(/^tool-/, "");
-                if (!["create_file", "create_skill", "frontend_design_skill"].includes(toolName)) continue;
+                // AI SDK v7: state is a string — only "output-available"
+                // has .output populated with the tool result.
+                if (part.state !== "output-available") continue;
+                const toolName =
+                    typeof part === "object" &&
+                    "toolName" in part &&
+                    typeof part.toolName === "string"
+                        ? part.toolName
+                        : part.type.replace(/^tool-/, "");
+                if (
+                    !["create_file", "create_skill", "frontend_design_skill"].includes(
+                        toolName,
+                    )
+                )
+                    continue;
                 const output = part.output;
                 const resultText =
                     typeof output === "string"

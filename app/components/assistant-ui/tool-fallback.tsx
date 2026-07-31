@@ -24,10 +24,29 @@ import {
 } from "~/components/ui/collapsible";
 import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
+import { ARTIFACT_MARKER } from "~/lib/artifacts";
 
 const ANIMATION_DURATION = 200;
 
 const pressable = "active:scale-[0.98]";
+
+function isArtifactPayload(result: unknown): boolean {
+  if (typeof result !== "string") return false;
+  return result.includes(ARTIFACT_MARKER);
+}
+
+function extractArtifactInfo(result: string): { title: string; filename: string } | null {
+  try {
+    const parsed = JSON.parse(result) as Record<string, unknown>;
+    if (!parsed[ARTIFACT_MARKER]) return null;
+    return {
+      title: String(parsed.title ?? "Artifact"),
+      filename: String(parsed.filename ?? "file"),
+    };
+  } catch {
+    return null;
+  }
+}
 
 export type ToolFallbackRootProps = Omit<
   React.ComponentProps<typeof Collapsible>,
@@ -258,6 +277,33 @@ function ToolFallbackResult({
   result?: unknown;
 }) {
   if (result === undefined) return null;
+
+  // Suppress raw JSON artifact payloads — Canvas panel shows them instead.
+  if (isArtifactPayload(result)) {
+    const info = extractArtifactInfo(result);
+    return (
+      <div
+        data-slot="tool-fallback-result"
+        className={cn("aui-tool-fallback-result", className)}
+        {...props}
+      >
+        <p className="aui-tool-fallback-result-header text-muted-foreground text-xs font-medium">
+          Result:
+        </p>
+        <p className="aui-tool-fallback-result-content mt-1 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+          Created{" "}
+          <span className="font-mono text-foreground">
+            {info?.filename ?? "artifact"}
+          </span>
+          {info?.title && info.title !== info.filename ? (
+            <> ("{info.title}")</>
+          ) : null}
+          {" "}
+          opened in Canvas panel.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div

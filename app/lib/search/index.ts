@@ -42,28 +42,106 @@ export async function duckDuckGoSearch(
     query: string,
     maxResults: number = 5,
 ): Promise<SearchResult[]> {
+    // Strategy: try DDG lite endpoint, then Bing RSS, then DDG API.
+    // DDG and Bing both block aggressive bot traffic, so we try multiple
+    // endpoints and return from the first that yields parseable results.
+
+    // Try 1: DDG Lite endpoint
     const params = new URLSearchParams();
     params.set("q", query);
     params.set("kl", "us-en");
     params.set("df", "pastyear");
 
-    const url = `https://lite.duckduckgo.com/lite/?${params.toString()}`;
+    const liteUrl = `https://lite.duckduckgo.com/lite/?${params.toString()}`;
 
-    const response = await fetch(url, {
-        headers: {
-            ...DDG_HEADERS,
-            Cookie: DDG_COOKIES,
-            Referer: "https://duckduckgo.com/",
-        },
-        signal: AbortSignal.timeout(15_000),
-    });
+    try {
+        const response = await fetch(liteUrl, {
+            headers: {
+                ...DDG_HEADERS,
+                Cookie: DDG_COOKIES,
+                Referer: "https://duckduckgo.com/",
+            },
+            signal: AbortSignal.timeout(8_000),
+        });
 
-    if (!response.ok) {
-        throw new Error(`DuckDuckGo returned HTTP ${response.status}`);
+        if (response.ok) {
+            const html = await response.text();
+            const results = parseDuckDuckGoResults(html, maxResults);
+            if (results.length > 0) return results;
+        }
+    } catch {
+        // Network/timeout — fall through to next strategy
     }
 
-    const html = await response.text();
-    return parseDuckDuckGoResults(html, maxResults);
+    // Try 2: Bing RSS (no API key needed)
+    try {
+        const bingParams = new URLSearchParams();
+        bingParams.set("q", query);
+        bingParams.set("format", "rss");
+        const bingUrl = `https://www.bing.com/search?${bingParams.toString()}`;
+
+        const response = await fetch(bingUrl, {
+            headers: { ...DDG_HEADERS, Referer: "https://www.bing.com/" },
+            signal: AbortSignal.timeout(10_000),
+        });
+
+        if (response.ok) {
+            const text = await response.text();
+            const results = parseRssFeed(text, maxResults);
+            if (results.length > 0) return results;
+        }
+    } catch {
+        // Network error — fall through
+    }
+
+    // Try 3: DDG Instant Answer API
+    try {
+        const apiUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&no_redirect=1&skip_disambig=1`;
+        const response = await fetch(apiUrl, {
+            headers: DDG_HEADERS,
+            signal: AbortSignal.timeout(5_000),
+        });
+
+        if (response.ok) {
+            const data = (await response.json()) as {
+                AbstractText?: string;
+                AbstractURL?: string;
+                AbstractSource?: string;
+                RelatedTopics?: Array<{
+                    Text?: string;
+                    FirstURL?: string;
+                }>;
+            };
+
+            const results: SearchResult[] = [];
+
+            if (data.AbstractText && data.AbstractURL) {
+                results.push({
+                    title: data.AbstractSource || "DDG",
+                    url: data.AbstractURL,
+                    snippet: data.AbstractText,
+                });
+            }
+
+            if (data.RelatedTopics) {
+                for (const topic of data.RelatedTopics) {
+                    if (topic.Text && topic.FirstURL && results.length < maxResults) {
+                        results.push({
+                            title: topic.Text.slice(0, 100),
+                            url: topic.FirstURL,
+                            snippet: topic.Text,
+                        });
+                    }
+                }
+            }
+
+            if (results.length > 0) return results;
+        }
+    } catch {
+        // Network error — fall through
+    }
+
+    return [];
 }
 
 export async function searxngSearch(
@@ -193,4 +271,32 @@ function stripHtml(html: string): string {
         .replace(/&#39;/g, "'")
         .replace(/&nbsp;/g, " ")
         .trim();
+}
+
+function parseRssFeed(xml: string, maxResults: number): SearchResult[] {
+    const results: SearchResult[] = [];
+
+    // Simple RSS parsing: extract <item> blocks
+    const itemRegex = /<item[^>]*>([\s\S]*?)<\/item>/gi;
+    let match: RegExpExecArray | null;
+
+    while (
+        (match = itemRegex.exec(xml)) !== null &&
+        results.length < maxResults
+    ) {
+        const itemXml = match[1];
+        const titleMatch = itemXml.match(/<title[^>]*>([^<]*)<\/title>/i);
+        const linkMatch = itemXml.match(/<link[^>]*>([^<]*)<\/link>/i);
+        const descMatch = itemXml.match(/<description[^>]*>([\s\S]*?)<\/description>/i);
+
+        const title = stripHtml(titleMatch?.[1] || "");
+        const url = (linkMatch?.[1] || "").trim();
+        const snippet = descMatch ? stripHtml(descMatch[1]) : "";
+
+        if (title && url) {
+            results.push({ title, url, snippet });
+        }
+    }
+
+    return results;
 }

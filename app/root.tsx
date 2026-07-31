@@ -23,7 +23,8 @@ export const links: LinksFunction = () => [
         rel: "stylesheet",
         href: "https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap",
     },
-    { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+    { rel: "icon", type: "image/png", href: "/ai-diy.png" },
+    { rel: "apple-touch-icon", href: "/ai-diy.png" },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
