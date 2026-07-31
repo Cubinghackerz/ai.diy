@@ -9,12 +9,38 @@
 
 import { useCanvas } from "~/lib/canvas";
 import { X, Download, Code, Play, Eye, FileText, Check, Copy } from "@phosphor-icons/react";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
 export function CanvasPanel() {
-    const { artifacts, activeArtifactId, canvasOpen, closeCanvas, setActiveArtifactId } = useCanvas();
+    const { artifacts, activeArtifactId, canvasOpen, closeCanvas, setActiveArtifactId, canvasWidth, setCanvasWidth } = useCanvas();
     const [viewMode, setViewMode] = useState<"preview" | "code">("preview");
     const [copied, setCopied] = useState(false);
+    const [isResizing, setIsResizing] = useState(false);
+    const panelRef = useRef<HTMLElement>(null);
+    const startXRef = useRef(0);
+    const startWidthRef = useRef(0);
+
+    const handleResizeStart = (e: React.MouseEvent) => {
+        e.preventDefault();
+        setIsResizing(true);
+        startXRef.current = e.clientX;
+        startWidthRef.current = canvasWidth;
+    };
+
+    useEffect(() => {
+        if (!isResizing) return;
+        const handleMouseMove = (e: MouseEvent) => {
+            const delta = startXRef.current - e.clientX;
+            setCanvasWidth(startWidthRef.current + delta);
+        };
+        const handleMouseUp = () => setIsResizing(false);
+        document.addEventListener("mousemove", handleMouseMove);
+        document.addEventListener("mouseup", handleMouseUp);
+        return () => {
+            document.removeEventListener("mousemove", handleMouseMove);
+            document.removeEventListener("mouseup", handleMouseUp);
+        };
+    }, [isResizing, setCanvasWidth]);
 
     if (!canvasOpen || !artifacts.length) return null;
 
@@ -41,9 +67,24 @@ export function CanvasPanel() {
     };
 
     return (
-        <aside className="fixed inset-y-0 right-0 z-40 flex w-full max-w-xl flex-col border-l border-border bg-card shadow-2xl animate-slide-up sm:w-[540px]">
+        <aside
+            ref={panelRef}
+            className={`fixed inset-y-0 right-0 z-40 flex flex-col border-l border-border bg-card shadow-2xl animate-slide-up`}
+            style={{ width: canvasWidth, maxWidth: "50vw" }}
+        >
+            {/* Resize handle */}
+            <div
+                className="absolute top-0 left-0 h-full w-1.5 cursor-col-resize touch-none"
+                onMouseDown={handleResizeStart}
+                style={{ zIndex: 1 }}
+            >
+                <div className={`h-full w-full rounded-r-sm transition-colors ${
+                    isResizing ? "bg-accent" : "hover:bg-accent/50"
+                }`}></div>
+            </div>
+
             {/* Header */}
-            <div className="flex h-13 items-center justify-between border-b border-border px-4">
+            <div className="flex h-13 items-center justify-between border-b border-border px-4 pl-[8px]">
                 <div className="flex items-center gap-2 overflow-hidden">
                     <span className="truncate text-sm font-semibold">{activeArtifact?.title || "Canvas Artifact"}</span>
                     {activeArtifact?.filename && (

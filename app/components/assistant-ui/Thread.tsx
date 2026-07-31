@@ -57,11 +57,12 @@ import {
 } from "lucide-react";
 import TextareaAutosize from "react-textarea-autosize";
 import {
-  createContext,
-  useContext,
-  type ComponentType,
-  type FC,
-  type PropsWithChildren,
+    createContext,
+    useContext,
+    useMemo,
+    type ComponentType,
+    type FC,
+    type PropsWithChildren,
 } from "react";
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
@@ -175,22 +176,24 @@ const ThreadRoot: FC<{ isEmpty: boolean; messageCount: number }> = ({
  * the AISDK external store — so we drive the list from getState() + RuntimeSync.
  */
 const ThreadMessages: FC<{ messageCount: number }> = ({ messageCount }) => {
-  // Re-render when runtime ticks so MessageByIndex memo doesn't freeze
-  // streaming content (it only compares index + components).
-  useRuntimeSyncTick();
-  if (messageCount === 0) return null;
+    // Re-render when runtime ticks so MessageByIndex memo doesn't freeze
+    // streaming content (it only compares index + components).
+    useRuntimeSyncTick();
+    if (messageCount === 0) return null;
 
-  return (
-    <>
-      {Array.from({ length: messageCount }, (_, index) => (
-        <ThreadPrimitive.MessageByIndex
-          key={index}
-          index={index}
-          components={{ Message: ThreadMessage }}
-        />
-      ))}
-    </>
-  );
+    const messageComponents = useMemo(() => ({ Message: ThreadMessage }), []);
+
+    return (
+        <>
+            {Array.from({ length: messageCount }, (_, index) => (
+                <ThreadPrimitive.MessageByIndex
+                    key={`thread-message-${index}`}
+                    index={index}
+                    components={messageComponents}
+                />
+            ))}
+        </>
+    );
 };
 
 const ThreadMessage: FC = () => {

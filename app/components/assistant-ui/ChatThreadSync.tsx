@@ -96,15 +96,16 @@ export function ChatThreadSync({ threadId }: { threadId: string | null }) {
         return () => clearTimeout(timer);
     }, [threadId, chat.status, chat.messages]);
 
-    // Push create_file tool results into the Canvas panel.
+    // Push create_file / create_skill / frontend_design_skill results into Canvas.
     useEffect(() => {
         const messages = chat.messages as UIMessage[];
         for (const msg of messages) {
             if (msg.role !== "assistant") continue;
             for (const part of msg.parts ?? []) {
                 if (!isToolUIPart(part)) continue;
+                if (part.state?.type !== "complete") continue;
                 const toolName = part.type.replace(/^tool-/, "");
-                if (toolName !== "create_file") continue;
+                if (!["create_file", "create_skill", "frontend_design_skill"].includes(toolName)) continue;
                 const output = part.output;
                 const resultText =
                     typeof output === "string"
@@ -115,7 +116,7 @@ export function ChatThreadSync({ threadId }: { threadId: string | null }) {
                 if (!resultText.includes(ARTIFACT_MARKER)) continue;
                 const artifact = extractArtifactFromText(resultText);
                 if (!artifact) continue;
-                const key = `${msg.id}:${artifact.filename}:${artifact.content.length}`;
+                const key = `${msg.id}:${toolName}:${part.toolCallId ?? artifact.filename}`;
                 if (seenArtifacts.current.has(key)) continue;
                 seenArtifacts.current.add(key);
                 addArtifact({

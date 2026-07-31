@@ -25,23 +25,41 @@ export async function webSearch(
     return duckDuckGoSearch(query, maxResults);
 }
 
+const DDG_HEADERS = {
+    "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    DNT: "1",
+    Connection: "keep-alive",
+};
+
+const DDG_COOKIES =
+    "cf_clearance=; lmt=; __cf_bm=; exp=; dcl=; p=-1; _ga=GA1.2.; _gid=GA1.2.";
+
 export async function duckDuckGoSearch(
     query: string,
     maxResults: number = 5,
 ): Promise<SearchResult[]> {
-    const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+    const params = new URLSearchParams();
+    params.set("q", query);
+    params.set("kl", "us-en");
+    params.set("df", "pastyear");
+
+    const url = `https://lite.duckduckgo.com/lite/?${params.toString()}`;
 
     const response = await fetch(url, {
         headers: {
-            "User-Agent":
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            Accept: "text/html,application/xhtml+xml",
-            "Accept-Language": "en-US,en;q=0.9",
+            ...DDG_HEADERS,
+            Cookie: DDG_COOKIES,
+            Referer: "https://duckduckgo.com/",
         },
+        signal: AbortSignal.timeout(15_000),
     });
 
     if (!response.ok) {
-        throw new Error(`DuckDuckGo returned ${response.status}`);
+        throw new Error(`DuckDuckGo returned HTTP ${response.status}`);
     }
 
     const html = await response.text();
@@ -95,41 +113,69 @@ function parseDuckDuckGoResults(
     maxResults: number,
 ): SearchResult[] {
     const results: SearchResult[] = [];
-    const resultRegex =
-        /<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>[\s\S]*?<a[^>]*class="result__snippet"[^>]*>(.*?)<\/a>/gi;
 
-    let match;
+    // DuckDuckGo lite uses <a class="result-link" href="...">Title</a>
+    // followed by a snippet in the same row.
+    const resultRegex =
+        /<a[^>]*class="result-link"[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>[\s\S]*?<td[^>]*class="result-snippet"[^>]*>(.*?)<\/td>/gi;
+
+    let match: RegExpExecArray | null;
     while (
         (match = resultRegex.exec(html)) !== null &&
         results.length < maxResults
     ) {
-        const rawUrl = match[1] || "";
-        const titleHtml = match[2] || "";
-        const snippetHtml = match[3] || "";
+        let url = match[1] || "";
+        const title = stripHtml(match[2] || "");
+        const snippet = stripHtml(match[3] || "");
 
-        let url = rawUrl;
-        const uddgMatch = rawUrl.match(/uddg=([^&]+)/);
+        const uddgMatch = url.match(/uddg=([^&]+)/);
         if (uddgMatch) {
             url = decodeURIComponent(uddgMatch[1]);
         }
-
-        const title = stripHtml(titleHtml);
-        const snippet = stripHtml(snippetHtml);
 
         if (title && url) {
             results.push({ title, url, snippet });
         }
     }
 
+    // Fallback: any <a class="result-link"> without a paired snippet cell
     if (results.length === 0) {
-        const simpleRegex = /<a[^>]*class="result__a"[^>]*>(.*?)<\/a>/gi;
+        const fallbackRegex =
+            /<a[^>]*class="result-link"[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi;
         while (
-            (match = simpleRegex.exec(html)) !== null &&
+            (match = fallbackRegex.exec(html)) !== null &&
             results.length < maxResults
         ) {
-            const title = stripHtml(match[1]);
-            if (title) {
-                results.push({ title, url: "", snippet: "" });
+            let url = match[1] || "";
+            const title = stripHtml(match[2] || "");
+            const uddgMatch = url.match(/uddg=([^&]+)/);
+            if (uddgMatch) {
+                url = decodeURIComponent(uddgMatch[1]);
+            }
+            if (title && url) {
+                results.push({ title, url, snippet: "" });
+            }
+        }
+    }
+
+    // Final fallback: generic result__a links from the HTML/endpoint
+    if (results.length === 0) {
+        const genericRegex =
+            /<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>[\s\S]*?<a[^>]*class="result__snippet"[^>]*>(.*?)<\/a>/gi;
+        while (
+            (match = genericRegex.exec(html)) !== null &&
+            results.length < maxResults
+        ) {
+            const rawUrl = match[1] || "";
+            const title = stripHtml(match[2] || "");
+            const snippet = stripHtml(match[3] || "");
+            let url = rawUrl;
+            const uddgMatch = rawUrl.match(/uddg=([^&]+)/);
+            if (uddgMatch) {
+                url = decodeURIComponent(uddgMatch[1]);
+            }
+            if (title && url) {
+                results.push({ title, url, snippet });
             }
         }
     }

@@ -24,6 +24,8 @@ interface CanvasContextValue {
     artifacts: Artifact[];
     activeArtifactId: string | null;
     canvasOpen: boolean;
+    canvasWidth: number;
+    setCanvasWidth: (w: number) => void;
     addArtifact: (a: Omit<Artifact, "id" | "createdAt">) => void;
     updateArtifactOutput: (id: string, output: string) => void;
     setActiveArtifactId: (id: string | null) => void;
@@ -33,10 +35,23 @@ interface CanvasContextValue {
 
 const CanvasContext = createContext<CanvasContextValue | null>(null);
 
+const MIN_WIDTH = 320;
+const MAX_WIDTH_RATIO = 0.5;
+
 export function CanvasProvider({ children }: { children: ReactNode }) {
     const [artifacts, setArtifacts] = useState<Artifact[]>([]);
     const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
     const [canvasOpen, setCanvasOpen] = useState(false);
+    const [canvasWidth, setCanvasWidth] = useState(() => {
+        const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
+        return Math.round(vw * MAX_WIDTH_RATIO);
+    });
+
+    const setCanvasWidthClamped = (w: number) => {
+        const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
+        const maxW = Math.round(vw * MAX_WIDTH_RATIO);
+        setCanvasWidth(Math.max(MIN_WIDTH, Math.min(maxW, w)));
+    };
 
     const addArtifact = (a: Omit<Artifact, "id" | "createdAt">) => {
         const newArtifact: Artifact = {
@@ -62,6 +77,8 @@ export function CanvasProvider({ children }: { children: ReactNode }) {
                 artifacts,
                 activeArtifactId,
                 canvasOpen,
+                canvasWidth,
+                setCanvasWidth: setCanvasWidthClamped,
                 addArtifact,
                 updateArtifactOutput,
                 setActiveArtifactId,

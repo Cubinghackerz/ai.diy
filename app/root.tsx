@@ -3,10 +3,18 @@
  */
 
 import { Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
-import type { LinksFunction } from "react-router";
+import type { LinksFunction, MetaFunction } from "react-router";
 import { SettingsProvider } from "~/lib/providers/SettingsProvider";
 import { TooltipProvider } from "~/components/ui/tooltip";
 import "~/styles/app.css";
+
+export const meta: MetaFunction = () => [
+    {
+        tagName: "script",
+        content: `(function(){try{var t=localStorage.getItem('prismium-lite:settings');var theme=t?JSON.parse(t).theme:'system';if(theme==='dark'||(theme==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){}})();`,
+    },
+    { name: "color-scheme", content: "dark light" },
+];
 
 export const links: LinksFunction = () => [
     { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -20,7 +28,7 @@ export const links: LinksFunction = () => [
 
 export function Layout({ children }: { children: React.ReactNode }) {
     return (
-        <html lang="en" className="dark">
+        <html className="h-full">
             <head>
                 <meta charSet="utf-8" />
                 <meta

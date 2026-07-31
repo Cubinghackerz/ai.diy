@@ -280,13 +280,22 @@ export async function buildChatTools(settings: ToolSettings = {}) {
 
         tools.frontend_design_skill = tool({
             description:
-                "Activate a frontend design skill for a UI request. Return an implementation-ready design brief covering hierarchy, responsive behavior, states, accessibility, and reusable components.",
+                "Activate a frontend design skill for a UI request. Returns an implementation-ready design brief covering hierarchy, responsive behavior, states, accessibility, and reusable components.",
             inputSchema: z.object({
                 request: z.string(),
                 surface: z.string().optional(),
                 constraints: z.string().optional(),
             }),
-            execute: async (input) => frontendDesignBrief(input),
+            execute: async (input) => {
+                const brief = frontendDesignBrief(input);
+                const title = `Design Brief: ${(input.request || "").trim().slice(0, 60)}`;
+                return artifactPayload({
+                    title: title.length > 5 ? title : "Design Brief",
+                    filename: "design-brief.md",
+                    content: brief,
+                    kind: "markdown",
+                });
+            },
         });
     }
 

@@ -84,14 +84,14 @@ export function AssistantRuntimeProvider({
                             maxTokens: s.chat.maxTokens,
                             topP: s.chat.topP,
                             reasoningEffort: s.chat.reasoningEffort,
-                             toolSettings: {
+                            toolSettings: {
                                 webSearchEnabled: s.webSearchEnabled,
                                 calculatorEnabled: s.calculatorEnabled,
                                 pythonEnabled: s.pythonEnabled,
                                 webSearchEngine: s.webSearchEngine,
-                                 searxngUrl: s.searxngUrl,
-                                 skillsEnabled: true,
-                             },
+                                searxngUrl: s.searxngUrl,
+                                skillsEnabled: true,
+                            },
                             mcpServers: s.mcpServers.filter((m) => m.enabled),
                         },
                     };
