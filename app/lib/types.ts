@@ -70,6 +70,7 @@ export interface AppSettings {
     searxngUrl: string;
     pythonEnabled: boolean;
     calculatorEnabled: boolean;
+    skillsEnabled: boolean;
     // MCP settings
     mcpServers: McpServerConfig[];
 }
@@ -224,6 +225,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     searxngUrl: "",
     pythonEnabled: true,
     calculatorEnabled: true,
+    skillsEnabled: true,
     mcpServers: [],
 };
 

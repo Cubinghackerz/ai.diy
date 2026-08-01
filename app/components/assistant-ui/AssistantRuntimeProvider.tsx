@@ -90,7 +90,7 @@ export function AssistantRuntimeProvider({
                                 pythonEnabled: s.pythonEnabled,
                                 webSearchEngine: s.webSearchEngine,
                                 searxngUrl: s.searxngUrl,
-                                skillsEnabled: true,
+                                skillsEnabled: s.skillsEnabled,
                             },
                             mcpServers: s.mcpServers.filter((m) => m.enabled),
                         },

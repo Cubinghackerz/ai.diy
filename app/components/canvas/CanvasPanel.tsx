@@ -171,7 +171,7 @@ export function CanvasPanel() {
                     <iframe
                         srcDoc={activeArtifact.content}
                         title={activeArtifact.title}
-                        className="h-full w-full rounded-xl border border-border bg-white shadow-sm"
+                        className="h-full w-full rounded-xl border border-border shadow-sm"
                         sandbox="allow-scripts allow-modals"
                     />
                 ) : activeArtifact?.kind === "python" ? (
