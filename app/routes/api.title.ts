@@ -2,13 +2,12 @@
  * API Title Route — generate a short chat title with the user's selected model
  */
 
-import type { ActionFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { generateText } from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createXai } from "@ai-sdk/xai";
 import type { ProviderId } from "~/lib/types";
+import { createChatModel } from "~/lib/server/model";
+import { providerNeedsKey } from "~/lib/provider-credentials";
+import { corsPreflight, withCors } from "~/lib/server/cors";
 
 interface TitleRequestBody {
     message: string;
@@ -16,49 +15,6 @@ interface TitleRequestBody {
     provider: ProviderId;
     apiKey: string;
     baseUrl?: string;
-}
-
-function getModelInstance(body: TitleRequestBody) {
-    const { provider, apiKey, baseUrl, model } = body;
-    switch (provider) {
-        case "openai":
-            return createOpenAI({ apiKey, baseURL: baseUrl || undefined }).chat(
-                model,
-            );
-        case "anthropic":
-            return createAnthropic({ apiKey, baseURL: baseUrl || undefined })(
-                model,
-            );
-        case "gemini":
-            return createGoogleGenerativeAI({ apiKey })(model);
-        case "groq":
-            return createOpenAI({
-                apiKey,
-                baseURL: baseUrl || "https://api.groq.com/openai/v1",
-            }).chat(model);
-        case "xai":
-            return createXai({
-                apiKey,
-                baseURL: baseUrl || "https://api.x.ai/v1",
-            }).chat(model);
-        case "openrouter":
-            return createOpenAI({
-                apiKey,
-                baseURL: baseUrl || "https://openrouter.ai/api/v1",
-            }).chat(model);
-        case "ollama":
-            return createOpenAI({
-                apiKey: apiKey || "ollama",
-                baseURL: baseUrl || "http://localhost:11434/v1",
-            }).chat(model);
-        case "custom":
-            return createOpenAI({
-                apiKey: apiKey || "custom",
-                baseURL: baseUrl || "http://localhost:1234/v1",
-            }).chat(model);
-        default:
-            throw new Error(`Unsupported provider: ${provider}`);
-    }
 }
 
 function fallbackTitle(message: string): string {
@@ -77,40 +33,66 @@ function cleanTitle(raw: string, message: string): string {
     return line.length > 60 ? `${line.slice(0, 57).trimEnd()}…` : line;
 }
 
+export function loader({ request }: LoaderFunctionArgs) {
+    const preflight = corsPreflight(request);
+    if (preflight) return preflight;
+    return withCors(
+        request,
+        new Response("Method Not Allowed", { status: 405 }),
+    );
+}
+
 export async function action({ request }: ActionFunctionArgs) {
+    const preflight = corsPreflight(request);
+    if (preflight) return preflight;
+
     if (request.method !== "POST") {
-        return new Response("Method Not Allowed", { status: 405 });
+        return withCors(
+            request,
+            new Response("Method Not Allowed", { status: 405 }),
+        );
     }
 
     let body: TitleRequestBody;
     try {
         body = await request.json();
     } catch {
-        return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+        return withCors(
+            request,
+            Response.json({ error: "Invalid JSON body" }, { status: 400 }),
+        );
     }
 
     const message = body.message?.trim() ?? "";
     if (!message) {
-        return Response.json({ error: "Message required" }, { status: 400 });
+        return withCors(
+            request,
+            Response.json({ error: "Message required" }, { status: 400 }),
+        );
     }
 
     if (!body.model) {
-        return Response.json({ error: "Model required" }, { status: 400 });
+        return withCors(
+            request,
+            Response.json({ error: "Model required" }, { status: 400 }),
+        );
     }
 
     if (
-        !body.apiKey &&
-        body.provider !== "ollama" &&
-        body.provider !== "custom"
+        providerNeedsKey(body.provider) &&
+        !body.apiKey
     ) {
-        return Response.json(
-            { title: fallbackTitle(message), fallback: true },
-            { status: 200 },
+        return withCors(
+            request,
+            Response.json(
+                { title: fallbackTitle(message), fallback: true },
+                { status: 200 },
+            ),
         );
     }
 
     try {
-        const model = getModelInstance(body);
+        const model = createChatModel(body);
         const { text } = await generateText({
             model,
             temperature: 0.3,
@@ -120,13 +102,16 @@ export async function action({ request }: ActionFunctionArgs) {
             prompt: message.slice(0, 500),
         });
 
-        return Response.json({ title: cleanTitle(text, message) });
+        return withCors(request, Response.json({ title: cleanTitle(text, message) }));
     } catch (err) {
         console.error("[api/title]", err);
-        return Response.json({
-            title: fallbackTitle(message),
-            fallback: true,
-            error: err instanceof Error ? err.message : "Title generation failed",
-        });
+        return withCors(
+            request,
+            Response.json({
+                title: fallbackTitle(message),
+                fallback: true,
+                error: err instanceof Error ? err.message : "Title generation failed",
+            }),
+        );
     }
 }

@@ -69,8 +69,8 @@ export function CanvasPanel() {
     return (
         <aside
             ref={panelRef}
-            className={`fixed inset-y-0 right-0 z-40 flex flex-col border-l border-border bg-card shadow-2xl animate-slide-up`}
-            style={{ width: canvasWidth, maxWidth: "50vw" }}
+            className="relative z-40 flex h-full shrink-0 flex-col border-l border-border bg-card shadow-2xl transition-[width] duration-200 animate-slide-up"
+            style={{ width: canvasWidth, maxWidth: "50%" }}
         >
             {/* Resize handle */}
             <div

@@ -4,7 +4,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Command } from "cmdk";
-import { CaretDown, MagnifyingGlass, SpinnerGap } from "@phosphor-icons/react";
+import {
+    CaretDown,
+    Check,
+    MagnifyingGlass,
+    SpinnerGap,
+} from "@phosphor-icons/react";
 import { hapticSelect } from "~/lib/haptics";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import { DEFAULT_MODELS, type ModelInfo, type ProviderId } from "~/lib/types";
@@ -13,6 +18,7 @@ import {
     inferModelSupportsTools,
 } from "~/lib/model-capabilities";
 import { cn } from "~/lib/utils";
+import { localProviderKey } from "~/lib/provider-credentials";
 
 export function useProviderModels(provider: ProviderId, enabled: boolean) {
     const { settings } = useSettings();
@@ -38,13 +44,7 @@ export function useProviderModels(provider: ProviderId, enabled: boolean) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     provider,
-                    apiKey:
-                        apiKey ||
-                        (provider === "ollama"
-                            ? "ollama"
-                            : provider === "custom"
-                              ? "custom"
-                              : ""),
+                    apiKey: apiKey || localProviderKey(provider),
                     baseUrl: baseUrl || undefined,
                 }),
             });
@@ -90,6 +90,120 @@ export function useProviderModels(provider: ProviderId, enabled: boolean) {
     }, [refresh]);
 
     return { models, loading, error, refresh };
+}
+
+export function SearchableModelSelect({
+    models,
+    value,
+    onChange,
+    className,
+}: {
+    models: ModelInfo[];
+    value: string;
+    onChange: (modelId: string) => void;
+    className?: string;
+}) {
+    const [open, setOpen] = useState(false);
+    const rootRef = useRef<HTMLDivElement>(null);
+    const selected = models.find((model) => model.id === value);
+
+    useEffect(() => {
+        if (!open) return;
+        const onDocumentMouseDown = (event: MouseEvent) => {
+            if (!rootRef.current?.contains(event.target as Node)) {
+                setOpen(false);
+            }
+        };
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") setOpen(false);
+        };
+        document.addEventListener("mousedown", onDocumentMouseDown);
+        document.addEventListener("keydown", onKeyDown);
+        return () => {
+            document.removeEventListener("mousedown", onDocumentMouseDown);
+            document.removeEventListener("keydown", onKeyDown);
+        };
+    }, [open]);
+
+    return (
+        <div ref={rootRef} className={cn("relative", className)}>
+            <button
+                type="button"
+                onClick={() => {
+                    hapticSelect();
+                    setOpen((current) => !current);
+                }}
+                className="flex h-10 w-full items-center justify-between gap-3 rounded-xl border border-input bg-background px-3 text-left outline-none transition-colors hover:border-foreground/25 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+                aria-haspopup="listbox"
+                aria-expanded={open}
+                aria-label="Choose model"
+            >
+                <span className="min-w-0 truncate text-sm font-medium">
+                    {selected?.name || value || "Choose a model"}
+                </span>
+                <CaretDown
+                    size={15}
+                    className={cn(
+                        "shrink-0 text-muted-foreground transition-transform",
+                        open && "rotate-180",
+                    )}
+                />
+            </button>
+
+            {open ? (
+                <div className="absolute top-[calc(100%+6px)] right-0 left-0 z-50 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl shadow-black/20">
+                    <Command className="flex max-h-80 flex-col" label="Choose model">
+                        <div className="flex items-center gap-2 border-b border-border px-3">
+                            <MagnifyingGlass
+                                size={14}
+                                className="shrink-0 text-muted-foreground"
+                            />
+                            <Command.Input
+                                placeholder={`Search ${models.length} models…`}
+                                className="h-10 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                                autoFocus
+                            />
+                        </div>
+                        <Command.List className="overflow-y-auto p-1">
+                            <Command.Empty className="px-3 py-6 text-center text-xs text-muted-foreground">
+                                No models match.
+                            </Command.Empty>
+                            {models.map((model) => (
+                                <Command.Item
+                                    key={model.id}
+                                    value={`${model.name} ${model.id}`}
+                                    onSelect={() => {
+                                        hapticSelect();
+                                        onChange(model.id);
+                                        setOpen(false);
+                                    }}
+                                    className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-xs outline-none aria-selected:bg-accent"
+                                >
+                                    <span className="min-w-0">
+                                        <span className="block truncate font-medium">
+                                            {model.name || model.id}
+                                        </span>
+                                        {model.name !== model.id ? (
+                                            <span className="mt-0.5 block truncate font-mono text-[10px] text-muted-foreground">
+                                                {model.id}
+                                            </span>
+                                        ) : null}
+                                    </span>
+                                    {model.id === value ? (
+                                        <Check
+                                            size={14}
+                                            weight="bold"
+                                            className="shrink-0 text-primary"
+                                        />
+                                    ) : null}
+                                </Command.Item>
+                            ))}
+                        </Command.List>
+                    </Command>
+                </div>
+            ) : null}
+        </div>
+    );
 }
 
 export function ModelPicker({

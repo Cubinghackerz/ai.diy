@@ -7,6 +7,7 @@
 import { DEFAULT_MODELS, type ModelInfo, type ProviderId } from "~/lib/types";
 import { isLocalProvider } from "~/lib/setup";
 import { enrichModelInfo } from "~/lib/model-capabilities";
+import { localProviderKey } from "~/lib/provider-credentials";
 
 export type KeyTestResult = {
     ok: boolean;
@@ -19,7 +20,7 @@ export function looksLikeApiKey(provider: ProviderId, key: string): boolean {
     const k = key.trim();
     if (!k) return false;
     if (isLocalProvider(provider)) return true;
-    if (provider === "openai") {
+    if (provider === "openai" || provider === "deepseek") {
         return k.startsWith("sk-") && k.length > 20;
     }
     if (provider === "groq") {
@@ -33,6 +34,16 @@ export function looksLikeApiKey(provider: ProviderId, key: string): boolean {
     }
     if (provider === "xai") {
         return k.startsWith("xai-") && k.length > 20;
+    }
+    if (provider === "togetherai") {
+        return k.startsWith("tgp_v1_") && k.length > 20;
+    }
+    if (provider === "huggingface") {
+        return k.startsWith("hf_") && k.length > 12;
+    }
+    if (provider === "bedrock" || provider === "vertex") {
+        // Structured JSON credentials (or a plain long key for bearer auth).
+        return k.startsWith("{") || k.length >= 16;
     }
     return k.length >= 16;
 }
@@ -68,7 +79,7 @@ export async function testProviderKey(options: {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 provider,
-                apiKey: key || (provider === "ollama" ? "ollama" : "custom"),
+                apiKey: key || localProviderKey(provider),
                 baseUrl: baseUrl || undefined,
             }),
         });

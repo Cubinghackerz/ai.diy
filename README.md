@@ -1,6 +1,6 @@
 # ai.diy
 
-> Open-source, BYOK AI chat — self-host or deploy free on Vercel. **No API keys required on the server.**
+> Open-source, BYOK AI chat — self-host on any Node server or Docker. **No API keys required on the server.**
 
 Built with [assistant-ui](https://assistant-ui.com), React Router v8, the Vercel AI SDK, and Tailwind CSS v4.
 
@@ -10,31 +10,44 @@ ai.diy is a privacy-first, bring-your-own-key chat interface. It proxies the use
 
 ## Features
 
-- **BYOK** — Users bring their own keys (OpenAI, Anthropic, Gemini, Groq, OpenRouter, xAI, Ollama, custom). Keys stay in the browser.
+- **BYOK** — Users bring their own keys (17 providers: OpenAI, Anthropic, Gemini, Groq, OpenRouter, xAI, DeepSeek, Amazon Bedrock, Azure OpenAI, Google Vertex AI, Vercel AI Gateway, Together AI, Mistral, Hugging Face, Ollama, LM Studio, custom). Keys stay in the browser.
 - **Live model discovery** — `/api/models` queries each provider with the user's key to return a real-time model catalog; local defaults are only an offline fallback.
 - **Free web search** — DuckDuckGo (no search API key) plus optional SearXNG. Server-side results are summarized server-side; nothing is stored.
-- **Built-in tools** — Web search, URL fetch, calculator, canvas files, and Python (Pyodide in the browser on Vercel; server Python on self-host/Docker).
+- **Built-in tools** — Web search, URL fetch, calculator, canvas files, and Python (Pyodide in the browser; optional server Python on self-host/Docker).
 - **Callable skills** — `create_skill` drafts a `SKILL.md` workflow document, and `frontend_design_skill` produces an implementation-ready frontend design brief. Both are side-effect-free and never access private data.
-- **Tool-capable model picker** — Defaults to the live catalog and keeps the user's selection visible across provider switches.
-- **Reasoning** — Thinking effort control (off/low/medium/high) when the selected model supports it; provider-specific `providerOptions` for OpenAI, Anthropic, Gemini, and xAI.
+- **Tool-capable model picker** — Defaults to the live catalog and keeps the user's selection visible across provider switches; searchable command-style picker.
+- **Reasoning** — Thinking effort control (off/low/medium/high where supported) in the composer; provider-specific `providerOptions` for OpenAI, Anthropic, Gemini, xAI, DeepSeek, Bedrock, and Mistral.
 - **Streaming** — Real-time tokens + reasoning in the UI via the AI SDK UI message stream.
 - **Auto thread titles** — New chat, first message, the model generates a short title; falls back to a slug if generation fails or the key is missing.
 - **Local-first** — Settings in localStorage; chats + messages in IndexedDB.
-- **Canvas** — Generated HTML, code, and SVG artifacts render in a resizable side panel.
+- **Canvas** — Generated HTML, code, and SVG artifacts render in a resizable side panel that auto-sizes to the artifact.
 - **Dark / light / system theme**.
 
 ## Supported providers
 
-| Provider | Models API | Notes |
-|----------|-----------|-------|
-| OpenAI | `https://api.openai.com/v1` | GPT-4o, o1/o3/o4, GPT-5 |
-| Anthropic | `https://api.anthropic.com` | Claude 3/3.5/4 |
-| Google Gemini | `https://generativelanguage.googleapis.com` | Gemini 1.5/2.x/2.5 |
+| Provider | Default endpoint | Notes |
+|----------|------------------|-------|
+| OpenAI | `https://api.openai.com/v1` | GPT-4o/4.1, o3/o4, GPT-5/5.1 |
+| Anthropic | `https://api.anthropic.com` | Claude 3/3.5/4/4.5 |
+| Google Gemini | `https://generativelanguage.googleapis.com` | Gemini 1.5/2.x/2.5/3 |
 | Groq | `https://api.groq.com/openai/v1` | Llama, Mixtral, Qwen |
 | OpenRouter | `https://openrouter.ai/api/v1` | Routed models from many providers |
-| xAI | `https://api.x.ai/v1` | Grok 1.5/2/mini |
+| xAI | `https://api.x.ai/v1` | Grok 1.5/2/3/4 |
+| DeepSeek | `https://api.deepseek.com` | DeepSeek Chat / Reasoner / V4 |
+| Amazon Bedrock | `https://bedrock-runtime.us-east-1.amazonaws.com` | Claude, Nova, Llama — JSON credentials (`accessKeyId`/`secretAccessKey`/`region`) |
+| Azure OpenAI | configurable | Deployment-based — JSON credentials (`resourceName`/`apiKey`) |
+| Google Vertex AI | `https://us-central1-aiplatform.googleapis.com` | Gemini + Claude — JSON credentials (`project`/`clientEmail`/`privateKey`) |
+| Vercel AI Gateway | `https://ai-gateway.vercel.sh/v4/ai` | One key, many providers |
+| Together AI | `https://api.together.xyz/v1` | Kimi, GLM, Qwen, DeepSeek |
+| Mistral | `https://api.mistral.ai/v1` | Mistral Medium/Large, Devstral |
+| Hugging Face | `https://router.huggingface.co/v1` | Open models via HF Inference |
 | Ollama | `http://localhost:11434/v1` | Local, no key |
+| LM Studio | `http://localhost:1234/v1` | Local, no key |
 | Custom | configurable | Any OpenAI-compatible endpoint, no key |
+
+Multi-credential providers (Bedrock, Azure, Vertex) take structured JSON in the
+API key field — the setup screen shows the exact shape. Nothing is stored
+server-side; credentials travel only in your browser's requests.
 
 ## Quick start (self-host)
 
@@ -46,13 +59,16 @@ npm run build && npm start   # production
 
 First run: complete setup, paste your API key (or pick Ollama), pick a model (defaults to the live catalog).
 
-## Deploy free on Vercel
+## Deploy anywhere
 
-1. Fork / import repo on [Vercel](https://vercel.com)
-2. **Do not** add LLM API keys to environment variables
-3. Users open your `*.vercel.app` URL and use their own keys
+The app is a plain React Router Node server — run it on any VPS, bare-metal host, or Docker (no serverless platform needed).
 
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for limits (no localhost Ollama, no server Python on Vercel).
+1. Push this repo to your server (or use `docker build -t ai-diy .`)
+2. `npm install && npm run build && npm start`
+3. **Do not** add LLM API keys to environment variables
+4. Users open your URL and use their own keys
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for details (local models need a host that can reach them, e.g. Ollama on the same machine).
 
 ### Environment variables
 

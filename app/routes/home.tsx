@@ -176,24 +176,25 @@ function HomeInner() {
                         </button>
                     </header>
 
-                    <main className="relative min-h-0 flex-1 overflow-hidden">
-                        <ChatLifecycle
-                            threadId={activeThreadId}
-                            threadTitle={activeThread?.title}
-                            onTitleChange={handleTitleChange}
-                        />
-                        <div className="flex h-full min-h-0 flex-col">
-                            <ChatErrorBanner />
-                            <div className="min-h-0 flex-1">
-                                <Thread />
+                    <div className="relative flex min-h-0 flex-1">
+                        <main className="relative min-w-0 flex-1 overflow-hidden">
+                            <ChatLifecycle
+                                threadId={activeThreadId}
+                                threadTitle={activeThread?.title}
+                                onTitleChange={handleTitleChange}
+                            />
+                            <div className="flex h-full min-h-0 flex-col">
+                                <ChatErrorBanner />
+                                <div className="min-h-0 flex-1">
+                                    <Thread />
+                                </div>
                             </div>
-                        </div>
-                    </main>
+                        </main>
 
-                    {/* Canvas panel — rendered outside overflow-hidden main
-                        container but inside the AssistantRuntimeProvider so
-                        it has access to CanvasContext and isn't clipped. */}
-                    <CanvasPanel />
+                        {/* The canvas is a workspace sibling, so opening an
+                            artifact gives the chat the remaining width. */}
+                        <CanvasPanel />
+                    </div>
                 </div>
             </div>
         </AssistantRuntimeProvider>

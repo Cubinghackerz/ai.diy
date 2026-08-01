@@ -7,7 +7,7 @@ import { enrichModelInfo } from "~/lib/model-capabilities";
 import type { ModelInfo } from "~/lib/types";
 
 /** Providers that run locally and do not require a cloud API key. */
-export const LOCAL_PROVIDERS: ProviderId[] = ["ollama", "custom"];
+export const LOCAL_PROVIDERS: ProviderId[] = ["ollama", "lmstudio", "custom"];
 
 export function isLocalProvider(id: ProviderId): boolean {
     return LOCAL_PROVIDERS.includes(id);

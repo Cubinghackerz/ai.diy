@@ -65,7 +65,7 @@ function isTextLike(file: File): boolean {
     );
 }
 
-const textDocumentAdapter: AttachmentAdapter = {
+const textDocumentAdapter = {
     accept: TEXT_EXT_ACCEPT,
     async add({ file }) {
         return {
@@ -96,9 +96,9 @@ const textDocumentAdapter: AttachmentAdapter = {
         };
     },
     async remove() {},
-};
+} satisfies AttachmentAdapter;
 
-const binaryDocumentAdapter: AttachmentAdapter = {
+const binaryDocumentAdapter = {
     accept: DOCUMENT_ACCEPT,
     async add({ file }) {
         if (isTextLike(file)) {
@@ -136,7 +136,7 @@ const binaryDocumentAdapter: AttachmentAdapter = {
         };
     },
     async remove() {},
-};
+} satisfies AttachmentAdapter;
 
 export function createAttachmentAdapter(
     modalities: ModelModalities,
@@ -162,6 +162,7 @@ export const prismiumAttachmentAdapter = createAttachmentAdapter({
     tools: true,
     vision: true,
     documents: true,
+    reasoning: true,
 });
 
 export function attachmentAcceptHint(modalities: ModelModalities): string {

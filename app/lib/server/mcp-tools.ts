@@ -1,10 +1,5 @@
-/**
- * Connect enabled MCP servers (HTTP/SSE; stdio on self-host only) and collect tools.
- */
-
 import { createMCPClient } from "@ai-sdk/mcp";
 import type { ToolSet } from "ai";
-import { isVercelServerless } from "~/lib/server/env";
 import type { McpServerConfig } from "~/lib/types";
 
 export type McpClientHandle = {
@@ -48,12 +43,6 @@ async function connectMcpServer(
     server: McpServerConfig,
 ): Promise<(McpClientHandle & { tools: () => Promise<ToolSet> }) | null> {
     if (server.kind === "stdio") {
-        if (isVercelServerless()) {
-            console.warn(
-                `[mcp] Skipping stdio server "${server.name}" on Vercel — self-host required.`,
-            );
-            return null;
-        }
         if (!server.command?.trim()) return null;
         const { Experimental_StdioMCPTransport } = await import(
             "@ai-sdk/mcp/mcp-stdio"

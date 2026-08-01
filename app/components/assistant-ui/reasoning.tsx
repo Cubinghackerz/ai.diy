@@ -334,7 +334,19 @@ function ReasoningText({
   );
 }
 
-const ReasoningImpl: ReasoningMessagePartComponent = () => <MarkdownText />;
+const ReasoningImpl: ReasoningMessagePartComponent = ({ status }) => {
+  const streaming = status?.type === "running";
+  return (
+    <ReasoningRoot streaming={streaming} variant="outline">
+      <ReasoningTrigger active={streaming} />
+      <ReasoningContent aria-busy={streaming}>
+        <ReasoningText>
+          <MarkdownText />
+        </ReasoningText>
+      </ReasoningContent>
+    </ReasoningRoot>
+  );
+};
 
 const ReasoningGroupImpl: ReasoningGroupComponent = ({
   children,

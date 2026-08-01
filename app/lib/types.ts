@@ -12,6 +12,15 @@ export type ProviderId =
     | "gemini"
     | "groq"
     | "openrouter"
+    | "deepseek"
+    | "bedrock"
+    | "azure"
+    | "vertex"
+    | "gateway"
+    | "togetherai"
+    | "mistral"
+    | "huggingface"
+    | "lmstudio"
     | "xai"
     | "ollama"
     | "custom";
@@ -40,7 +49,7 @@ export interface ModelInfo {
 }
 
 /** Reasoning / thinking effort when the selected model supports it. */
-export type ReasoningEffort = "off" | "low" | "medium" | "high";
+export type ReasoningEffort = "off" | "minimal" | "low" | "medium" | "high";
 
 export interface ChatSettings {
     systemPrompt: string;
@@ -178,6 +187,51 @@ export const PROVIDER_DEFAULTS: Record<ProviderId, Omit<ProviderConfig, "apiKey"
         name: "OpenRouter",
         baseUrl: "https://openrouter.ai/api/v1",
     },
+    deepseek: {
+        id: "deepseek",
+        name: "DeepSeek",
+        baseUrl: "https://api.deepseek.com",
+    },
+    bedrock: {
+        id: "bedrock",
+        name: "Amazon Bedrock",
+        baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
+    },
+    azure: {
+        id: "azure",
+        name: "Azure OpenAI",
+        baseUrl: "",
+    },
+    vertex: {
+        id: "vertex",
+        name: "Google Vertex AI",
+        baseUrl: "https://us-central1-aiplatform.googleapis.com",
+    },
+    gateway: {
+        id: "gateway",
+        name: "Vercel AI Gateway",
+        baseUrl: "https://ai-gateway.vercel.sh/v4/ai",
+    },
+    togetherai: {
+        id: "togetherai",
+        name: "Together AI",
+        baseUrl: "https://api.together.xyz/v1",
+    },
+    mistral: {
+        id: "mistral",
+        name: "Mistral",
+        baseUrl: "https://api.mistral.ai/v1",
+    },
+    huggingface: {
+        id: "huggingface",
+        name: "Hugging Face",
+        baseUrl: "https://router.huggingface.co/v1",
+    },
+    lmstudio: {
+        id: "lmstudio",
+        name: "LM Studio (Local)",
+        baseUrl: "http://localhost:1234/v1",
+    },
     xai: {
         id: "xai",
         name: "xAI (Grok)",
@@ -202,6 +256,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
         gemini: { ...PROVIDER_DEFAULTS.gemini, apiKey: "", enabled: false },
         groq: { ...PROVIDER_DEFAULTS.groq, apiKey: "", enabled: false },
         openrouter: { ...PROVIDER_DEFAULTS.openrouter, apiKey: "", enabled: false },
+        deepseek: { ...PROVIDER_DEFAULTS.deepseek, apiKey: "", enabled: false },
+        bedrock: { ...PROVIDER_DEFAULTS.bedrock, apiKey: "", enabled: false },
+        azure: { ...PROVIDER_DEFAULTS.azure, apiKey: "", enabled: false },
+        vertex: { ...PROVIDER_DEFAULTS.vertex, apiKey: "", enabled: false },
+        gateway: { ...PROVIDER_DEFAULTS.gateway, apiKey: "", enabled: false },
+        togetherai: { ...PROVIDER_DEFAULTS.togetherai, apiKey: "", enabled: false },
+        mistral: { ...PROVIDER_DEFAULTS.mistral, apiKey: "", enabled: false },
+        huggingface: { ...PROVIDER_DEFAULTS.huggingface, apiKey: "", enabled: false },
+        lmstudio: { ...PROVIDER_DEFAULTS.lmstudio, apiKey: "lmstudio", enabled: true },
         xai: { ...PROVIDER_DEFAULTS.xai, apiKey: "", enabled: false },
         ollama: { ...PROVIDER_DEFAULTS.ollama, apiKey: "ollama", enabled: true },
         custom: { ...PROVIDER_DEFAULTS.custom, apiKey: "custom", enabled: false },
@@ -235,21 +298,25 @@ export const DEFAULT_MODELS: Record<ProviderId, ModelInfo[]> = {
     openai: [
         { id: "gpt-4o", name: "GPT-4o", provider: "openai", contextWindow: 128000, supportsTools: true, supportsVision: true },
         { id: "gpt-4o-mini", name: "GPT-4o Mini", provider: "openai", contextWindow: 128000, supportsTools: true, supportsVision: true },
-        { id: "o3-mini", name: "o3-mini", provider: "openai", contextWindow: 200000, supportsTools: true },
-        { id: "o4-mini", name: "o4-mini", provider: "openai", contextWindow: 200000, supportsTools: true },
-        { id: "gpt-5", name: "GPT-5", provider: "openai", contextWindow: 200000, supportsTools: true },
+        { id: "gpt-5", name: "GPT-5", provider: "openai", contextWindow: 200000, supportsTools: true, supportsReasoning: true },
+        { id: "gpt-5.1", name: "GPT-5.1", provider: "openai", contextWindow: 200000, supportsTools: true, supportsReasoning: true },
+        { id: "o3-mini", name: "o3-mini", provider: "openai", contextWindow: 200000, supportsTools: true, supportsReasoning: true },
+        { id: "o4-mini", name: "o4-mini", provider: "openai", contextWindow: 200000, supportsTools: true, supportsReasoning: true },
     ],
     anthropic: [
         { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet", provider: "anthropic", contextWindow: 200000, supportsTools: true },
         { id: "claude-3-5-haiku-20241022", name: "Claude 3.5 Haiku", provider: "anthropic", contextWindow: 200000, supportsTools: true },
-        { id: "claude-sonnet-4-20250514", name: "Claude Sonnet 4", provider: "anthropic", contextWindow: 200000, supportsTools: true },
-        { id: "claude-opus-4-20250514", name: "Claude Opus 4", provider: "anthropic", contextWindow: 200000, supportsTools: true },
+        { id: "claude-sonnet-4-20250514", name: "Claude Sonnet 4", provider: "anthropic", contextWindow: 200000, supportsTools: true, supportsReasoning: true },
+        { id: "claude-opus-4-20250514", name: "Claude Opus 4", provider: "anthropic", contextWindow: 200000, supportsTools: true, supportsReasoning: true },
+        { id: "claude-sonnet-4-5-20250929", name: "Claude Sonnet 4.5", provider: "anthropic", contextWindow: 200000, supportsTools: true, supportsReasoning: true },
+        { id: "claude-opus-4-5-20251101", name: "Claude Opus 4.5", provider: "anthropic", contextWindow: 200000, supportsTools: true, supportsReasoning: true },
     ],
     gemini: [
         { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", provider: "gemini", contextWindow: 1048576, supportsTools: true },
         { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", provider: "gemini", contextWindow: 1048576, supportsTools: true },
-        { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "gemini", contextWindow: 1048576, supportsTools: true },
-        { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", provider: "gemini", contextWindow: 1048576, supportsTools: true },
+        { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "gemini", contextWindow: 1048576, supportsTools: true, supportsReasoning: true },
+        { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", provider: "gemini", contextWindow: 1048576, supportsTools: true, supportsReasoning: true },
+        { id: "gemini-3-pro-preview", name: "Gemini 3 Pro", provider: "gemini", contextWindow: 1048576, supportsTools: true, supportsReasoning: true },
     ],
     groq: [
         { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B", provider: "groq", contextWindow: 131072, supportsTools: true },
@@ -257,20 +324,87 @@ export const DEFAULT_MODELS: Record<ProviderId, ModelInfo[]> = {
     ],
     openrouter: [
         { id: "openai/gpt-4o", name: "GPT-4o (OpenRouter)", provider: "openrouter", supportsTools: true },
+        { id: "openai/gpt-5", name: "GPT-5 (OpenRouter)", provider: "openrouter", supportsTools: true, supportsReasoning: true },
         { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet (OpenRouter)", provider: "openrouter", supportsTools: true },
+        { id: "anthropic/claude-sonnet-4.5", name: "Claude Sonnet 4.5 (OpenRouter)", provider: "openrouter", supportsTools: true, supportsReasoning: true },
         { id: "deepseek/deepseek-chat", name: "DeepSeek V3 (OpenRouter)", provider: "openrouter", supportsTools: true },
+        { id: "deepseek/deepseek-r1", name: "DeepSeek R1 (OpenRouter)", provider: "openrouter", supportsTools: false, supportsReasoning: true },
+    ],
+    deepseek: [
+        { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", provider: "deepseek", contextWindow: 1000000, maxTokens: 384000, supportsTools: true, supportsReasoning: true },
+        { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", provider: "deepseek", contextWindow: 1000000, maxTokens: 384000, supportsTools: true, supportsReasoning: true },
+        { id: "deepseek-chat", name: "DeepSeek Chat", provider: "deepseek", contextWindow: 1000000, maxTokens: 384000, supportsTools: true, supportsVision: true },
+        { id: "deepseek-reasoner", name: "DeepSeek Reasoner", provider: "deepseek", contextWindow: 1000000, maxTokens: 384000, supportsTools: true, supportsVision: true, supportsReasoning: true },
+    ],
+    bedrock: [
+        { id: "anthropic.claude-sonnet-4-5-20250929-v1:0", name: "Claude Sonnet 4.5", provider: "bedrock", contextWindow: 200000, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "anthropic.claude-opus-4-5-20251101-v1:0", name: "Claude Opus 4.5", provider: "bedrock", contextWindow: 200000, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "us.amazon.nova-pro-v1:0", name: "Amazon Nova Pro", provider: "bedrock", contextWindow: 300000, supportsTools: true, supportsVision: true },
+        { id: "us.amazon.nova-lite-v1:0", name: "Amazon Nova Lite", provider: "bedrock", contextWindow: 300000, supportsTools: true, supportsVision: true },
+        { id: "meta.llama3-3-70b-instruct-v1:0", name: "Llama 3.3 70B", provider: "bedrock", contextWindow: 131072, supportsTools: true },
+    ],
+    azure: [
+        { id: "gpt-5.6", name: "GPT-5.6", provider: "azure", contextWindow: 1050000, maxTokens: 128000, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "gpt-5.5", name: "GPT-5.5", provider: "azure", contextWindow: 1050000, maxTokens: 128000, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "gpt-4o", name: "GPT-4o", provider: "azure", contextWindow: 128000, supportsTools: true, supportsVision: true },
+        { id: "claude-sonnet-5", name: "Claude Sonnet 5", provider: "azure", contextWindow: 1000000, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", provider: "azure", contextWindow: 1000000, maxTokens: 384000, supportsTools: true, supportsReasoning: true },
+    ],
+    vertex: [
+        { id: "gemini-3.6-flash", name: "Gemini 3.6 Flash", provider: "vertex", contextWindow: 1048576, maxTokens: 65536, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "gemini-3.5-flash", name: "Gemini 3.5 Flash", provider: "vertex", contextWindow: 1048576, maxTokens: 65536, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "vertex", contextWindow: 1048576, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "claude-sonnet-5@default", name: "Claude Sonnet 5", provider: "vertex", contextWindow: 1000000, maxTokens: 128000, supportsTools: true, supportsVision: true, supportsReasoning: true },
+    ],
+    gateway: [
+        { id: "openai/gpt-5.6", name: "GPT-5.6", provider: "gateway", contextWindow: 1050000, maxTokens: 128000, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "anthropic/claude-sonnet-5", name: "Claude Sonnet 5", provider: "gateway", contextWindow: 1000000, maxTokens: 128000, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "google/gemini-3.6-flash", name: "Gemini 3.6 Flash", provider: "gateway", contextWindow: 1000000, maxTokens: 65536, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "deepseek/deepseek-v4-pro", name: "DeepSeek V4 Pro", provider: "gateway", contextWindow: 1000000, maxTokens: 384000, supportsTools: true, supportsReasoning: true },
+        { id: "xai/grok-4.5", name: "Grok 4.5", provider: "gateway", contextWindow: 500000, maxTokens: 500000, supportsTools: true, supportsVision: true, supportsReasoning: true },
+    ],
+    togetherai: [
+        { id: "moonshotai/Kimi-K3", name: "Kimi K3", provider: "togetherai", contextWindow: 1048576, maxTokens: 131072, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "zai-org/GLM-5.2", name: "GLM 5.2", provider: "togetherai", contextWindow: 262144, maxTokens: 164000, supportsTools: true, supportsReasoning: true },
+        { id: "Qwen/Qwen3.7-Max", name: "Qwen 3.7 Max", provider: "togetherai", contextWindow: 1000000, maxTokens: 500000, supportsTools: true },
+        { id: "deepseek-ai/DeepSeek-V4-Pro", name: "DeepSeek V4 Pro", provider: "togetherai", contextWindow: 512000, maxTokens: 384000, supportsTools: true, supportsReasoning: true },
+        { id: "meta-llama/Llama-3.3-70B-Instruct-Turbo", name: "Llama 3.3 70B Turbo", provider: "togetherai", contextWindow: 131072, supportsTools: true },
+    ],
+    mistral: [
+        { id: "mistral-medium-latest", name: "Mistral Medium", provider: "mistral", contextWindow: 262144, maxTokens: 262144, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "mistral-large-latest", name: "Mistral Large", provider: "mistral", contextWindow: 262144, maxTokens: 262144, supportsTools: true },
+        { id: "mistral-small-latest", name: "Mistral Small", provider: "mistral", contextWindow: 256000, maxTokens: 256000, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "devstral-latest", name: "Devstral", provider: "mistral", contextWindow: 262144, maxTokens: 262144, supportsTools: true },
+        { id: "magistral-medium-latest", name: "Magistral Medium", provider: "mistral", contextWindow: 262144, maxTokens: 262144, supportsTools: true, supportsReasoning: true },
+    ],
+    huggingface: [
+        { id: "moonshotai/Kimi-K3", name: "Kimi K3", provider: "huggingface", contextWindow: 1000000, maxTokens: 131072, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "deepseek-ai/DeepSeek-V4-Pro", name: "DeepSeek V4 Pro", provider: "huggingface", contextWindow: 1048576, maxTokens: 393216, supportsTools: true, supportsReasoning: true },
+        { id: "Qwen/Qwen3.6-27B", name: "Qwen 3.6 27B", provider: "huggingface", contextWindow: 262144, maxTokens: 65536, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "meta-llama/Llama-4-Maverick-17B-128E-Instruct", name: "Llama 4 Maverick", provider: "huggingface", contextWindow: 1048576, supportsTools: true, supportsVision: true },
+        { id: "Qwen/Qwen3-Coder-480B-A35B-Instruct", name: "Qwen 3 Coder", provider: "huggingface", contextWindow: 262144, supportsTools: true },
+    ],
+    lmstudio: [
+        { id: "openai/gpt-oss-20b", name: "GPT OSS 20B", provider: "lmstudio", contextWindow: 131072, maxTokens: 32768, supportsTools: true, supportsReasoning: true },
+        { id: "qwen/qwen3-30b-a3b-2507", name: "Qwen 3 30B", provider: "lmstudio", contextWindow: 262144, maxTokens: 16384, supportsTools: true },
+        { id: "qwen/qwen3-coder-30b", name: "Qwen 3 Coder 30B", provider: "lmstudio", contextWindow: 262144, maxTokens: 65536, supportsTools: true },
     ],
     xai: [
         { id: "grok-2", name: "Grok 2", provider: "xai", contextWindow: 131072, supportsTools: true, supportsVision: true, supportsReasoning: true },
         { id: "grok-2-latest", name: "Grok 2 Latest", provider: "xai", contextWindow: 131072, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "grok-3", name: "Grok 3", provider: "xai", contextWindow: 131072, supportsTools: true, supportsReasoning: true },
+        { id: "grok-4", name: "Grok 4", provider: "xai", contextWindow: 262144, supportsTools: true, supportsReasoning: true },
+        { id: "grok-4-fast", name: "Grok 4 Fast", provider: "xai", contextWindow: 262144, supportsTools: true, supportsReasoning: true },
+        { id: "grok-4-fast-mini", name: "Grok 4 Fast Mini", provider: "xai", contextWindow: 262144, supportsTools: true, supportsReasoning: true },
         { id: "grok-2-mini", name: "Grok 2 Mini", provider: "xai", contextWindow: 131072, supportsTools: true, supportsVision: true },
         { id: "grok-1.5", name: "Grok 1.5", provider: "xai", contextWindow: 131072, supportsTools: true, supportsVision: true },
     ],
     ollama: [
         { id: "llama3", name: "Llama 3 (Local)", provider: "ollama", supportsTools: true },
         { id: "mistral", name: "Mistral (Local)", provider: "ollama", supportsTools: true },
-        { id: "deepseek-r1", name: "DeepSeek R1 (Local)", provider: "ollama", supportsTools: false },
+        { id: "deepseek-r1", name: "DeepSeek R1 (Local)", provider: "ollama", supportsTools: false, supportsReasoning: true },
         { id: "qwen2.5-coder", name: "Qwen 2.5 Coder (Local)", provider: "ollama", supportsTools: true },
+        { id: "qwq-32b", name: "QwQ 32B (Local)", provider: "ollama", supportsTools: false, supportsReasoning: true },
     ],
     custom: [
         { id: "default-model", name: "Custom Endpoint Model", provider: "custom", supportsTools: true },

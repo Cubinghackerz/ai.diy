@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import { SearchableModelSelect } from "~/components/ui/ModelPicker";
 import { haptic, hapticConfirm, hapticSelect } from "~/lib/haptics";
 import { testProviderKey } from "~/lib/key-test";
 import { useSettings } from "~/lib/providers/SettingsProvider";
@@ -16,7 +17,6 @@ import {
 } from "~/lib/types";
 import {
     ArrowRight,
-    CaretDown,
     CheckCircle,
     HardDrives,
     Key,
@@ -24,6 +24,7 @@ import {
     XCircle,
 } from "@phosphor-icons/react";
 import { cn } from "~/lib/utils";
+import { localProviderKey } from "~/lib/provider-credentials";
 
 const CLOUD_PROVIDERS: ProviderId[] = [
     "openai",
@@ -32,9 +33,25 @@ const CLOUD_PROVIDERS: ProviderId[] = [
     "groq",
     "openrouter",
     "xai",
+    "deepseek",
+    "bedrock",
+    "azure",
+    "vertex",
+    "gateway",
+    "togetherai",
+    "mistral",
+    "huggingface",
 ];
 
-const LOCAL_IDS: ProviderId[] = ["ollama", "custom"];
+const LOCAL_IDS: ProviderId[] = ["ollama", "lmstudio", "custom"];
+
+const CREDENTIAL_HINTS: Partial<Record<ProviderId, string>> = {
+    bedrock:
+        '{"accessKeyId":"…","secretAccessKey":"…","region":"us-east-1"}',
+    azure: '{"resourceName":"my-resource","apiKey":"…"}',
+    vertex:
+        '{"project":"my-project","location":"us-central1","clientEmail":"…","privateKey":"…"}',
+};
 
 export function SetupGate() {
     const { settings, loaded, updateProvider, updateChat, updateSettings } =
@@ -110,7 +127,7 @@ export function SetupGate() {
         if (!canContinue) return;
         hapticConfirm();
         const storedKey = local
-            ? apiKey.trim() || (provider === "ollama" ? "ollama" : "custom")
+            ? apiKey.trim() || localProviderKey(provider)
             : apiKey.trim();
 
         updateProvider(provider, {
@@ -215,6 +232,14 @@ export function SetupGate() {
                                 }}
                                 className="h-10 rounded-xl bg-background font-mono text-sm"
                             />
+                            {CREDENTIAL_HINTS[provider] ? (
+                                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                                    Paste JSON credentials:{" "}
+                                    <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground/80">
+                                        {CREDENTIAL_HINTS[provider]}
+                                    </code>
+                                </p>
+                            ) : null}
                         </div>
                     ) : null}
 
@@ -276,27 +301,11 @@ export function SetupGate() {
                                     className="text-success"
                                 />
                             </label>
-                            <div className="relative">
-                                <select
-                                    id="setup-model"
-                                    value={model}
-                                    onChange={(e) => {
-                                        hapticSelect();
-                                        setModel(e.target.value);
-                                    }}
-                                    className="h-10 w-full appearance-none rounded-xl border border-input bg-background py-2 pr-9 pl-3 text-sm font-medium outline-none"
-                                >
-                                    {models.map((m) => (
-                                        <option key={m.id} value={m.id}>
-                                            {m.name || m.id}
-                                        </option>
-                                    ))}
-                                </select>
-                                <CaretDown
-                                    size={14}
-                                    className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground"
-                                />
-                            </div>
+                            <SearchableModelSelect
+                                models={models}
+                                value={model}
+                                onChange={setModel}
+                            />
                             <p className="text-xs text-muted-foreground">
                                 Live test succeeded — choose a model to continue.
                             </p>

@@ -13,16 +13,13 @@ import { isLocalProvider, isProviderReady } from "~/lib/setup";
 import {
     DEFAULT_MODELS,
     PROVIDER_DEFAULTS,
-    type ModelInfo,
     type McpServerConfig,
     type ProviderId,
 } from "~/lib/types";
-import { enrichModelInfo, resolveModel } from "~/lib/model-capabilities";
+import { resolveModel } from "~/lib/model-capabilities";
 import { cn } from "~/lib/utils";
-import { ModelPicker } from "~/components/ui/ModelPicker";
-import { ProviderPicker } from "~/components/ui/ProviderPicker";
+import { localProviderKey } from "~/lib/provider-credentials";
 import {
-    CaretDown,
     ChatCircleDots,
     CheckCircle,
     Desktop,
@@ -33,7 +30,6 @@ import {
     Moon,
     Plus,
     Plug,
-    Sliders,
     SpinnerGap,
     Sun,
     Trash,
@@ -43,7 +39,7 @@ import {
 import * as Switch from "@radix-ui/react-switch";
 
 type SidebarPanel = "chats" | "settings";
-type SettingsSection = "keys" | "model" | "tools" | "mcp" | "appearance";
+type SettingsSection = "keys" | "tools" | "mcp" | "appearance";
 
 type ThreadItem = { id: string; title: string };
 
@@ -223,7 +219,6 @@ function SettingsPanel() {
     const {
         settings,
         updateProvider,
-        updateChat,
         updateSettings,
         addMcpServer,
         removeMcpServer,
@@ -240,7 +235,6 @@ function SettingsPanel() {
         icon: typeof Key;
     }[] = [
         { id: "keys", label: "API Keys", icon: Key },
-        { id: "model", label: "Model", icon: Sliders },
         { id: "tools", label: "Tools", icon: Globe },
         { id: "mcp", label: "MCP", icon: Plug },
         { id: "appearance", label: "Theme", icon: Sun },
@@ -293,60 +287,6 @@ function SettingsPanel() {
             </div>
 
             {section === "keys" && <KeysSection />}
-
-            {section === "model" && (
-                <div className="flex flex-col gap-3">
-                    <ProviderModelPickers />
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-[11px] font-medium text-muted-foreground">
-                            System prompt
-                        </label>
-                        <textarea
-                            value={settings.chat.systemPrompt}
-                            onChange={(e) =>
-                                updateChat({ systemPrompt: e.target.value })
-                            }
-                            placeholder="You are a helpful AI assistant…"
-                            rows={3}
-                            className="w-full resize-none rounded-xl border border-border bg-background px-3 py-2 text-xs outline-none focus:border-border"
-                        />
-                    </div>
-                    <div className="flex flex-col gap-2">
-                        <label className="text-[11px] font-medium text-muted-foreground">
-                            Temperature ({settings.chat.temperature})
-                        </label>
-                        <input
-                            type="range"
-                            min={0}
-                            max={2}
-                            step={0.1}
-                            value={settings.chat.temperature}
-                            onChange={(e) =>
-                                updateChat({
-                                    temperature: parseFloat(e.target.value),
-                                })
-                            }
-                            className="w-full accent-primary"
-                        />
-                    </div>
-                    <div className="flex flex-col gap-2">
-                        <label className="text-[11px] font-medium text-muted-foreground">
-                            Top P ({settings.chat.topP})
-                        </label>
-                        <input
-                            type="range"
-                            min={0}
-                            max={1}
-                            step={0.05}
-                            value={settings.chat.topP}
-                            onChange={(e) =>
-                                updateChat({ topP: parseFloat(e.target.value) })
-                            }
-                            className="w-full accent-primary"
-                        />
-                    </div>
-                </div>
-            )}
 
             {section === "tools" && (
                 <div className="flex flex-col gap-2">
@@ -416,8 +356,7 @@ function SettingsPanel() {
                 <div className="flex flex-col gap-3">
                     <p className="text-[11px] leading-relaxed text-muted-foreground">
                         HTTP/SSE MCP tools are sent with each chat request.
-                        Stdio servers only work when self-hosting (not on
-                        Vercel).
+                        Stdio servers launch server-side on your host.
                     </p>
                     <div className="flex flex-col gap-1.5">
                         <Input
@@ -556,15 +495,11 @@ function KeysSection() {
         kind: "idle" | "ok" | "error";
         message?: string;
     }>({ kind: "idle" });
-    const [models, setModels] = useState<ModelInfo[]>(() =>
-        (DEFAULT_MODELS[active] ?? []).map(enrichModelInfo),
-    );
 
     useEffect(() => {
         const cfg = settings.providers[active];
         setDraftKey(cfg?.apiKey || "");
         setDraftUrl(cfg?.baseUrl || PROVIDER_DEFAULTS[active].baseUrl || "");
-        setModels((DEFAULT_MODELS[active] ?? []).map(enrichModelInfo));
         setStatus({ kind: "idle" });
     }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -581,7 +516,6 @@ function KeysSection() {
             baseUrl: draftUrl,
         });
         setTesting(false);
-        setModels(result.models.map(enrichModelInfo));
 
         if (!result.ok) {
             setStatus({ kind: "error", message: result.error });
@@ -590,7 +524,7 @@ function KeysSection() {
 
         hapticConfirm();
         const storedKey = local
-            ? draftKey.trim() || (active === "ollama" ? "ollama" : "custom")
+            ? draftKey.trim() || localProviderKey(active)
             : draftKey.trim();
         updateProvider(active, {
             apiKey: storedKey,
@@ -726,77 +660,10 @@ function KeysSection() {
                 </p>
             )}
 
-            {status.kind === "ok" && (
-                <div className="flex flex-col gap-1.5 animate-slide-up">
-                    <label className="text-[11px] font-medium text-muted-foreground">
-                        Model
-                    </label>
-                    <ModelPicker
-                        provider={active}
-                        value={settings.chat.model}
-                        onChange={(modelId) =>
-                            updateChat({ provider: active, model: modelId })
-                        }
-                        enabled
-                        align="left"
-                        className="w-full [&_button]:h-9 [&_button]:w-full [&_button]:justify-between [&_button]:rounded-xl"
-                    />
-                </div>
-            )}
-
             {status.kind === "idle" && keyReady && !local && (
                 <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
                     <WarningCircle size={14} className="mt-0.5 shrink-0" />
                     Models unlock after a successful test call.
-                </p>
-            )}
-        </div>
-    );
-}
-
-function ProviderModelPickers() {
-    const { settings, updateChat } = useSettings();
-    const provider = settings.chat.provider;
-    const ready = isProviderReady(settings, provider);
-
-    return (
-        <div className="flex flex-col gap-2">
-            <label className="text-[11px] font-medium text-muted-foreground">
-                Active provider
-            </label>
-            <ProviderPicker
-                value={provider}
-                onChange={(next) => {
-                    const first = resolveModel(
-                        next,
-                        settings.chat.model,
-                        (DEFAULT_MODELS[next] ?? []).map((m) => ({ ...m, provider: next })),
-                    );
-                    updateChat({ provider: next, model: first });
-                }}
-                align="left"
-                className="w-full [&_button]:h-9 [&_button]:w-full [&_button]:justify-between [&_button]:rounded-xl"
-            />
-
-            {ready ? (
-                <div className="flex flex-col gap-1.5">
-                    <label className="text-[11px] font-medium text-muted-foreground">
-                        Model
-                    </label>
-                    <ModelPicker
-                        provider={provider}
-                        value={settings.chat.model}
-                        onChange={(modelId) => updateChat({ model: modelId })}
-                        enabled={ready}
-                        align="left"
-                        className="w-full [&_button]:h-9 [&_button]:w-full [&_button]:justify-between [&_button]:rounded-xl"
-                    />
-                </div>
-            ) : (
-                <p className="rounded-xl border border-border/60 bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
-                    Add and test an API key under{" "}
-                    <span className="font-medium text-foreground">API Keys</span>{" "}
-                    to unlock models for this provider.
                 </p>
             )}
         </div>

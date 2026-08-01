@@ -52,7 +52,7 @@ export function inferModelSupportsTools(
         return false;
     }
 
-    if (provider === "ollama" || provider === "custom") {
+    if (provider === "ollama" || provider === "custom" || provider === "lmstudio") {
         if (/llava|bakllava|moondream|minicpm-v|embed/.test(id)) {
             return false;
         }

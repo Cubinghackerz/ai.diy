@@ -6,11 +6,10 @@
  * messages from the previous chat can't mistitle the new one.
  */
 
-import { useRuntimeSyncTick } from "~/components/assistant-ui/RuntimeSync";
-import { useAui } from "@assistant-ui/react";
+import { useAui, useAuiState } from "@assistant-ui/react";
 import { useEffect, useRef } from "react";
 import { useSettings } from "~/lib/providers/SettingsProvider";
-import { isLocalProvider } from "~/lib/setup";
+import { localProviderKey } from "~/lib/provider-credentials";
 
 function fallbackTitle(message: string): string {
     const cleaned = message.replace(/\s+/g, " ").trim();
@@ -28,11 +27,9 @@ export function ChatLifecycle({
     onTitleChange: (threadId: string, title: string) => void;
 }) {
     const aui = useAui();
-    const tick = useRuntimeSyncTick();
     const { settings } = useSettings();
-    const messageCount = aui.thread.getState().messages.length;
-    const isRunning = aui.thread.getState().isRunning;
-    void tick;
+    const messageCount = useAuiState((s) => s.thread.messages.length);
+    const isRunning = useAuiState((s) => s.thread.isRunning);
     const titledForThread = useRef<string | null>(null);
     const pendingTitle = useRef(false);
     /** True once this thread has been empty after becoming active. */
@@ -72,12 +69,7 @@ export function ChatLifecycle({
         const provider = settings.chat.provider;
         const providerConfig = settings.providers[provider];
         const apiKey =
-            providerConfig?.apiKey ||
-            (isLocalProvider(provider)
-                ? provider === "ollama"
-                    ? "ollama"
-                    : "custom"
-                : "");
+            providerConfig?.apiKey || localProviderKey(provider);
         const titleThreadId = threadId;
 
         void (async () => {

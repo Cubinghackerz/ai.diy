@@ -6,12 +6,15 @@ import { DEFAULT_MODELS, type ModelInfo, type ProviderId } from "~/lib/types";
 import {
     inferModelSupportsTools,
 } from "~/lib/model-capabilities";
+import { modelSupportsReasoning } from "~/lib/reasoning";
 
 export type ModelModalities = {
     tools: boolean;
     vision: boolean;
     /** PDF / binary document file parts (not plain text). */
     documents: boolean;
+    /** Model emits reasoning / thinking parts. */
+    reasoning: boolean;
 };
 
 export function inferModelSupportsVision(
@@ -65,6 +68,7 @@ export function getModelModalities(
         tools: inferModelSupportsTools(modelId, provider),
         vision: inferModelSupportsVision(modelId, provider),
         documents: inferModelSupportsDocuments(modelId, provider),
+        reasoning: modelSupportsReasoning(provider, modelId),
     };
 }
 
@@ -77,5 +81,8 @@ export function enrichModelModalities(model: ModelInfo): ModelInfo {
         supportsVision:
             model.supportsVision ??
             inferModelSupportsVision(model.id, model.provider),
+        supportsReasoning:
+            model.supportsReasoning ??
+            modelSupportsReasoning(model.provider, model.id),
     };
 }

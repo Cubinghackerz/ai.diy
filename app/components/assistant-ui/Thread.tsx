@@ -6,7 +6,6 @@ import {
   UserMessageAttachments,
 } from "~/components/assistant-ui/attachment";
 import { ComposerModelControls } from "~/components/assistant-ui/ComposerModelControls";
-import { useRuntimeSyncTick } from "~/components/assistant-ui/RuntimeSync";
 import { ThreadFollowupSuggestions } from "~/components/assistant-ui/follow-up-suggestions";
 import { MarkdownText } from "~/components/assistant-ui/markdown-text";
 import {
@@ -96,13 +95,8 @@ const ThreadComponentsContext =
   createContext<ThreadComponents>(EMPTY_COMPONENTS);
 
 export const Thread: FC<ThreadProps> = ({ components = EMPTY_COMPONENTS }) => {
-  const aui = useAui();
-  // Must subscribe — Provider ticks alone don't re-render non-consumers,
-  // which left the welcome screen stuck while the composer showed "generating".
-  const tick = useRuntimeSyncTick();
-  const messageCount = aui.thread.getState().messages.length;
+  const messageCount = useAuiState((state) => state.thread.messages.length);
   const isEmpty = messageCount === 0;
-  void tick;
 
   return (
     <ThreadComponentsContext.Provider value={components}>
@@ -116,10 +110,7 @@ const ThreadRoot: FC<{ isEmpty: boolean; messageCount: number }> = ({
   messageCount,
 }) => {
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext);
-  const aui = useAui();
-  const tick = useRuntimeSyncTick();
-  const composerEmpty = aui.composer.getState().isEmpty;
-  void tick;
+  const composerEmpty = useAuiState((s) => s.composer.isEmpty);
 
   return (
     <ThreadPrimitive.Root
@@ -149,7 +140,7 @@ const ThreadRoot: FC<{ isEmpty: boolean; messageCount: number }> = ({
             data-slot="aui_message-group"
             className="mb-14 flex flex-col gap-y-6 empty:hidden"
           >
-            <ThreadMessages messageCount={messageCount} />
+            <ThreadMessages />
           </div>
 
           <ThreadPrimitive.ViewportFooter
@@ -171,14 +162,12 @@ const ThreadRoot: FC<{ isEmpty: boolean; messageCount: number }> = ({
 };
 
 /**
- * Render messages by index from a tick-synced count.
- * ThreadPrimitive.Messages relies on useAuiState, which can miss updates with
- * the AISDK external store — so we drive the list from getState() + RuntimeSync.
+ * Render messages by index from a subscribed count. The count selector
+ * re-renders this list as messages stream in; each MessageByIndex item
+ * subscribes to its own message state for content updates.
  */
-const ThreadMessages: FC<{ messageCount: number }> = ({ messageCount }) => {
-    // Re-render when runtime ticks so MessageByIndex memo doesn't freeze
-    // streaming content (it only compares index + components).
-    useRuntimeSyncTick();
+const ThreadMessages: FC = () => {
+    const messageCount = useAuiState((s) => s.thread.messages.length);
     if (messageCount === 0) return null;
 
     const messageComponents = useMemo(() => ({ Message: ThreadMessage }), []);
@@ -199,12 +188,8 @@ const ThreadMessages: FC<{ messageCount: number }> = ({ messageCount }) => {
 const ThreadMessage: FC = () => {
   const { AssistantMessage: AssistantMessageComponent = AssistantMessage } =
     useContext(ThreadComponentsContext);
-  // Context consumer — updates even when MessageByIndex is memo-bailed.
-  useRuntimeSyncTick();
-  const aui = useAui();
-  const message = aui.message.getState();
-  const role = message.role;
-  const isEditing = message.composer.isEditing;
+  const role = useAuiState((s) => s.message.role);
+  const isEditing = useAuiState((s) => s.message.composer.isEditing);
 
   if (isEditing) return <EditComposer />;
   if (role === "user") return <UserMessage />;
@@ -298,7 +283,6 @@ const ComposerInput: FC = () => {
 
 const Composer: FC = () => {
   const aui = useAui();
-  const tick = useRuntimeSyncTick();
   const {
     value,
     setText,
@@ -306,7 +290,6 @@ const Composer: FC = () => {
     canSend: storeCanSend,
   } = unstable_useComposerInput();
   const isRunning = useAuiState((s) => s.thread.isRunning);
-  void tick;
 
   const canSend = storeCanSend && !isRunning;
 
@@ -419,7 +402,6 @@ const AssistantMessage: FC = () => {
     ToolGroup,
     ReasoningGroup,
   } = useContext(ThreadComponentsContext);
-  useRuntimeSyncTick();
 
   const ACTION_BAR_PT = "pt-1.5";
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
@@ -542,7 +524,6 @@ const AssistantActionBar: FC = () => {
 };
 
 const UserMessage: FC = () => {
-  useRuntimeSyncTick();
   return (
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"

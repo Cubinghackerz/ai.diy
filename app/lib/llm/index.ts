@@ -2,7 +2,10 @@
  * LLM Provider Registry
  *
  * Factory for getting the appropriate provider adapter for each ProviderId.
- * Supports providers: OpenAI, Anthropic, Google Gemini, Groq, OpenRouter, xAI, Ollama, Custom.
+ * Providers that expose an OpenAI-compatible models endpoint reuse
+ * OpenAIProvider; the rest use native adapters. Chat streaming itself is
+ * handled by the AI SDK route (app/lib/server/model.ts) — these adapters only
+ * power live model discovery in /api/models.
  */
 
 import type { LLMProvider } from "./types";
@@ -10,18 +13,34 @@ import type { ProviderId } from "~/lib/types";
 import { OpenAIProvider } from "./openai";
 import { AnthropicProvider } from "./anthropic";
 import { GeminiProvider } from "./gemini";
+import { BedrockProvider } from "./bedrock";
+import { AzureProvider } from "./azure";
+import { VertexProvider } from "./vertex";
+import { GatewayProvider } from "./gateway";
 
 const providers = new Map<ProviderId, LLMProvider>();
 
-// OpenAI, Groq, OpenRouter, xAI, Ollama, and Custom all use the OpenAI-compatible API
+// OpenAI-compatible API surface
 providers.set("openai", new OpenAIProvider("openai"));
-providers.set("anthropic", new AnthropicProvider());
-providers.set("gemini", new GeminiProvider());
 providers.set("groq", new OpenAIProvider("groq"));
 providers.set("openrouter", new OpenAIProvider("openrouter"));
 providers.set("xai", new OpenAIProvider("xai"));
+providers.set("deepseek", new OpenAIProvider("deepseek"));
+providers.set("togetherai", new OpenAIProvider("togetherai"));
+providers.set("mistral", new OpenAIProvider("mistral"));
+providers.set("huggingface", new OpenAIProvider("huggingface"));
 providers.set("ollama", new OpenAIProvider("ollama"));
+providers.set("lmstudio", new OpenAIProvider("lmstudio"));
 providers.set("custom", new OpenAIProvider("custom"));
+
+// Native SDKs (Anthropic / Gemini use their own wire formats; the rest
+// have no OpenAI-compatible model listing).
+providers.set("anthropic", new AnthropicProvider());
+providers.set("gemini", new GeminiProvider());
+providers.set("bedrock", new BedrockProvider());
+providers.set("azure", new AzureProvider());
+providers.set("vertex", new VertexProvider());
+providers.set("gateway", new GatewayProvider());
 
 export function getProvider(id: ProviderId): LLMProvider {
     const provider = providers.get(id);

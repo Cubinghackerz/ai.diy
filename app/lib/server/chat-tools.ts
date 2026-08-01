@@ -3,7 +3,7 @@
  * Uses free DuckDuckGo / optional SearXNG; LLM calls are BYOK (user's key).
  */
 
-import { tool } from "ai";
+import { tool, type Tool } from "ai";
 import { z } from "zod";
 import { ARTIFACT_MARKER } from "~/lib/artifacts";
 import { webSearch, type SearchEngine } from "~/lib/search";
@@ -168,7 +168,7 @@ export async function buildChatTools(settings: ToolSettings = {}) {
     const enablePython =
         settings.pythonEnabled !== false && (await isPythonRuntimeAvailable());
 
-    const tools: Record<string, ReturnType<typeof tool>> = {};
+    const tools: Record<string, Tool> = {};
 
     if (enableSearch) {
         const engine = settings.webSearchEngine ?? "duckduckgo";

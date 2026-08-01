@@ -1,30 +1,21 @@
-/**
- * API Chat Route — Vercel AI SDK UI message stream (assistant-ui / useChat)
- *
- * BYOK: API keys come from the client on every request — no server env secrets.
- * Tools run on this host (free search); LLM usage is billed to the user.
- */
-
-import type { ActionFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import {
     streamText,
     convertToModelMessages,
     stepCountIs,
     type UIMessage,
 } from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createXai } from "@ai-sdk/xai";
 import { buildChatTools } from "~/lib/server/chat-tools";
 import { closeMcpClients, loadMcpTools } from "~/lib/server/mcp-tools";
-import { validateProviderEndpoint } from "~/lib/server/env";
 import { buildChatSystemPrompt } from "~/lib/server/prompt";
 import {
     buildReasoningProviderOptions,
     type ReasoningEffort,
 } from "~/lib/reasoning";
 import type { McpServerConfig, ProviderId } from "~/lib/types";
+import { createChatModel } from "~/lib/server/model";
+import { providerNeedsKey } from "~/lib/provider-credentials";
+import { corsPreflight, withCors } from "~/lib/server/cors";
 
 interface ChatRequestBody {
     messages: UIMessage[];
@@ -49,86 +40,58 @@ interface ChatRequestBody {
     mcpServers?: McpServerConfig[];
 }
 
-function getModelInstance(body: ChatRequestBody) {
-    const { provider, apiKey, baseUrl, model } = body;
-    switch (provider) {
-        case "openai":
-            return createOpenAI({ apiKey, baseURL: baseUrl || undefined }).chat(
-                model,
-            );
-        case "anthropic":
-            return createAnthropic({ apiKey, baseURL: baseUrl || undefined })(
-                model,
-            );
-        case "gemini":
-            return createGoogleGenerativeAI({ apiKey })(model);
-        case "groq":
-            return createOpenAI({
-                apiKey,
-                baseURL: baseUrl || "https://api.groq.com/openai/v1",
-            }).chat(model);
-        case "xai":
-            return createXai({
-                apiKey,
-                baseURL: baseUrl || "https://api.x.ai/v1",
-            }).chat(model);
-        case "openrouter":
-            return createOpenAI({
-                apiKey,
-                baseURL: baseUrl || "https://openrouter.ai/api/v1",
-            }).chat(model);
-        case "ollama":
-            return createOpenAI({
-                apiKey: apiKey || "ollama",
-                baseURL: baseUrl || "http://localhost:11434/v1",
-            }).chat(model);
-        case "custom":
-            return createOpenAI({
-                apiKey: apiKey || "custom",
-                baseURL: baseUrl || "http://localhost:1234/v1",
-            }).chat(model);
-        default:
-            throw new Error(`Unsupported provider: ${provider}`);
-    }
+export function loader({ request }: LoaderFunctionArgs) {
+    const preflight = corsPreflight(request);
+    if (preflight) return preflight;
+    return withCors(
+        request,
+        new Response("Method Not Allowed", { status: 405 }),
+    );
 }
 
 export async function action({ request }: ActionFunctionArgs) {
+    const preflight = corsPreflight(request);
+    if (preflight) return preflight;
+
     if (request.method !== "POST") {
-        return new Response("Method Not Allowed", { status: 405 });
+        return withCors(
+            request,
+            new Response("Method Not Allowed", { status: 405 }),
+        );
     }
 
     let body: ChatRequestBody;
     try {
         body = await request.json();
     } catch {
-        return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+        return withCors(
+            request,
+            Response.json({ error: "Invalid JSON body" }, { status: 400 }),
+        );
     }
 
-    const endpointError = validateProviderEndpoint(
-        body.provider,
-        body.baseUrl,
-    );
-    if (endpointError) {
-        return Response.json({ error: endpointError }, { status: 400 });
-    }
-
-    if (
-        !body.apiKey &&
-        body.provider !== "ollama" &&
-        body.provider !== "custom"
-    ) {
-        return Response.json(
-            { error: "API key required — add yours in Settings." },
-            { status: 400 },
+    if (providerNeedsKey(body.provider) && !body.apiKey) {
+        return withCors(
+            request,
+            Response.json(
+                { error: "API key required — add yours in Settings." },
+                { status: 400 },
+            ),
         );
     }
 
     if (!body.model) {
-        return Response.json({ error: "Model required." }, { status: 400 });
+        return withCors(
+            request,
+            Response.json({ error: "Model required." }, { status: 400 }),
+        );
     }
 
     if (!Array.isArray(body.messages)) {
-        return Response.json({ error: "Messages required." }, { status: 400 });
+        return withCors(
+            request,
+            Response.json({ error: "Messages required." }, { status: 400 }),
+        );
     }
 
     const { tools: mcpTools, clients: mcpClients } = await loadMcpTools(
@@ -136,7 +99,7 @@ export async function action({ request }: ActionFunctionArgs) {
     );
 
     try {
-        const modelInstance = getModelInstance(body);
+        const modelInstance = createChatModel(body);
         const builtIn = await buildChatTools(body.toolSettings ?? {});
         const tools = { ...builtIn, ...mcpTools };
 
@@ -186,16 +149,22 @@ export async function action({ request }: ActionFunctionArgs) {
             },
         });
 
-        return result.toUIMessageStreamResponse({
-            sendReasoning: true,
-            onError: (err) =>
-                err instanceof Error ? err.message : "Unknown chat error",
-        });
+        return withCors(
+            request,
+            result.toUIMessageStreamResponse({
+                sendReasoning: true,
+                onError: (err) =>
+                    err instanceof Error ? err.message : "Unknown chat error",
+            }),
+        );
     } catch (err) {
         await closeMcpClients(mcpClients);
         const errorMsg =
             err instanceof Error ? err.message : "Unknown server error";
         console.error("[api/chat]", err);
-        return Response.json({ error: errorMsg }, { status: 500 });
+        return withCors(
+            request,
+            Response.json({ error: errorMsg }, { status: 500 }),
+        );
     }
 }

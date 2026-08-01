@@ -13,10 +13,10 @@ import {
 import { useChat } from "@ai-sdk/react";
 import { ChatSessionProvider } from "~/components/assistant-ui/ChatSessionContext";
 import { ChatThreadSync } from "~/components/assistant-ui/ChatThreadSync";
-import { RuntimeSync } from "~/components/assistant-ui/RuntimeSync";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import { createAttachmentAdapter } from "~/lib/attachments";
 import { getModelModalities } from "~/lib/model-modalities";
+import { localProviderKey } from "~/lib/provider-credentials";
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
 
 async function parseChatError(res: Response): Promise<string> {
@@ -71,13 +71,7 @@ export function AssistantRuntimeProvider({
                             metadata: options.requestMetadata,
                             model: s.chat.model,
                             provider,
-                            apiKey:
-                                apiKey ||
-                                (provider === "ollama"
-                                    ? "ollama"
-                                    : provider === "custom"
-                                      ? "custom"
-                                      : ""),
+                            apiKey: apiKey || localProviderKey(provider),
                             baseUrl,
                             systemPrompt: s.chat.systemPrompt,
                             temperature: s.chat.temperature,
@@ -129,10 +123,8 @@ export function AssistantRuntimeProvider({
     return (
         <ChatSessionProvider value={chat}>
             <AuiRuntimeProvider runtime={runtime}>
-                <RuntimeSync>
-                    <ChatThreadSync threadId={threadId} />
-                    {children}
-                </RuntimeSync>
+                <ChatThreadSync threadId={threadId} />
+                {children}
             </AuiRuntimeProvider>
         </ChatSessionProvider>
     );
