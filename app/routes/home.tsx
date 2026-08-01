@@ -10,6 +10,7 @@ import { ChatErrorBanner } from "~/components/assistant-ui/ChatThreadSync";
 import { PreviewWorkspace } from "~/components/assistant-ui/PreviewWorkspace";
 import { Thread } from "~/components/assistant-ui/Thread";
 import { CanvasPanel } from "~/components/canvas/CanvasPanel";
+import { ArtifactLauncher } from "~/components/canvas/ArtifactLauncher";
 import { AppSidebar } from "~/components/sidebar/AppSidebar";
 import { SetupGate, useNeedsSetup } from "~/components/setup/SetupGate";
 import { CanvasProvider } from "~/lib/canvas";
@@ -23,6 +24,7 @@ export default function Home() {
     return (
         <CanvasProvider>
             <HomeInner />
+            <ArtifactLauncher />
         </CanvasProvider>
     );
 }

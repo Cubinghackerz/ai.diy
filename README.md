@@ -14,7 +14,7 @@ ai.diy is a privacy-first, bring-your-own-key chat interface. It proxies the use
 - **Live model discovery** — `/api/models` queries each provider with the user's key to return a real-time model catalog; local defaults are only an offline fallback.
 - **Free web search** — DuckDuckGo (no search API key) plus optional SearXNG. Server-side results are summarized server-side; nothing is stored.
 - **Built-in tools** — Web search, URL fetch, calculator, canvas files, and browser Python via Pyodide. The model receives the execution result and can continue its response automatically.
-- **Callable skills** — `create_skill` drafts a `SKILL.md` workflow document, and `frontend_design_skill` produces an implementation-ready frontend design brief. Both are side-effect-free and never access private data.
+- **Callable skills** — `create_skill` drafts a `SKILL.md` workflow document, `frontend_design_skill` produces an implementation-ready frontend design brief, and `ultimate_frontend_ui` applies the full frontend implementation/validation contract. These tools are side-effect-free and never access private data.
 - **Tool-capable model picker** — Defaults to the live catalog and keeps the user's selection visible across provider switches; searchable command-style picker.
 - **Reasoning** — One compact input-bar selector exposes the supported effort levels for the selected model; provider-specific `providerOptions` are used for OpenAI, Anthropic, Gemini, xAI, DeepSeek, Bedrock, and Mistral.
 - **Image models** — Vision-capable models accept image attachments. Image-generation models are marked in the picker, expose supported size/count controls, and return generated images inline in chat.
@@ -22,7 +22,7 @@ ai.diy is a privacy-first, bring-your-own-key chat interface. It proxies the use
 - **Experimental multi-model preview** — An opt-in Settings → Experimental workspace runs up to three models in parallel and can synthesize their completed outputs with a fourth model. Each tab retains its own tool calls, reasoning, images, and artifacts.
 - **Auto thread titles** — New chat, first message, the model generates a short title; falls back to a slug if generation fails or the key is missing.
 - **Local-first** — Settings in localStorage; chats + messages in IndexedDB.
-- **Canvas** — Generated HTML, code, and SVG artifacts are scoped to their current chat, reopen from the originating tool result, and resize up to 50% of the viewport.
+- **Canvas** — Generated files, HTML, code, and SVG artifacts are saved per chat in IndexedDB, reopen from tool results or the bottom-right Artifacts button, and resize up to 50% of the viewport.
 - **Dark / light / system theme**.
 
 ## Supported providers

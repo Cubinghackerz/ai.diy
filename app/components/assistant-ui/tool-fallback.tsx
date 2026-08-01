@@ -5,6 +5,7 @@ import {
   AlertCircleIcon,
   CheckIcon,
   ChevronDownIcon,
+  DownloadIcon,
   LoaderIcon,
   XCircleIcon,
 } from "lucide-react";
@@ -54,6 +55,7 @@ function extractArtifact(result: string): {
   filename: string;
   content: string;
   kind: ArtifactKind;
+  mimeType?: string;
 } | null {
   try {
     const parsed = JSON.parse(result) as Record<string, unknown>;
@@ -71,6 +73,7 @@ function extractArtifact(result: string): {
       filename: String(parsed.filename ?? "file.txt"),
       content: String(parsed.content ?? ""),
       kind,
+      mimeType: parsed.mimeType ? String(parsed.mimeType) : undefined,
     };
   } catch {
     return null;
@@ -312,6 +315,18 @@ function ToolFallbackResult({
   if (isArtifactPayload(result)) {
     const info = extractArtifactInfo(result as string);
     const artifact = extractArtifact(result as string);
+    const download = () => {
+      if (!artifact) return;
+      const blob = new Blob([artifact.content], {
+        type: artifact.mimeType || "text/plain;charset=utf-8",
+      });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = artifact.filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    };
     return (
       <div
         data-slot="tool-fallback-result"
@@ -337,6 +352,14 @@ function ToolFallbackResult({
             className="ms-1.5 rounded-md border border-border bg-background px-1.5 py-0.5 text-[11px] font-medium text-foreground outline-none transition-colors hover:bg-accent"
           >
             Open artifact
+          </button>
+          <button
+            type="button"
+            onClick={download}
+            className="ms-1 inline-flex items-center gap-1 rounded-md border border-border bg-background px-1.5 py-0.5 text-[11px] font-medium text-foreground outline-none transition-colors hover:bg-accent"
+          >
+            <DownloadIcon className="size-3" />
+            Download
           </button>
         </p>
       </div>

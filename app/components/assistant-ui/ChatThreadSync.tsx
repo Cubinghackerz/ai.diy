@@ -12,6 +12,10 @@ import {
 } from "~/lib/chat-store";
 import { ARTIFACT_MARKER } from "~/lib/artifacts";
 import { useCanvas, type ArtifactKind } from "~/lib/canvas";
+import {
+    getArtifactsForScope,
+    saveArtifactToDB,
+} from "~/lib/db";
 import { useChatSession } from "~/components/assistant-ui/ChatSessionContext";
 import { isToolUIPart, type UIMessage } from "ai";
 import { useEffect, useRef } from "react";
@@ -33,7 +37,8 @@ function extractArtifactFromText(text: string) {
         const filename = String(parsed.filename ?? "file.txt");
         const content = String(parsed.content ?? "");
         const kind = mapArtifactKind(String(parsed.kind ?? "file"));
-        return { kind, title, filename, content };
+        const mimeType = parsed.mimeType ? String(parsed.mimeType) : undefined;
+        return { kind, title, filename, content, mimeType };
     } catch {
         return null;
     }
@@ -73,6 +78,32 @@ export function ChatThreadSync({
             chat.messages.map((message) => message.id),
         );
     }, [artifactScopeId, threadId]);
+
+    useEffect(() => {
+        if (!threadId) return;
+        let cancelled = false;
+        void getArtifactsForScope(threadId).then((artifacts) => {
+            if (cancelled) return;
+            for (const artifact of artifacts) {
+                addArtifact(
+                    {
+                        kind: artifact.kind,
+                        title: artifact.title,
+                        filename: artifact.filename,
+                        content: artifact.content,
+                        mimeType: artifact.mimeType,
+                        language: artifact.language,
+                        output: artifact.output,
+                        sourceKey: artifact.sourceKey,
+                    },
+                    { scopeId: threadId, open: false },
+                );
+            }
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [addArtifact, threadId]);
 
     // Load messages only when the active thread id changes.
     useEffect(() => {
@@ -142,7 +173,12 @@ export function ChatThreadSync({
                         ? part.toolName
                         : part.type.replace(/^tool-/, "");
                 if (
-                    !["create_file", "create_skill", "frontend_design_skill"].includes(
+                    ![
+                        "create_file",
+                        "generate_file",
+                        "create_skill",
+                        "frontend_design_skill",
+                    ].includes(
                         toolName,
                     )
                 )
@@ -160,19 +196,32 @@ export function ChatThreadSync({
                 const key = `${msg.id}:${toolName}:${part.toolCallId ?? artifact.filename}`;
                 if (seenArtifacts.current.has(key)) continue;
                 seenArtifacts.current.add(key);
-                addArtifact({
-                    kind: artifact.kind,
-                    title: artifact.title,
-                    filename: artifact.filename,
-                    content: artifact.content,
-                    sourceKey: `${artifact.kind}:${artifact.filename}:${artifact.content}`,
-                }, {
-                    scopeId: artifactScopeId,
-                    open: !restoredMessageIds.current.has(msg.id),
-                });
+                const artifactId = addArtifact(
+                    {
+                        kind: artifact.kind,
+                        title: artifact.title,
+                        filename: artifact.filename,
+                        content: artifact.content,
+                        mimeType: artifact.mimeType,
+                        sourceKey: `${artifact.kind}:${artifact.filename}:${artifact.content}`,
+                    },
+                    {
+                        scopeId: artifactScopeId,
+                        open: !restoredMessageIds.current.has(msg.id),
+                    },
+                );
+                if (threadId) {
+                    void saveArtifactToDB(threadId, {
+                        id: artifactId,
+                        ...artifact,
+                        sourceKey: `${artifact.kind}:${artifact.filename}:${artifact.content}`,
+                        scopeId: threadId,
+                        createdAt: Date.now(),
+                    });
+                }
             }
         }
-    }, [chat.messages, addArtifact, artifactScopeId]);
+    }, [chat.messages, addArtifact, artifactScopeId, threadId]);
 
     return null;
 }

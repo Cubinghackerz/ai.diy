@@ -5,6 +5,7 @@
 
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { ThreadData, MessageData } from "~/lib/types";
+import type { Artifact } from "~/lib/canvas";
 
 interface PrismiumDB extends DBSchema {
     threads: {
@@ -17,10 +18,15 @@ interface PrismiumDB extends DBSchema {
         value: MessageData;
         indexes: { "by-thread": string; "by-created": number };
     };
+    artifacts: {
+        key: string;
+        value: Artifact;
+        indexes: { "by-scope": string; "by-created": number };
+    };
 }
 
 const DB_NAME = "prismium-lite-db";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBPDatabase<PrismiumDB>> | null = null;
 
@@ -37,6 +43,13 @@ function getDB() {
                     const msgStore = db.createObjectStore("messages", { keyPath: "id" });
                     msgStore.createIndex("by-thread", "threadId");
                     msgStore.createIndex("by-created", "createdAt");
+                }
+                if (!db.objectStoreNames.contains("artifacts")) {
+                    const artifactStore = db.createObjectStore("artifacts", {
+                        keyPath: "id",
+                    });
+                    artifactStore.createIndex("by-scope", "scopeId");
+                    artifactStore.createIndex("by-created", "createdAt");
                 }
             },
         });
@@ -64,6 +77,36 @@ export async function deleteThreadFromDB(threadId: string): Promise<void> {
     const tx = db.transaction("messages", "readwrite");
     const index = tx.store.index("by-thread");
     let cursor = await index.openCursor(threadId);
+    while (cursor) {
+        await cursor.delete();
+        cursor = await cursor.continue();
+    }
+    await tx.done;
+    await deleteArtifactsForScope(threadId);
+}
+
+export async function getArtifactsForScope(scopeId: string): Promise<Artifact[]> {
+    const db = await getDB();
+    if (!db) return [];
+    const artifacts = await db.getAllFromIndex("artifacts", "by-scope", scopeId);
+    return artifacts.sort((a, b) => a.createdAt - b.createdAt);
+}
+
+export async function saveArtifactToDB(
+    scopeId: string,
+    artifact: Artifact,
+): Promise<void> {
+    const db = await getDB();
+    if (!db) return;
+    await db.put("artifacts", { ...artifact, scopeId });
+}
+
+export async function deleteArtifactsForScope(scopeId: string): Promise<void> {
+    const db = await getDB();
+    if (!db) return;
+    const tx = db.transaction("artifacts", "readwrite");
+    const index = tx.store.index("by-scope");
+    let cursor = await index.openCursor(scopeId);
     while (cursor) {
         await cursor.delete();
         cursor = await cursor.continue();

@@ -60,6 +60,7 @@ function artifactPayload(input: {
     filename: string;
     content: string;
     kind: string;
+    mimeType?: string;
 }) {
     return JSON.stringify({
         [ARTIFACT_MARKER]: true,
@@ -67,6 +68,7 @@ function artifactPayload(input: {
         filename: input.filename,
         content: input.content,
         kind: input.kind,
+        ...(input.mimeType ? { mimeType: input.mimeType } : {}),
     });
 }
 
@@ -126,6 +128,53 @@ function frontendDesignBrief(input: {
                 "Visual tokens and states",
                 "Accessibility and validation checklist",
             ],
+        },
+        null,
+        2,
+    );
+}
+
+function ultimateFrontendUISkill(input: {
+    request: string;
+    surface?: string;
+    constraints?: string;
+}) {
+    return JSON.stringify(
+        {
+            name: "ultimate-frontend-ui",
+            description:
+                "Design and implement polished, responsive frontend experiences from natural-language briefs.",
+            instructionPriority: [
+                "Host-system and artifact instructions",
+                "Explicit user requirements",
+                "Functional correctness and data integrity",
+                "Primary user task and business goal",
+                "Accessibility and usability",
+                "Responsive behavior",
+                "Visual coherence and craft",
+                "Performance and maintainability",
+            ],
+            workflow: [
+                "Extract artifact type, audience, primary task, states, assets, constraints, and success criteria.",
+                "Classify the interface as marketing, product, dashboard, utility, editorial, visualization, game, or 3D.",
+                "Define a concise design thesis before coding.",
+                "Set expression, density, and motion deliberately.",
+                "Map default, loading, empty, error, success, disabled, and offline states before styling.",
+                "Inspect the existing framework, design tokens, routing, data flow, accessibility conventions, and nearby components before changing an existing project.",
+                "Implement semantic structure, responsive layout, primary interaction, visual system, secondary motion, then accessibility/performance hardening.",
+                "Validate at mobile, tablet, and desktop widths, with keyboard navigation, reduced motion, realistic content, and console-error checks.",
+            ],
+            guardrails: [
+                "Use existing project patterns when modifying an existing codebase.",
+                "Do not invent metrics, testimonials, compliance claims, or private data.",
+                "Use semantic controls, visible focus states, accessible names, keyboard access, and reduced-motion support.",
+                "Prevent horizontal overflow and keep touch targets practical.",
+                "Do not use eval, unsafe DOM insertion, or expose secrets.",
+                "Deliver complete runnable behavior rather than decorative mockups.",
+            ],
+            request: input.request.trim(),
+            surface: input.surface?.trim() || "web interface",
+            constraints: input.constraints?.trim() || "Use the existing design system and preserve accessibility.",
         },
         null,
         2,
@@ -267,19 +316,45 @@ export async function buildChatTools(settings: ToolSettings = {}) {
                 });
             },
         });
+
+        tools.ultimate_frontend_ui = tool({
+            description:
+                "Callable Ultimate Frontend UI skill. Use this before creating or substantially redesigning a frontend. It requires a design thesis, interface-mode classification, explicit states, responsive behavior, accessibility, performance, security, and validation. Return the implementation-ready skill contract and apply it to the user's request.",
+            inputSchema: z.object({
+                request: z.string(),
+                surface: z.string().optional(),
+                constraints: z.string().optional(),
+            }),
+            execute: async (input) => ultimateFrontendUISkill(input),
+        });
     }
 
     tools.create_file = tool({
         description:
-            "Create a document, code file, SVG, or interactive HTML preview in the Canvas panel.",
+            "Create a document, code file, SVG, or interactive HTML preview in the Canvas panel. When the user asks for a downloadable file, always use this tool and cite the resulting file.",
         inputSchema: z.object({
             filename: z.string(),
             title: z.string(),
             content: z.string(),
             kind: z.string(),
+            mimeType: z.string().optional(),
         }),
-        execute: async ({ title, filename, content, kind }) =>
-            artifactPayload({ title, filename, content, kind }),
+        execute: async ({ title, filename, content, kind, mimeType }) =>
+            artifactPayload({ title, filename, content, kind, mimeType }),
+    });
+
+    tools.generate_file = tool({
+        description:
+            "Generate a downloadable file from content and cite it in the response. Use this for CSV, JSON, Markdown, TXT, SVG, HTML, or code files. For data-heavy files, use run_python first, then pass the generated content here.",
+        inputSchema: z.object({
+            filename: z.string(),
+            title: z.string(),
+            content: z.string(),
+            kind: z.string(),
+            mimeType: z.string().optional(),
+        }),
+        execute: async ({ title, filename, content, kind, mimeType }) =>
+            artifactPayload({ title, filename, content, kind, mimeType }),
     });
 
     return tools;
