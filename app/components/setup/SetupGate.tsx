@@ -166,9 +166,11 @@ export function SetupGate() {
         <div className="relative flex h-full w-full items-center justify-center overflow-hidden bg-background px-4">
             <div className="relative z-10 flex w-full max-w-lg flex-col gap-8 animate-slide-up">
                 <header className="flex flex-col items-center gap-3 text-center">
-                    <div className="flex size-12 items-center justify-center rounded-2xl bg-primary text-lg font-bold tracking-tight text-primary-foreground">
-                        a
-                    </div>
+                    <img
+                        src="/ai-diy.png"
+                        alt="ai.diy"
+                        className="size-12 rounded-2xl object-cover shadow-sm"
+                    />
                     <div className="flex flex-col gap-1.5">
                         <h1 className="text-3xl font-semibold tracking-tight text-foreground">
                             ai.diy
