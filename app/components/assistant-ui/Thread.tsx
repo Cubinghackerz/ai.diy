@@ -168,9 +168,9 @@ const ThreadRoot: FC<{ isEmpty: boolean; messageCount: number }> = ({
  */
 const ThreadMessages: FC = () => {
     const messageCount = useAuiState((s) => s.thread.messages.length);
-    if (messageCount === 0) return null;
-
     const messageComponents = useMemo(() => ({ Message: ThreadMessage }), []);
+
+    if (messageCount === 0) return null;
 
     return (
         <>

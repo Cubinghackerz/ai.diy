@@ -8,11 +8,9 @@ import { SettingsProvider } from "~/lib/providers/SettingsProvider";
 import { TooltipProvider } from "~/components/ui/tooltip";
 import "~/styles/app.css";
 
+const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem('prismium-lite:settings');var theme=t?JSON.parse(t).theme:'system';if(theme==='dark'||(theme==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){}})();`;
+
 export const meta: MetaFunction = () => [
-    {
-        tagName: "script",
-        content: `(function(){try{var t=localStorage.getItem('prismium-lite:settings');var theme=t?JSON.parse(t).theme:'system';if(theme==='dark'||(theme==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){}})();`,
-    },
     { name: "color-scheme", content: "dark light" },
 ];
 
@@ -42,6 +40,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 />
                 <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
                 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+                <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
                 <Meta />
                 <Links />
             </head>
