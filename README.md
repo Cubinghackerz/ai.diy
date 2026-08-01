@@ -87,7 +87,7 @@ Self-hosting remains the default deployment path. For a temporary Vercel **previ
 npx vercel
 ```
 
-This creates a preview URL only and does not update a production domain. Do not use `npx vercel --prod` for this beta workspace.
+This creates a preview URL only and does not update a production domain. Do not use `npx vercel --prod` for this beta workspace. Vercel can label the first deployment of a newly created project as production; if that happens, remove that deployment and run the same command again, which creates a Preview deployment.
 
 ## Docker
 
