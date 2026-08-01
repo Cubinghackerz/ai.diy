@@ -4,7 +4,6 @@
 
 import {
     CompositeAttachmentAdapter,
-    SimpleImageAttachmentAdapter,
     SimpleTextAttachmentAdapter,
     type AttachmentAdapter,
 } from "@assistant-ui/core";
@@ -13,10 +12,33 @@ import type { ModelModalities } from "~/lib/model-modalities";
 async function fileToDataURL(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
+        reader.onload = () => {
+            const dataUrl = String(reader.result);
+            const mimeType = getFileMimeType(file);
+            resolve(
+                mimeType && dataUrl.startsWith("data:;base64,")
+                    ? dataUrl.replace("data:;base64,", `data:${mimeType};base64,`)
+                    : dataUrl,
+            );
+        };
         reader.onerror = () => reject(reader.error);
         reader.readAsDataURL(file);
     });
+}
+
+function getFileMimeType(file: File): string {
+    if (file.type) return file.type.split(";", 1)[0];
+    const extension = file.name.split(".").pop()?.toLowerCase();
+    return (
+        {
+            pdf: "application/pdf",
+            doc: "application/msword",
+            docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            rtf: "application/rtf",
+        } as Record<string, string>
+    )[extension ?? ""] ?? "application/octet-stream";
 }
 
 const DOCUMENT_ACCEPT = [
@@ -98,6 +120,38 @@ const textDocumentAdapter = {
     async remove() {},
 } satisfies AttachmentAdapter;
 
+const imageAttachmentAdapter = {
+    accept: "image/*",
+    async add({ file }) {
+        return {
+            id: crypto.randomUUID(),
+            type: "image",
+            name: file.name,
+            contentType: getFileMimeType(file),
+            file,
+            content: [],
+            status: { type: "requires-action", reason: "composer-send" },
+        };
+    },
+    async send(attachment) {
+        const file = attachment.file;
+        if (!file) {
+            return { ...attachment, status: { type: "complete" }, content: [] };
+        }
+        return {
+            ...attachment,
+            status: { type: "complete" },
+            content: [
+                {
+                    type: "image",
+                    image: await fileToDataURL(file),
+                },
+            ],
+        };
+    },
+    async remove() {},
+} satisfies AttachmentAdapter;
+
 const binaryDocumentAdapter = {
     accept: DOCUMENT_ACCEPT,
     async add({ file }) {
@@ -108,7 +162,7 @@ const binaryDocumentAdapter = {
             id: crypto.randomUUID(),
             type: "file",
             name: file.name,
-            contentType: file.type || "application/octet-stream",
+            contentType: getFileMimeType(file),
             file,
             content: [],
             status: { type: "requires-action", reason: "composer-send" },
@@ -128,7 +182,7 @@ const binaryDocumentAdapter = {
             content: [
                 {
                     type: "file",
-                    mimeType: attachment.contentType ?? file.type,
+                mimeType: attachment.contentType ?? getFileMimeType(file),
                     filename: attachment.name,
                     data: await fileToDataURL(file),
                 },
@@ -144,7 +198,7 @@ export function createAttachmentAdapter(
     const adapters: AttachmentAdapter[] = [new SimpleTextAttachmentAdapter()];
 
     if (modalities.vision) {
-        adapters.unshift(new SimpleImageAttachmentAdapter());
+        adapters.unshift(imageAttachmentAdapter);
     }
 
     // Always allow text-like docs (inlined as text — works with any chat model).
