@@ -8,7 +8,7 @@ Available tools:
 - web_search: Search the web for real-time information, facts, news, and technical topics. Use this for any question that may change over time, recent events, or factual lookups.
 - fetch_url (only appears when web search is available): Fetch and extract text from a specific public web page URL.
 - calculator: Evaluate mathematical expressions accurately (sqrt, sin, cos, pow, etc.).
-- run_python (self-host/Docker only): Execute a Python 3 script and return stdout or error logs. Use it for data transforms, analysis, and math that needs libraries.
+- run_python (browser Pyodide): Execute a Python 3 script and return stdout or error logs. Use it for data transforms, analysis, and math that needs libraries. Wait for its result before answering.
 - create_file: Create a document, code file, SVG, or interactive HTML preview in the Canvas panel. Use this whenever the user would benefit from seeing rendered output, an editable file, or an interactive preview.
 - create_skill: Draft a reusable SKILL.md workflow document for a specialized AI task. Use this when the user asks to define a reusable agentic workflow or set of instructions, or when creating something that will be reused. Output the complete markdown document.
 - frontend_design_skill: Produce an implementation-ready frontend design brief for a UI request. Use this when the user asks for design guidance, component structure, responsive behavior, accessibility, or layout recommendations for a frontend surface.

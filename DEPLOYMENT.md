@@ -41,7 +41,6 @@ Ollama on the same machine: set base URL to `http://host.docker.internal:11434/v
 
 Copy `.env.example` — no secrets required. Optional:
 
-- `DISABLE_PYTHON=1` — turn off legacy server Python (browser Pyodide is preferred)
 
 ## Public deployment
 
@@ -56,7 +55,7 @@ Copy `.env.example` — no secrets required. Optional:
 |---------|-------|
 | Cloud providers (OpenAI, Anthropic, …) | Works with user's BYOK key |
 | Ollama / localhost custom proxy | Only when the server can reach them (same network / Docker) |
-| Python `run_python` tool | Works when `python3` is installed (included in the Docker image) |
+| Python `run_python` tool | Runs in each user's browser through Pyodide |
 | Web search, calculator, fetch URL, canvas | Works |
 | Chat history | Stored in **user's browser** (IndexedDB) |
 

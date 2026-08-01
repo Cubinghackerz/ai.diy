@@ -6,18 +6,35 @@ import {
     AssistantChatTransport,
     useAISDKRuntime,
 } from "@assistant-ui/react-ai-sdk";
-import { Flask, Play, Sparkle, SpinnerGap, WarningCircle } from "@phosphor-icons/react";
+import {
+    Flask,
+    Play,
+    Plus,
+    Sparkle,
+    SpinnerGap,
+    WarningCircle,
+} from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState, type FC } from "react";
-import type { UIMessage } from "ai";
+import { lastAssistantMessageIsCompleteWithToolCalls, type UIMessage } from "ai";
 import { ChatSessionProvider } from "~/components/assistant-ui/ChatSessionContext";
 import { ChatThreadSync } from "~/components/assistant-ui/ChatThreadSync";
 import { Thread } from "~/components/assistant-ui/Thread";
 import { createAttachmentAdapter } from "~/lib/attachments";
 import { getModelModalities } from "~/lib/model-modalities";
+import { ModelPicker } from "~/components/ui/ModelPicker";
+import { ProviderPicker } from "~/components/ui/ProviderPicker";
 import { localProviderKey } from "~/lib/provider-credentials";
+import { runBrowserPython } from "~/lib/pyodide";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import { isProviderReady } from "~/lib/setup";
-import type { PreviewModelConfig, ProviderId, ReasoningEffort } from "~/lib/types";
+import { getReasoningEffortOptions } from "~/lib/reasoning";
+import { resolveModel } from "~/lib/model-capabilities";
+import type {
+    PreviewModelConfig,
+    PreviewSettings,
+    ProviderId,
+    ReasoningEffort,
+} from "~/lib/types";
 import { cn } from "~/lib/utils";
 
 type RunStatus = "running" | "complete" | "error";
@@ -68,6 +85,8 @@ type PreviewSession = {
     primaryCount: number;
 };
 
+type DraftSlot = `primary:${number}` | "fusion";
+
 function responseText(messages: UIMessage[]): string {
     return messages
         .filter((message) => message.role === "assistant")
@@ -95,11 +114,12 @@ function parseChatError(response: Response, fallback: string): Promise<string> {
 }
 
 export const PreviewWorkspace: FC = () => {
-    const { settings } = useSettings();
+    const { settings, updateSettings } = useSettings();
     const [prompt, setPrompt] = useState("");
     const [runs, setRuns] = useState<PreviewRun[]>([]);
     const [session, setSession] = useState<PreviewSession | null>(null);
     const [activeTab, setActiveTab] = useState<string | null>(null);
+    const [activeSlot, setActiveSlot] = useState<DraftSlot>("primary:0");
     const [configurationError, setConfigurationError] = useState<string | null>(null);
 
     const resolveConfig = (config: PreviewModelConfig): ResolvedConfig => {
@@ -236,88 +256,101 @@ export const PreviewWorkspace: FC = () => {
     }, [runs, session]);
 
     const running = runs.some((run) => run.status === "running");
+    const draftSlots: DraftSlot[] = [
+        ...settings.preview.primaryModels
+            .slice(0, 3)
+            .map((_, index) => `primary:${index}` as DraftSlot),
+        ...(settings.preview.fusionModel ? ["fusion" as const] : []),
+    ];
+    const activeDraftConfig =
+        activeSlot === "fusion"
+            ? settings.preview.fusionModel
+            : settings.preview.primaryModels[Number(activeSlot.split(":")[1])];
+    const updateDraftConfig = (patch: Partial<PreviewModelConfig>) => {
+        if (!activeDraftConfig) return;
+        if (activeSlot === "fusion") {
+            updateSettings({
+                preview: {
+                    ...settings.preview,
+                    fusionModel: { ...activeDraftConfig, ...patch },
+                },
+            });
+            return;
+        }
+        const index = Number(activeSlot.split(":")[1]);
+        updateSettings({
+            preview: {
+                ...settings.preview,
+                primaryModels: settings.preview.primaryModels.map((config, current) =>
+                    current === index ? { ...config, ...patch } : config,
+                ),
+            },
+        });
+    };
+    const addDraftModel = () => {
+        if (settings.preview.primaryModels.length >= 3) return;
+        updateSettings({
+            preview: {
+                ...settings.preview,
+                primaryModels: [
+                    ...settings.preview.primaryModels,
+                    {
+                        provider: settings.chat.provider,
+                        model: settings.chat.model,
+                        reasoningEffort: settings.chat.reasoningEffort,
+                    },
+                ],
+            },
+        });
+        setActiveSlot(`primary:${settings.preview.primaryModels.length}`);
+    };
+    const addFusionModel = () => {
+        if (settings.preview.fusionModel) return;
+        updateSettings({
+            preview: {
+                ...settings.preview,
+                fusionModel: {
+                    provider: settings.chat.provider,
+                    model: settings.chat.model,
+                    reasoningEffort: settings.chat.reasoningEffort,
+                },
+            },
+        });
+        setActiveSlot("fusion");
+    };
+    const resetPreview = () => {
+        setRuns([]);
+        setSession(null);
+        setActiveTab(null);
+        setActiveSlot("primary:0");
+    };
 
     return (
         <div className="flex h-full min-h-0 flex-col">
-            <div className="border-b border-border/70 bg-background px-4 py-3 md:px-6">
-                <div className="mx-auto flex w-full max-w-4xl flex-col gap-2">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Flask size={14} className="text-primary" />
-                        <span>Experimental multi-model preview</span>
-                        <span className="rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-primary">
-                            Beta
-                        </span>
+            <PreviewTabs
+                runs={runs}
+                draftSlots={draftSlots}
+                settings={settings}
+                activeTab={activeTab}
+                activeSlot={activeSlot}
+                onTabChange={setActiveTab}
+                onSlotChange={setActiveSlot}
+                onAddModel={addDraftModel}
+                onAddFusion={addFusionModel}
+                onNew={resetPreview}
+            />
+            <div className="relative flex min-h-0 flex-1 flex-col">
+                {runs.length === 0 ? (
+                    <div className="flex min-h-0 flex-1 items-center justify-center p-6 text-center">
+                        <div className="max-w-sm space-y-2">
+                            <Flask size={24} className="mx-auto text-primary" />
+                            <p className="text-sm font-semibold">Experimental comparison</p>
+                            <p className="text-xs leading-relaxed text-muted-foreground">
+                                Send one prompt to the configured model tabs and inspect each model&apos;s complete work.
+                            </p>
+                        </div>
                     </div>
-                    <textarea
-                        value={prompt}
-                        onChange={(event) => setPrompt(event.target.value)}
-                        onKeyDown={(event) => {
-                            if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                                event.preventDefault();
-                                if (!running) startRuns();
-                            }
-                        }}
-                        placeholder="Ask the configured models a question…"
-                        className="min-h-20 w-full resize-y rounded-xl border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
-                    />
-                    <div className="flex items-center justify-between gap-3">
-                        <p className="text-[11px] text-muted-foreground">
-                            {settings.preview.primaryModels.length} comparison model{settings.preview.primaryModels.length === 1 ? "" : "s"}
-                            {settings.preview.fusionModel ? " + fusion" : ""}
-                        </p>
-                        <button
-                            type="button"
-                            disabled={running}
-                            onClick={startRuns}
-                            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground outline-none transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                            {running ? <SpinnerGap size={14} className="animate-spin" /> : <Play size={13} weight="fill" />}
-                            {running ? "Running…" : "Compare"}
-                        </button>
-                    </div>
-                    {configurationError ? (
-                        <p className="flex items-center gap-1.5 text-[11px] text-destructive">
-                            <WarningCircle size={13} />
-                            {configurationError}
-                        </p>
-                    ) : null}
-                </div>
-            </div>
-
-            {runs.length === 0 ? (
-                <div className="flex flex-1 items-center justify-center p-6 text-center">
-                    <div className="max-w-sm space-y-2">
-                        <Sparkle size={24} className="mx-auto text-primary" />
-                        <p className="text-sm font-semibold">Compare model work side by side</p>
-                        <p className="text-xs leading-relaxed text-muted-foreground">
-                            Configure primary and optional fusion models in Settings → Experimental, then run a prompt to inspect their outputs, tool calls, reasoning, and artifacts in separate tabs.
-                        </p>
-                    </div>
-                </div>
-            ) : (
-                <div className="flex min-h-0 flex-1 flex-col">
-                    <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-border/70 px-3 pt-2">
-                        {runs.map((run) => (
-                            <button
-                                key={run.id}
-                                type="button"
-                                onClick={() => setActiveTab(run.id)}
-                                className={cn(
-                                    "flex max-w-52 shrink-0 items-center gap-1.5 rounded-t-lg border border-b-0 px-2.5 py-1.5 text-xs font-medium outline-none transition-colors",
-                                    activeTab === run.id
-                                        ? "border-border bg-background text-foreground"
-                                        : "border-transparent text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-                                )}
-                            >
-                                {run.status === "running" ? (
-                                    <SpinnerGap size={12} className="shrink-0 animate-spin text-primary" />
-                                ) : run.kind === "fusion" ? (
-                                    <Sparkle size={12} className="shrink-0 text-primary" />
-                                ) : null}
-                                <span className="truncate">{run.label}</span>
-                            </button>
-                        ))}
-                    </div>
+                ) : (
                     <div className="min-h-0 flex-1">
                         {runs.map((run) => (
                             <div
@@ -333,8 +366,256 @@ export const PreviewWorkspace: FC = () => {
                             </div>
                         ))}
                     </div>
-                </div>
+                )}
+                <PreviewComposer
+                    prompt={prompt}
+                    onPromptChange={setPrompt}
+                    onSubmit={startRuns}
+                    running={running}
+                    configurationError={configurationError}
+                    config={activeDraftConfig}
+                    onConfigChange={updateDraftConfig}
+                    onAddModel={addDraftModel}
+                />
+            </div>
+        </div>
+    );
+};
+
+const PreviewTabs: FC<{
+    runs: PreviewRun[];
+    draftSlots: DraftSlot[];
+    settings: { preview: PreviewSettings };
+    activeTab: string | null;
+    activeSlot: DraftSlot;
+    onTabChange: (id: string) => void;
+    onSlotChange: (slot: DraftSlot) => void;
+    onAddModel: () => void;
+    onAddFusion: () => void;
+    onNew: () => void;
+}> = ({
+    runs,
+    draftSlots,
+    settings,
+    activeTab,
+    activeSlot,
+    onTabChange,
+    onSlotChange,
+    onAddModel,
+    onAddFusion,
+    onNew,
+}) => {
+    const hasRuns = runs.length > 0;
+    return (
+        <div className="flex min-h-10 shrink-0 items-center gap-1 overflow-x-auto border-b border-border/70 bg-background px-3 py-1.5">
+            <div className="flex min-w-0 flex-1 items-center gap-1">
+                {hasRuns
+                    ? runs.map((run) => (
+                          <button
+                              key={run.id}
+                              type="button"
+                              onClick={() => onTabChange(run.id)}
+                              className={cn(
+                                  "flex max-w-52 shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none transition-colors",
+                                  activeTab === run.id
+                                      ? "bg-accent text-foreground"
+                                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                              )}
+                          >
+                              {run.status === "running" ? (
+                                  <SpinnerGap
+                                      size={12}
+                                      className="shrink-0 animate-spin text-primary"
+                                  />
+                              ) : run.kind === "fusion" ? (
+                                  <Sparkle size={12} className="shrink-0 text-primary" />
+                              ) : null}
+                              <span className="truncate">{run.label}</span>
+                          </button>
+                      ))
+                    : draftSlots.map((slot, index) => {
+                          const config =
+                              slot === "fusion"
+                                  ? settings.preview.fusionModel
+                                  : settings.preview.primaryModels[index];
+                          if (!config) return null;
+                          return (
+                              <button
+                                  key={slot}
+                                  type="button"
+                                  onClick={() => onSlotChange(slot)}
+                                  className={cn(
+                                      "flex max-w-52 shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none transition-colors",
+                                      activeSlot === slot
+                                          ? "bg-accent text-foreground"
+                                          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                                  )}
+                              >
+                                  {slot === "fusion" ? (
+                                      <Sparkle size={12} className="shrink-0 text-primary" />
+                                  ) : null}
+                                  <span className="truncate">
+                                      {slot === "fusion"
+                                          ? `Fusion · ${config.model}`
+                                          : `${index + 1} · ${config.model}`}
+                                  </span>
+                              </button>
+                          );
+                      })}
+            </div>
+
+            {!hasRuns ? (
+                <>
+                    {settings.preview.primaryModels.length < 3 ? (
+                        <button
+                            type="button"
+                            onClick={onAddModel}
+                            className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
+                        >
+                            <Plus size={13} />
+                            Model
+                        </button>
+                    ) : null}
+                    {!settings.preview.fusionModel ? (
+                        <button
+                            type="button"
+                            onClick={onAddFusion}
+                            className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
+                        >
+                            <Sparkle size={13} />
+                            Fusion
+                        </button>
+                    ) : null}
+                </>
+            ) : (
+                <button
+                    type="button"
+                    onClick={onNew}
+                    className="shrink-0 rounded-lg px-2 py-1.5 text-[11px] font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
+                >
+                    New compare
+                </button>
             )}
+        </div>
+    );
+};
+
+const PreviewComposer: FC<{
+    prompt: string;
+    onPromptChange: (value: string) => void;
+    onSubmit: () => void;
+    running: boolean;
+    configurationError: string | null;
+    config: PreviewModelConfig | undefined | null;
+    onConfigChange: (patch: Partial<PreviewModelConfig>) => void;
+    onAddModel: () => void;
+}> = ({
+    prompt,
+    onPromptChange,
+    onSubmit,
+    running,
+    configurationError,
+    config,
+    onConfigChange,
+}) => {
+    const { settings } = useSettings();
+    const providerReady = config
+        ? isProviderReady(settings, config.provider)
+        : false;
+    const reasoningOptions = config
+        ? getReasoningEffortOptions(config.provider, config.model)
+        : [];
+
+    return (
+        <div className="relative z-10 w-full shrink-0 bg-background px-4 pb-4 pt-2">
+            <div className="mx-auto w-full max-w-(--thread-max-width) rounded-[1.25rem] border border-border bg-muted/35 p-2.5 shadow-sm">
+                <textarea
+                    value={prompt}
+                    onChange={(event) => onPromptChange(event.target.value)}
+                    onKeyDown={(event) => {
+                        if (
+                            (event.metaKey || event.ctrlKey) &&
+                            event.key === "Enter"
+                        ) {
+                            event.preventDefault();
+                            if (!running) onSubmit();
+                        }
+                    }}
+                    placeholder="Send a message to the selected models…"
+                    className="min-h-16 w-full resize-none bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground"
+                />
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5 px-1">
+                    {config ? (
+                        <ProviderPicker
+                            value={config.provider}
+                            onChange={(provider) =>
+                                onConfigChange({
+                                    provider,
+                                    model: resolveModel(provider, config.model),
+                                    reasoningEffort: "medium",
+                                })
+                            }
+                            compact
+                            className="max-w-[9rem]"
+                        />
+                    ) : null}
+                    {config && providerReady ? (
+                        <ModelPicker
+                            provider={config.provider}
+                            value={config.model}
+                            onChange={(model) => onConfigChange({ model })}
+                            enabled
+                            compact
+                            className="max-w-[13rem]"
+                        />
+                    ) : null}
+                    {config && reasoningOptions.length > 0 ? (
+                        <select
+                            value={
+                                reasoningOptions.some(
+                                    (option) => option.id === config.reasoningEffort,
+                                )
+                                    ? config.reasoningEffort
+                                    : reasoningOptions[0].id
+                            }
+                            onChange={(event) =>
+                                onConfigChange({
+                                    reasoningEffort: event.target
+                                        .value as PreviewModelConfig["reasoningEffort"],
+                                })
+                            }
+                            className="h-7 max-w-36 rounded-lg border border-border/70 bg-transparent px-2 text-[11px] font-medium outline-none"
+                            aria-label="Reasoning effort"
+                        >
+                            {reasoningOptions.map((option) => (
+                                <option key={option.id} value={option.id}>
+                                    {option.label}
+                                </option>
+                            ))}
+                        </select>
+                    ) : null}
+                    <span className="flex-1" />
+                    <button
+                        type="button"
+                        disabled={running || !prompt.trim()}
+                        onClick={onSubmit}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-semibold text-primary-foreground outline-none transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        {running ? (
+                            <SpinnerGap size={14} className="animate-spin" />
+                        ) : (
+                            <Play size={13} weight="fill" />
+                        )}
+                        {running ? "Running" : "Compare"}
+                    </button>
+                </div>
+                {configurationError ? (
+                    <p className="flex items-center gap-1.5 px-2 pt-2 text-[11px] text-destructive">
+                        <WarningCircle size={13} />
+                        {configurationError}
+                    </p>
+                ) : null}
+            </div>
         </div>
     );
 };
@@ -390,14 +671,69 @@ const PreviewRunPanel: FC<{
             }),
         [run.config],
     );
+    const chatRef = useRef<ReturnType<typeof useChat> | null>(null);
+    const pendingPythonCalls = useRef(0);
     const chat = useChat({
         id: run.id,
         transport,
+        onToolCall: ({ toolCall }) => {
+            if (toolCall.toolName !== "run_python") return;
+            pendingPythonCalls.current += 1;
+            const input = toolCall.input as { code?: string };
+            void runBrowserPython(input.code ?? "").then(
+                (output) => {
+                    const addToolOutput = chatRef.current
+                        ?.addToolOutput as unknown as
+                        | ((args: {
+                              tool: string;
+                              toolCallId: string;
+                              state: "output-available";
+                              output: string;
+                          }) => void)
+                        | undefined;
+                    addToolOutput?.({
+                        tool: "run_python",
+                        toolCallId: toolCall.toolCallId,
+                        state: "output-available",
+                        output,
+                    });
+                },
+                (error) => {
+                    const addToolOutput = chatRef.current
+                        ?.addToolOutput as unknown as
+                        | ((args: {
+                              tool: string;
+                              toolCallId: string;
+                              state: "output-error";
+                              errorText: string;
+                          }) => void)
+                        | undefined;
+                    addToolOutput?.({
+                        tool: "run_python",
+                        toolCallId: toolCall.toolCallId,
+                        state: "output-error",
+                        errorText:
+                            error instanceof Error
+                                ? error.message
+                                : "Pyodide execution failed",
+                    });
+                },
+            );
+        },
+        sendAutomaticallyWhen: ({ messages }) => {
+            if (pendingPythonCalls.current === 0) return false;
+            if (!lastAssistantMessageIsCompleteWithToolCalls({ messages })) {
+                return false;
+            }
+            pendingPythonCalls.current = 0;
+            return true;
+        },
         onFinish: ({ messages, isError }) => {
             if (!isError) callbacksRef.current.onComplete(run.id, messages);
         },
         onError: (error) => callbacksRef.current.onError(run.id, error),
     });
+    chatRef.current = chat;
     const runtime = useAISDKRuntime(chat, { adapters });
 
     useEffect(() => {

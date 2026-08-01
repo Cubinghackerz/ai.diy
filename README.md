@@ -13,7 +13,7 @@ ai.diy is a privacy-first, bring-your-own-key chat interface. It proxies the use
 - **BYOK** — Users bring their own keys (17 providers: OpenAI, Anthropic, Gemini, Groq, OpenRouter, xAI, DeepSeek, Amazon Bedrock, Azure OpenAI, Google Vertex AI, Vercel AI Gateway, Together AI, Mistral, Hugging Face, Ollama, LM Studio, custom). Keys stay in the browser.
 - **Live model discovery** — `/api/models` queries each provider with the user's key to return a real-time model catalog; local defaults are only an offline fallback.
 - **Free web search** — DuckDuckGo (no search API key) plus optional SearXNG. Server-side results are summarized server-side; nothing is stored.
-- **Built-in tools** — Web search, URL fetch, calculator, canvas files, and Python (Pyodide in the browser; optional server Python on self-host/Docker).
+- **Built-in tools** — Web search, URL fetch, calculator, canvas files, and browser Python via Pyodide. The model receives the execution result and can continue its response automatically.
 - **Callable skills** — `create_skill` drafts a `SKILL.md` workflow document, and `frontend_design_skill` produces an implementation-ready frontend design brief. Both are side-effect-free and never access private data.
 - **Tool-capable model picker** — Defaults to the live catalog and keeps the user's selection visible across provider switches; searchable command-style picker.
 - **Reasoning** — One compact input-bar selector exposes the supported effort levels for the selected model; provider-specific `providerOptions` are used for OpenAI, Anthropic, Gemini, xAI, DeepSeek, Bedrock, and Mistral.
@@ -76,7 +76,6 @@ See [DEPLOYMENT.md](./DEPLOYMENT.md) for details (local models need a host that 
 
 No secrets are required. See `.env.example`. Optional:
 
-- `DISABLE_PYTHON=1` — turn off legacy server Python (browser Pyodide is preferred)
 - `CORS_ORIGINS=https://app.example.com` — comma-separated frontend origins permitted to call `/api/*`; same-origin is the default
 
 ### Vercel preview only
@@ -96,7 +95,7 @@ docker build -t ai-diy .
 docker run -p 3000:3000 ai-diy
 ```
 
-Includes Python 3 for the `run_python` tool.
+Python runs in each user's browser through Pyodide; no server Python installation is required.
 
 ## Security
 

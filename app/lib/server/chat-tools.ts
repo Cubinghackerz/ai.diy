@@ -7,7 +7,6 @@ import { tool, type Tool } from "ai";
 import { z } from "zod";
 import { ARTIFACT_MARKER } from "~/lib/artifacts";
 import { webSearch, type SearchEngine } from "~/lib/search";
-import { isPythonRuntimeAvailable } from "~/lib/server/env";
 import { assertPublicHttpUrl } from "~/lib/server/ssrf";
 
 export { ARTIFACT_MARKER };
@@ -53,35 +52,6 @@ function evaluateMath(expression: string): string {
         return `Result: ${result}`;
     } catch (err) {
         return `Error: ${err instanceof Error ? err.message : String(err)}`;
-    }
-}
-
-async function runPythonScript(code: string): Promise<string> {
-    const { execSync } = await import("node:child_process");
-    const fs = await import("node:fs");
-    const os = await import("node:os");
-    const path = await import("node:path");
-    const tmpFile = path.join(
-        os.tmpdir(),
-        `prismium_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.py`,
-    );
-    fs.writeFileSync(tmpFile, String(code));
-    try {
-        const output = execSync(`python3 "${tmpFile}"`, {
-            timeout: 10_000,
-            encoding: "utf8",
-            maxBuffer: 512 * 1024,
-        });
-        return output.trim() || "(Python script completed with no output)";
-    } catch (err: unknown) {
-        const e = err as { stderr?: string; stdout?: string; message?: string };
-        return `Python error:\n${e.stderr || e.stdout || e.message || "Unknown error"}`;
-    } finally {
-        try {
-            fs.unlinkSync(tmpFile);
-        } catch {
-            // ignore
-        }
     }
 }
 
@@ -165,8 +135,9 @@ function frontendDesignBrief(input: {
 export async function buildChatTools(settings: ToolSettings = {}) {
     const enableSearch = settings.webSearchEnabled !== false;
     const enableCalc = settings.calculatorEnabled !== false;
-    const enablePython =
-        settings.pythonEnabled !== false && (await isPythonRuntimeAvailable());
+    // Python is a client-side tool. The browser executes it in Pyodide and
+    // sends the result back before the model continues.
+    const enablePython = settings.pythonEnabled !== false;
 
     const tools: Record<string, Tool> = {};
 
@@ -250,12 +221,11 @@ export async function buildChatTools(settings: ToolSettings = {}) {
     if (enablePython) {
         tools.run_python = tool({
             description:
-                "Execute a Python 3 script and return stdout or error logs.",
+                "Execute Python 3 in the browser with Pyodide and return stdout or error logs. Use it for exact calculations, data transforms, and analysis.",
             inputSchema: z.object({
                 code: z.string(),
                 description: z.string().optional(),
             }),
-            execute: async ({ code }) => runPythonScript(code),
         });
     }
 

@@ -354,7 +354,7 @@ function SettingsPanel() {
                     />
                     <ToolToggle
                         title="Python"
-                        description="Server python3 (self-host/Docker only)"
+                        description="Browser Python via Pyodide"
                         checked={settings.pythonEnabled}
                         onChange={(v) => updateSettings({ pythonEnabled: v })}
                     />

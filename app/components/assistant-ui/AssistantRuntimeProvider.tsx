@@ -11,12 +11,14 @@ import {
     AssistantChatTransport,
 } from "@assistant-ui/react-ai-sdk";
 import { useChat } from "@ai-sdk/react";
+import { lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { ChatSessionProvider } from "~/components/assistant-ui/ChatSessionContext";
 import { ChatThreadSync } from "~/components/assistant-ui/ChatThreadSync";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import { createAttachmentAdapter } from "~/lib/attachments";
 import { getModelModalities } from "~/lib/model-modalities";
 import { localProviderKey } from "~/lib/provider-credentials";
+import { runBrowserPython } from "~/lib/pyodide";
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
 
 async function parseChatError(res: Response): Promise<string> {
@@ -98,13 +100,68 @@ export function AssistantRuntimeProvider({
         [],
     );
 
+    const chatRef = useRef<ReturnType<typeof useChat> | null>(null);
+    const pendingPythonCalls = useRef(0);
     const chat = useChat({
         id: threadId ?? "draft",
         transport,
+        onToolCall: ({ toolCall }) => {
+            if (toolCall.toolName !== "run_python") return;
+            pendingPythonCalls.current += 1;
+            const input = toolCall.input as { code?: string };
+            void runBrowserPython(input.code ?? "").then(
+                (output) => {
+                    const addToolOutput = chatRef.current
+                        ?.addToolOutput as unknown as
+                        | ((args: {
+                              tool: string;
+                              toolCallId: string;
+                              state: "output-available";
+                              output: string;
+                          }) => void)
+                        | undefined;
+                    addToolOutput?.({
+                        tool: "run_python",
+                        toolCallId: toolCall.toolCallId,
+                        state: "output-available",
+                        output,
+                    });
+                },
+                (error) => {
+                    const addToolOutput = chatRef.current
+                        ?.addToolOutput as unknown as
+                        | ((args: {
+                              tool: string;
+                              toolCallId: string;
+                              state: "output-error";
+                              errorText: string;
+                          }) => void)
+                        | undefined;
+                    addToolOutput?.({
+                        tool: "run_python",
+                        toolCallId: toolCall.toolCallId,
+                        state: "output-error",
+                        errorText:
+                            error instanceof Error
+                                ? error.message
+                                : "Pyodide execution failed",
+                    });
+                },
+            );
+        },
+        sendAutomaticallyWhen: ({ messages }) => {
+            if (pendingPythonCalls.current === 0) return false;
+            if (!lastAssistantMessageIsCompleteWithToolCalls({ messages })) {
+                return false;
+            }
+            pendingPythonCalls.current = 0;
+            return true;
+        },
         onError: (err) => {
             console.error("[chat]", err);
         },
     });
+    chatRef.current = chat;
 
     const modalities = getModelModalities(
         settings.chat.model,
