@@ -61,6 +61,18 @@ npm run build && npm start   # production
 
 First run: complete setup, paste your API key (or pick Ollama), pick a model (defaults to the live catalog).
 
+## Beginner VS Code guide
+
+1. Install [VS Code](https://code.visualstudio.com/) and [Node.js 20+](https://nodejs.org/).
+2. In VS Code, open **Clone Git Repository** and clone this project.
+3. Open the project folder, then open **Terminal → New Terminal**.
+4. Run `npm install`.
+5. Run `npm run dev`.
+6. Open `http://localhost:5173` in your browser.
+7. Complete setup and add your own provider key in Settings. Keys stay in your browser.
+
+The browser Python tool uses Pyodide. The first Python run downloads the browser runtime; imports such as `numpy`, `pandas`, `matplotlib`, `scipy`, `sympy`, `sklearn`, `PIL`, `networkx`, `bs4`, `lxml`, `regex`, `dateutil`, and `yaml` are loaded on demand. A local Python installation is not required.
+
 ## Deploy anywhere
 
 The app is a plain React Router Node server — run it on any VPS, bare-metal host, or Docker (no serverless platform needed).

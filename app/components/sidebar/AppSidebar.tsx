@@ -354,7 +354,7 @@ function SettingsPanel() {
                     />
                     <ToolToggle
                         title="Python"
-                        description="Browser Python via Pyodide"
+                        description="Browser Pyodide with NumPy, pandas, SciPy, plotting, and more"
                         checked={settings.pythonEnabled}
                         onChange={(v) => updateSettings({ pythonEnabled: v })}
                     />

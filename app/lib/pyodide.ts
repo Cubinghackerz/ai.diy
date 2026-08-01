@@ -2,6 +2,7 @@ let pyodidePromise: Promise<PyodideRuntime> | null = null;
 
 type PyodideRuntime = {
     loadPackagesFromImports?: (code: string) => Promise<void>;
+    loadPackage?: (packages: string | string[]) => Promise<void>;
     runPythonAsync: (code: string) => Promise<unknown>;
 };
 
@@ -11,6 +12,25 @@ type PyodideWindow = Window & {
 
 const PYODIDE_VERSION = "0.26.4";
 const PYODIDE_BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
+
+// Pyodide loads these only when the user's code imports the matching module.
+// Keeping the map here makes common scientific, data, plotting, parsing, and
+// image workflows work without requiring a local Python installation.
+const USEFUL_PACKAGE_ALIASES: Record<string, string> = {
+    numpy: "numpy",
+    pandas: "pandas",
+    matplotlib: "matplotlib",
+    scipy: "scipy",
+    sympy: "sympy",
+    sklearn: "scikit-learn",
+    PIL: "pillow",
+    networkx: "networkx",
+    bs4: "beautifulsoup4",
+    lxml: "lxml",
+    regex: "regex",
+    dateutil: "python-dateutil",
+    yaml: "pyyaml",
+};
 
 function loadPyodide(): Promise<PyodideRuntime> {
     if (pyodidePromise) return pyodidePromise;
@@ -63,7 +83,30 @@ export async function runBrowserPython(code: string): Promise<string> {
     if (!source) return "Python error: no code provided.";
 
     const pyodide = await loadPyodide();
-    await pyodide.loadPackagesFromImports?.(source);
+    try {
+        await pyodide.loadPackagesFromImports?.(source);
+    } catch {
+        // Alias loading below handles common import names such as sklearn and
+        // PIL. Unknown imports are reported by Python with a useful traceback.
+    }
+    const importedModules = [...source.matchAll(/^\s*(?:from|import)\s+([A-Za-z0-9_]+)/gm)]
+        .map((match) => match[1])
+        .filter((module): module is string => Boolean(module));
+    const usefulPackages = [
+        ...new Set(
+            importedModules
+                .map((module) => USEFUL_PACKAGE_ALIASES[module])
+                .filter((packageName): packageName is string => Boolean(packageName)),
+        ),
+    ];
+    for (const packageName of usefulPackages) {
+        try {
+            await pyodide.loadPackage?.(packageName);
+        } catch {
+            // Let Python return the import traceback if this optional package
+            // is unavailable in the selected Pyodide release.
+        }
+    }
 
     const result = await pyodide.runPythonAsync(`
 import contextlib
