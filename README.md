@@ -73,6 +73,24 @@ First run: complete setup, paste your API key (or pick Ollama), pick a model (de
 
 The browser Python tool uses Pyodide. The first Python run downloads the browser runtime; imports such as `numpy`, `pandas`, `matplotlib`, `scipy`, `sympy`, `sklearn`, `PIL`, `networkx`, `bs4`, `lxml`, `regex`, `dateutil`, and `yaml` are loaded on demand. A local Python installation is not required.
 
+## Copy-paste agent prompt
+
+Use this prompt with a coding agent from the project folder when you want it to run ai.diy locally:
+
+```text
+You are working on the ai.diy repository at /Users/nirneet/Documents/GitHub/PrismiumLite.
+
+Run the app locally and verify it before making changes:
+1. Inspect package.json and the current git status.
+2. Install dependencies with `npm install` if needed.
+3. Start the development server with `npm run dev`.
+4. Verify that http://localhost:5173 responds.
+5. Keep the server running while you investigate or implement the requested task.
+6. Run `npm run build` before reporting completion.
+
+Do not add provider API keys to files or environment variables. Preserve BYOK behavior, use the existing design system, and report exact commands, URLs, and validation results.
+```
+
 ## Deploy anywhere
 
 The app is a plain React Router Node server — run it on any VPS, bare-metal host, or Docker (no serverless platform needed).

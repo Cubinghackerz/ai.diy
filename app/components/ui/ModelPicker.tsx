@@ -2,7 +2,15 @@
  * ModelPicker — searchable model dropdown (full live provider catalog).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+    useCallback,
+    useEffect,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
+} from "react";
+import { createPortal } from "react-dom";
 import { Command } from "cmdk";
 import {
     CaretDown,
@@ -239,6 +247,9 @@ export function ModelPicker({
     );
     const [open, setOpen] = useState(false);
     const rootRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
+    const [menuStyle, setMenuStyle] = useState<React.CSSProperties | null>(null);
 
     const selected = useMemo(() => {
         const hit = models.find((m) => m.id === value);
@@ -275,7 +286,13 @@ export function ModelPicker({
     useEffect(() => {
         if (!open) return;
         const onDoc = (e: MouseEvent) => {
-            if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+            const target = e.target as Node;
+            if (
+                !rootRef.current?.contains(target) &&
+                !menuRef.current?.contains(target)
+            ) {
+                setOpen(false);
+            }
         };
         const onKey = (e: KeyboardEvent) => {
             if (e.key === "Escape") setOpen(false);
@@ -288,6 +305,44 @@ export function ModelPicker({
         };
     }, [open]);
 
+    useLayoutEffect(() => {
+        if (!open) {
+            setMenuStyle(null);
+            return;
+        }
+        const updatePosition = () => {
+            const rect = triggerRef.current?.getBoundingClientRect();
+            if (!rect) return;
+            const menuHeight = 328;
+            const top = compact
+                ? Math.max(8, rect.top - menuHeight - 6)
+                : Math.min(
+                      Math.max(8, window.innerHeight - menuHeight - 8),
+                      rect.bottom + 6,
+                  );
+            const style: React.CSSProperties = {
+                position: "fixed",
+                top,
+                width: "min(22rem, calc(100vw - 2rem))",
+                maxHeight: "min(20rem, calc(100vh - 1rem))",
+                zIndex: 100,
+            };
+            if (align === "right") {
+                style.right = Math.max(8, window.innerWidth - rect.right);
+            } else {
+                style.left = Math.max(8, rect.left);
+            }
+            setMenuStyle(style);
+        };
+        updatePosition();
+        window.addEventListener("resize", updatePosition);
+        window.addEventListener("scroll", updatePosition, true);
+        return () => {
+            window.removeEventListener("resize", updatePosition);
+            window.removeEventListener("scroll", updatePosition, true);
+        };
+    }, [align, compact, open]);
+
     // Do NOT auto-call onChange when the catalog loads — that was resetting
     // the user's selected model after sends / refreshes.
 
@@ -296,6 +351,7 @@ export function ModelPicker({
     return (
         <div ref={rootRef} className={cn("relative", className)}>
             <button
+                ref={triggerRef}
                 type="button"
                 onClick={() => {
                     hapticSelect();
@@ -321,16 +377,13 @@ export function ModelPicker({
                 )}
             </button>
 
-            {open ? (
-                <div
-                    className={cn(
-                        "absolute z-50 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg",
-                        compact
-                            ? "bottom-[calc(100%+6px)]"
-                            : "top-[calc(100%+6px)]",
-                        align === "right" ? "right-0" : "left-0",
-                    )}
-                >
+            {open && menuStyle
+                ? createPortal(
+                    <div
+                        ref={menuRef}
+                        style={menuStyle}
+                        className="overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg"
+                    >
                     <Command
                         className="flex max-h-80 flex-col"
                         label="Search models"
@@ -389,8 +442,10 @@ export function ModelPicker({
                             ))}
                         </Command.List>
                     </Command>
-                </div>
-            ) : null}
+                    </div>,
+                    document.body,
+                )
+                : null}
         </div>
     );
 }

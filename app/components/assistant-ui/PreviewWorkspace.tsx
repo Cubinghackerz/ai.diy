@@ -36,6 +36,7 @@ import type {
     ReasoningEffort,
 } from "~/lib/types";
 import { cn } from "~/lib/utils";
+import { X } from "lucide-react";
 
 type RunStatus = "running" | "complete" | "error";
 
@@ -83,6 +84,7 @@ type PreviewSession = {
     prompt: string;
     fusionConfig: ResolvedConfig | null;
     primaryCount: number;
+    fusionStarted: boolean;
 };
 
 type DraftSlot = `primary:${number}` | "fusion";
@@ -95,7 +97,7 @@ function responseText(messages: UIMessage[]): string {
         .map((part) => part.text)
         .join("\n")
         .trim()
-        .slice(0, 24_000);
+        .slice(0, 64_000);
 }
 
 function modelLabel(config: PreviewModelConfig, fusion = false): string {
@@ -195,6 +197,7 @@ export const PreviewWorkspace: FC = () => {
                 ? resolveConfig(settings.preview.fusionModel)
                 : null,
             primaryCount: primaryRuns.length,
+            fusionStarted: false,
         });
         setRuns(primaryRuns);
         setActiveTab(primaryRuns[0]?.id ?? null);
@@ -221,7 +224,7 @@ export const PreviewWorkspace: FC = () => {
     };
 
     useEffect(() => {
-        if (!session?.fusionConfig) return;
+        if (!session?.fusionConfig || session.fusionStarted) return;
         const primaryRuns = runs.filter((run) => run.kind === "primary");
         if (
             primaryRuns.length !== session.primaryCount ||
@@ -251,9 +254,28 @@ export const PreviewWorkspace: FC = () => {
             status: "running",
             output: "",
         };
+        setSession((current) =>
+            current ? { ...current, fusionStarted: true } : current,
+        );
         setRuns((current) => [...current, fusionRun]);
         setActiveTab(fusionRun.id);
     }, [runs, session]);
+
+    const closeRun = (runId: string) => {
+        const run = runs.find((candidate) => candidate.id === runId);
+        if (!run || run.status === "running") return;
+        const remaining = runs.filter((candidate) => candidate.id !== runId);
+        setRuns(remaining);
+        if (run.kind === "primary" && session && !session.fusionStarted) {
+            setSession({
+                ...session,
+                primaryCount: Math.max(0, session.primaryCount - 1),
+            });
+        }
+        if (activeTab === runId) {
+            setActiveTab(remaining[0]?.id ?? null);
+        }
+    };
 
     const running = runs.some((run) => run.status === "running");
     const draftSlots: DraftSlot[] = [
@@ -338,6 +360,7 @@ export const PreviewWorkspace: FC = () => {
                 onAddModel={addDraftModel}
                 onAddFusion={addFusionModel}
                 onNew={resetPreview}
+                onClose={closeRun}
             />
             <div className="relative flex min-h-0 flex-1 flex-col">
                 {runs.length === 0 ? (
@@ -393,6 +416,7 @@ const PreviewTabs: FC<{
     onAddModel: () => void;
     onAddFusion: () => void;
     onNew: () => void;
+    onClose: (id: string) => void;
 }> = ({
     runs,
     draftSlots,
@@ -404,6 +428,7 @@ const PreviewTabs: FC<{
     onAddModel,
     onAddFusion,
     onNew,
+    onClose,
 }) => {
     const hasRuns = runs.length > 0;
     return (
@@ -411,27 +436,45 @@ const PreviewTabs: FC<{
             <div className="flex min-w-0 flex-1 items-center gap-1">
                 {hasRuns
                     ? runs.map((run) => (
-                          <button
+                          <div
                               key={run.id}
-                              type="button"
-                              onClick={() => onTabChange(run.id)}
                               className={cn(
-                                  "flex max-w-52 shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none transition-colors",
+                                  "flex max-w-60 shrink-0 items-center gap-0.5 rounded-lg px-1 py-0.5 text-xs font-medium outline-none transition-colors",
                                   activeTab === run.id
                                       ? "bg-accent text-foreground"
                                       : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
                               )}
                           >
-                              {run.status === "running" ? (
-                                  <SpinnerGap
-                                      size={12}
-                                      className="shrink-0 animate-spin text-primary"
-                                  />
-                              ) : run.kind === "fusion" ? (
-                                  <Sparkle size={12} className="shrink-0 text-primary" />
-                              ) : null}
-                              <span className="truncate">{run.label}</span>
-                          </button>
+                              <button
+                                  type="button"
+                                  onClick={() => onTabChange(run.id)}
+                                  className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 py-1 outline-none"
+                                  aria-label={`Open ${run.label} tab`}
+                              >
+                                  {run.status === "running" ? (
+                                      <SpinnerGap
+                                          size={12}
+                                          className="shrink-0 animate-spin text-primary"
+                                      />
+                                  ) : run.kind === "fusion" ? (
+                                      <Sparkle size={12} className="shrink-0 text-primary" />
+                                  ) : null}
+                                  <span className="truncate">{run.label}</span>
+                              </button>
+                              <button
+                                  type="button"
+                                  disabled={run.status === "running"}
+                                  onClick={() => onClose(run.id)}
+                                  className="rounded-md p-1 text-muted-foreground outline-none hover:bg-background/70 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+                                  aria-label={
+                                      run.status === "running"
+                                          ? `${run.label} is still running`
+                                          : `Close ${run.label} tab`
+                                  }
+                              >
+                                  <X size={12} />
+                              </button>
+                          </div>
                       ))
                     : draftSlots.map((slot, index) => {
                           const config =
