@@ -340,6 +340,38 @@ export const PreviewWorkspace: FC = () => {
         });
         setActiveSlot("fusion");
     };
+    const closeDraftSlot = (slot: DraftSlot) => {
+        if (slot === "fusion") {
+            updateSettings({
+                preview: { ...settings.preview, fusionModel: null },
+            });
+            setActiveSlot(
+                settings.preview.primaryModels.length > 0 ? "primary:0" : "fusion",
+            );
+            return;
+        }
+
+        const removedIndex = Number(slot.split(":")[1]);
+        const primaryModels = settings.preview.primaryModels.filter(
+            (_, index) => index !== removedIndex,
+        );
+        updateSettings({
+            preview: { ...settings.preview, primaryModels },
+        });
+
+        if (primaryModels.length === 0) {
+            setActiveSlot(settings.preview.fusionModel ? "fusion" : "primary:0");
+        } else if (activeSlot === slot) {
+            setActiveSlot(
+                `primary:${Math.min(removedIndex, primaryModels.length - 1)}`,
+            );
+        } else if (activeSlot.startsWith("primary:")) {
+            const activeIndex = Number(activeSlot.split(":")[1]);
+            if (activeIndex > removedIndex) {
+                setActiveSlot(`primary:${activeIndex - 1}`);
+            }
+        }
+    };
     const resetPreview = () => {
         setRuns([]);
         setSession(null);
@@ -361,6 +393,7 @@ export const PreviewWorkspace: FC = () => {
                 onAddFusion={addFusionModel}
                 onNew={resetPreview}
                 onClose={closeRun}
+                onCloseSlot={closeDraftSlot}
             />
             <div className="relative flex min-h-0 flex-1 flex-col">
                 {runs.length === 0 ? (
@@ -417,6 +450,7 @@ const PreviewTabs: FC<{
     onAddFusion: () => void;
     onNew: () => void;
     onClose: (id: string) => void;
+    onCloseSlot: (slot: DraftSlot) => void;
 }> = ({
     runs,
     draftSlots,
@@ -429,6 +463,7 @@ const PreviewTabs: FC<{
     onAddFusion,
     onNew,
     onClose,
+    onCloseSlot,
 }) => {
     const hasRuns = runs.length > 0;
     return (
@@ -482,28 +517,41 @@ const PreviewTabs: FC<{
                                   ? settings.preview.fusionModel
                                   : settings.preview.primaryModels[index];
                           if (!config) return null;
-                          return (
-                              <button
-                                  key={slot}
-                                  type="button"
-                                  onClick={() => onSlotChange(slot)}
-                                  className={cn(
-                                      "flex max-w-52 shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none transition-colors",
-                                      activeSlot === slot
-                                          ? "bg-accent text-foreground"
-                                          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-                                  )}
-                              >
-                                  {slot === "fusion" ? (
-                                      <Sparkle size={12} className="shrink-0 text-primary" />
-                                  ) : null}
-                                  <span className="truncate">
-                                      {slot === "fusion"
-                                          ? `Fusion · ${config.model}`
-                                          : `${index + 1} · ${config.model}`}
-                                  </span>
-                              </button>
-                          );
+                           return (
+                               <div
+                                   key={slot}
+                                   className={cn(
+                                       "flex max-w-60 shrink-0 items-center gap-0.5 rounded-lg px-1 py-0.5 text-xs font-medium outline-none transition-colors",
+                                       activeSlot === slot
+                                           ? "bg-accent text-foreground"
+                                           : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                                   )}
+                               >
+                                   <button
+                                       type="button"
+                                       onClick={() => onSlotChange(slot)}
+                                       className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 py-1 outline-none"
+                                       aria-label={`Configure ${slot === "fusion" ? "fusion" : `model ${index + 1}`} tab`}
+                                   >
+                                       {slot === "fusion" ? (
+                                           <Sparkle size={12} className="shrink-0 text-primary" />
+                                       ) : null}
+                                       <span className="truncate">
+                                           {slot === "fusion"
+                                               ? `Fusion · ${config.model}`
+                                               : `${index + 1} · ${config.model}`}
+                                       </span>
+                                   </button>
+                                   <button
+                                       type="button"
+                                       onClick={() => onCloseSlot(slot)}
+                                       className="rounded-md p-1 text-muted-foreground outline-none hover:bg-background/70 hover:text-foreground"
+                                       aria-label={`Close ${slot === "fusion" ? "fusion" : `model ${index + 1}`} tab`}
+                                   >
+                                       <X size={12} />
+                                   </button>
+                               </div>
+                           );
                       })}
             </div>
 
