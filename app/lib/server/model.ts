@@ -13,6 +13,7 @@ import { createXai } from "@ai-sdk/xai";
 import type { ImageModel } from "ai";
 import type { ProviderId } from "~/lib/types";
 import { parseProviderCredentials } from "~/lib/provider-credentials";
+import { modelSupportsReasoning } from "~/lib/reasoning";
 
 export type ModelRequest = {
     provider: ProviderId;
@@ -27,8 +28,15 @@ export function createChatModel(body: ModelRequest) {
     const key = credentials.apiKey || apiKey;
 
     switch (provider) {
-        case "openai":
-            return createOpenAI({ apiKey: key, baseURL: baseUrl || undefined }).chat(model);
+        case "openai": {
+            const openai = createOpenAI({
+                apiKey: key,
+                baseURL: baseUrl || undefined,
+            });
+            return shouldUseOpenAIResponses(provider, model, baseUrl)
+                ? openai.responses(model)
+                : openai.chat(model);
+        }
         case "anthropic":
             return createAnthropic({ apiKey: key, baseURL: baseUrl || undefined })(model);
         case "gemini":
@@ -93,6 +101,26 @@ export function createChatModel(body: ModelRequest) {
             return createOpenAI({ apiKey: key || "custom", baseURL: baseUrl || "http://localhost:1234/v1" }).chat(model);
         default:
             throw new Error(`Unsupported provider: ${provider}`);
+    }
+}
+
+/**
+ * OpenAI's reasoning models support function tools through Responses, not
+ * Chat Completions. Custom OpenAI-compatible endpoints must stay on chat.
+ */
+export function shouldUseOpenAIResponses(
+    provider: ProviderId,
+    model: string,
+    baseUrl?: string,
+): boolean {
+    if (provider !== "openai" || !modelSupportsReasoning(provider, model)) {
+        return false;
+    }
+    if (!baseUrl) return true;
+    try {
+        return new URL(baseUrl).hostname === "api.openai.com";
+    } catch {
+        return false;
     }
 }
 

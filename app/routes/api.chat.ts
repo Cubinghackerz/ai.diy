@@ -16,7 +16,11 @@ import {
     type ReasoningEffort,
 } from "~/lib/reasoning";
 import type { McpServerConfig, ProviderId } from "~/lib/types";
-import { createChatModel, createImageModel } from "~/lib/server/model";
+import {
+    createChatModel,
+    createImageModel,
+    shouldUseOpenAIResponses,
+} from "~/lib/server/model";
 import { inferModelSupportsImageGeneration } from "~/lib/model-capabilities";
 import { imageRequestOptions } from "~/lib/image-generation";
 import { providerNeedsKey } from "~/lib/provider-credentials";
@@ -175,6 +179,19 @@ export async function action({ request }: ActionFunctionArgs) {
             body.model,
             effort,
         );
+        const toolsEnabled = Object.keys(tools).length > 0;
+        const safeProviderOptions =
+            toolsEnabled &&
+            !shouldUseOpenAIResponses(body.provider, body.model, body.baseUrl) &&
+            providerOptions?.openai
+                ? {
+                      ...providerOptions,
+                      openai: {
+                          ...providerOptions.openai,
+                          reasoningEffort: "none" as const,
+                      },
+                  }
+                : providerOptions;
 
         const anthropicThinkingOn =
             body.provider === "anthropic" &&
@@ -211,7 +228,7 @@ export async function action({ request }: ActionFunctionArgs) {
             // tool call followed by a correction. Keep a finite guard while
             // leaving room for substantial multi-tool work to finish.
             stopWhen: stepCountIs(20),
-            ...(providerOptions ? { providerOptions } : {}),
+            ...(safeProviderOptions ? { providerOptions: safeProviderOptions } : {}),
             onFinish: async () => {
                 await closeMcpClients(mcpClients);
             },
