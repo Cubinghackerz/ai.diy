@@ -10,6 +10,7 @@ import { resolveModel } from "~/lib/model-capabilities";
 import type { ProviderId } from "~/lib/types";
 import { type FC } from "react";
 import { ReasoningEffortSelector } from "~/components/assistant-ui/ReasoningEffortSelector";
+import { ImageModelControls } from "~/components/assistant-ui/ImageModelControls";
 
 export const ComposerModelControls: FC = () => {
     const { settings, updateChat } = useSettings();
@@ -49,7 +50,8 @@ export const ComposerModelControls: FC = () => {
                 </span>
             )}
 
-            <ReasoningEffortSelector variant="compact" />
+            <ReasoningEffortSelector />
+            <ImageModelControls />
         </div>
     );
 };

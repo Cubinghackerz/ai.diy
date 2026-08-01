@@ -6,7 +6,9 @@
 
 import {
     useCallback,
+    useEffect,
     useMemo,
+    useRef,
     useState,
     createContext,
     useContext,
@@ -24,6 +26,10 @@ export interface Artifact {
     output?: string;       // execution output (for python)
     mimeType?: string;     // for file downloads
     filename?: string;     // for file downloads
+    /** Stable content identity used to reopen, not duplicate, an artifact. */
+    sourceKey?: string;
+    /** Thread or preview run that produced this artifact. */
+    scopeId?: string | null;
     createdAt: number;
 }
 
@@ -33,9 +39,15 @@ interface CanvasContextValue {
     canvasOpen: boolean;
     canvasWidth: number;
     setCanvasWidth: (w: number) => void;
-    addArtifact: (a: Omit<Artifact, "id" | "createdAt">) => string;
+    addArtifact: (
+        a: Omit<Artifact, "id" | "createdAt" | "scopeId" | "sourceKey"> & {
+            sourceKey?: string;
+        },
+        options?: { open?: boolean; scopeId?: string | null },
+    ) => string;
     updateArtifactOutput: (id: string, output: string) => void;
     setActiveArtifactId: (id: string | null) => void;
+    setArtifactScope: (scopeId: string | null) => void;
     openCanvas: () => void;
     closeCanvas: () => void;
 }
@@ -79,6 +91,8 @@ function recommendedCanvasWidth(artifact: Omit<Artifact, "id" | "createdAt">) {
 
 export function CanvasProvider({ children }: { children: ReactNode }) {
     const [artifacts, setArtifacts] = useState<Artifact[]>([]);
+    const artifactsRef = useRef<Artifact[]>([]);
+    const artifactScopeRef = useRef<string | null>(null);
     const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
     const [canvasOpen, setCanvasOpen] = useState(false);
     const [canvasWidth, setCanvasWidth] = useState(() => {
@@ -90,24 +104,63 @@ export function CanvasProvider({ children }: { children: ReactNode }) {
         setCanvasWidth(clampCanvasWidth(w));
     }, []);
 
-    const addArtifact = useCallback((a: Omit<Artifact, "id" | "createdAt">) => {
+    useEffect(() => {
+        const onResize = () => {
+            setCanvasWidth((width) => clampCanvasWidth(width));
+        };
+        window.addEventListener("resize", onResize);
+        return () => window.removeEventListener("resize", onResize);
+    }, []);
+
+    const setArtifactScope = useCallback((scopeId: string | null) => {
+        if (artifactScopeRef.current === scopeId) return;
+        artifactScopeRef.current = scopeId;
+        artifactsRef.current = [];
+        setArtifacts([]);
+        setActiveArtifactId(null);
+        setCanvasOpen(false);
+    }, []);
+
+    const addArtifact = useCallback((
+        a: Omit<Artifact, "id" | "createdAt" | "scopeId" | "sourceKey"> & {
+            sourceKey?: string;
+        },
+        options?: { open?: boolean; scopeId?: string | null },
+    ) => {
+        const scopeId = options?.scopeId ?? artifactScopeRef.current;
+        const sourceKey =
+            a.sourceKey ?? `${a.kind}:${a.filename ?? a.title}:${a.content}`;
+        const existing = artifactsRef.current.find(
+            (artifact) =>
+                artifact.scopeId === scopeId && artifact.sourceKey === sourceKey,
+        );
+        if (existing) {
+            setActiveArtifactId(existing.id);
+            if (options?.open !== false) setCanvasOpen(true);
+            return existing.id;
+        }
+
         const createdAt = Date.now();
         const newArtifact: Artifact = {
             ...a,
             id: `artifact_${createdAt}`,
+            sourceKey,
+            scopeId,
             createdAt,
         };
-        setArtifacts((prev) => [...prev, newArtifact]);
+        artifactsRef.current = [...artifactsRef.current, newArtifact];
+        setArtifacts(artifactsRef.current);
         setActiveArtifactId(newArtifact.id);
         setCanvasWidth(recommendedCanvasWidth(a));
-        setCanvasOpen(true);
+        if (options?.open !== false) setCanvasOpen(true);
         return newArtifact.id;
     }, []);
 
     const updateArtifactOutput = useCallback((id: string, output: string) => {
-        setArtifacts((prev) =>
-            prev.map((a) => (a.id === id ? { ...a, output } : a))
+        artifactsRef.current = artifactsRef.current.map((artifact) =>
+            artifact.id === id ? { ...artifact, output } : artifact,
         );
+        setArtifacts(artifactsRef.current);
     }, []);
 
     const openCanvas = useCallback(() => setCanvasOpen(true), []);
@@ -123,6 +176,7 @@ export function CanvasProvider({ children }: { children: ReactNode }) {
             addArtifact,
             updateArtifactOutput,
             setActiveArtifactId,
+            setArtifactScope,
             openCanvas,
             closeCanvas,
         }),
@@ -134,6 +188,7 @@ export function CanvasProvider({ children }: { children: ReactNode }) {
             setCanvasWidthClamped,
             addArtifact,
             updateArtifactOutput,
+            setArtifactScope,
             openCanvas,
             closeCanvas,
         ],

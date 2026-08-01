@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AssistantRuntimeProvider } from "~/components/assistant-ui/AssistantRuntimeProvider";
 import { ChatLifecycle } from "~/components/assistant-ui/ChatLifecycle";
 import { ChatErrorBanner } from "~/components/assistant-ui/ChatThreadSync";
+import { PreviewWorkspace } from "~/components/assistant-ui/PreviewWorkspace";
 import { Thread } from "~/components/assistant-ui/Thread";
 import { CanvasPanel } from "~/components/canvas/CanvasPanel";
 import { AppSidebar } from "~/components/sidebar/AppSidebar";
@@ -27,7 +28,7 @@ export default function Home() {
 }
 
 function HomeInner() {
-    const { loaded } = useSettings();
+    const { loaded, settings } = useSettings();
     const {
         threads,
         activeThreadId,
@@ -107,12 +108,8 @@ function HomeInner() {
         />
     );
 
-    return (
-        <AssistantRuntimeProvider
-            key={activeThreadId ?? "draft"}
-            threadId={activeThreadId}
-        >
-            <div className="flex h-full w-full overflow-hidden bg-background text-foreground">
+    const appShell = (
+        <div className="flex h-full w-full overflow-hidden bg-background text-foreground">
                 <aside
                     className={cn(
                         "hidden flex-col border-r border-border/80 bg-sidebar transition-[width] duration-200 md:flex",
@@ -155,7 +152,9 @@ function HomeInner() {
                                 <SidebarIcon size={18} />
                             </button>
                             <span className="truncate text-sm font-semibold">
-                                {activeThread?.title || "New Chat"}
+                                {settings.preview.enabled
+                                    ? "Multi-model preview"
+                                    : activeThread?.title || "New Chat"}
                             </span>
                         </div>
 
@@ -178,17 +177,23 @@ function HomeInner() {
 
                     <div className="relative flex min-h-0 flex-1">
                         <main className="relative min-w-0 flex-1 overflow-hidden">
-                            <ChatLifecycle
-                                threadId={activeThreadId}
-                                threadTitle={activeThread?.title}
-                                onTitleChange={handleTitleChange}
-                            />
-                            <div className="flex h-full min-h-0 flex-col">
-                                <ChatErrorBanner />
-                                <div className="min-h-0 flex-1">
-                                    <Thread />
-                                </div>
-                            </div>
+                            {settings.preview.enabled ? (
+                                <PreviewWorkspace />
+                            ) : (
+                                <>
+                                    <ChatLifecycle
+                                        threadId={activeThreadId}
+                                        threadTitle={activeThread?.title}
+                                        onTitleChange={handleTitleChange}
+                                    />
+                                    <div className="flex h-full min-h-0 flex-col">
+                                        <ChatErrorBanner />
+                                        <div className="min-h-0 flex-1">
+                                            <Thread />
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                         </main>
 
                         {/* The canvas is a workspace sibling, so opening an
@@ -196,7 +201,17 @@ function HomeInner() {
                         <CanvasPanel />
                     </div>
                 </div>
-            </div>
+        </div>
+    );
+
+    if (settings.preview.enabled) return appShell;
+
+    return (
+        <AssistantRuntimeProvider
+            key={activeThreadId ?? "draft"}
+            threadId={activeThreadId}
+        >
+            {appShell}
         </AssistantRuntimeProvider>
     );
 }

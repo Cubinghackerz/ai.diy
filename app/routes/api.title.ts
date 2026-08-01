@@ -7,6 +7,7 @@ import { generateText } from "ai";
 import type { ProviderId } from "~/lib/types";
 import { createChatModel } from "~/lib/server/model";
 import { providerNeedsKey } from "~/lib/provider-credentials";
+import { inferModelSupportsImageGeneration } from "~/lib/model-capabilities";
 import { corsPreflight, withCors } from "~/lib/server/cors";
 
 interface TitleRequestBody {
@@ -88,6 +89,13 @@ export async function action({ request }: ActionFunctionArgs) {
                 { title: fallbackTitle(message), fallback: true },
                 { status: 200 },
             ),
+        );
+    }
+
+    if (inferModelSupportsImageGeneration(body.model, body.provider)) {
+        return withCors(
+            request,
+            Response.json({ title: fallbackTitle(message), fallback: true }),
         );
     }
 

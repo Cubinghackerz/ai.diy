@@ -9,7 +9,6 @@ import { ComposerModelControls } from "~/components/assistant-ui/ComposerModelCo
 import { ThreadFollowupSuggestions } from "~/components/assistant-ui/follow-up-suggestions";
 import { MarkdownText } from "~/components/assistant-ui/markdown-text";
 import {
-  Reasoning,
   ReasoningContent,
   ReasoningRoot,
   ReasoningText,
@@ -87,6 +86,8 @@ export type ThreadComponents = {
 
 export type ThreadProps = {
   components?: ThreadComponents | undefined;
+  /** Preview runs render messages only; their prompt is composed elsewhere. */
+  hideComposer?: boolean;
 };
 
 const EMPTY_COMPONENTS: ThreadComponents = {};
@@ -94,20 +95,32 @@ const EMPTY_COMPONENTS: ThreadComponents = {};
 const ThreadComponentsContext =
   createContext<ThreadComponents>(EMPTY_COMPONENTS);
 
-export const Thread: FC<ThreadProps> = ({ components = EMPTY_COMPONENTS }) => {
+export const Thread: FC<ThreadProps> = ({
+  components = EMPTY_COMPONENTS,
+  hideComposer = false,
+}) => {
   const messageCount = useAuiState((state) => state.thread.messages.length);
   const isEmpty = messageCount === 0;
 
   return (
     <ThreadComponentsContext.Provider value={components}>
-      <ThreadRoot isEmpty={isEmpty} messageCount={messageCount} />
+      <ThreadRoot
+        isEmpty={isEmpty}
+        messageCount={messageCount}
+        hideComposer={hideComposer}
+      />
     </ThreadComponentsContext.Provider>
   );
 };
 
-const ThreadRoot: FC<{ isEmpty: boolean; messageCount: number }> = ({
+const ThreadRoot: FC<{
+  isEmpty: boolean;
+  messageCount: number;
+  hideComposer: boolean;
+}> = ({
   isEmpty,
   messageCount,
+  hideComposer,
 }) => {
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext);
   const composerEmpty = useAuiState((s) => s.composer.isEmpty);
@@ -138,23 +151,28 @@ const ThreadRoot: FC<{ isEmpty: boolean; messageCount: number }> = ({
 
           <div
             data-slot="aui_message-group"
-            className="mb-14 flex flex-col gap-y-6 empty:hidden"
+            className={cn(
+              "flex flex-col gap-y-6 empty:hidden",
+              hideComposer ? "pb-4" : "mb-14",
+            )}
           >
             <ThreadMessages />
           </div>
 
-          <ThreadPrimitive.ViewportFooter
-            className={cn(
-              "aui-thread-viewport-footer bg-background flex flex-col gap-4 overflow-visible pb-4 md:pb-6",
-              !isEmpty &&
-                "sticky bottom-0 mt-auto rounded-t-(--composer-radius)",
-            )}
-          >
-            <ThreadScrollToBottom />
-            <ThreadFollowupSuggestions />
-            <Composer />
-            {isEmpty && composerEmpty ? <ThreadSuggestions /> : null}
-          </ThreadPrimitive.ViewportFooter>
+          {!hideComposer ? (
+            <ThreadPrimitive.ViewportFooter
+              className={cn(
+                "aui-thread-viewport-footer bg-background flex flex-col gap-4 overflow-visible pb-4 md:pb-6",
+                !isEmpty &&
+                  "sticky bottom-0 mt-auto rounded-t-(--composer-radius)",
+              )}
+            >
+              <ThreadScrollToBottom />
+              <ThreadFollowupSuggestions />
+              <Composer />
+              {isEmpty && composerEmpty ? <ThreadSuggestions /> : null}
+            </ThreadPrimitive.ViewportFooter>
+          ) : null}
         </div>
       </ThreadPrimitive.Viewport>
     </ThreadPrimitive.Root>
@@ -460,9 +478,35 @@ const AssistantMessage: FC = () => {
               case "text":
                 return <MarkdownText />;
               case "reasoning":
-                return <Reasoning {...part} />;
+                // The parent group owns the single disclosure. Rendering a
+                // second ReasoningRoot here creates nested reasoning panels.
+                return <MarkdownText />;
               case "tool-call":
                 return part.toolUI ?? <ToolFallbackComponent {...part} />;
+              case "file":
+                return part.mimeType.startsWith("image/") ? (
+                  <figure className="my-3 max-w-2xl overflow-hidden rounded-2xl border border-border/70 bg-muted/30 shadow-sm">
+                    <img
+                      src={part.data}
+                      alt={part.filename || "Generated image"}
+                      className="block h-auto max-h-[min(70vh,42rem)] w-full object-contain"
+                      loading="lazy"
+                    />
+                    {part.filename ? (
+                      <figcaption className="border-t border-border/60 px-3 py-2 text-[11px] text-muted-foreground">
+                        {part.filename}
+                      </figcaption>
+                    ) : null}
+                  </figure>
+                ) : (
+                  <a
+                    href={part.data}
+                    download={part.filename}
+                    className="my-2 inline-flex rounded-lg border border-border px-3 py-2 text-xs text-primary underline-offset-4 hover:underline"
+                  >
+                    {part.filename || "Download file"}
+                  </a>
+                );
               case "data":
                 return part.dataRendererUI;
               case "indicator":

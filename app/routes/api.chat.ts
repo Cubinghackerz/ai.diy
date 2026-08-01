@@ -2,6 +2,9 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import {
     streamText,
     convertToModelMessages,
+    createUIMessageStream,
+    createUIMessageStreamResponse,
+    generateImage,
     stepCountIs,
     type UIMessage,
 } from "ai";
@@ -13,7 +16,9 @@ import {
     type ReasoningEffort,
 } from "~/lib/reasoning";
 import type { McpServerConfig, ProviderId } from "~/lib/types";
-import { createChatModel } from "~/lib/server/model";
+import { createChatModel, createImageModel } from "~/lib/server/model";
+import { inferModelSupportsImageGeneration } from "~/lib/model-capabilities";
+import { imageRequestOptions } from "~/lib/image-generation";
 import { providerNeedsKey } from "~/lib/provider-credentials";
 import { corsPreflight, withCors } from "~/lib/server/cors";
 
@@ -38,6 +43,52 @@ interface ChatRequestBody {
         skillsEnabled?: boolean;
     };
     mcpServers?: McpServerConfig[];
+    imageSettings?: {
+        size?: "1024x1024" | "1536x1024" | "1024x1536";
+        count?: number;
+    };
+}
+
+function imagePrompt(messages: UIMessage[]): string {
+    const lastUser = [...messages].reverse().find((message) => message.role === "user");
+    return (
+        lastUser?.parts
+            .filter((part) => part.type === "text")
+            .map((part) => part.text)
+            .join(" ")
+            .trim() || "Generate an image based on the conversation."
+    );
+}
+
+async function generateImageResponse(body: ChatRequestBody): Promise<Response> {
+    const imageOptions = imageRequestOptions(
+        body.provider,
+        body.imageSettings?.size,
+        body.imageSettings?.count,
+    );
+    const result = await generateImage({
+        model: createImageModel(body),
+        prompt: imagePrompt(body.messages),
+        ...imageOptions,
+    });
+
+    const stream = createUIMessageStream({
+        execute({ writer }) {
+            writer.write({ type: "start" });
+            for (const image of result.images) {
+                writer.write({
+                    type: "file",
+                    url: `data:${image.mediaType};base64,${image.base64}`,
+                    mediaType: image.mediaType,
+                });
+            }
+            writer.write({ type: "finish", finishReason: "stop" });
+        },
+        onError: (error) =>
+            error instanceof Error ? error.message : "Image generation failed",
+    });
+
+    return createUIMessageStreamResponse({ stream });
 }
 
 export function loader({ request }: LoaderFunctionArgs) {
@@ -94,6 +145,20 @@ export async function action({ request }: ActionFunctionArgs) {
         );
     }
 
+    if (inferModelSupportsImageGeneration(body.model, body.provider)) {
+        try {
+            return withCors(request, await generateImageResponse(body));
+        } catch (err) {
+            const message =
+                err instanceof Error ? err.message : "Image generation failed";
+            console.error("[api/chat:image]", err);
+            return withCors(
+                request,
+                Response.json({ error: message }, { status: 500 }),
+            );
+        }
+    }
+
     const { tools: mcpTools, clients: mcpClients } = await loadMcpTools(
         body.mcpServers,
     );
@@ -142,7 +207,10 @@ export async function action({ request }: ActionFunctionArgs) {
                   }),
             maxOutputTokens,
             tools: Object.keys(tools).length > 0 ? tools : undefined,
-            stopWhen: stepCountIs(5),
+            // Five steps is too easy to exhaust with repeated searches or a
+            // tool call followed by a correction. Keep a finite guard while
+            // leaving room for substantial multi-tool work to finish.
+            stopWhen: stepCountIs(20),
             ...(providerOptions ? { providerOptions } : {}),
             onFinish: async () => {
                 await closeMcpClients(mcpClients);

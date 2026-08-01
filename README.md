@@ -1,4 +1,4 @@
-# ai.diy
+# ai.diy <sup>BETA</sup>
 
 > Open-source, BYOK AI chat — self-host on any Node server or Docker. **No API keys required on the server.**
 
@@ -16,11 +16,13 @@ ai.diy is a privacy-first, bring-your-own-key chat interface. It proxies the use
 - **Built-in tools** — Web search, URL fetch, calculator, canvas files, and Python (Pyodide in the browser; optional server Python on self-host/Docker).
 - **Callable skills** — `create_skill` drafts a `SKILL.md` workflow document, and `frontend_design_skill` produces an implementation-ready frontend design brief. Both are side-effect-free and never access private data.
 - **Tool-capable model picker** — Defaults to the live catalog and keeps the user's selection visible across provider switches; searchable command-style picker.
-- **Reasoning** — Thinking effort control (off/low/medium/high where supported) in the composer; provider-specific `providerOptions` for OpenAI, Anthropic, Gemini, xAI, DeepSeek, Bedrock, and Mistral.
-- **Streaming** — Real-time tokens + reasoning in the UI via the AI SDK UI message stream.
+- **Reasoning** — One compact input-bar selector exposes the supported effort levels for the selected model; provider-specific `providerOptions` are used for OpenAI, Anthropic, Gemini, xAI, DeepSeek, Bedrock, and Mistral.
+- **Image models** — Vision-capable models accept image attachments. Image-generation models are marked in the picker, expose supported size/count controls, and return generated images inline in chat.
+- **Streaming** — Real-time tokens, tool calls, generated files, and reasoning where the selected provider exposes it via the AI SDK UI message stream.
+- **Experimental multi-model preview** — An opt-in Settings → Experimental workspace runs up to three models in parallel and can synthesize their completed outputs with a fourth model. Each tab retains its own tool calls, reasoning, images, and artifacts.
 - **Auto thread titles** — New chat, first message, the model generates a short title; falls back to a slug if generation fails or the key is missing.
 - **Local-first** — Settings in localStorage; chats + messages in IndexedDB.
-- **Canvas** — Generated HTML, code, and SVG artifacts render in a resizable side panel that auto-sizes to the artifact.
+- **Canvas** — Generated HTML, code, and SVG artifacts are scoped to their current chat, reopen from the originating tool result, and resize up to 50% of the viewport.
 - **Dark / light / system theme**.
 
 ## Supported providers
@@ -75,6 +77,17 @@ See [DEPLOYMENT.md](./DEPLOYMENT.md) for details (local models need a host that 
 No secrets are required. See `.env.example`. Optional:
 
 - `DISABLE_PYTHON=1` — turn off legacy server Python (browser Pyodide is preferred)
+- `CORS_ORIGINS=https://app.example.com` — comma-separated frontend origins permitted to call `/api/*`; same-origin is the default
+
+### Vercel preview only
+
+Self-hosting remains the default deployment path. For a temporary Vercel **preview** (Node runtime, never Edge), deploy a non-`main` branch and omit `--prod`:
+
+```bash
+npx vercel
+```
+
+This creates a preview URL only and does not update a production domain. Do not use `npx vercel --prod` for this beta workspace.
 
 ## Docker
 

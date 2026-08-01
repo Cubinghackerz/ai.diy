@@ -77,7 +77,11 @@ export function AssistantRuntimeProvider({
                             temperature: s.chat.temperature,
                             maxTokens: s.chat.maxTokens,
                             topP: s.chat.topP,
-                            reasoningEffort: s.chat.reasoningEffort,
+                             reasoningEffort: s.chat.reasoningEffort,
+                             imageSettings: {
+                                 size: s.chat.imageSize,
+                                 count: s.chat.imageCount,
+                             },
                             toolSettings: {
                                 webSearchEnabled: s.webSearchEnabled,
                                 calculatorEnabled: s.calculatorEnabled,

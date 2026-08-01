@@ -25,6 +25,7 @@ import {
 import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
 import { ARTIFACT_MARKER } from "~/lib/artifacts";
+import { useCanvas, type ArtifactKind } from "~/lib/canvas";
 
 const ANIMATION_DURATION = 200;
 
@@ -42,6 +43,34 @@ function extractArtifactInfo(result: string): { title: string; filename: string 
     return {
       title: String(parsed.title ?? "Artifact"),
       filename: String(parsed.filename ?? "file"),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function extractArtifact(result: string): {
+  title: string;
+  filename: string;
+  content: string;
+  kind: ArtifactKind;
+} | null {
+  try {
+    const parsed = JSON.parse(result) as Record<string, unknown>;
+    if (!parsed[ARTIFACT_MARKER]) return null;
+    const rawKind = String(parsed.kind ?? "file").toLowerCase();
+    const kind: ArtifactKind = /html|svg|preview/.test(rawKind)
+      ? "html"
+      : /python|py/.test(rawKind)
+        ? "python"
+        : /code|ts|js|css|json|md|markdown|txt/.test(rawKind)
+          ? "code"
+          : "file";
+    return {
+      title: String(parsed.title ?? "Artifact"),
+      filename: String(parsed.filename ?? "file.txt"),
+      content: String(parsed.content ?? ""),
+      kind,
     };
   } catch {
     return null;
@@ -276,11 +305,13 @@ function ToolFallbackResult({
 }: React.ComponentProps<"div"> & {
   result?: unknown;
 }) {
+  const { addArtifact } = useCanvas();
   if (result === undefined) return null;
 
   // Suppress raw JSON artifact payloads — Canvas panel shows them instead.
   if (isArtifactPayload(result)) {
     const info = extractArtifactInfo(result as string);
+    const artifact = extractArtifact(result as string);
     return (
       <div
         data-slot="tool-fallback-result"
@@ -298,8 +329,15 @@ function ToolFallbackResult({
           {info?.title && info.title !== info.filename ? (
             <span className="text-muted-foreground"> — {info.title}</span>
           ) : null}
-          {" "}
-          opened in Canvas panel.
+          <button
+            type="button"
+            onClick={() => {
+              if (artifact) addArtifact(artifact, { open: true });
+            }}
+            className="ms-1.5 rounded-md border border-border bg-background px-1.5 py-0.5 text-[11px] font-medium text-foreground outline-none transition-colors hover:bg-accent"
+          >
+            Open artifact
+          </button>
         </p>
       </div>
     );

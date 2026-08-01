@@ -10,6 +10,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createXai } from "@ai-sdk/xai";
+import type { ImageModel } from "ai";
 import type { ProviderId } from "~/lib/types";
 import { parseProviderCredentials } from "~/lib/provider-credentials";
 
@@ -92,5 +93,65 @@ export function createChatModel(body: ModelRequest) {
             return createOpenAI({ apiKey: key || "custom", baseURL: baseUrl || "http://localhost:1234/v1" }).chat(model);
         default:
             throw new Error(`Unsupported provider: ${provider}`);
+    }
+}
+
+export function createImageModel(body: ModelRequest): ImageModel {
+    const { provider, apiKey, baseUrl, model } = body;
+    const credentials = parseProviderCredentials(provider, apiKey);
+    const key = credentials.apiKey || apiKey;
+
+    switch (provider) {
+        case "openai":
+        case "openrouter":
+        case "custom":
+            return createOpenAI({
+                apiKey: key,
+                baseURL: baseUrl || undefined,
+            }).imageModel(model);
+        case "xai":
+            return createXai({
+                apiKey: key,
+                baseURL: baseUrl || undefined,
+            }).imageModel(model);
+        case "gemini":
+            return createGoogleGenerativeAI({ apiKey: key }).image(model);
+        case "gateway":
+            return createGateway({
+                apiKey: key,
+                baseURL: baseUrl || undefined,
+            }).imageModel(model);
+        case "bedrock":
+            return createAmazonBedrock({
+                apiKey: credentials.apiKey,
+                region: credentials.region,
+                accessKeyId: credentials.accessKeyId,
+                secretAccessKey: credentials.secretAccessKey,
+                sessionToken: credentials.sessionToken,
+                baseURL: baseUrl || credentials.baseURL || undefined,
+            }).image(model);
+        case "azure":
+            return createAzure({
+                apiKey: credentials.apiKey,
+                resourceName: credentials.resourceName,
+                apiVersion: credentials.apiVersion,
+                baseURL: baseUrl || credentials.baseURL || undefined,
+            }).imageModel(model);
+        case "vertex":
+            return createGoogleVertex({
+                apiKey: credentials.apiKey,
+                project: credentials.project,
+                location: credentials.location,
+                baseURL: baseUrl || credentials.baseURL || undefined,
+            }).imageModel(model);
+        case "togetherai":
+            return createTogetherAI({
+                apiKey: key,
+                baseURL: baseUrl || undefined,
+            }).imageModel(model);
+        default:
+            throw new Error(
+                `${provider} does not expose an image-generation model through its SDK.`,
+            );
     }
 }

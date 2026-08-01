@@ -98,9 +98,25 @@ export function enrichModelInfo(model: ModelInfo): ModelInfo {
             model.supportsAudio ?? /audio|realtime|gpt-4o/.test(id),
         supportsImageGeneration:
             model.supportsImageGeneration ??
-            /dall-e|gpt-image|imagen|stable-diffusion|flux/.test(id),
+            inferModelSupportsImageGeneration(model.id, model.provider),
         supportsStreaming: model.supportsStreaming ?? true,
     };
+}
+
+export function inferModelSupportsImageGeneration(
+    modelId: string,
+    provider?: ProviderId,
+): boolean {
+    const known = provider
+        ? (DEFAULT_MODELS[provider] ?? []).find((model) => model.id === modelId)
+        : undefined;
+    if (known?.supportsImageGeneration != null) {
+        return known.supportsImageGeneration;
+    }
+
+    return /dall[-_]?e|gpt[-_]?image|imagen|stable[-_]?diffusion|flux(?:[-_.]|$)|recraft|black[-_]?forest[-_]?labs|grok[-_]?2[-_]?image/.test(
+        modelId.toLowerCase(),
+    );
 }
 
 export function inferModelSupportsVision(

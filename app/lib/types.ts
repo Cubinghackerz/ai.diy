@@ -60,7 +60,24 @@ export interface ChatSettings {
     provider: ProviderId;
     /** Used only when the current model supports reasoning / thinking. */
     reasoningEffort: ReasoningEffort;
+    imageSize: "1024x1024" | "1536x1024" | "1024x1536";
+    imageCount: number;
     activeAgentId?: string | null;
+}
+
+/** A model selection used by the opt-in multi-model preview workspace. */
+export interface PreviewModelConfig {
+    provider: ProviderId;
+    model: string;
+    reasoningEffort: ReasoningEffort;
+}
+
+export interface PreviewSettings {
+    enabled: boolean;
+    /** One to three independent models run in parallel. */
+    primaryModels: PreviewModelConfig[];
+    /** Optional fourth model that synthesizes completed primary outputs. */
+    fusionModel: PreviewModelConfig | null;
 }
 
 // ─── Settings Types ──────────────────────────────────────────────
@@ -80,6 +97,7 @@ export interface AppSettings {
     pythonEnabled: boolean;
     calculatorEnabled: boolean;
     skillsEnabled: boolean;
+    preview: PreviewSettings;
     // MCP settings
     mcpServers: McpServerConfig[];
 }
@@ -277,6 +295,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
         model: "gpt-4o",
         provider: "openai",
         reasoningEffort: "medium",
+        imageSize: "1024x1024",
+        imageCount: 1,
         activeAgentId: null,
     },
     theme: "system",
@@ -289,6 +309,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
     pythonEnabled: true,
     calculatorEnabled: true,
     skillsEnabled: true,
+    preview: {
+        enabled: false,
+        primaryModels: [],
+        fusionModel: null,
+    },
     mcpServers: [],
 };
 
@@ -302,6 +327,7 @@ export const DEFAULT_MODELS: Record<ProviderId, ModelInfo[]> = {
         { id: "gpt-5.1", name: "GPT-5.1", provider: "openai", contextWindow: 200000, supportsTools: true, supportsReasoning: true },
         { id: "o3-mini", name: "o3-mini", provider: "openai", contextWindow: 200000, supportsTools: true, supportsReasoning: true },
         { id: "o4-mini", name: "o4-mini", provider: "openai", contextWindow: 200000, supportsTools: true, supportsReasoning: true },
+        { id: "gpt-image-1", name: "GPT Image 1", provider: "openai", supportsImageGeneration: true },
     ],
     anthropic: [
         { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet", provider: "anthropic", contextWindow: 200000, supportsTools: true },
@@ -317,6 +343,8 @@ export const DEFAULT_MODELS: Record<ProviderId, ModelInfo[]> = {
         { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "gemini", contextWindow: 1048576, supportsTools: true, supportsReasoning: true },
         { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", provider: "gemini", contextWindow: 1048576, supportsTools: true, supportsReasoning: true },
         { id: "gemini-3-pro-preview", name: "Gemini 3 Pro", provider: "gemini", contextWindow: 1048576, supportsTools: true, supportsReasoning: true },
+        { id: "imagen-4.0-generate-001", name: "Imagen 4", provider: "gemini", supportsImageGeneration: true },
+        { id: "gemini-2.5-flash-image", name: "Gemini 2.5 Flash Image", provider: "gemini", supportsImageGeneration: true },
     ],
     groq: [
         { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B", provider: "groq", contextWindow: 131072, supportsTools: true },
@@ -342,6 +370,7 @@ export const DEFAULT_MODELS: Record<ProviderId, ModelInfo[]> = {
         { id: "us.amazon.nova-pro-v1:0", name: "Amazon Nova Pro", provider: "bedrock", contextWindow: 300000, supportsTools: true, supportsVision: true },
         { id: "us.amazon.nova-lite-v1:0", name: "Amazon Nova Lite", provider: "bedrock", contextWindow: 300000, supportsTools: true, supportsVision: true },
         { id: "meta.llama3-3-70b-instruct-v1:0", name: "Llama 3.3 70B", provider: "bedrock", contextWindow: 131072, supportsTools: true },
+        { id: "amazon.nova-canvas-v1:0", name: "Amazon Nova Canvas", provider: "bedrock", supportsImageGeneration: true },
     ],
     azure: [
         { id: "gpt-5.6", name: "GPT-5.6", provider: "azure", contextWindow: 1050000, maxTokens: 128000, supportsTools: true, supportsVision: true, supportsReasoning: true },
@@ -355,6 +384,7 @@ export const DEFAULT_MODELS: Record<ProviderId, ModelInfo[]> = {
         { id: "gemini-3.5-flash", name: "Gemini 3.5 Flash", provider: "vertex", contextWindow: 1048576, maxTokens: 65536, supportsTools: true, supportsVision: true, supportsReasoning: true },
         { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "vertex", contextWindow: 1048576, supportsTools: true, supportsVision: true, supportsReasoning: true },
         { id: "claude-sonnet-5@default", name: "Claude Sonnet 5", provider: "vertex", contextWindow: 1000000, maxTokens: 128000, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "imagen-4.0-generate-001", name: "Imagen 4", provider: "vertex", supportsImageGeneration: true },
     ],
     gateway: [
         { id: "openai/gpt-5.6", name: "GPT-5.6", provider: "gateway", contextWindow: 1050000, maxTokens: 128000, supportsTools: true, supportsVision: true, supportsReasoning: true },
@@ -362,6 +392,7 @@ export const DEFAULT_MODELS: Record<ProviderId, ModelInfo[]> = {
         { id: "google/gemini-3.6-flash", name: "Gemini 3.6 Flash", provider: "gateway", contextWindow: 1000000, maxTokens: 65536, supportsTools: true, supportsVision: true, supportsReasoning: true },
         { id: "deepseek/deepseek-v4-pro", name: "DeepSeek V4 Pro", provider: "gateway", contextWindow: 1000000, maxTokens: 384000, supportsTools: true, supportsReasoning: true },
         { id: "xai/grok-4.5", name: "Grok 4.5", provider: "gateway", contextWindow: 500000, maxTokens: 500000, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "openai/gpt-image-1", name: "GPT Image 1", provider: "gateway", supportsImageGeneration: true },
     ],
     togetherai: [
         { id: "moonshotai/Kimi-K3", name: "Kimi K3", provider: "togetherai", contextWindow: 1048576, maxTokens: 131072, supportsTools: true, supportsVision: true, supportsReasoning: true },
@@ -369,6 +400,7 @@ export const DEFAULT_MODELS: Record<ProviderId, ModelInfo[]> = {
         { id: "Qwen/Qwen3.7-Max", name: "Qwen 3.7 Max", provider: "togetherai", contextWindow: 1000000, maxTokens: 500000, supportsTools: true },
         { id: "deepseek-ai/DeepSeek-V4-Pro", name: "DeepSeek V4 Pro", provider: "togetherai", contextWindow: 512000, maxTokens: 384000, supportsTools: true, supportsReasoning: true },
         { id: "meta-llama/Llama-3.3-70B-Instruct-Turbo", name: "Llama 3.3 70B Turbo", provider: "togetherai", contextWindow: 131072, supportsTools: true },
+        { id: "black-forest-labs/FLUX.1-schnell", name: "FLUX.1 Schnell", provider: "togetherai", supportsImageGeneration: true },
     ],
     mistral: [
         { id: "mistral-medium-latest", name: "Mistral Medium", provider: "mistral", contextWindow: 262144, maxTokens: 262144, supportsTools: true, supportsVision: true, supportsReasoning: true },
@@ -398,6 +430,7 @@ export const DEFAULT_MODELS: Record<ProviderId, ModelInfo[]> = {
         { id: "grok-4-fast-mini", name: "Grok 4 Fast Mini", provider: "xai", contextWindow: 262144, supportsTools: true, supportsReasoning: true },
         { id: "grok-2-mini", name: "Grok 2 Mini", provider: "xai", contextWindow: 131072, supportsTools: true, supportsVision: true },
         { id: "grok-1.5", name: "Grok 1.5", provider: "xai", contextWindow: 131072, supportsTools: true, supportsVision: true },
+        { id: "grok-2-image-1212", name: "Grok 2 Image", provider: "xai", supportsImageGeneration: true },
     ],
     ollama: [
         { id: "llama3", name: "Llama 3 (Local)", provider: "ollama", supportsTools: true },

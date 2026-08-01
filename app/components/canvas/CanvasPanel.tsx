@@ -27,6 +27,25 @@ export function CanvasPanel() {
         startWidthRef.current = canvasWidth;
     };
 
+    const handleResizeKeyDown = (e: React.KeyboardEvent) => {
+        const step = e.shiftKey ? 64 : 16;
+        const maxWidth =
+            typeof window === "undefined" ? 640 : Math.round(window.innerWidth * 0.5);
+        if (e.key === "ArrowLeft") {
+            e.preventDefault();
+            setCanvasWidth(canvasWidth - step);
+        } else if (e.key === "ArrowRight") {
+            e.preventDefault();
+            setCanvasWidth(canvasWidth + step);
+        } else if (e.key === "Home") {
+            e.preventDefault();
+            setCanvasWidth(320);
+        } else if (e.key === "End") {
+            e.preventDefault();
+            setCanvasWidth(maxWidth);
+        }
+    };
+
     useEffect(() => {
         if (!isResizing) return;
         const handleMouseMove = (e: MouseEvent) => {
@@ -69,18 +88,31 @@ export function CanvasPanel() {
     return (
         <aside
             ref={panelRef}
-            className="relative z-40 flex h-full shrink-0 flex-col border-l border-border bg-card shadow-2xl transition-[width] duration-200 animate-slide-up"
-            style={{ width: canvasWidth, maxWidth: "50%" }}
+            className={`relative z-40 flex h-full shrink-0 flex-col border-l border-border bg-card shadow-2xl animate-slide-up ${isResizing ? "transition-none" : "transition-[width] duration-200"}`}
+            style={{ width: canvasWidth, maxWidth: "50vw" }}
         >
             {/* Resize handle */}
             <div
                 className="absolute top-0 left-0 h-full w-1.5 cursor-col-resize touch-none"
                 onMouseDown={handleResizeStart}
+                onKeyDown={handleResizeKeyDown}
+                role="separator"
+                aria-label="Resize artifact panel"
+                aria-orientation="vertical"
+                aria-valuemin={320}
+                aria-valuemax={Math.round(
+                    typeof window === "undefined" ? 640 : window.innerWidth * 0.5,
+                )}
+                aria-valuenow={Math.round(canvasWidth)}
+                tabIndex={0}
+                title="Drag or use arrow keys to resize"
                 style={{ zIndex: 1 }}
             >
-                <div className={`h-full w-full rounded-r-sm transition-colors ${
-                    isResizing ? "bg-accent" : "hover:bg-accent/50"
-                }`}></div>
+                <div
+                    className={`h-full w-full rounded-r-sm transition-colors ${
+                        isResizing ? "bg-accent" : "hover:bg-accent/50"
+                    }`}
+                />
             </div>
 
             {/* Header */}

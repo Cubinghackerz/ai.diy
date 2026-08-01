@@ -7,6 +7,7 @@ import { Command } from "cmdk";
 import {
     CaretDown,
     Check,
+    ImageSquare,
     MagnifyingGlass,
     SpinnerGap,
 } from "@phosphor-icons/react";
@@ -15,6 +16,7 @@ import { useSettings } from "~/lib/providers/SettingsProvider";
 import { DEFAULT_MODELS, type ModelInfo, type ProviderId } from "~/lib/types";
 import {
     enrichModelInfo,
+    inferModelSupportsImageGeneration,
     inferModelSupportsTools,
 } from "~/lib/model-capabilities";
 import { cn } from "~/lib/utils";
@@ -180,8 +182,16 @@ export function SearchableModelSelect({
                                     className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-xs outline-none aria-selected:bg-accent"
                                 >
                                     <span className="min-w-0">
-                                        <span className="block truncate font-medium">
+                                        <span className="flex items-center gap-1.5 truncate font-medium">
                                             {model.name || model.id}
+                                            {model.supportsImageGeneration ? (
+                                                <ImageSquare
+                                                    size={12}
+                                                    weight="duotone"
+                                                    className="shrink-0 text-primary"
+                                                    aria-label="Image generation model"
+                                                />
+                                            ) : null}
                                         </span>
                                         {model.name !== model.id ? (
                                             <span className="mt-0.5 block truncate font-mono text-[10px] text-muted-foreground">
@@ -245,7 +255,10 @@ export function ModelPicker({
             return availableModels;
         }
         // Keep current selection visible if it was set before the live catalog loaded.
-        if (inferModelSupportsTools(value, provider)) {
+        if (
+            inferModelSupportsTools(value, provider) ||
+            inferModelSupportsImageGeneration(value, provider)
+        ) {
             return [
                 enrichModelInfo({
                     id: value,
@@ -356,8 +369,16 @@ export function ModelPicker({
                                         m.id === value && "bg-accent/70",
                                     )}
                                 >
-                                    <span className="font-medium text-foreground">
+                                    <span className="flex items-center gap-1.5 font-medium text-foreground">
                                         {m.name}
+                                        {m.supportsImageGeneration ? (
+                                            <ImageSquare
+                                                size={12}
+                                                weight="duotone"
+                                                className="shrink-0 text-primary"
+                                                aria-label="Image generation model"
+                                            />
+                                        ) : null}
                                     </span>
                                     {m.name !== m.id ? (
                                         <span className="font-mono text-[10px] text-muted-foreground">

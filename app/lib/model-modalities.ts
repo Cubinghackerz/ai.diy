@@ -5,6 +5,7 @@
 import { DEFAULT_MODELS, type ModelInfo, type ProviderId } from "~/lib/types";
 import {
     inferModelSupportsTools,
+    inferModelSupportsImageGeneration,
 } from "~/lib/model-capabilities";
 import { modelSupportsReasoning } from "~/lib/reasoning";
 
@@ -15,6 +16,8 @@ export type ModelModalities = {
     documents: boolean;
     /** Model emits reasoning / thinking parts. */
     reasoning: boolean;
+    /** Model generates images rather than only text. */
+    imageGeneration: boolean;
 };
 
 export function inferModelSupportsVision(
@@ -69,6 +72,7 @@ export function getModelModalities(
         vision: inferModelSupportsVision(modelId, provider),
         documents: inferModelSupportsDocuments(modelId, provider),
         reasoning: modelSupportsReasoning(provider, modelId),
+        imageGeneration: inferModelSupportsImageGeneration(modelId, provider),
     };
 }
 

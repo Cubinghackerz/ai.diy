@@ -163,6 +163,7 @@ export const prismiumAttachmentAdapter = createAttachmentAdapter({
     vision: true,
     documents: true,
     reasoning: true,
+    imageGeneration: true,
 });
 
 export function attachmentAcceptHint(modalities: ModelModalities): string {

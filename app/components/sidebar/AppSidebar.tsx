@@ -6,6 +6,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import { ModelPicker } from "~/components/ui/ModelPicker";
+import { ProviderPicker } from "~/components/ui/ProviderPicker";
 import { haptic, hapticConfirm, hapticSelect } from "~/lib/haptics";
 import { testProviderKey } from "~/lib/key-test";
 import { useSettings } from "~/lib/providers/SettingsProvider";
@@ -14,15 +16,18 @@ import {
     DEFAULT_MODELS,
     PROVIDER_DEFAULTS,
     type McpServerConfig,
+    type PreviewModelConfig,
     type ProviderId,
 } from "~/lib/types";
 import { resolveModel } from "~/lib/model-capabilities";
+import { getReasoningEffortOptions } from "~/lib/reasoning";
 import { cn } from "~/lib/utils";
 import { localProviderKey } from "~/lib/provider-credentials";
 import {
     ChatCircleDots,
     CheckCircle,
     Desktop,
+    Flask,
     GearSix,
     Globe,
     HardDrives,
@@ -39,7 +44,7 @@ import {
 import * as Switch from "@radix-ui/react-switch";
 
 type SidebarPanel = "chats" | "settings";
-type SettingsSection = "keys" | "tools" | "mcp" | "appearance";
+type SettingsSection = "keys" | "tools" | "mcp" | "experimental" | "appearance";
 
 type ThreadItem = { id: string; title: string };
 
@@ -64,11 +69,14 @@ export function AppSidebar({
         <div className="flex h-full flex-col">
             <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-2">
                 <div className="flex items-center gap-2 min-w-0">
-                    <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground">
-                        P
-                    </div>
-                    <span className="truncate text-sm font-semibold tracking-tight">
-                        ai.diy
+                    <img
+                        src="/ai-diy.png"
+                        alt=""
+                        className="size-7 shrink-0 rounded-lg object-cover"
+                    />
+                    <span className="truncate text-sm font-semibold tracking-tight">ai.diy</span>
+                    <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-primary">
+                        Beta
                     </span>
                 </div>
             </div>
@@ -237,6 +245,7 @@ function SettingsPanel() {
         { id: "keys", label: "API Keys", icon: Key },
         { id: "tools", label: "Tools", icon: Globe },
         { id: "mcp", label: "MCP", icon: Plug },
+        { id: "experimental", label: "Experimental", icon: Flask },
         { id: "appearance", label: "Theme", icon: Sun },
     ];
 
@@ -430,6 +439,8 @@ function SettingsPanel() {
                 </div>
             )}
 
+            {section === "experimental" && <PreviewSettingsSection />}
+
             {section === "appearance" && (
                 <div className="grid grid-cols-3 gap-2">
                     {(
@@ -474,6 +485,209 @@ function SettingsPanel() {
             >
                 Reset all settings
             </button>
+        </div>
+    );
+}
+
+function PreviewSettingsSection() {
+    const { settings, updateSettings } = useSettings();
+    const preview = settings.preview;
+
+    const seedConfig = (): PreviewModelConfig => ({
+        provider: settings.chat.provider,
+        model: settings.chat.model,
+        reasoningEffort: settings.chat.reasoningEffort,
+    });
+    const updatePreview = (patch: Partial<typeof preview>) => {
+        updateSettings({ preview: { ...preview, ...patch } });
+    };
+    const updatePrimary = (index: number, patch: Partial<PreviewModelConfig>) => {
+        updatePreview({
+            primaryModels: preview.primaryModels.map((config, current) =>
+                current === index ? { ...config, ...patch } : config,
+            ),
+        });
+    };
+    const updateFusion = (patch: Partial<PreviewModelConfig>) => {
+        if (!preview.fusionModel) return;
+        updatePreview({ fusionModel: { ...preview.fusionModel, ...patch } });
+    };
+
+    return (
+        <div className="flex flex-col gap-3">
+            <ToolToggle
+                title="Multi-model preview"
+                description="Run up to three models in parallel, then optionally synthesize their answers."
+                checked={preview.enabled}
+                onChange={(enabled) =>
+                    updatePreview({
+                        enabled,
+                        primaryModels:
+                            enabled && preview.primaryModels.length === 0
+                                ? [seedConfig()]
+                                : preview.primaryModels,
+                    })
+                }
+            />
+
+            {preview.enabled ? (
+                <>
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                        Preview runs are isolated from regular chat history. Each
+                        tab keeps its own tool calls, reasoning, images, and
+                        artifacts while it runs.
+                    </p>
+
+                    <div className="flex flex-col gap-2">
+                        {preview.primaryModels.map((config, index) => (
+                            <PreviewModelRow
+                                key={`${config.provider}:${config.model}:${index}`}
+                                label={`Model ${index + 1}`}
+                                config={config}
+                                removable={preview.primaryModels.length > 1}
+                                onChange={(patch) => updatePrimary(index, patch)}
+                                onRemove={() =>
+                                    updatePreview({
+                                        primaryModels: preview.primaryModels.filter(
+                                            (_, current) => current !== index,
+                                        ),
+                                    })
+                                }
+                            />
+                        ))}
+                    </div>
+
+                    {preview.primaryModels.length < 3 ? (
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                                updatePreview({
+                                    primaryModels: [
+                                        ...preview.primaryModels,
+                                        seedConfig(),
+                                    ],
+                                })
+                            }
+                            className="rounded-xl"
+                        >
+                            Add comparison model
+                        </Button>
+                    ) : null}
+
+                    {preview.fusionModel ? (
+                        <PreviewModelRow
+                            label="Fusion model"
+                            config={preview.fusionModel}
+                            removable
+                            onChange={updateFusion}
+                            onRemove={() => updatePreview({ fusionModel: null })}
+                        />
+                    ) : (
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updatePreview({ fusionModel: seedConfig() })}
+                            className="rounded-xl"
+                        >
+                            Add fusion model
+                        </Button>
+                    )}
+                </>
+            ) : null}
+        </div>
+    );
+}
+
+function PreviewModelRow({
+    label,
+    config,
+    removable,
+    onChange,
+    onRemove,
+}: {
+    label: string;
+    config: PreviewModelConfig;
+    removable: boolean;
+    onChange: (patch: Partial<PreviewModelConfig>) => void;
+    onRemove: () => void;
+}) {
+    const { settings } = useSettings();
+    const ready = isProviderReady(settings, config.provider);
+    const reasoningOptions = getReasoningEffortOptions(
+        config.provider,
+        config.model,
+    );
+
+    return (
+        <div className="flex flex-col gap-2 rounded-xl border border-border/80 bg-background/50 p-2.5">
+            <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-semibold">{label}</span>
+                {removable ? (
+                    <button
+                        type="button"
+                        onClick={onRemove}
+                        className="rounded-md p-1 text-muted-foreground outline-none hover:bg-destructive/10 hover:text-destructive"
+                        aria-label={`Remove ${label.toLowerCase()}`}
+                    >
+                        <Trash size={13} />
+                    </button>
+                ) : null}
+            </div>
+            <div className="flex min-w-0 items-center gap-1.5">
+                <ProviderPicker
+                    value={config.provider}
+                    onChange={(provider) =>
+                        onChange({
+                            provider,
+                            model: resolveModel(provider),
+                            reasoningEffort: "medium",
+                        })
+                    }
+                    compact
+                    className="min-w-0 max-w-[8rem]"
+                />
+                {ready ? (
+                    <ModelPicker
+                        provider={config.provider}
+                        value={config.model}
+                        onChange={(model) => onChange({ model })}
+                        enabled
+                        compact
+                        className="min-w-0 flex-1"
+                    />
+                ) : (
+                    <span className="truncate rounded-lg border border-warning/40 bg-warning/10 px-2 py-1 text-[10px] text-warning">
+                        Connect provider first
+                    </span>
+                )}
+            </div>
+            {reasoningOptions.length > 0 ? (
+                <select
+                    value={
+                        reasoningOptions.some(
+                            (option) => option.id === config.reasoningEffort,
+                        )
+                            ? config.reasoningEffort
+                            : reasoningOptions[0].id
+                    }
+                    onChange={(event) =>
+                        onChange({
+                            reasoningEffort: event.target
+                                .value as PreviewModelConfig["reasoningEffort"],
+                        })
+                    }
+                    className="h-7 w-full rounded-lg border border-border bg-background px-2 text-[11px] outline-none"
+                >
+                    {reasoningOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                            {option.label}
+                        </option>
+                    ))}
+                </select>
+            ) : null}
         </div>
     );
 }

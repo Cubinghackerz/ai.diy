@@ -39,15 +39,40 @@ function extractArtifactFromText(text: string) {
     }
 }
 
-export function ChatThreadSync({ threadId }: { threadId: string | null }) {
+export function ChatThreadSync({
+    threadId,
+    artifactScopeId = threadId,
+}: {
+    threadId: string | null;
+    artifactScopeId?: string | null;
+}) {
     const { chat } = useChatSession();
-    const { addArtifact } = useCanvas();
+    const { addArtifact, setArtifactScope } = useCanvas();
     const seenArtifacts = useRef(new Set<string>());
+    const restoredMessageIds = useRef(new Set<string>());
     const chatRef = useRef(chat);
     chatRef.current = chat;
     /** Thread id whose IndexedDB hydrate finished (or was safely skipped). */
     const hydratedThreadId = useRef<string | null>(null);
     const hydrateGen = useRef(0);
+
+    // Canvas is scoped to the current chat or preview run. Switching scope
+    // never leaves artifacts from a different conversation visible.
+    useEffect(() => {
+        setArtifactScope(artifactScopeId);
+        seenArtifacts.current.clear();
+        restoredMessageIds.current.clear();
+    }, [artifactScopeId, setArtifactScope]);
+
+    // Preview tabs have no IndexedDB hydrate. Treat already-streamed messages
+    // as restored when a tab becomes active so reopening a tab never pops the
+    // canvas unexpectedly; its tool result exposes an explicit open button.
+    useEffect(() => {
+        if (threadId != null) return;
+        restoredMessageIds.current = new Set(
+            chat.messages.map((message) => message.id),
+        );
+    }, [artifactScopeId, threadId]);
 
     // Load messages only when the active thread id changes.
     useEffect(() => {
@@ -56,6 +81,7 @@ export function ChatThreadSync({ threadId }: { threadId: string | null }) {
         const gen = ++hydrateGen.current;
         hydratedThreadId.current = null;
         seenArtifacts.current.clear();
+        restoredMessageIds.current.clear();
 
         let cancelled = false;
         void loadThreadUIMessages(threadId).then((messages) => {
@@ -76,6 +102,9 @@ export function ChatThreadSync({ threadId }: { threadId: string | null }) {
                 return;
             }
 
+            restoredMessageIds.current = new Set(
+                messages.map((message) => message.id),
+            );
             session.setMessages(messages);
             hydratedThreadId.current = threadId;
         });
@@ -136,10 +165,14 @@ export function ChatThreadSync({ threadId }: { threadId: string | null }) {
                     title: artifact.title,
                     filename: artifact.filename,
                     content: artifact.content,
+                    sourceKey: `${artifact.kind}:${artifact.filename}:${artifact.content}`,
+                }, {
+                    scopeId: artifactScopeId,
+                    open: !restoredMessageIds.current.has(msg.id),
                 });
             }
         }
-    }, [chat.messages, addArtifact]);
+    }, [chat.messages, addArtifact, artifactScopeId]);
 
     return null;
 }
