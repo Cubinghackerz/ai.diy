@@ -280,7 +280,7 @@ function ToolFallbackResult({
 
   // Suppress raw JSON artifact payloads — Canvas panel shows them instead.
   if (isArtifactPayload(result)) {
-    const info = extractArtifactInfo(result);
+    const info = extractArtifactInfo(result as string);
     return (
       <div
         data-slot="tool-fallback-result"
@@ -296,7 +296,7 @@ function ToolFallbackResult({
             {info?.filename ?? "artifact"}
           </span>
           {info?.title && info.title !== info.filename ? (
-            <> ("{info.title}")</>
+            <span className="text-muted-foreground"> — {info.title}</span>
           ) : null}
           {" "}
           opened in Canvas panel.

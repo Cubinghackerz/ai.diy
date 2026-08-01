@@ -136,7 +136,7 @@ function HomeInner() {
                     </div>
                 ) : null}
 
-                <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+                <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
                     <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border/70 px-3">
                         <div className="flex min-w-0 items-center gap-2">
                             <button
@@ -188,8 +188,12 @@ function HomeInner() {
                                 <Thread />
                             </div>
                         </div>
-                        <CanvasPanel />
                     </main>
+
+                    {/* Canvas panel — rendered outside overflow-hidden main
+                        container but inside the AssistantRuntimeProvider so
+                        it has access to CanvasContext and isn't clipped. */}
+                    <CanvasPanel />
                 </div>
             </div>
         </AssistantRuntimeProvider>
