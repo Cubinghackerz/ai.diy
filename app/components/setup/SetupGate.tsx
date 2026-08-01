@@ -156,15 +156,15 @@ export function SetupGate() {
 
     if (!loaded) {
         return (
-            <div className="flex h-full w-full items-center justify-center bg-background">
+            <div className="flex min-h-dvh w-full items-center justify-center bg-background">
                 <SpinnerGap className="size-6 animate-spin text-muted-foreground" />
             </div>
         );
     }
 
     return (
-        <div className="relative flex h-full w-full items-center justify-center overflow-hidden bg-background px-4">
-            <div className="relative z-10 flex w-full max-w-lg flex-col gap-8 animate-slide-up">
+        <div className="relative flex h-dvh min-h-0 w-full items-start justify-center overflow-x-hidden overflow-y-auto overscroll-contain bg-background px-4 py-6 sm:py-10">
+            <div className="relative z-10 flex w-full max-w-lg flex-col gap-6 py-2 animate-slide-up sm:gap-8">
                 <header className="flex flex-col items-center gap-3 text-center">
                     <img
                         src="/ai-diy.png"

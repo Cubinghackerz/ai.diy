@@ -115,12 +115,19 @@ export function SearchableModelSelect({
 }) {
     const [open, setOpen] = useState(false);
     const rootRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
+    const [menuStyle, setMenuStyle] = useState<React.CSSProperties | null>(null);
     const selected = models.find((model) => model.id === value);
 
     useEffect(() => {
         if (!open) return;
         const onDocumentMouseDown = (event: MouseEvent) => {
-            if (!rootRef.current?.contains(event.target as Node)) {
+            const target = event.target as Node;
+            if (
+                !rootRef.current?.contains(target) &&
+                !menuRef.current?.contains(target)
+            ) {
                 setOpen(false);
             }
         };
@@ -135,9 +142,41 @@ export function SearchableModelSelect({
         };
     }, [open]);
 
+    useLayoutEffect(() => {
+        if (!open) {
+            setMenuStyle(null);
+            return;
+        }
+        const updatePosition = () => {
+            const rect = triggerRef.current?.getBoundingClientRect();
+            if (!rect) return;
+            const menuHeight = 328;
+            const style: React.CSSProperties = {
+                position: "fixed",
+                top: Math.min(
+                    Math.max(8, window.innerHeight - menuHeight - 8),
+                    rect.bottom + 6,
+                ),
+                left: Math.max(8, rect.left),
+                width: Math.min(360, window.innerWidth - 16),
+                maxHeight: "min(20rem, calc(100vh - 1rem))",
+                zIndex: 100,
+            };
+            setMenuStyle(style);
+        };
+        updatePosition();
+        window.addEventListener("resize", updatePosition);
+        window.addEventListener("scroll", updatePosition, true);
+        return () => {
+            window.removeEventListener("resize", updatePosition);
+            window.removeEventListener("scroll", updatePosition, true);
+        };
+    }, [open]);
+
     return (
         <div ref={rootRef} className={cn("relative", className)}>
             <button
+                ref={triggerRef}
                 type="button"
                 onClick={() => {
                     hapticSelect();
@@ -160,8 +199,13 @@ export function SearchableModelSelect({
                 />
             </button>
 
-            {open ? (
-                <div className="absolute top-[calc(100%+6px)] right-0 left-0 z-50 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl shadow-black/20">
+            {open && menuStyle
+                ? createPortal(
+                    <div
+                        ref={menuRef}
+                        style={menuStyle}
+                        className="overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl shadow-black/20"
+                    >
                     <Command className="flex max-h-80 flex-col" label="Choose model">
                         <div className="flex items-center gap-2 border-b border-border px-3">
                             <MagnifyingGlass
@@ -218,8 +262,10 @@ export function SearchableModelSelect({
                             ))}
                         </Command.List>
                     </Command>
-                </div>
-            ) : null}
+                    </div>,
+                    document.body,
+                )
+                : null}
         </div>
     );
 }
