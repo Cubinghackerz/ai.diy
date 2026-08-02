@@ -319,32 +319,58 @@ function connectorGuide(connectors: ConnectorConfig[]): string {
         .join("\n");
 }
 
-function researchSkillGuide(input: { question: string; depth?: "quick" | "standard" | "deep" }): string {
+function researchSkillGuide(input: {
+    question: string;
+    depth?: "quick" | "standard" | "deep";
+    context?: string;
+}): string {
     return `# Research Skill
 
-Research task: ${input.question.trim()}
+Research question: ${input.question.trim()}
 Depth: ${input.depth || "standard"}
+Known context (treat as unverified until confirmed): ${input.context?.trim() || "none provided"}
 
-## Freshness requirement
-- Do not answer from training data, a knowledge cutoff, or local memory when the question asks about current or changing information.
-- Use the available search tool and read authoritative pages before making current claims.
-- If live sources are unavailable or disagree, state the limitation and uncertainty instead of guessing.
+## Mission
+Answer the question with live, verifiable evidence. Your training data, knowledge cutoff, and saved local memory are not evidence. Every material claim must trace to a source you actually retrieved in this session.
 
-## Workflow
-1. Define the decision or factual question and split it into answerable subquestions.
-2. Search with the available provider-specific web search tool using focused queries, synonyms, dates, and authoritative domains.
-3. Prefer primary sources: official documentation, specifications, original research, direct datasets, and maintained repositories.
-4. Read the most relevant pages with read_url; do not treat snippets as evidence.
-5. Extract the exact claim, source URL, publication/update date, and relevant section for each important finding.
-6. Cross-check consequential claims with an independent source and explicitly report disagreement or uncertainty.
-7. Stop when the requested question is answered, sources converge, or additional searches are no longer changing the conclusion.
+## Before searching
+1. Define the answerable core: what must be true for the answer to be reliable.
+2. Split the question into 2-5 subquestions; each subquestion gets at least one focused query.
+3. Design queries per subquestion using exact phrases ("quoted term"), site restriction (site:docs.example.com), file type (filetype:pdf for primary documents), date terms (e.g. 2026) for freshness, and synonym variants when results are thin.
+4. Classify how fast the facts change:
+   - Volatile (prices, releases, incidents, live status, schedules): use the newest sources and cross-check within the session.
+   - Stable (documentation, APIs, history, specs): verify against the primary source and note its date.
+   - Subjective or contested: sample multiple perspectives and report the range.
+
+## Depth behavior
+- Quick: 1-3 focused queries; verify the direct answer with one authoritative source plus one independent check when the claim is consequential.
+- Standard: cover every subquestion; read the top pages with read_url; cross-check every claim that materially affects the answer with two independent sources.
+- Deep: exhaustive: multiple query families, site/filetype/date operators, primary-source reads for every consequential claim, and an explicit disagreement table with dates.
+
+## Evidence rules
+1. Prefer primary and official sources: official documentation, specifications, standards bodies, original research, direct datasets, maintained repositories, and primary reporting. Treat forums, blogs, and unknown domains as weak evidence.
+2. A search snippet is a lead, not evidence. Read the page with read_url before quoting numbers, dates, or claims; extract the exact sentence and the stable source URL.
+3. Check each source's date: is it the newest relevant document, and does it claim to be current?
+4. Consequential claims (safety, financial, legal, medical, identity, versions, API behavior) require two independent credible sources, or one primary source you verified directly.
+5. If sources disagree, report the disagreement explicitly with dates and source types; never silently average them or pick the one that fits.
+
+## Anti-hallucination
+- Cite only URLs that actually appeared in tool results. Never construct or guess URLs.
+- Never invent quotes, numbers, dates, authors, or sources. If you could not read the page, say so.
+- Distinguish "stated by source X" from "verified fact".
+- If a search returns nothing usable, change the query or state that the answer could not be verified. Do not fall back to training data or memory.
+
+## Synthesis
+1. Answer the exact question first, in 1-3 sentences.
+2. Support the answer with key findings; each finding cites a source and, when useful, its date.
+3. Label confidence per claim: High (primary source or two independent credible sources), Medium (single reputable source), Low (unverified or conflicting).
+4. State remaining gaps or what would change the answer.
 
 ## Output contract
-- Give the direct answer first.
-- Cite each material claim with a stable URL and identify the source type/date when useful.
-- Separate verified facts, reasonable inferences, and unresolved uncertainty.
-- Do not invent sources, dates, quotes, metrics, or tool results.
-- Keep the evidence concise; do not expose private chain-of-thought or narrate routine searches.`;
+- Answer first; evidence after.
+- Bullet findings with inline source URLs; keep the answer as concise as accuracy allows.
+- End with confidence labels and unresolved uncertainty only when relevant.
+- Do not narrate searches or expose private reasoning.`;
 }
 
 export async function buildChatTools(settings: ToolSettings = {}) {
@@ -359,10 +385,11 @@ export async function buildChatTools(settings: ToolSettings = {}) {
     if (enableSearch) {
         tools.research_skill = tool({
             description:
-                "Callable research skill. Use before substantial factual, current, technical, or comparison research to plan source-first searches, read pages, cross-check evidence, cite claims, and stop efficiently.",
+                "Callable research skill. Invoke before substantial factual, current, technical, or comparison research: it defines subquestions, a query strategy, source-quality and verification rules, and an output contract for live, source-verified research. Then run its planned queries with the search tool and read pages with read_url.",
             inputSchema: z.object({
                 question: z.string(),
                 depth: z.enum(["quick", "standard", "deep"]).optional(),
+                context: z.string().optional(),
             }),
             execute: async (input) => researchSkillGuide(input),
         });

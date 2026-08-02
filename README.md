@@ -138,7 +138,7 @@ Tools available to a selected model depend on the settings toggles and provider 
 | Calculator | Evaluates bounded arithmetic expressions |
 | Browser Python | Runs Pyodide in the browser and returns output to the model |
 | Files | Creates downloadable artifacts through `generate_file` and Canvas files through `create_file` |
-| Research skill | Guides source-first research and citation-oriented synthesis before broad current-information queries |
+| Research skill | Plans subquestions, live multi-query search, source-quality grading, cross-verification, confidence labeling, and citation-backed synthesis before current-information queries |
 | Skills | Generates reusable `SKILL.md` documents and frontend design briefs |
 | Local time | Returns an ISO timestamp for an IANA timezone |
 | Memory | Bounded local memory is automatically attached to provider system instructions when entries exist; optional retrieval stays in the browser |
