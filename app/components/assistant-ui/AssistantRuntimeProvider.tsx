@@ -29,6 +29,8 @@ import {
     readLocalMemory,
 } from "~/lib/memory";
 import { askUserInBrowser } from "~/lib/client-tools";
+import { forcedSkillStore } from "~/lib/skill-command";
+import { useSubagent } from "~/components/assistant-ui/subagents";
 import {
     createWebSpeechDictationAdapter,
     isWebSpeechDictationSupported,
@@ -56,6 +58,7 @@ export function AssistantRuntimeProvider({
 }) {
     const { settings } = useSettings();
     const { addArtifact } = useCanvas();
+    const { runSubagent } = useSubagent();
     const settingsRef = useRef(settings);
     settingsRef.current = settings;
 
@@ -83,6 +86,8 @@ export function AssistantRuntimeProvider({
                         : "";
                     const memoryAvailable =
                         memoryEnabled && (await hasLocalMemoryEntries());
+                    const forcedSkill = forcedSkillStore.current;
+                    forcedSkillStore.current = null;
                     return {
                         body: {
                             // Keep assistant-ui forwarded context (tools/system/etc).
@@ -120,9 +125,11 @@ export function AssistantRuntimeProvider({
                                 skillsEnabled: s.skillsEnabled,
                                 connectors: s.connectors,
                                 memoryAvailable,
+                                subagentsEnabled: s.subagentsEnabled,
                             },
                             mcpServers: s.mcpServers.filter((m) => m.enabled),
                             memoryContext,
+                            ...(forcedSkill ? { customSkill: forcedSkill } : {}),
                         },
                     };
                 },
@@ -141,6 +148,7 @@ export function AssistantRuntimeProvider({
                 "run_code",
                 "ask_user",
                 "memory",
+                "spawn_subagent",
             ].includes(toolCall.toolName)) return;
             pendingClientCalls.current += 1;
             const input = toolCall.input as {
@@ -149,6 +157,7 @@ export function AssistantRuntimeProvider({
                 questionType?: "single" | "multiple" | "short";
                 options?: string[];
                 query?: string;
+                task?: string;
             };
             const task =
                 toolCall.toolName === "ask_user"
@@ -157,11 +166,13 @@ export function AssistantRuntimeProvider({
                           questionType: input.questionType,
                           options: input.options,
                       })
-                    : toolCall.toolName === "memory"
-                      ? settingsRef.current.memoryEnabled !== false
-                          ? readLocalMemory(input.query)
-                          : Promise.resolve("Memory is disabled for this chat.")
-                      : runBrowserPython(input.code ?? "");
+                    : toolCall.toolName === "spawn_subagent"
+                      ? runSubagent(toolCall.toolCallId, input.task ?? "")
+                      : toolCall.toolName === "memory"
+                        ? settingsRef.current.memoryEnabled !== false
+                            ? readLocalMemory(input.query)
+                            : Promise.resolve("Memory is disabled for this chat.")
+                        : runBrowserPython(input.code ?? "");
             void task.then(
                 (result) => {
                     const output =

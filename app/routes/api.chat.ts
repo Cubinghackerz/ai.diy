@@ -48,6 +48,7 @@ interface ChatRequestBody {
         skillsEnabled?: boolean;
         connectors?: ConnectorConfig[];
         memoryAvailable?: boolean;
+        subagentsEnabled?: boolean;
     };
     mcpServers?: McpServerConfig[];
     imageSettings?: {
@@ -56,6 +57,8 @@ interface ChatRequestBody {
     };
     memoryContext?: string;
     customSkill?: { name: string; content: string };
+    /** When true the request runs as a delegated subagent (no ask_user/spawn_subagent). */
+    subagentMode?: boolean;
     openAICompatible?: {
         apiMode: "auto" | "chat" | "responses";
         reasoningWithTools: "auto" | "none" | "allow";
@@ -202,7 +205,10 @@ export async function action({ request }: ActionFunctionArgs) {
         );
     }
 
-    if (inferModelSupportsImageGeneration(body.model, body.provider)) {
+    if (
+        body.subagentMode !== true &&
+        inferModelSupportsImageGeneration(body.model, body.provider)
+    ) {
         try {
             return withCors(request, await generateImageResponse(body));
         } catch (err) {
@@ -223,7 +229,9 @@ export async function action({ request }: ActionFunctionArgs) {
         mcpTools = loadedMcp.tools;
         mcpClients = loadedMcp.clients;
         const modelInstance = createChatModel(body);
-        const builtIn = await buildChatTools(body.toolSettings ?? {});
+        const builtIn = await buildChatTools(body.toolSettings ?? {}, {
+            subagentMode: body.subagentMode === true,
+        });
         const tools =
             body.openAICompatible?.capabilityOverrides?.tools === false
                 ? {}
@@ -280,6 +288,7 @@ export async function action({ request }: ActionFunctionArgs) {
                 body.system || body.systemPrompt || undefined,
                 body.memoryContext,
                 body.customSkill,
+                body.subagentMode === true ? "subagent" : "main",
             ),
             ...(anthropicThinkingOn
                 ? { temperature: 1 }

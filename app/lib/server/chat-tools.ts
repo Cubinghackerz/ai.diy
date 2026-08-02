@@ -27,6 +27,7 @@ export type ToolSettings = {
     skillsEnabled?: boolean;
     connectors?: ConnectorConfig[];
     memoryAvailable?: boolean;
+    subagentsEnabled?: boolean;
 };
 
 function evaluateMath(expression: string): string {
@@ -468,7 +469,11 @@ Create real, downloadable files with browser-side Pyodide. Use this skill before
 - Keep binary file bytes out of chat text and out of saved memory.`;
 }
 
-export async function buildChatTools(settings: ToolSettings = {}) {
+export async function buildChatTools(
+    settings: ToolSettings = {},
+    options: { subagentMode?: boolean } = {},
+) {
+    const subagentMode = options.subagentMode === true;
     const enableSearch = settings.webSearchEnabled !== false;
     const enableCalc = settings.calculatorEnabled !== false;
     // Python is a client-side tool. The browser executes it in Pyodide and
@@ -713,14 +718,16 @@ export async function buildChatTools(settings: ToolSettings = {}) {
             ),
     });
 
-    tools.ask_user = tool({
-        description: "Ask the user a focused multiple-choice, multi-select, or short-answer question when required information cannot be safely inferred.",
-        inputSchema: z.object({
-            question: z.string(),
-            questionType: z.enum(["single", "multiple", "short"]).default("short"),
-            options: z.array(z.string()).max(8).optional(),
-        }),
-    });
+    if (!subagentMode) {
+        tools.ask_user = tool({
+            description: "Ask the user a focused multiple-choice, multi-select, or short-answer question when required information cannot be safely inferred.",
+            inputSchema: z.object({
+                question: z.string(),
+                questionType: z.enum(["single", "multiple", "short"]).default("short"),
+                options: z.array(z.string()).max(8).optional(),
+            }),
+        });
+    }
 
     if (settings.skillsEnabled !== false) {
         const skillArchitectInput = z.object({
@@ -831,6 +838,18 @@ export async function buildChatTools(settings: ToolSettings = {}) {
             return artifactPayload({ title, filename, content, kind, mimeType, contentEncoding });
         },
     });
+
+    if (settings.subagentsEnabled && !subagentMode) {
+        tools.spawn_subagent = tool({
+            description:
+                "Delegate a focused subtask to a subagent. The user must approve each subagent before it runs. A subagent uses the same tools as you (web search, Python, memory, etc.), runs without being prompted or interrupted, and returns only its final answer; you then synthesize its result into your reply. Use this for deep multi-step research, lengthy analysis, or parallelizable work that would otherwise take many sequential tool calls. Provide one complete, self-contained task string; the subagent has no conversation history.",
+            inputSchema: z.object({
+                task: z.string(),
+            }),
+            execute: async () =>
+                "The subagent could not be started in this run. The browser UI is required for subagent approval; complete the task directly with your tools instead.",
+        });
+    }
 
     return tools;
 }

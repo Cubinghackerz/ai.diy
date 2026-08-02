@@ -71,6 +71,7 @@ type ResolvedConfig = PreviewModelConfig & {
         webSearchEngine: "duckduckgo" | "searxng";
         searxngUrl: string;
         skillsEnabled: boolean;
+        subagentsEnabled: boolean;
         connectors: import("~/lib/types").ConnectorConfig[];
     };
     mcpServers: Array<{
@@ -221,6 +222,7 @@ export const PreviewWorkspace: FC = () => {
                 webSearchEngine: settings.webSearchEngine,
                 searxngUrl: settings.searxngUrl,
                 skillsEnabled: settings.skillsEnabled,
+                subagentsEnabled: settings.subagentsEnabled,
                 connectors: settings.connectors,
             },
             mcpServers: settings.mcpServers.filter((server) => server.enabled),

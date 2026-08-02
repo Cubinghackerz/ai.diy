@@ -17,6 +17,38 @@ export function artifactContentHash(content: string): string {
     return (hash >>> 0).toString(36);
 }
 
+/**
+ * Wrap generated HTML before it goes into a sandboxed preview iframe.
+ *
+ * With `srcdoc`, relative and root-relative links resolve against the parent
+ * app's URL, so clicking a button or link would load ai.diy inside the preview
+ * panel. We inject a `<base target="_blank">` plus a capture-phase guard so
+ * every link/form navigation leaves the iframe (opens a new tab) instead of
+ * hijacking the preview. Anchor `#hash` navigation is kept in place.
+ */
+export function preparePreviewDocument(html: string): string {
+    const guard = [
+        "<script>",
+        "(function(){",
+        'function externalUrl(href){try{var u=new URL(href,window.location.href);if(u.protocol==="http:"||u.protocol==="https:")return u.toString()}catch(e){}return null}',
+        'document.addEventListener("click",function(e){var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(!a)return;var h=a.getAttribute("href");if(!h||h.charAt(0)==="#")return;e.preventDefault();var u=externalUrl(h);if(u)window.open(u,"_blank","noopener")},true);',
+        'document.addEventListener("submit",function(e){e.preventDefault();var u=externalUrl(e.target&&e.target.action||"");if(u)window.open(u,"_blank","noopener")},true);',
+        "})();",
+        "</script>",
+    ].join("\n");
+    const injection = `<base target="_blank">\n${guard}`;
+
+    const headMatch = html.match(/<head[^>]*>/i);
+    if (headMatch) {
+        return html.replace(headMatch[0], `${headMatch[0]}\n${injection}`);
+    }
+    const htmlMatch = html.match(/<html[^>]*>/i);
+    if (htmlMatch) {
+        return html.replace(htmlMatch[0], `${htmlMatch[0]}\n<head>${injection}</head>`);
+    }
+    return `<!doctype html>\n<html>\n<head>${injection}</head>\n<body>\n${html}\n</body>\n</html>`;
+}
+
 export function inferArtifactMimeType(filename: string): string {
     const extension = filename.split(".").pop()?.toLowerCase();
     switch (extension) {

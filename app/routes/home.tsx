@@ -8,6 +8,7 @@ import { AssistantRuntimeProvider } from "~/components/assistant-ui/AssistantRun
 import { ChatLifecycle } from "~/components/assistant-ui/ChatLifecycle";
 import { ChatErrorBanner } from "~/components/assistant-ui/ChatThreadSync";
 import { PreviewWorkspace } from "~/components/assistant-ui/PreviewWorkspace";
+import { SubagentProvider } from "~/components/assistant-ui/subagents";
 import { Thread } from "~/components/assistant-ui/Thread";
 import { CanvasPanel } from "~/components/canvas/CanvasPanel";
 import { ArtifactLauncher } from "~/components/canvas/ArtifactLauncher";
@@ -210,11 +211,13 @@ function HomeInner() {
     if (settings.preview.enabled) return appShell;
 
     return (
-        <AssistantRuntimeProvider
-            key={activeThreadId ?? "draft"}
-            threadId={activeThreadId}
-        >
-            {appShell}
-        </AssistantRuntimeProvider>
+        <SubagentProvider threadId={activeThreadId}>
+            <AssistantRuntimeProvider
+                key={activeThreadId ?? "draft"}
+                threadId={activeThreadId}
+            >
+                {appShell}
+            </AssistantRuntimeProvider>
+        </SubagentProvider>
     );
 }

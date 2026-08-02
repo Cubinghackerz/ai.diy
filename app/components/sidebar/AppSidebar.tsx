@@ -15,6 +15,7 @@ import { isLocalProvider, isProviderReady } from "~/lib/setup";
 import {
     DEFAULT_MODELS,
     PROVIDER_DEFAULTS,
+    type CustomSkill,
     type McpServerConfig,
     type ConnectorConfig,
     type ConnectorKind,
@@ -552,6 +553,7 @@ function SettingsPanel() {
                         checked={settings.pythonEnabled}
                         onChange={(v) => updateSettings({ pythonEnabled: v })}
                     />
+                    <CustomSkillsSection />
                 </div>
             )}
 
@@ -652,7 +654,12 @@ function SettingsPanel() {
                 </div>
             )}
 
-            {section === "experimental" && <PreviewSettingsSection />}
+            {section === "experimental" && (
+                <div className="flex flex-col gap-3">
+                    <SubagentsSettingsSection />
+                    <PreviewSettingsSection />
+                </div>
+            )}
 
             {section === "memory" && <MemorySettingsSection />}
 
@@ -1077,6 +1084,154 @@ function CloudStorageSection() {
                         Read Google&apos;s official setup guide ↗
                     </a>
                 </div>
+            ) : null}
+        </div>
+    );
+}
+
+function CustomSkillsSection() {
+    const { settings, updateSettings } = useSettings();
+    const [name, setName] = useState("");
+    const [content, setContent] = useState("");
+
+    const addSkill = () => {
+        const trimmedName = name.trim();
+        const trimmedContent = content.trim();
+        if (!trimmedName || !trimmedContent) return;
+        const skill: CustomSkill = {
+            id: `skill_${Date.now()}`,
+            name: trimmedName,
+            description: "",
+            content: trimmedContent,
+            enabled: true,
+        };
+        updateSettings({
+            customSkills: [...settings.customSkills, skill],
+        });
+        setName("");
+        setContent("");
+        hapticConfirm();
+    };
+
+    const patchSkill = (id: string, patch: Partial<CustomSkill>) => {
+        updateSettings({
+            customSkills: settings.customSkills.map((skill) =>
+                skill.id === id ? { ...skill, ...patch } : skill,
+            ),
+        });
+    };
+
+    const removeSkill = (id: string) => {
+        updateSettings({
+            customSkills: settings.customSkills.filter((skill) => skill.id !== id),
+        });
+    };
+
+    return (
+        <div className="flex flex-col gap-2 rounded-xl border border-border/70 p-2.5">
+            <div className="flex items-center justify-between gap-2">
+                <label className="text-[11px] font-medium text-muted-foreground">
+                    Custom skills
+                </label>
+                <span className="text-[10px] text-muted-foreground">
+                    Type / in the composer to force one
+                </span>
+            </div>
+            {settings.customSkills.length > 0 ? (
+                <div className="flex flex-col gap-1.5">
+                    {settings.customSkills.map((skill) => (
+                        <div
+                            key={skill.id}
+                            className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-background px-2 py-1.5"
+                        >
+                            <span className="min-w-0 truncate text-xs font-medium">
+                                {skill.name}
+                            </span>
+                            <div className="flex shrink-0 items-center gap-1">
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        patchSkill(skill.id, {
+                                            enabled: !skill.enabled,
+                                        })
+                                    }
+                                    className={cn(
+                                        "rounded-md px-1.5 py-0.5 text-[10px] font-medium outline-none",
+                                        skill.enabled
+                                            ? "bg-primary/15 text-primary"
+                                            : "bg-muted text-muted-foreground",
+                                    )}
+                                >
+                                    {skill.enabled ? "On" : "Off"}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => removeSkill(skill.id)}
+                                    className="rounded-md p-1 text-muted-foreground outline-none hover:text-destructive"
+                                    aria-label={`Remove ${skill.name}`}
+                                >
+                                    <Trash size={13} />
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                <p className="text-[10px] text-muted-foreground">
+                    No custom skills yet. Add one below; built-in skills
+                    (Research, Ultimate Frontend UI, …) are always available in
+                    the slash menu.
+                </p>
+            )}
+            <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Skill name"
+                className="h-8 rounded-lg text-xs"
+            />
+            <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder="Instructions the AI must follow when this skill is forced"
+                rows={3}
+                className="h-auto w-full resize-none rounded-lg border border-border bg-background px-2 py-1.5 text-xs outline-none placeholder:text-muted-foreground"
+            />
+            <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!name.trim() || !content.trim()}
+                onClick={addSkill}
+                className="rounded-lg"
+            >
+                <Plus size={13} />
+                Add skill
+            </Button>
+        </div>
+    );
+}
+
+function SubagentsSettingsSection() {
+    const { settings, updateSettings } = useSettings();
+    return (
+        <div className="flex flex-col gap-3">
+            <ToolToggle
+                title="Subagents"
+                description="Let the AI delegate subtasks to subagents. Every subagent requires your approval, runs in a watchable popup, and can use the same tools as the main chat."
+                checked={settings.subagentsEnabled}
+                onChange={(enabled) => updateSettings({ subagentsEnabled: enabled })}
+            />
+            {settings.subagentsEnabled ? (
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    The model can call{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
+                        spawn_subagent
+                    </code>{" "}
+                    for deep research or long multi-step work. You approve each
+                    subagent before it runs, you cannot prompt it mid-run, and
+                    the main model waits for its result before synthesizing the
+                    answer.
+                </p>
             ) : null}
         </div>
     );

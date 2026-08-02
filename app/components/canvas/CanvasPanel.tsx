@@ -8,7 +8,7 @@
  */
 
 import { useCanvas } from "~/lib/canvas";
-import { decodeArtifactContent } from "~/lib/artifacts";
+import { decodeArtifactContent, preparePreviewDocument } from "~/lib/artifacts";
 import { X, Download, Code, Play, Eye, FileText, Check, Copy } from "@phosphor-icons/react";
 import { useState, useRef, useEffect } from "react";
 
@@ -217,10 +217,10 @@ export function CanvasPanel() {
                 ) : null}
                 {activeArtifact?.kind === "html" && viewMode === "preview" ? (
                     <iframe
-                        srcDoc={activeArtifact.content}
+                        srcDoc={preparePreviewDocument(activeArtifact.content)}
                         title={activeArtifact.title}
                         className="h-full w-full rounded-xl border border-border shadow-sm"
-                        sandbox="allow-scripts allow-modals"
+                        sandbox="allow-scripts allow-modals allow-popups"
                     />
                 ) : activeArtifact?.kind === "python" ? (
                     <div className="space-y-4">

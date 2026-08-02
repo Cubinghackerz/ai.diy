@@ -41,28 +41,38 @@ import {
   useAuiState,
 } from "@assistant-ui/react";
 import {
-  ArrowDownIcon,
-  ArrowUpIcon,
-  CheckIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  CopyIcon,
-  DownloadIcon,
-  MicIcon,
-  MoreHorizontalIcon,
-  PencilIcon,
-  RefreshCwIcon,
-  SquareIcon,
+    ArrowDownIcon,
+    ArrowUpIcon,
+    CheckIcon,
+    ChevronLeftIcon,
+    ChevronRightIcon,
+    CopyIcon,
+    DownloadIcon,
+    MicIcon,
+    MoreHorizontalIcon,
+    PencilIcon,
+    RefreshCwIcon,
+    SparklesIcon,
+    SquareIcon,
+    XIcon,
 } from "lucide-react";
 import TextareaAutosize from "react-textarea-autosize";
 import {
     createContext,
     useContext,
+    useEffect,
     useMemo,
+    useState,
     type ComponentType,
     type FC,
     type PropsWithChildren,
 } from "react";
+import { useSettings } from "~/lib/providers/SettingsProvider";
+import {
+    BUILTIN_FORCED_SKILLS,
+    forcedSkillStore,
+    type ForcedSkill,
+} from "~/lib/skill-command";
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 
@@ -259,6 +269,8 @@ type ComposerDraftContextValue = {
   canSend: boolean;
   isRunning: boolean;
   stop: () => void;
+  appliedSkill: ForcedSkill | null;
+  setAppliedSkill: (skill: ForcedSkill | null) => void;
 };
 
 const ComposerDraftContext = createContext<ComposerDraftContextValue | null>(
@@ -272,31 +284,136 @@ const useComposerDraft = () => {
 };
 
 const ComposerInput: FC = () => {
-  const { value, setText, send, isRunning } = useComposerDraft();
+  const { value, setText, send, isRunning, appliedSkill, setAppliedSkill } =
+    useComposerDraft();
+  const { settings } = useSettings();
   const disabled = useAuiState(
     (s) => s.thread.isDisabled || Boolean(s.composer.dictation?.inputDisabled),
   );
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [highlighted, setHighlighted] = useState(0);
+
+  const commandActive = value.startsWith("/");
+
+  const skills = useMemo(() => {
+    if (!commandActive) return [];
+    const query = value.slice(1).trim().toLowerCase();
+    const custom = settings.customSkills
+      .filter((skill) => skill.enabled)
+      .map((skill) => ({ name: skill.name, content: skill.content }));
+    const all = [...custom, ...BUILTIN_FORCED_SKILLS];
+    const matches = query
+      ? all.filter((skill) => skill.name.toLowerCase().includes(query))
+      : all;
+    return matches.slice(0, 8);
+  }, [commandActive, settings.customSkills, value]);
+
+  useEffect(() => {
+    setMenuOpen(commandActive);
+  }, [commandActive]);
+
+  useEffect(() => {
+    setHighlighted(0);
+  }, [value]);
+
+  const applySkill = (skill: ForcedSkill) => {
+    forcedSkillStore.current = skill;
+    setAppliedSkill(skill);
+    setText("");
+    setMenuOpen(false);
+  };
 
   return (
-    <TextareaAutosize
-      name="input"
-      minRows={1}
-      maxRows={8}
-      value={value}
-      disabled={disabled}
-      placeholder="Send a message..."
-      className="aui-composer-input caret-foreground placeholder:text-muted-foreground/70 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none ring-0 shadow-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
-      autoFocus
-      enterKeyHint="send"
-      aria-label="Message input"
-      onChange={(e) => setText(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
-        if (isRunning) return;
-        e.preventDefault();
-        send();
-      }}
-    />
+    <div className="relative">
+      {menuOpen && skills.length > 0 ? (
+        <div className="absolute bottom-full left-0 right-0 z-30 mb-1 max-h-56 overflow-y-auto rounded-xl border border-border bg-popover p-1 shadow-lg">
+          <p className="px-2 pb-1 pt-0.5 text-[10px] font-medium text-muted-foreground">
+            Force a skill — the AI must use it
+          </p>
+          {skills.map((skill, index) => (
+            <button
+              key={skill.name}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                applySkill(skill);
+              }}
+              onMouseEnter={() => setHighlighted(index)}
+              className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs outline-none ${
+                highlighted === index
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+              }`}
+            >
+              <SparklesIcon size={12} className="shrink-0 text-primary" />
+              <span className="truncate font-medium">{skill.name}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <TextareaAutosize
+        name="input"
+        minRows={1}
+        maxRows={8}
+        value={value}
+        disabled={disabled}
+        placeholder="Send a message...  (type / to force a skill)"
+        className="aui-composer-input caret-foreground placeholder:text-muted-foreground/70 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none ring-0 shadow-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+        autoFocus
+        enterKeyHint="send"
+        aria-label="Message input"
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => setMenuOpen(false)}
+        onKeyDown={(e) => {
+          if (menuOpen && skills.length > 0) {
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setHighlighted((h) => (h + 1) % skills.length);
+              return;
+            }
+            if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setHighlighted((h) => (h - 1 + skills.length) % skills.length);
+              return;
+            }
+            if (e.key === "Enter") {
+              e.preventDefault();
+              applySkill(skills[highlighted]);
+              return;
+            }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              setMenuOpen(false);
+              return;
+            }
+          }
+          if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
+          if (isRunning) return;
+          e.preventDefault();
+          send();
+        }}
+      />
+      {appliedSkill ? (
+        <div className="flex items-center gap-1.5 px-1 pt-1">
+          <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+            <SparklesIcon size={10} />
+            <span className="truncate">Skill: {appliedSkill.name}</span>
+            <button
+              type="button"
+              aria-label="Clear forced skill"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                forcedSkillStore.current = null;
+                setAppliedSkill(null);
+              }}
+              className="ml-0.5 rounded-full p-0.5 outline-none hover:bg-primary/20"
+            >
+              <XIcon size={10} />
+            </button>
+          </span>
+        </div>
+      ) : null}
+    </div>
   );
 };
 
@@ -309,11 +426,14 @@ const Composer: FC = () => {
     canSend: storeCanSend,
   } = unstable_useComposerInput();
   const isRunning = useAuiState((s) => s.thread.isRunning);
+  const [appliedSkill, setAppliedSkill] = useState<ForcedSkill | null>(null);
 
   const canSend = storeCanSend && !isRunning;
 
   const send = () => {
     if (!canSend) return;
+    forcedSkillStore.current = null;
+    setAppliedSkill(null);
     composerSend();
   };
 
@@ -323,7 +443,7 @@ const Composer: FC = () => {
 
   return (
     <ComposerDraftContext.Provider
-      value={{ value, setText, send, canSend, isRunning, stop }}
+      value={{ value, setText, send, canSend, isRunning, stop, appliedSkill, setAppliedSkill }}
     >
       <ComposerPrimitive.Root
         className="aui-composer-root relative flex w-full flex-col"

@@ -1,5 +1,10 @@
 /**
  * Web Search — DuckDuckGo (default) + optional self-hosted SearXNG.
+ *
+ * Reliability strategy: DDG serves several front-ends that use different
+ * HTML classes. We try the most stable ones in order and return the first
+ * set of parseable results. Each attempt uses an 8–12s timeout with a small
+ * retry so transient bot-block pages or rate limits don't kill a query.
  */
 
 export interface SearchResult {
@@ -59,7 +64,7 @@ export async function duckDuckGoInstantAnswer(
     });
     const response = await fetch(`https://api.duckduckgo.com/?${params.toString()}`, {
         headers: {
-            ...DDG_HEADERS,
+            ...ddgHeaders(),
             Accept: "application/json",
         },
         signal: AbortSignal.timeout(8_000),
@@ -104,18 +109,74 @@ export async function duckDuckGoInstantAnswer(
     };
 }
 
-const DDG_HEADERS = {
-    "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
-    DNT: "1",
-    Connection: "keep-alive",
-};
+const DDG_USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+];
+
+let ddgAgentIndex = 0;
+
+function ddgHeaders(cookie = false): Record<string, string> {
+    const headers: Record<string, string> = {
+        "User-Agent": DDG_USER_AGENTS[ddgAgentIndex++ % DDG_USER_AGENTS.length],
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        DNT: "1",
+    };
+    if (cookie) headers.Cookie = DDG_COOKIES;
+    return headers;
+}
 
 const DDG_COOKIES =
     "cf_clearance=; lmt=; __cf_bm=; exp=; dcl=; p=-1; _ga=GA1.2.; _gid=GA1.2.";
+
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function decodeDdgcUddg(rawUrl: string): string {
+    if (!rawUrl) return rawUrl;
+    const uddg = rawUrl.match(/uddg=([^&]+)/);
+    if (uddg) {
+        try {
+            const decoded = decodeURIComponent(uddg[1]);
+            if (/^https?:\/\//i.test(decoded)) return decoded;
+        } catch {
+            // fall through to raw url
+        }
+    }
+    return rawUrl;
+}
+
+/**
+ * Fetch with rotating user agents and one retry so transient bot-block pages
+ * or rate limits don't kill a query.
+ */
+async function robustFetch(
+    url: string,
+    headers: Record<string, string>,
+    timeoutMs: number,
+): Promise<Response | undefined> {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+            const response = await fetch(url, {
+                headers: {
+                    ...ddgHeaders(attempt === 1),
+                    ...headers,
+                },
+                signal: AbortSignal.timeout(timeoutMs),
+                redirect: "follow",
+            });
+            if (response.ok) return response;
+        } catch {
+            // transient failure — retry once below
+        }
+        await sleep(300 + attempt * 200);
+    }
+    return undefined;
+}
 
 type DuckDuckGoRelatedTopic = {
     Text?: string;
@@ -169,106 +230,162 @@ export async function duckDuckGoSearch(
     query: string,
     maxResults: number = 5,
 ): Promise<SearchResult[]> {
-    // Strategy: try DDG lite endpoint, then Bing RSS, then DDG API.
-    // DDG and Bing both block aggressive bot traffic, so we try multiple
-    // endpoints and return from the first that yields parseable results.
+    // Strategy: try the HTML front-end, then Lite, then Bing RSS, then the
+    // Instant Answer API. DDG blocks aggressive bot traffic, so each attempt
+    // uses rotating user agents, a retry, and short timeouts.
+    const limit = Math.max(1, Math.min(maxResults, 10));
+    const strategies: Array<() => Promise<SearchResult[]>> = [
+        () => searchDuckDuckGoHtml(query, limit),
+        () => searchDuckDuckGoLite(query, limit),
+        () => searchBingRss(query, limit),
+        () => searchDuckDuckGoInstantAnswerApi(query, limit),
+    ];
 
-    // Try 1: DDG Lite endpoint
-    const params = new URLSearchParams();
-    params.set("q", query);
-    params.set("kl", "us-en");
-    params.set("df", "pastyear");
-
-    const liteUrl = `https://lite.duckduckgo.com/lite/?${params.toString()}`;
-
-    try {
-        const response = await fetch(liteUrl, {
-            headers: {
-                ...DDG_HEADERS,
-                Cookie: DDG_COOKIES,
-                Referer: "https://duckduckgo.com/",
-            },
-            signal: AbortSignal.timeout(8_000),
-        });
-
-        if (response.ok) {
-            const html = await response.text();
-            const results = parseDuckDuckGoResults(html, maxResults);
+    for (const strategy of strategies) {
+        try {
+            const results = deduplicateResults(await strategy());
             if (results.length > 0) return results;
+        } catch {
+            // Fall through to the next strategy
         }
-    } catch {
-        // Network/timeout — fall through to next strategy
-    }
-
-    // Try 2: Bing RSS (no API key needed)
-    try {
-        const bingParams = new URLSearchParams();
-        bingParams.set("q", query);
-        bingParams.set("format", "rss");
-        const bingUrl = `https://www.bing.com/search?${bingParams.toString()}`;
-
-        const response = await fetch(bingUrl, {
-            headers: { ...DDG_HEADERS, Referer: "https://www.bing.com/" },
-            signal: AbortSignal.timeout(10_000),
-        });
-
-        if (response.ok) {
-            const text = await response.text();
-            const results = parseRssFeed(text, maxResults);
-            if (results.length > 0) return results;
-        }
-    } catch {
-        // Network error — fall through
-    }
-
-    // Try 3: DDG Instant Answer API
-    try {
-        const apiUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&no_redirect=1&skip_disambig=1`;
-        const response = await fetch(apiUrl, {
-            headers: DDG_HEADERS,
-            signal: AbortSignal.timeout(5_000),
-        });
-
-        if (response.ok) {
-            const data = (await response.json()) as {
-                AbstractText?: string;
-                AbstractURL?: string;
-                AbstractSource?: string;
-                RelatedTopics?: Array<{
-                    Text?: string;
-                    FirstURL?: string;
-                }>;
-            };
-
-            const results: SearchResult[] = [];
-
-            if (data.AbstractText && data.AbstractURL) {
-                results.push({
-                    title: data.AbstractSource || "DDG",
-                    url: data.AbstractURL,
-                    snippet: data.AbstractText,
-                });
-            }
-
-            if (data.RelatedTopics) {
-                for (const topic of data.RelatedTopics) {
-                    if (topic.Text && topic.FirstURL && results.length < maxResults) {
-                        results.push({
-                            title: topic.Text.slice(0, 100),
-                            url: topic.FirstURL,
-                            snippet: topic.Text,
-                        });
-                    }
-                }
-            }
-
-            if (results.length > 0) return results;
-        }
-    } catch {
-        // Network error — fall through
     }
 
     return [];
+}
+
+async function searchDuckDuckGoHtml(
+    query: string,
+    maxResults: number,
+): Promise<SearchResult[]> {
+    const params = new URLSearchParams({
+        q: query,
+        kl: "us-en",
+    });
+    const url = `https://html.duckduckgo.com/html/?${params.toString()}`;
+    const response = await robustFetch(
+        url,
+        { Referer: "https://duckduckgo.com/" },
+        10_000,
+    );
+    if (!response) return [];
+    const html = await response.text();
+    return parseDdggHtmlResults(html, maxResults);
+}
+
+async function searchDuckDuckGoLite(
+    query: string,
+    maxResults: number,
+): Promise<SearchResult[]> {
+    const params = new URLSearchParams({
+        q: query,
+        kl: "us-en",
+    });
+    const url = `https://lite.duckduckgo.com/lite/?${params.toString()}`;
+    const response = await robustFetch(
+        url,
+        { Referer: "https://duckduckgo.com/" },
+        10_000,
+    );
+    if (!response) return [];
+    const html = await response.text();
+    return parseDuckDuckGoResults(html, maxResults);
+}
+
+async function searchBingRss(
+    query: string,
+    maxResults: number,
+): Promise<SearchResult[]> {
+    const params = new URLSearchParams({
+        q: query,
+        format: "rss",
+    });
+    const url = `https://www.bing.com/search?${params.toString()}`;
+    const response = await robustFetch(
+        url,
+        { Referer: "https://www.bing.com/" },
+        10_000,
+    );
+    if (!response) return [];
+    const xml = await response.text();
+    return parseRssFeed(xml, maxResults);
+}
+
+async function searchDuckDuckGoInstantAnswerApi(
+    query: string,
+    maxResults: number,
+): Promise<SearchResult[]> {
+    const answer = await duckDuckGoInstantAnswer(query, maxResults);
+    const results: SearchResult[] = [];
+    if (answer.abstractText && answer.abstractUrl) {
+        results.push({
+            title: answer.abstractSource || "DuckDuckGo",
+            url: answer.abstractUrl,
+            snippet: answer.abstractText,
+        });
+    }
+    for (const topic of answer.relatedTopics) {
+        if (results.length >= maxResults) break;
+        results.push(topic);
+    }
+    return results;
+}
+
+function deduplicateResults(results: SearchResult[]): SearchResult[] {
+    const seen = new Set<string>();
+    const deduped: SearchResult[] = [];
+    for (const result of results) {
+        let key = result.url.trim();
+        try {
+            const url = new URL(key);
+            url.hash = "";
+            url.search = "";
+            key = url.toString().replace(/\/+$/, "").toLowerCase();
+        } catch {
+            key = key.toLowerCase();
+        }
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(result);
+    }
+    return deduped;
+}
+
+function parseDdggHtmlResults(
+    html: string,
+    maxResults: number,
+): SearchResult[] {
+    const results: SearchResult[] = [];
+
+    // HTML front-end: <a class="result__a" href="...">Title</a> followed by
+    // <a class="result__snippet">…</a> in the same result row.
+    const resultRegex =
+        /<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi;
+    let match: RegExpExecArray | null;
+    while (
+        (match = resultRegex.exec(html)) !== null &&
+        results.length < maxResults
+    ) {
+        const url = decodeDdgcUddg(match[1] || "");
+        const title = stripHtml(match[2] || "");
+        const snippet = stripHtml(match[3] || "");
+        if (title && url) results.push({ title, url, snippet });
+    }
+
+    // Fallback: title-only links when snippets aren't present
+    if (results.length === 0) {
+        const fallbackRegex =
+            /<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
+        while (
+            (match = fallbackRegex.exec(html)) !== null &&
+            results.length < maxResults
+        ) {
+            const url = decodeDdgcUddg(match[1] || "");
+            const title = stripHtml(match[2] || "");
+            if (title && url) results.push({ title, url, snippet: "" });
+        }
+    }
+
+    return results;
 }
 
 export async function searxngSearch(
@@ -333,10 +450,7 @@ function parseDuckDuckGoResults(
         const title = stripHtml(match[2] || "");
         const snippet = stripHtml(match[3] || "");
 
-        const uddgMatch = url.match(/uddg=([^&]+)/);
-        if (uddgMatch) {
-            url = decodeURIComponent(uddgMatch[1]);
-        }
+        url = decodeDdgcUddg(url);
 
         if (title && url) {
             results.push({ title, url, snippet });
@@ -353,34 +467,9 @@ function parseDuckDuckGoResults(
         ) {
             let url = match[1] || "";
             const title = stripHtml(match[2] || "");
-            const uddgMatch = url.match(/uddg=([^&]+)/);
-            if (uddgMatch) {
-                url = decodeURIComponent(uddgMatch[1]);
-            }
+            url = decodeDdgcUddg(url);
             if (title && url) {
                 results.push({ title, url, snippet: "" });
-            }
-        }
-    }
-
-    // Final fallback: generic result__a links from the HTML/endpoint
-    if (results.length === 0) {
-        const genericRegex =
-            /<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>[\s\S]*?<a[^>]*class="result__snippet"[^>]*>(.*?)<\/a>/gi;
-        while (
-            (match = genericRegex.exec(html)) !== null &&
-            results.length < maxResults
-        ) {
-            const rawUrl = match[1] || "";
-            const title = stripHtml(match[2] || "");
-            const snippet = stripHtml(match[3] || "");
-            let url = rawUrl;
-            const uddgMatch = rawUrl.match(/uddg=([^&]+)/);
-            if (uddgMatch) {
-                url = decodeURIComponent(uddgMatch[1]);
-            }
-            if (title && url) {
-                results.push({ title, url, snippet });
             }
         }
     }
@@ -390,13 +479,18 @@ function parseDuckDuckGoResults(
 
 function stripHtml(html: string): string {
     return html
-        .replace(/<[^>]*>/g, "")
-        .replace(/&/g, "&")
-        .replace(/</g, "<")
-        .replace(/>/g, ">")
-        .replace(/"/g, '"')
+        .replace(/<[^>]*>/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
         .replace(/&#39;/g, "'")
+        .replace(/&#x27;/g, "'")
         .replace(/&nbsp;/g, " ")
+        .replace(/&#x2F;/g, "/")
+        .replace(/&#x22;/g, '"')
+        .replace(/&apos;/g, "'")
+        .replace(/\s+/g, " ")
         .trim();
 }
 

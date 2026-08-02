@@ -138,6 +138,8 @@ export interface AppSettings {
     calculatorEnabled: boolean;
     memoryEnabled: boolean;
     skillsEnabled: boolean;
+    /** Beta: let the model delegate subtasks to user-approved subagents. */
+    subagentsEnabled: boolean;
     preview: PreviewSettings;
     // MCP settings
     mcpServers: McpServerConfig[];
@@ -373,6 +375,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     calculatorEnabled: true,
     memoryEnabled: true,
     skillsEnabled: true,
+    subagentsEnabled: false,
     preview: {
         enabled: false,
         primaryModels: [],
