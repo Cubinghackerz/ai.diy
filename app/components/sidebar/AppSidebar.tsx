@@ -726,9 +726,9 @@ function MemorySettingsSection() {
             <div>
                 <h3 className="text-xs font-semibold">Local memory</h3>
                 <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                    Memories stay in this browser. Relevant matches, or a small recent
-                    fallback when there is no keyword match, are attached to the system
-                    prompt in bounded slices; full archives are never sent automatically.
+                    Saved memories stay in this browser. A bounded set of historical
+                    memories is attached to the system prompt; they are separate from
+                    active app preferences and the full archive is never sent automatically.
                 </p>
             </div>
             <div className="rounded-xl border border-border/70 bg-muted/20 p-3 text-[11px] leading-relaxed text-muted-foreground">
