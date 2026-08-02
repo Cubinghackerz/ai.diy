@@ -939,12 +939,6 @@ const PreviewRunPanel: FC<{
                     return response;
                 },
         prepareSendMessagesRequest: async (options) => {
-                    const latestText = [...options.messages]
-                        .reverse()
-                        .find((message) => message.role === "user")
-                        ?.parts.filter((part) => part.type === "text")
-                        .map((part) => part.text)
-                        .join(" ") ?? "";
                     return { body: {
                         ...options.body,
                         messages: options.messages,
@@ -963,7 +957,7 @@ const PreviewRunPanel: FC<{
                             count: run.config.imageCount,
                         },
                         mcpServers: run.config.mcpServers,
-                        memoryContext: await buildLocalMemoryContext(latestText),
+                        memoryContext: await buildLocalMemoryContext(),
                         toolSettings: {
                             ...run.config.toolSettings,
                             memoryAvailable: await hasLocalMemoryEntries(),

@@ -77,11 +77,15 @@ export async function indexChatMemories(messages: UIMessage[]): Promise<void> {
     }
 }
 
-export async function buildLocalMemoryContext(query: string): Promise<string> {
+/**
+ * Build provider-neutral context for every request. The model should not need
+ * to discover or call a tool before it can use approved local memory.
+ */
+export async function buildLocalMemoryContext(): Promise<string> {
     try {
         const entries = await getMemoryEntries();
         if (entries.length === 0) return "";
-        return formatMemoryEntries(selectMemoryEntries(entries, query, true));
+        return formatMemoryEntries(entries.slice(0, MAX_CONTEXT_ENTRIES));
     } catch {
         // A blocked or unavailable IndexedDB must fail open to normal chat.
         return "";

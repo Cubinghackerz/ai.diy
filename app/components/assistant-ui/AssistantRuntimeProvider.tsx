@@ -74,13 +74,7 @@ export function AssistantRuntimeProvider({
                     const apiKey = providerConfig?.apiKey?.trim() || "";
                     const baseUrl = providerConfig?.baseUrl?.trim() || undefined;
 
-                    const latestText = [...options.messages]
-                        .reverse()
-                        .find((message) => message.role === "user")
-                        ?.parts.filter((part) => part.type === "text")
-                        .map((part) => part.text)
-                        .join(" ") ?? "";
-                    const memoryContext = await buildLocalMemoryContext(latestText);
+                    const memoryContext = await buildLocalMemoryContext();
                     const memoryAvailable = await hasLocalMemoryEntries();
                     return {
                         body: {

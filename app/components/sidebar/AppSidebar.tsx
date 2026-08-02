@@ -3,7 +3,7 @@
  * Settings live in the sidebar (no modal) — TypingMind-style operate surface.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { ModelPicker } from "~/components/ui/ModelPicker";
@@ -49,6 +49,7 @@ import {
     Key,
     Moon,
     Plus,
+    Pencil,
     Plug,
     SpinnerGap,
     Sun,
@@ -77,6 +78,7 @@ export function AppSidebar({
     onSelectThread,
     onNewChat,
     onDeleteThread,
+    onRenameThread,
     panel,
     onPanelChange,
 }: {
@@ -85,6 +87,7 @@ export function AppSidebar({
     onSelectThread: (id: string) => void;
     onNewChat: () => void;
     onDeleteThread: (id: string) => void;
+    onRenameThread: (id: string, title: string) => void;
     panel: SidebarPanel;
     onPanelChange: (panel: SidebarPanel) => void;
 }) {
@@ -147,6 +150,7 @@ export function AppSidebar({
                         onSelectThread={onSelectThread}
                         onNewChat={onNewChat}
                         onDeleteThread={onDeleteThread}
+                        onRenameThread={onRenameThread}
                     />
                 ) : (
                     <SettingsPanel />
@@ -162,13 +166,40 @@ function ChatsPanel({
     onSelectThread,
     onNewChat,
     onDeleteThread,
+    onRenameThread,
 }: {
     threads: ThreadItem[];
     activeThreadId: string | null;
     onSelectThread: (id: string) => void;
     onNewChat: () => void;
     onDeleteThread: (id: string) => void;
+    onRenameThread: (id: string, title: string) => void;
 }) {
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [draftTitle, setDraftTitle] = useState("");
+    const cancelEditRef = useRef(false);
+
+    const beginEditing = (thread: ThreadItem) => {
+        cancelEditRef.current = false;
+        setEditingId(thread.id);
+        setDraftTitle(thread.title);
+    };
+
+    const finishEditing = (thread: ThreadItem) => {
+        if (editingId !== thread.id) return;
+        const title = draftTitle.trim();
+        cancelEditRef.current = true;
+        setEditingId(null);
+        if (title && title !== thread.title) {
+            onRenameThread(thread.id, title);
+        }
+    };
+
+    const cancelEditing = () => {
+        cancelEditRef.current = true;
+        setEditingId(null);
+    };
+
     return (
         <div className="flex flex-col gap-3">
             <Button
@@ -217,13 +248,56 @@ function ChatsPanel({
                                         : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
                                 )}
                             >
-                                <div className="flex min-w-0 items-center gap-2">
-                                    <ChatCircleDots
-                                        size={14}
-                                        className="shrink-0"
+                                {editingId === t.id ? (
+                                    <input
+                                        autoFocus
+                                        value={draftTitle}
+                                        onChange={(e) => setDraftTitle(e.target.value)}
+                                        onClick={(e) => e.stopPropagation()}
+                                        onBlur={() => {
+                                            if (cancelEditRef.current) {
+                                                cancelEditRef.current = false;
+                                                return;
+                                            }
+                                            finishEditing(t);
+                                        }}
+                                        onKeyDown={(e) => {
+                                            e.stopPropagation();
+                                            if (e.key === "Enter") {
+                                                e.preventDefault();
+                                                e.currentTarget.blur();
+                                            } else if (e.key === "Escape") {
+                                                e.preventDefault();
+                                                cancelEditing();
+                                            }
+                                        }}
+                                        className="min-w-0 flex-1 rounded border border-input bg-background px-1.5 py-0.5 text-xs text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                        aria-label={`Rename ${t.title}`}
                                     />
-                                    <span className="truncate">{t.title}</span>
-                                </div>
+                                ) : (
+                                    <div className="flex min-w-0 items-center gap-2">
+                                        <ChatCircleDots
+                                            size={14}
+                                            className="shrink-0"
+                                        />
+                                        <span className="truncate">{t.title}</span>
+                                    </div>
+                                )}
+                                {editingId !== t.id ? (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            hapticSelect();
+                                            beginEditing(t);
+                                        }}
+                                        className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity outline-none hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
+                                        title="Rename chat"
+                                        aria-label={`Rename ${t.title}`}
+                                    >
+                                        <Pencil size={13} />
+                                    </button>
+                                ) : null}
                                 <button
                                     type="button"
                                     onClick={(e) => {

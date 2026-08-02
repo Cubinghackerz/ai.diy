@@ -105,6 +105,7 @@ function HomeInner() {
             onDeleteThread={(id) => {
                 void deleteThread(id);
             }}
+            onRenameThread={handleTitleChange}
             panel={sidebarPanel}
             onPanelChange={setSidebarPanel}
         />
