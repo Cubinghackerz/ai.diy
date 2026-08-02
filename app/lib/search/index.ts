@@ -36,11 +36,13 @@ export async function webSearch(
         searxngUrl?: string;
     } = {},
 ): Promise<SearchResult[]> {
+    const normalizedQuery = normalizeSearchQuery(query);
     const maxResults = options.maxResults ?? 5;
+    if (!normalizedQuery) return [];
     if (options.engine === "searxng" && options.searxngUrl?.trim()) {
-        return searxngSearch(query, options.searxngUrl.trim(), maxResults);
+        return searxngSearch(normalizedQuery, options.searxngUrl.trim(), maxResults);
     }
-    return duckDuckGoSearch(query, maxResults);
+    return duckDuckGoSearch(normalizedQuery, maxResults);
 }
 
 /**
@@ -233,17 +235,23 @@ export async function duckDuckGoSearch(
     // Strategy: try the HTML front-end, then Lite, then Bing RSS, then the
     // Instant Answer API. DDG blocks aggressive bot traffic, so each attempt
     // uses rotating user agents, a retry, and short timeouts.
+    const normalizedQuery = normalizeSearchQuery(query);
+    if (!normalizedQuery) return [];
     const limit = Math.max(1, Math.min(maxResults, 10));
     const strategies: Array<() => Promise<SearchResult[]>> = [
-        () => searchDuckDuckGoHtml(query, limit),
-        () => searchDuckDuckGoLite(query, limit),
-        () => searchBingRss(query, limit),
-        () => searchDuckDuckGoInstantAnswerApi(query, limit),
+        () => searchDuckDuckGoHtml(normalizedQuery, limit),
+        () => searchDuckDuckGoLite(normalizedQuery, limit),
+        () => searchBingRss(normalizedQuery, limit),
+        () => searchDuckDuckGoInstantAnswerApi(normalizedQuery, limit),
     ];
 
     for (const strategy of strategies) {
         try {
-            const results = deduplicateResults(await strategy());
+            const results = rankSearchResults(
+                normalizedQuery,
+                deduplicateResults(await strategy()),
+                limit,
+            );
             if (results.length > 0) return results;
         } catch {
             // Fall through to the next strategy
@@ -350,6 +358,153 @@ function deduplicateResults(results: SearchResult[]): SearchResult[] {
     return deduped;
 }
 
+const SEARCH_STOPWORDS = new Set([
+    "a",
+    "an",
+    "and",
+    "are",
+    "at",
+    "be",
+    "by",
+    "for",
+    "from",
+    "how",
+    "in",
+    "is",
+    "it",
+    "of",
+    "on",
+    "or",
+    "the",
+    "to",
+    "what",
+    "when",
+    "where",
+    "which",
+    "who",
+    "with",
+]);
+
+const WEATHER_TERMS = new Set([
+    "bom",
+    "climate",
+    "conditions",
+    "cold",
+    "forecast",
+    "heat",
+    "humidity",
+    "meteorological",
+    "meteorology",
+    "rain",
+    "rainfall",
+    "snow",
+    "storm",
+    "sunny",
+    "temperature",
+    "weather",
+    "wind",
+]);
+
+const TEMPORAL_TERMS = new Set([
+    "august",
+    "current",
+    "daily",
+    "day",
+    "hourly",
+    "latest",
+    "month",
+    "monthly",
+    "now",
+    "today",
+    "tomorrow",
+    "week",
+    "weekly",
+    "yesterday",
+]);
+
+function normalizeSearchQuery(query: string): string {
+    return query.replace(/\s+/g, " ").trim().slice(0, 500);
+}
+
+function searchTerms(query: string): string[] {
+    return [...new Set(
+        query
+            .toLocaleLowerCase()
+            .normalize("NFKD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .match(/[a-z0-9]+/g) ?? [],
+    )].filter((term) => term.length > 1 && !SEARCH_STOPWORDS.has(term));
+}
+
+function containsSearchTerm(text: string, term: string): boolean {
+    return new RegExp(`(?:^|[^a-z0-9])${escapeRegExp(term)}(?:$|[^a-z0-9])`, "i").test(
+        text,
+    );
+}
+
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function rankSearchResults(
+    query: string,
+    results: SearchResult[],
+    maxResults: number,
+): SearchResult[] {
+    if (results.length === 0) return [];
+    const terms = searchTerms(query);
+    if (terms.length === 0) return results.slice(0, maxResults);
+
+    const weatherQuery = terms.some((term) => WEATHER_TERMS.has(term));
+    const locationTerms = weatherQuery
+        ? terms.filter(
+              (term) =>
+                  !WEATHER_TERMS.has(term) && !TEMPORAL_TERMS.has(term) && !/^\d+$/.test(term),
+          )
+        : [];
+    const phrase = query.toLocaleLowerCase();
+    const scored = results.flatMap((result, index) => {
+        const title = result.title.toLocaleLowerCase();
+        const snippet = result.snippet.toLocaleLowerCase();
+        const url = result.url.toLocaleLowerCase();
+        const searchable = `${title} ${snippet} ${url}`;
+        const matchedTerms = terms.filter((term) => containsSearchTerm(searchable, term));
+        const matchedLocations = locationTerms.filter((term) =>
+            containsSearchTerm(searchable, term),
+        );
+        const matchedWeather = terms.filter(
+            (term) => WEATHER_TERMS.has(term) && containsSearchTerm(searchable, term),
+        );
+
+        // Weather queries need both weather language and the requested place.
+        // This prevents unrelated entity results such as "The Flash" from
+        // being returned merely because the provider produced parseable HTML.
+        if (weatherQuery && (matchedWeather.length === 0 || (locationTerms.length > 0 && matchedLocations.length === 0))) {
+            return [];
+        }
+
+        let score = matchedTerms.length * 1.5;
+        score += matchedTerms.filter((term) => containsSearchTerm(title, term)).length * 4;
+        score += matchedTerms.filter((term) => containsSearchTerm(url, term)).length * 1.5;
+        if (phrase.length > 8 && searchable.includes(phrase)) score += 5;
+        if (weatherQuery) {
+            score += matchedWeather.length * 4;
+            score += matchedLocations.length * 4;
+            if (terms.includes("bom") || phrase.includes("bureau of meteorology")) {
+                if (url.includes("bom.gov.au")) score += 12;
+            }
+        }
+        return [{ result, score, index }];
+    });
+
+    const minimumScore = weatherQuery ? 6 : Math.max(2, Math.ceil(terms.length * 1.25));
+    return scored
+        .filter((entry) => entry.score >= minimumScore)
+        .sort((left, right) => right.score - left.score || left.index - right.index)
+        .slice(0, maxResults)
+        .map((entry) => entry.result);
+}
+
 function parseDdggHtmlResults(
     html: string,
     maxResults: number,
@@ -393,9 +548,11 @@ export async function searxngSearch(
     baseUrl: string,
     maxResults: number = 5,
 ): Promise<SearchResult[]> {
+    const normalizedQuery = normalizeSearchQuery(query);
+    if (!normalizedQuery) return [];
     const root = baseUrl.replace(/\/$/, "");
     const url = new URL(`${root}/search`);
-    url.searchParams.set("q", query);
+    url.searchParams.set("q", normalizedQuery);
     url.searchParams.set("format", "json");
     url.searchParams.set("language", "en");
 
@@ -420,14 +577,14 @@ export async function searxngSearch(
         }>;
     };
 
-    return (data.results ?? [])
+    const results = (data.results ?? [])
         .filter((r) => r.title && (r.url || r.pretty_url))
-        .slice(0, maxResults)
         .map((r) => ({
             title: String(r.title),
             url: String(r.url || r.pretty_url || ""),
             snippet: String(r.content || "").slice(0, 400),
         }));
+    return rankSearchResults(normalizedQuery, results, maxResults);
 }
 
 function parseDuckDuckGoResults(

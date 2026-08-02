@@ -32,6 +32,18 @@ const ANIMATION_DURATION = 200;
 
 const pressable = "active:scale-[0.98]";
 
+// These tools are handled automatically by the browser runtime. Their
+// `requires-action` state means "run the client tool", not "ask the user for
+// permission". Subagents have their own approval popup and ask_user opens its
+// focused prompt directly.
+const AUTO_EXECUTED_CLIENT_TOOL_NAMES = new Set([
+  "run_python",
+  "run_code",
+  "memory",
+  "ask_user",
+  "spawn_subagent",
+]);
+
 function isArtifactPayload(result: unknown): boolean {
   if (typeof result !== "string") return false;
   return result.includes(ARTIFACT_MARKER);
@@ -663,7 +675,9 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
 }) => {
   const isCancelled =
     status?.type === "incomplete" && status.reason === "cancelled";
-  const isRequiresAction = status?.type === "requires-action";
+  const isRequiresAction =
+    status?.type === "requires-action" &&
+    !AUTO_EXECUTED_CLIENT_TOOL_NAMES.has(toolName);
 
   const [open, setOpen] = useState(isRequiresAction);
   const [prevRequiresAction, setPrevRequiresAction] =

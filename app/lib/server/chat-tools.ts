@@ -486,6 +486,7 @@ export async function buildChatTools(
         tools.duckduckgo_instant_answer = tool({
             description:
                 "Use DuckDuckGo's free Instant Answer API as a compact first-pass overview for definitions, entities, concepts, and broad factual questions. Use it once when applicable, not for current proof; verify only material claims with a focused web search and relevant page fetch. This service is intended for non-commercial use; review current DuckDuckGo terms before commercial deployment.",
+            needsApproval: false,
             inputSchema: z.object({
                 query: z.string(),
                 maxRelatedTopics: z.number().int().min(0).max(3).optional(),
@@ -503,6 +504,7 @@ export async function buildChatTools(
         tools.research_skill = tool({
             description:
                 "Callable research skill for substantial factual, current, technical, or comparison research. It plans the minimum focused queries, source checks, and stopping point; choose quick depth by default, then run only the necessary searches and page reads.",
+            needsApproval: false,
             inputSchema: z.object({
                 question: z.string(),
                 depth: z.enum(["quick", "standard", "deep"]).optional(),
@@ -558,6 +560,7 @@ export async function buildChatTools(
 
         const searchTool = tool({
             description: `Search the web using ${engineLabel} for real-time information, facts, news, and technical topics. Cite result URLs.`,
+            needsApproval: false,
             inputSchema: z.object({
                 query: z.string().optional(),
                 maxResults: z.number().int().min(1).max(5).optional(),
@@ -593,6 +596,7 @@ export async function buildChatTools(
             tools.web_search = tool({
                 description:
                     "Built-in web search fallback. Use this when the configured provider search connector is unavailable.",
+                needsApproval: false,
                 inputSchema: z.object({
                     query: z.string().optional(),
                     maxResults: z.number().int().min(1).max(5).optional(),
@@ -614,6 +618,7 @@ export async function buildChatTools(
         tools.fetch_url = tool({
             description:
                 "Fetch and extract only the relevant content from one public web page URL. Do not fetch the same URL repeatedly; use this after search when snippets are insufficient.",
+            needsApproval: false,
             inputSchema: z.object({
                 url: z.string().url(),
             }),
