@@ -377,7 +377,7 @@ function SettingsPanel() {
         { id: "tools", label: "Tools", icon: Globe },
         { id: "mcp", label: "MCP Beta", icon: Plug },
         { id: "experimental", label: "Experimental", icon: Flask },
-        { id: "memory", label: "Memory", icon: Brain },
+        { id: "memory", label: "Memory Beta", icon: Brain },
         { id: "connectors", label: "Connectors Beta", icon: HardDrives },
         { id: "cloud", label: "Cloud Storage Beta", icon: CloudArrowUp },
         { id: "appearance", label: "Theme", icon: Sun },
@@ -728,8 +728,13 @@ function MemorySettingsSection() {
                 // Plain text and markdown are supported as universal imports.
             }
             const entries = importMemoryEntries(payload);
+            if (entries.length === 0) {
+                setStatus("No usable memories found. Use a memory fact or supported JSON export.");
+                return;
+            }
             await saveMemoryEntries(entries);
-            setCount((current) => current + entries.length);
+            const storedEntries = await getMemoryEntries();
+            setCount(storedEntries.length);
             setStatus(`${entries.length} memories imported locally.`);
             setPastedMemory("");
         } catch (error) {

@@ -7,8 +7,10 @@ const STOP_WORDS = new Set(
 );
 
 const MAX_MEMORY_ENTRIES = 500;
-const MAX_CONTEXT_ENTRIES = 6;
+const MAX_CONTEXT_ENTRIES = 10;
 const MAX_CONTEXT_CHARS = 4_000;
+const MIN_CHAT_MEMORY_CHARS = 24;
+const MIN_IMPORTED_MEMORY_CHARS = 8;
 const SECRET_PATTERNS = [
     /(?:api[_ -]?key|access[_ -]?token|secret|password|private[_ -]?key|bearer\s+[a-z0-9._-]{12,})\s*[:=]/i,
     /(?:sk-[a-z0-9]{16,}|sk-ant-[a-z0-9_-]{16,}|gsk_[a-z0-9_-]{16,}|xai-[a-z0-9_-]{16,}|hf_[a-z0-9_-]{12,}|gh[pousr]_[a-z0-9_-]{16,})/i,
@@ -39,7 +41,10 @@ function containsSecret(value: string): boolean {
 
 function entry(content: string, source: MemoryEntry["source"], sourceId?: string): MemoryEntry | null {
     const text = content.replace(/\s+/g, " ").trim().slice(0, 1600);
-    if (text.length < 24) return null;
+    const minimumLength = source === "chat"
+        ? MIN_CHAT_MEMORY_CHARS
+        : MIN_IMPORTED_MEMORY_CHARS;
+    if (text.length < minimumLength) return null;
     if (containsSecret(text)) {
         return null;
     }
@@ -85,7 +90,10 @@ export async function buildLocalMemoryContext(): Promise<string> {
     try {
         const entries = await getMemoryEntries();
         if (entries.length === 0) return "";
-        return formatMemoryEntries(entries.slice(0, MAX_CONTEXT_ENTRIES));
+        // Imported/manual memories are explicit user context. Keep them ahead
+        // of automatically indexed chat messages so a busy chat cannot evict
+        // memories the user deliberately brought into the app.
+        return formatMemoryEntries(prioritizeExplicitMemory(entries).slice(0, MAX_CONTEXT_ENTRIES));
     } catch {
         // A blocked or unavailable IndexedDB must fail open to normal chat.
         return "";
@@ -105,7 +113,7 @@ export async function readLocalMemory(query?: string): Promise<string> {
     try {
         const entries = await getMemoryEntries();
         if (entries.length === 0) return "No local memory is stored.";
-        const selected = selectMemoryEntries(entries, query, false);
+        const selected = selectMemoryEntries(entries, query, true);
         if (selected.length === 0) return "No relevant local memory matched that query.";
         return formatMemoryEntries(selected);
     } catch {
@@ -134,7 +142,14 @@ function selectMemoryEntries(
               .map(({ item }) => item)
         : [];
     if (ranked.length > 0) return ranked;
-    return fallbackToRecent ? entries.slice(0, 3) : [];
+    return fallbackToRecent ? prioritizeExplicitMemory(entries).slice(0, 3) : [];
+}
+
+function prioritizeExplicitMemory(entries: MemoryEntry[]): MemoryEntry[] {
+    return [
+        ...entries.filter((item) => item.source !== "chat"),
+        ...entries.filter((item) => item.source === "chat"),
+    ];
 }
 
 function formatMemoryEntries(entries: MemoryEntry[]): string {
@@ -149,7 +164,26 @@ export function importMemoryEntries(payload: unknown): MemoryEntry[] {
     const walk = (value: unknown, depth = 0) => {
         if (depth > 8 || textValues.length >= MAX_MEMORY_ENTRIES) return;
         if (typeof value === "string") {
-            if (value.trim().length >= 24) textValues.push(value);
+            const text = value.trim();
+            if (depth === 0) {
+                const parsed = parseMemoryJson(text);
+                if (parsed !== undefined) {
+                    walk(parsed, depth + 1);
+                    return;
+                }
+
+                const lines = text
+                    .split(/\r?\n/)
+                    .map((line) => line.replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)/, "").trim())
+                    .filter(Boolean);
+                if (lines.length > 1) {
+                    lines.forEach((line) => {
+                        if (line.length >= MIN_IMPORTED_MEMORY_CHARS) textValues.push(line);
+                    });
+                    return;
+                }
+            }
+            if (text.length >= MIN_IMPORTED_MEMORY_CHARS) textValues.push(text);
             return;
         }
         if (Array.isArray(value)) {
@@ -161,9 +195,25 @@ export function importMemoryEntries(payload: unknown): MemoryEntry[] {
         }
     };
     walk(payload);
+    const seen = new Set<string>();
     return textValues
         .map((content, index) => entry(content, "import", `import_${index}`))
-        .filter((value): value is MemoryEntry => Boolean(value));
+        .filter((value): value is MemoryEntry => {
+            if (!value || seen.has(value.id)) return false;
+            seen.add(value.id);
+            return true;
+        });
+}
+
+function parseMemoryJson(value: string): unknown | undefined {
+    const fenced = value.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1]?.trim();
+    const candidate = fenced || value;
+    if (!fenced && !/^[\[{]/.test(candidate)) return undefined;
+    try {
+        return JSON.parse(candidate) as unknown;
+    } catch {
+        return undefined;
+    }
 }
 
 export const UNIVERSAL_MEMORY_EXPORT_PROMPT = `Create a portable personal-memory export for a local AI assistant. Return JSON only with this shape: {"version":1,"memories":[{"content":"concise durable fact, preference, project context, or instruction"}]}. Include only information I explicitly shared that is useful in future chats. Exclude passwords, API keys, financial/account identifiers, private third-party information, and raw chat transcripts. Keep each memory under 500 characters and keep the total below 100 entries.`;

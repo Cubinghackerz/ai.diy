@@ -208,16 +208,17 @@ export async function getMemoryEntries(): Promise<MemoryEntry[]> {
 
 export async function saveMemoryEntries(entries: MemoryEntry[]): Promise<void> {
     const db = await getDB();
-    if (!db || entries.length === 0) return;
+    if (entries.length === 0) return;
+    if (!db) throw new Error("Local memory storage is unavailable in this browser.");
     const tx = db.transaction("memories", "readwrite");
-    const existing = await tx.store.getAll();
-    const merged = new Map(existing.map((entry) => [entry.id, entry]));
-    for (const entry of entries) merged.set(entry.id, entry);
-    const retained = [...merged.values()]
+    for (const entry of entries) await tx.store.put(entry);
+    const retained = (await tx.store.getAll())
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .slice(0, 500);
-    await tx.store.clear();
-    for (const entry of retained) await tx.store.put(entry);
+    const retainedIds = new Set(retained.map((entry) => entry.id));
+    for (const entry of await tx.store.getAll()) {
+        if (!retainedIds.has(entry.id)) await tx.store.delete(entry.id);
+    }
     await tx.done;
 }
 

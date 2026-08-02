@@ -163,7 +163,7 @@ The composer displays Voice input only when the browser exposes the Web Speech R
 
 Chats, messages, artifacts, saved memory entries, and Preview sessions live in browser IndexedDB. The newest bounded historical memories are selected locally and automatically attached to provider system instructions, so provider tool-calling behavior is not required for memory to work. Saved memory is separate from active app preferences and the full archive is never injected automatically; the optional memory tool is available only when entries exist.
 
-Settings -> Memory can import supported text/JSON memory exports and export the memory index. Settings -> Cloud storage (Beta, coming soon) can download a complete local JSON backup containing chats, artifacts, Preview sessions, and memories. This is a manual backup file today; automatic cloud upload and restore are not implemented.
+Settings -> Memory (Beta) can import supported text/JSON memory exports and export the memory index. Settings -> Cloud storage (Beta, coming soon) can download a complete local JSON backup containing chats, artifacts, Preview sessions, and memories. This is a manual backup file today; automatic cloud upload and restore are not implemented.
 
 ### Multi-Model Preview
 

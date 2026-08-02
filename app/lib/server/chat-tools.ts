@@ -379,7 +379,7 @@ Answer the question with live, verifiable evidence. Your training data, knowledg
 
 ## Before searching
 1. Define the answerable core: what must be true for the answer to be reliable.
-2. Split the question into 2-5 subquestions; each subquestion gets at least one focused query.
+2. Split the question into only the necessary subquestions, normally 1-3; each subquestion gets at most one focused query unless the result fails or sources conflict.
 3. For definitions, entities, concepts, and broad factual overviews, call duckduckgo_instant_answer first. Treat its output as a fast discovery/overview layer, not as proof or a substitute for a retrieved primary page.
 4. Design queries per subquestion using exact phrases ("quoted term"), site restriction (site:docs.example.com), file type (filetype:pdf for primary documents), date terms (e.g. 2026) for freshness, and synonym variants when results are thin.
 5. Classify how fast the facts change:
@@ -388,9 +388,14 @@ Answer the question with live, verifiable evidence. Your training data, knowledg
    - Subjective or contested: sample multiple perspectives and report the range.
 
 ## Depth behavior
-- Quick: use duckduckgo_instant_answer when applicable, then 1-3 focused queries; verify the direct answer with one authoritative source plus one independent check when the claim is consequential.
-- Standard: use the Instant Answer overview when applicable, cover every subquestion, read the top pages with read_url, and cross-check every claim that materially affects the answer with two independent sources.
-- Deep: use all relevant discovery layers, including Instant Answer, traditional search, third-party providers, and primary-source reads; use multiple query families and an explicit disagreement table with dates.
+- Quick: use duckduckgo_instant_answer when applicable, then 1-2 focused queries; verify the direct answer with one authoritative source plus one independent check when the claim is consequential.
+- Standard: use the Instant Answer overview when applicable, cover every necessary subquestion, read only the most relevant pages with read_url, and cross-check claims that materially affect the answer.
+- Deep: use all relevant discovery layers, including Instant Answer, traditional search, third-party providers, and primary-source reads; use multiple query families only when needed to resolve uncertainty.
+
+## Token-efficient stopping
+- Start with quick depth unless the user asks for a deep review.
+- Use no more than 3 search results per focused query by default and read only pages that can change the answer.
+- Never repeat an equivalent query or fetch the same URL twice. Stop when the answer is supported, or state the unresolved gap.
 
 ## Evidence rules
 1. Prefer primary and official sources: official documentation, specifications, standards bodies, original research, direct datasets, maintained repositories, and primary reporting. Treat forums, blogs, and unknown domains as weak evidence.
@@ -475,15 +480,15 @@ export async function buildChatTools(settings: ToolSettings = {}) {
     if (enableSearch) {
         tools.duckduckgo_instant_answer = tool({
             description:
-                "Use DuckDuckGo's free Instant Answer API as the first-pass research tool for definitions, entities, concepts, and broad factual overviews. It is fast and useful but is not an LLM and is not proof by itself. For current, consequential, disputed, or source-sensitive claims, follow with web_search or a configured third-party provider and read_url/fetch_url to verify authoritative pages. This service is intended for non-commercial use; review current DuckDuckGo terms before commercial deployment.",
+                "Use DuckDuckGo's free Instant Answer API as a compact first-pass overview for definitions, entities, concepts, and broad factual questions. Use it once when applicable, not for current proof; verify only material claims with a focused web search and relevant page fetch. This service is intended for non-commercial use; review current DuckDuckGo terms before commercial deployment.",
             inputSchema: z.object({
                 query: z.string(),
-                maxRelatedTopics: z.number().int().min(0).max(8).optional(),
+                maxRelatedTopics: z.number().int().min(0).max(3).optional(),
             }),
             execute: async ({ query, maxRelatedTopics }) => {
                 try {
                     return formatDuckDuckGoInstantAnswer(
-                        await duckDuckGoInstantAnswer(query, maxRelatedTopics ?? 5),
+                        await duckDuckGoInstantAnswer(query, maxRelatedTopics ?? 3),
                     );
                 } catch (err) {
                     return `DuckDuckGo Instant Answer unavailable: ${err instanceof Error ? err.message : "the service failed"}. Continue with web_search and read_url.`;
@@ -492,7 +497,7 @@ export async function buildChatTools(settings: ToolSettings = {}) {
         });
         tools.research_skill = tool({
             description:
-                "Callable research skill. Invoke before substantial factual, current, technical, or comparison research: it defines subquestions, a query strategy, source-quality and verification rules, and an output contract for live, source-verified research. Then run its planned queries with the search tool and read pages with read_url.",
+                "Callable research skill for substantial factual, current, technical, or comparison research. It plans the minimum focused queries, source checks, and stopping point; choose quick depth by default, then run only the necessary searches and page reads.",
             inputSchema: z.object({
                 question: z.string(),
                 depth: z.enum(["quick", "standard", "deep"]).optional(),
@@ -550,7 +555,7 @@ export async function buildChatTools(settings: ToolSettings = {}) {
             description: `Search the web using ${engineLabel} for real-time information, facts, news, and technical topics. Cite result URLs.`,
             inputSchema: z.object({
                 query: z.string().optional(),
-                maxResults: z.number().optional(),
+                maxResults: z.number().int().min(1).max(5).optional(),
             }),
             execute: async ({ query, maxResults }) => {
                 const normalizedQuery = query?.trim();
@@ -559,9 +564,9 @@ export async function buildChatTools(settings: ToolSettings = {}) {
                 }
                 try {
                     const results = activeConnector
-                        ? await connectorSearch(activeConnector, normalizedQuery, maxResults ?? 5)
+                        ? await connectorSearch(activeConnector, normalizedQuery, maxResults ?? 3)
                         : await webSearch(normalizedQuery, {
-                              maxResults: maxResults ?? 5,
+                              maxResults: maxResults ?? 3,
                               engine,
                               searxngUrl: settings.searxngUrl,
                           });
@@ -569,7 +574,7 @@ export async function buildChatTools(settings: ToolSettings = {}) {
                 } catch (err) {
                     if (activeConnector) {
                         try {
-                            return `${await builtInSearch(normalizedQuery, maxResults ?? 5)}\n\nNote: ${activeConnector.name} was unavailable, so built-in web search was used instead.`;
+                            return `${await builtInSearch(normalizedQuery, maxResults ?? 3)}\n\nNote: ${activeConnector.name} was unavailable, so built-in web search was used instead.`;
                         } catch {
                             // Return a model-readable result instead of failing the stream.
                         }
@@ -585,7 +590,7 @@ export async function buildChatTools(settings: ToolSettings = {}) {
                     "Built-in web search fallback. Use this when the configured provider search connector is unavailable.",
                 inputSchema: z.object({
                     query: z.string().optional(),
-                    maxResults: z.number().optional(),
+                    maxResults: z.number().int().min(1).max(5).optional(),
                 }),
                 execute: async ({ query, maxResults }) => {
                     const normalizedQuery = query?.trim();
@@ -593,7 +598,7 @@ export async function buildChatTools(settings: ToolSettings = {}) {
                         return "Search query required. Retry with a focused query string.";
                     }
                     try {
-                        return await builtInSearch(normalizedQuery, maxResults ?? 5);
+                        return await builtInSearch(normalizedQuery, maxResults ?? 3);
                     } catch (err) {
                         return `Search unavailable: ${err instanceof Error ? err.message : "the built-in provider failed"}`;
                     }
@@ -603,7 +608,7 @@ export async function buildChatTools(settings: ToolSettings = {}) {
 
         tools.fetch_url = tool({
             description:
-                "Fetch and extract text content from a public web page URL.",
+                "Fetch and extract only the relevant content from one public web page URL. Do not fetch the same URL repeatedly; use this after search when snippets are insufficient.",
             inputSchema: z.object({
                 url: z.string().url(),
             }),
@@ -686,7 +691,7 @@ export async function buildChatTools(settings: ToolSettings = {}) {
     if (settings.memoryAvailable) {
         tools.memory = tool({
             description:
-                "Read relevant user-approved local memory from the browser. Use only when it can improve the answer; never infer or invent memories and never request credentials or secrets.",
+                "Read relevant user-approved local memory, including pasted or imported entries, from the browser. Use only when the needed personal context is not already visible; send a narrow keyword query and never infer, invent, or request credentials or secrets.",
             inputSchema: z.object({
                 query: z.string().optional(),
             }),
