@@ -54,6 +54,10 @@ export interface ProviderConfig {
     apiKey: string;
     baseUrl?: string;
     enabled: boolean;
+    openAICompatible?: {
+        apiMode: "chat" | "responses";
+        reasoningWithTools: "none" | "allow";
+    };
 }
 
 export interface ModelInfo {
@@ -124,6 +128,7 @@ export interface AppSettings {
     // MCP settings
     mcpServers: McpServerConfig[];
     connectors: ConnectorConfig[];
+    customSkills: CustomSkill[];
 }
 
 export interface McpServerConfig {
@@ -172,6 +177,14 @@ export interface MemoryEntry {
     keywords: string[];
     createdAt: number;
     updatedAt: number;
+}
+
+export interface CustomSkill {
+    id: string;
+    name: string;
+    description: string;
+    content: string;
+    enabled: boolean;
 }
 
 // ─── Thread/Message Types ────────────────────────────────────────
@@ -350,6 +363,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     },
     mcpServers: [],
     connectors: [],
+    customSkills: [],
 };
 
 // ─── Default Models per Provider ─────────────────────────────────

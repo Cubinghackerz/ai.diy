@@ -361,6 +361,7 @@ export async function buildChatTools(settings: ToolSettings = {}) {
                 }
             },
         });
+        tools.read_url = tools.fetch_url;
     }
 
     if (enableCalc) {
@@ -372,6 +373,7 @@ export async function buildChatTools(settings: ToolSettings = {}) {
             }),
             execute: async ({ expression }) => evaluateMath(expression),
         });
+        tools.calculate = tools.calculator;
     }
 
     if (enablePython) {
@@ -383,7 +385,45 @@ export async function buildChatTools(settings: ToolSettings = {}) {
                 description: z.string().optional(),
             }),
         });
+        tools.run_code = tools.run_python;
     }
+
+    tools.get_current_time = tool({
+        description: "Return the current ISO date/time in a requested IANA timezone.",
+        inputSchema: z.object({ timezone: z.string().optional() }),
+        execute: async ({ timezone }) => {
+            const now = new Date();
+            return JSON.stringify({
+                iso: now.toISOString(),
+                timezone: timezone || "UTC",
+                readable: now.toLocaleString("en-US", { timeZone: timezone || "UTC" }),
+            });
+        },
+    });
+
+    tools.list_connections = tool({
+        description: "List enabled integrations and their capability categories without exposing credentials.",
+        inputSchema: z.object({}),
+        execute: async () =>
+            JSON.stringify(
+                (settings.connectors ?? [])
+                    .filter((connector) => connector.enabled)
+                    .map((connector) => ({
+                        name: connector.name,
+                        kind: connector.kind,
+                        capabilities: connector.kind === "remote-mcp" ? ["discovered tools"] : ["configured connector"],
+                    })),
+            ),
+    });
+
+    tools.ask_user = tool({
+        description: "Ask the user a focused multiple-choice, multi-select, or short-answer question when required information cannot be safely inferred.",
+        inputSchema: z.object({
+            question: z.string(),
+            questionType: z.enum(["single", "multiple", "short"]).default("short"),
+            options: z.array(z.string()).max(8).optional(),
+        }),
+    });
 
     if (settings.skillsEnabled !== false) {
         const skillArchitectInput = z.object({

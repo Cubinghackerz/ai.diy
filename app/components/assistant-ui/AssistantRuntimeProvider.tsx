@@ -5,7 +5,10 @@
  * Thread-scoped useChat id syncs with IndexedDB via ChatThreadSync.
  */
 
-import { AssistantRuntimeProvider as AuiRuntimeProvider } from "@assistant-ui/react";
+import {
+    AssistantRuntimeProvider as AuiRuntimeProvider,
+    WebSpeechDictationAdapter,
+} from "@assistant-ui/react";
 import {
     useAISDKRuntime,
     AssistantChatTransport,
@@ -20,6 +23,7 @@ import { getModelModalities } from "~/lib/model-modalities";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { runBrowserPython } from "~/lib/pyodide";
 import { buildLocalMemoryContext } from "~/lib/memory";
+import { askUserInBrowser } from "~/lib/client-tools";
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
 
 async function parseChatError(res: Response): Promise<string> {
@@ -82,6 +86,7 @@ export function AssistantRuntimeProvider({
                             provider,
                             apiKey: apiKey || localProviderKey(provider),
                             baseUrl,
+                            openAICompatible: providerConfig?.openAICompatible,
                             systemPrompt: s.chat.systemPrompt,
                             temperature: s.chat.temperature,
                             maxTokens: s.chat.maxTokens,
@@ -110,15 +115,32 @@ export function AssistantRuntimeProvider({
     );
 
     const chatRef = useRef<ReturnType<typeof useChat> | null>(null);
-    const pendingPythonCalls = useRef(0);
+    const pendingClientCalls = useRef(0);
     const chat = useChat({
         id: threadId ?? "draft",
         transport,
         onToolCall: ({ toolCall }) => {
-            if (toolCall.toolName !== "run_python") return;
-            pendingPythonCalls.current += 1;
-            const input = toolCall.input as { code?: string };
-            void runBrowserPython(input.code ?? "").then(
+            if (![
+                "run_python",
+                "run_code",
+                "ask_user",
+            ].includes(toolCall.toolName)) return;
+            pendingClientCalls.current += 1;
+            const input = toolCall.input as {
+                code?: string;
+                question?: string;
+                questionType?: "single" | "multiple" | "short";
+                options?: string[];
+            };
+            const task =
+                toolCall.toolName === "ask_user"
+                    ? askUserInBrowser({
+                          question: input.question ?? "Please provide more information.",
+                          questionType: input.questionType,
+                          options: input.options,
+                      })
+                    : runBrowserPython(input.code ?? "");
+            void task.then(
                 (output) => {
                     const addToolOutput = chatRef.current
                         ?.addToolOutput as unknown as
@@ -130,7 +152,7 @@ export function AssistantRuntimeProvider({
                           }) => void)
                         | undefined;
                     addToolOutput?.({
-                        tool: "run_python",
+                        tool: toolCall.toolName,
                         toolCallId: toolCall.toolCallId,
                         state: "output-available",
                         output,
@@ -147,7 +169,7 @@ export function AssistantRuntimeProvider({
                           }) => void)
                         | undefined;
                     addToolOutput?.({
-                        tool: "run_python",
+                        tool: toolCall.toolName,
                         toolCallId: toolCall.toolCallId,
                         state: "output-error",
                         errorText:
@@ -159,11 +181,11 @@ export function AssistantRuntimeProvider({
             );
         },
         sendAutomaticallyWhen: ({ messages }) => {
-            if (pendingPythonCalls.current === 0) return false;
+            if (pendingClientCalls.current === 0) return false;
             if (!lastAssistantMessageIsCompleteWithToolCalls({ messages })) {
                 return false;
             }
-            pendingPythonCalls.current = 0;
+            pendingClientCalls.current = 0;
             return true;
         },
         onError: (err) => {
@@ -176,12 +198,26 @@ export function AssistantRuntimeProvider({
         settings.chat.model,
         settings.chat.provider,
     );
+    const dictation = useMemo(() => {
+        if (
+            typeof window === "undefined" ||
+            !WebSpeechDictationAdapter.isSupported()
+        ) {
+            return undefined;
+        }
+        return new WebSpeechDictationAdapter({
+            language: navigator.language || "en-US",
+            continuous: true,
+            interimResults: true,
+        });
+    }, []);
 
     const adapters = useMemo(
         () => ({
             attachments: createAttachmentAdapter(modalities),
+            dictation,
         }),
-        [modalities.vision, modalities.documents, modalities.tools],
+        [dictation, modalities.vision, modalities.documents, modalities.tools],
     );
 
     const runtime = useAISDKRuntime(chat, { adapters });

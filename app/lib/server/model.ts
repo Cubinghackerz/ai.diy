@@ -11,7 +11,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createXai } from "@ai-sdk/xai";
 import type { ImageModel } from "ai";
-import type { ProviderId } from "~/lib/types";
+import type { ProviderConfig, ProviderId } from "~/lib/types";
 import { parseProviderCredentials } from "~/lib/provider-credentials";
 import { modelSupportsReasoning } from "~/lib/reasoning";
 
@@ -20,6 +20,7 @@ export type ModelRequest = {
     apiKey: string;
     baseUrl?: string;
     model: string;
+    openAICompatible?: ProviderConfig["openAICompatible"];
 };
 
 export function createChatModel(body: ModelRequest) {
@@ -33,7 +34,7 @@ export function createChatModel(body: ModelRequest) {
                 apiKey: key,
                 baseURL: baseUrl || undefined,
             });
-            return shouldUseOpenAIResponses(provider, model, baseUrl)
+            return shouldUseOpenAIResponses(provider, model, baseUrl, body.openAICompatible)
                 ? openai.responses(model)
                 : openai.chat(model);
         }
@@ -97,8 +98,15 @@ export function createChatModel(body: ModelRequest) {
             return createOpenAI({ apiKey: key || "ollama", baseURL: baseUrl || "http://localhost:11434/v1" }).chat(model);
         case "lmstudio":
             return createOpenAI({ apiKey: key || "lmstudio", baseURL: baseUrl || "http://localhost:1234/v1" }).chat(model);
-        case "custom":
-            return createOpenAI({ apiKey: key || "custom", baseURL: baseUrl || "http://localhost:1234/v1" }).chat(model);
+        case "custom": {
+            const compatible = createOpenAI({
+                apiKey: key || "custom",
+                baseURL: baseUrl || "http://localhost:1234/v1",
+            });
+            return body.openAICompatible?.apiMode === "responses"
+                ? compatible.responses(model)
+                : compatible.chat(model);
+        }
         default:
             throw new Error(`Unsupported provider: ${provider}`);
     }
@@ -112,7 +120,10 @@ export function shouldUseOpenAIResponses(
     provider: ProviderId,
     model: string,
     baseUrl?: string,
+    openAICompatible?: ProviderConfig["openAICompatible"],
 ): boolean {
+    if (openAICompatible?.apiMode === "responses") return true;
+    if (openAICompatible?.apiMode === "chat") return false;
     if (provider !== "openai" || !modelSupportsReasoning(provider, model)) {
         return false;
     }

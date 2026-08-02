@@ -9,6 +9,7 @@ import {
 import {
     Flask,
     Play,
+    Paperclip,
     Plus,
     Sparkle,
     SpinnerGap,
@@ -26,6 +27,7 @@ import { ProviderPicker } from "~/components/ui/ProviderPicker";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { runBrowserPython } from "~/lib/pyodide";
 import { buildLocalMemoryContext } from "~/lib/memory";
+import { askUserInBrowser } from "~/lib/client-tools";
 import {
     deletePreviewSession,
     loadPreviewSession,
@@ -49,6 +51,7 @@ type RunStatus = "running" | "complete" | "error";
 type ResolvedConfig = PreviewModelConfig & {
     apiKey: string;
     baseUrl?: string;
+    openAICompatible?: import("~/lib/types").ProviderConfig["openAICompatible"];
     systemPrompt: string;
     temperature: number;
     maxTokens: number | null;
@@ -86,7 +89,40 @@ type PreviewRun = {
     output: string;
     error?: string;
     messages?: UIMessage[];
+    files: PreviewFile[];
+    uploadNotice?: string;
 };
+
+type PreviewFile = {
+    type: "file";
+    url: string;
+    mediaType: string;
+    filename: string;
+};
+
+async function fileToPreviewPart(file: File): Promise<PreviewFile> {
+    const url = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error ?? new Error("File read failed."));
+        reader.readAsDataURL(file);
+    });
+    return {
+        type: "file",
+        url,
+        mediaType: file.type || "application/octet-stream",
+        filename: file.name,
+    };
+}
+
+function fileSupportedForRun(file: PreviewFile, config: PreviewModelConfig): boolean {
+    const modalities = getModelModalities(config.model, config.provider);
+    if (file.mediaType.startsWith("image/")) return modalities.vision;
+    if (file.mediaType === "application/pdf" || !file.mediaType.startsWith("text/")) {
+        return modalities.documents;
+    }
+    return true;
+}
 
 type PreviewSession = {
     prompt: string;
@@ -145,6 +181,7 @@ function parseChatError(response: Response, fallback: string): Promise<string> {
 export const PreviewWorkspace: FC = () => {
     const { settings, updateSettings } = useSettings();
     const [prompt, setPrompt] = useState("");
+    const [files, setFiles] = useState<PreviewFile[]>([]);
     const [runs, setRuns] = useState<PreviewRun[]>([]);
     const [session, setSession] = useState<PreviewSession | null>(null);
     const [activeTab, setActiveTab] = useState<string | null>(null);
@@ -158,6 +195,7 @@ export const PreviewWorkspace: FC = () => {
             ...config,
             apiKey: provider?.apiKey?.trim() || localProviderKey(config.provider),
             baseUrl: provider?.baseUrl?.trim() || undefined,
+            openAICompatible: provider?.openAICompatible,
             systemPrompt: settings.chat.systemPrompt,
             temperature: settings.chat.temperature,
             maxTokens: settings.chat.maxTokens,
@@ -289,6 +327,10 @@ export const PreviewWorkspace: FC = () => {
             config: resolveConfig(config),
             status: "running",
             output: "",
+            files: files.filter((file) => fileSupportedForRun(file, config)),
+            uploadNotice: files.some((file) => !fileSupportedForRun(file, config))
+                ? "Some files were skipped because this model does not support their modality."
+                : undefined,
         }));
 
         setConfigurationError(null);
@@ -302,6 +344,12 @@ export const PreviewWorkspace: FC = () => {
         });
         setRuns(primaryRuns);
         setActiveTab(primaryRuns[0]?.id ?? null);
+    };
+
+    const addFiles = async (selected: FileList | null) => {
+        if (!selected?.length) return;
+        const next = await Promise.all([...selected].map(fileToPreviewPart));
+        setFiles((current) => [...current, ...next].slice(0, 8));
     };
 
     const markComplete = (runId: string, messages: UIMessage[]) => {
@@ -354,6 +402,7 @@ export const PreviewWorkspace: FC = () => {
             config: session.fusionConfig,
             status: "running",
             output: "",
+            files: [],
         };
         setSession((current) =>
             current ? { ...current, fusionStarted: true } : current,
@@ -534,6 +583,11 @@ export const PreviewWorkspace: FC = () => {
                     config={activeDraftConfig}
                     onConfigChange={updateDraftConfig}
                     onAddModel={addDraftModel}
+                    files={files}
+                    onFiles={addFiles}
+                    onRemoveFile={(filename) =>
+                        setFiles((current) => current.filter((file) => file.filename !== filename))
+                    }
                 />
             </div>
         </div>
@@ -702,6 +756,9 @@ const PreviewComposer: FC<{
     config: PreviewModelConfig | undefined | null;
     onConfigChange: (patch: Partial<PreviewModelConfig>) => void;
     onAddModel: () => void;
+    files: PreviewFile[];
+    onFiles: (files: FileList | null) => void;
+    onRemoveFile: (filename: string) => void;
 }> = ({
     prompt,
     onPromptChange,
@@ -710,6 +767,9 @@ const PreviewComposer: FC<{
     configurationError,
     config,
     onConfigChange,
+    files,
+    onFiles,
+    onRemoveFile,
 }) => {
     const { settings } = useSettings();
     const providerReady = config
@@ -737,7 +797,35 @@ const PreviewComposer: FC<{
                     placeholder="Send a message to the selected models…"
                     className="min-h-16 w-full resize-none bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground"
                 />
+                {files.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 px-2 pb-2">
+                        {files.map((file) => (
+                            <button
+                                key={file.filename}
+                                type="button"
+                                onClick={() => onRemoveFile(file.filename)}
+                                className="max-w-48 truncate rounded-full border border-border/70 bg-background px-2 py-1 text-[10px] text-muted-foreground hover:bg-accent"
+                                title="Remove file"
+                            >
+                                {file.filename} ×
+                            </button>
+                        ))}
+                    </div>
+                ) : null}
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5 px-1">
+                    <label className="inline-flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground">
+                        <Paperclip size={15} />
+                        <input
+                            type="file"
+                            multiple
+                            accept="image/*,.pdf,.txt,.md,.csv,.json,.js,.jsx,.ts,.tsx,.css,.html,.xml,.yaml,.yml"
+                            className="sr-only"
+                            onChange={(event) => {
+                                void onFiles(event.target.files);
+                                event.currentTarget.value = "";
+                            }}
+                        />
+                    </label>
                     {config ? (
                         <ProviderPicker
                             value={config.provider}
@@ -840,7 +928,7 @@ const PreviewRunPanel: FC<{
                     }
                     return response;
                 },
-                prepareSendMessagesRequest: async (options) => {
+        prepareSendMessagesRequest: async (options) => {
                     const latestText = [...options.messages]
                         .reverse()
                         .find((message) => message.role === "user")
@@ -854,6 +942,7 @@ const PreviewRunPanel: FC<{
                         provider: run.config.provider as ProviderId,
                         apiKey: run.config.apiKey,
                         baseUrl: run.config.baseUrl,
+                        openAICompatible: run.config.openAICompatible,
                         systemPrompt: run.config.systemPrompt,
                         temperature: run.config.temperature,
                         maxTokens: run.config.maxTokens,
@@ -873,16 +962,33 @@ const PreviewRunPanel: FC<{
         [run.config],
     );
     const chatRef = useRef<ReturnType<typeof useChat> | null>(null);
-    const pendingPythonCalls = useRef(0);
+    const pendingClientCalls = useRef(0);
     const chat = useChat({
         id: run.id,
         transport,
         messages: run.messages,
         onToolCall: ({ toolCall }) => {
-            if (toolCall.toolName !== "run_python") return;
-            pendingPythonCalls.current += 1;
-            const input = toolCall.input as { code?: string };
-            void runBrowserPython(input.code ?? "").then(
+            if (![
+                "run_python",
+                "run_code",
+                "ask_user",
+            ].includes(toolCall.toolName)) return;
+            pendingClientCalls.current += 1;
+            const input = toolCall.input as {
+                code?: string;
+                question?: string;
+                questionType?: "single" | "multiple" | "short";
+                options?: string[];
+            };
+            const task =
+                toolCall.toolName === "ask_user"
+                    ? askUserInBrowser({
+                          question: input.question ?? "Please provide more information.",
+                          questionType: input.questionType,
+                          options: input.options,
+                      })
+                    : runBrowserPython(input.code ?? "");
+            void task.then(
                 (output) => {
                     const addToolOutput = chatRef.current
                         ?.addToolOutput as unknown as
@@ -894,7 +1000,7 @@ const PreviewRunPanel: FC<{
                           }) => void)
                         | undefined;
                     addToolOutput?.({
-                        tool: "run_python",
+                        tool: toolCall.toolName,
                         toolCallId: toolCall.toolCallId,
                         state: "output-available",
                         output,
@@ -911,7 +1017,7 @@ const PreviewRunPanel: FC<{
                           }) => void)
                         | undefined;
                     addToolOutput?.({
-                        tool: "run_python",
+                        tool: toolCall.toolName,
                         toolCallId: toolCall.toolCallId,
                         state: "output-error",
                         errorText:
@@ -923,11 +1029,11 @@ const PreviewRunPanel: FC<{
             );
         },
         sendAutomaticallyWhen: ({ messages }) => {
-            if (pendingPythonCalls.current === 0) return false;
+            if (pendingClientCalls.current === 0) return false;
             if (!lastAssistantMessageIsCompleteWithToolCalls({ messages })) {
                 return false;
             }
-            pendingPythonCalls.current = 0;
+            pendingClientCalls.current = 0;
             return true;
         },
         onFinish: ({ messages, isError }) => {
@@ -945,7 +1051,7 @@ const PreviewRunPanel: FC<{
     useEffect(() => {
         if (sentRef.current || run.messages?.length) return;
         sentRef.current = true;
-        void chat.sendMessage({ text: run.prompt });
+        void chat.sendMessage({ text: run.prompt, files: run.files });
     }, [chat, run.messages?.length, run.prompt]);
 
     return (

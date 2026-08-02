@@ -39,6 +39,7 @@ import {
     CheckCircle,
     Desktop,
     Brain,
+    CloudArrowUp,
     Flask,
     GearSix,
     Globe,
@@ -63,6 +64,7 @@ type SettingsSection =
     | "experimental"
     | "memory"
     | "connectors"
+    | "cloud"
     | "appearance";
 
 type ThreadItem = { id: string; title: string };
@@ -267,6 +269,7 @@ function SettingsPanel() {
         { id: "experimental", label: "Experimental", icon: Flask },
         { id: "memory", label: "Memory", icon: Brain },
         { id: "connectors", label: "Connectors Beta", icon: HardDrives },
+        { id: "cloud", label: "Cloud Storage Beta", icon: CloudArrowUp },
         { id: "appearance", label: "Theme", icon: Sun },
     ];
 
@@ -466,6 +469,8 @@ function SettingsPanel() {
 
             {section === "connectors" && <ConnectorsSection />}
 
+            {section === "cloud" && <CloudStorageSection />}
+
             {section === "appearance" && (
                 <div className="grid grid-cols-3 gap-2">
                     {(
@@ -649,6 +654,7 @@ const SEARCH_CONNECTOR_OPTIONS: Array<{
 function ConnectorsSection() {
     const { settings, updateSettings } = useSettings();
     const [status, setStatus] = useState<Record<string, string>>({});
+    const [helpKind, setHelpKind] = useState<ConnectorKind | null>(null);
     const connectors = settings.connectors ?? [];
 
     const getConnector = (kind: ConnectorKind): ConnectorConfig =>
@@ -711,16 +717,26 @@ function ConnectorsSection() {
                     <div key={option.kind} className="flex flex-col gap-2 rounded-xl border border-border/70 p-2.5">
                         <div className="flex items-center justify-between gap-2">
                             <span className="text-xs font-semibold">{option.label}</span>
-                            <button
-                                type="button"
-                                onClick={() => saveConnector({ ...connector, enabled: !connector.enabled }, true)}
-                                className={cn(
-                                    "rounded-md px-2 py-1 text-[10px] font-medium",
-                                    connector.enabled ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
-                                )}
-                            >
-                                {connector.enabled ? "On" : "Off"}
-                            </button>
+                            <div className="flex items-center gap-1">
+                                <button
+                                    type="button"
+                                    onClick={() => setHelpKind(helpKind === option.kind ? null : option.kind)}
+                                    className="flex size-6 items-center justify-center rounded-md border border-border text-[11px] font-semibold text-muted-foreground hover:bg-accent hover:text-foreground"
+                                    aria-label={`How to get a ${option.label} key`}
+                                >
+                                    ?
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => saveConnector({ ...connector, enabled: !connector.enabled }, true)}
+                                    className={cn(
+                                        "rounded-md px-2 py-1 text-[10px] font-medium",
+                                        connector.enabled ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
+                                    )}
+                                >
+                                    {connector.enabled ? "On" : "Off"}
+                                </button>
+                            </div>
                         </div>
                         <div className="flex gap-1.5">
                             <Input
@@ -735,12 +751,78 @@ function ConnectorsSection() {
                             </Button>
                         </div>
                         {status[option.kind] ? <p className="text-[10px] text-muted-foreground">{status[option.kind]}</p> : null}
+                        {helpKind === option.kind ? (
+                            <ConnectorHelp kind={option.kind} />
+                        ) : null}
                     </div>
                 );
             })}
             <div className="rounded-xl border border-dashed border-border/70 p-3 text-[11px] leading-relaxed text-muted-foreground">
                 <strong className="text-foreground">GitHub, Supabase, PostgreSQL, S3:</strong> connect these through a permission-scoped Remote MCP server in MCP Beta. Direct database/service-role proxying is intentionally blocked.
             </div>
+        </div>
+    );
+}
+
+function ConnectorHelp({
+    kind,
+}: {
+    kind: Extract<ConnectorKind, "tavily" | "brave" | "exa" | "parallel">;
+}) {
+    const details = {
+        tavily: {
+            text: "Create an API key in Tavily, then paste it here. Requests use Bearer authentication and basic search defaults.",
+            url: "https://app.tavily.com/home",
+            label: "Open Tavily dashboard",
+        },
+        brave: {
+            text: "Create a Brave Search subscription token. Requests use the X-Subscription-Token header and rate-limit-safe result counts.",
+            url: "https://api.search.brave.com/app/keys",
+            label: "Open Brave API keys",
+        },
+        exa: {
+            text: "Create an Exa API key. Results include semantic matches and highlights for cited research.",
+            url: "https://dashboard.exa.ai/api-keys",
+            label: "Open Exa API keys",
+        },
+        parallel: {
+            text: "Create a Parallel API key. The connector uses advanced search with bounded result counts and citations.",
+            url: "https://platform.parallel.ai/settings/api-keys",
+            label: "Open Parallel API keys",
+        },
+    }[kind];
+    return (
+        <div className="rounded-lg border border-primary/20 bg-primary/5 p-2 text-[10px] leading-relaxed text-muted-foreground">
+            <p>{details.text}</p>
+            <a
+                href={details.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 inline-block font-medium text-primary underline-offset-2 hover:underline"
+            >
+                {details.label} ↗
+            </a>
+        </div>
+    );
+}
+
+function CloudStorageSection() {
+    return (
+        <div className="flex flex-col gap-3">
+            <div>
+                <h3 className="text-xs font-semibold">
+                    Cloud storage <span className="text-[9px] uppercase tracking-wider text-primary">Beta</span>
+                </h3>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                    Optional zero-cost backup is being prepared with Google Drive&apos;s private app-data space. Local IndexedDB remains the source of truth.
+                </p>
+            </div>
+            <div className="rounded-xl border border-dashed border-border/70 p-3 text-[11px] leading-relaxed text-muted-foreground">
+                Drive OAuth uses user consent and a narrow app-data scope. No server credential or production sync is enabled yet.
+            </div>
+            <Button type="button" size="sm" variant="outline" disabled className="rounded-xl">
+                Connect Google Drive (Beta)
+            </Button>
         </div>
     );
 }
@@ -960,6 +1042,12 @@ function KeysSection() {
             PROVIDER_DEFAULTS[active].baseUrl ||
             "",
     );
+    const [draftCompatible, setDraftCompatible] = useState(
+        settings.providers[active]?.openAICompatible ?? {
+            apiMode: "chat" as const,
+            reasoningWithTools: "none" as const,
+        },
+    );
     const [testing, setTesting] = useState(false);
     const [status, setStatus] = useState<{
         kind: "idle" | "ok" | "error";
@@ -970,6 +1058,12 @@ function KeysSection() {
         const cfg = settings.providers[active];
         setDraftKey(cfg?.apiKey || "");
         setDraftUrl(cfg?.baseUrl || PROVIDER_DEFAULTS[active].baseUrl || "");
+        setDraftCompatible(
+            cfg?.openAICompatible ?? {
+                apiMode: "chat",
+                reasoningWithTools: "none",
+            },
+        );
         setStatus({ kind: "idle" });
     }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1000,6 +1094,7 @@ function KeysSection() {
             apiKey: storedKey,
             baseUrl: draftUrl || PROVIDER_DEFAULTS[active].baseUrl,
             enabled: true,
+            openAICompatible: active === "custom" ? draftCompatible : undefined,
         });
         const nextModel = resolveModel(
             active,
@@ -1096,6 +1191,44 @@ function KeysSection() {
                     className="h-9 rounded-xl font-mono text-xs"
                 />
             </div>
+
+            {active === "custom" ? (
+                <div className="flex flex-col gap-2 rounded-xl border border-border/70 bg-muted/20 p-2.5">
+                    <p className="text-[11px] font-medium">OpenAI-compatible API</p>
+                    <label className="text-[10px] text-muted-foreground">
+                        API mode
+                        <select
+                            value={draftCompatible.apiMode}
+                            onChange={(event) =>
+                                setDraftCompatible((current) => ({
+                                    ...current,
+                                    apiMode: event.target.value as "chat" | "responses",
+                                }))
+                            }
+                            className="mt-1 h-8 w-full rounded-lg border border-border bg-background px-2 text-xs outline-none"
+                        >
+                            <option value="chat">Chat Completions</option>
+                            <option value="responses">Responses API</option>
+                        </select>
+                    </label>
+                    <label className="text-[10px] text-muted-foreground">
+                        Reasoning with tools
+                        <select
+                            value={draftCompatible.reasoningWithTools}
+                            onChange={(event) =>
+                                setDraftCompatible((current) => ({
+                                    ...current,
+                                    reasoningWithTools: event.target.value as "none" | "allow",
+                                }))
+                            }
+                            className="mt-1 h-8 w-full rounded-lg border border-border bg-background px-2 text-xs outline-none"
+                        >
+                            <option value="none">Disable safely (recommended)</option>
+                            <option value="allow">Allow if endpoint supports it</option>
+                        </select>
+                    </label>
+                </div>
+            ) : null}
 
             <Button
                 type="button"

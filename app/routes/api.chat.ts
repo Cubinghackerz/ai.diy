@@ -53,6 +53,10 @@ interface ChatRequestBody {
         count?: number;
     };
     memoryContext?: string;
+    openAICompatible?: {
+        apiMode: "chat" | "responses";
+        reasoningWithTools: "none" | "allow";
+    };
 }
 
 function imagePrompt(messages: UIMessage[]): string {
@@ -184,7 +188,13 @@ export async function action({ request }: ActionFunctionArgs) {
         const toolsEnabled = Object.keys(tools).length > 0;
         const safeProviderOptions =
             toolsEnabled &&
-            !shouldUseOpenAIResponses(body.provider, body.model, body.baseUrl) &&
+            body.openAICompatible?.reasoningWithTools !== "allow" &&
+            !shouldUseOpenAIResponses(
+                body.provider,
+                body.model,
+                body.baseUrl,
+                body.openAICompatible,
+            ) &&
             providerOptions?.openai
                 ? {
                       ...providerOptions,

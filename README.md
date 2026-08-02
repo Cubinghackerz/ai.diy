@@ -1,5 +1,10 @@
 # ai.diy <sup>BETA</sup>
 
+[![Clone repository](https://img.shields.io/badge/Clone-GitHub-181717?logo=github)](https://github.com/Cubinghackerz/ai.diy)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FCubinghackerz%2Fai.diy&project-name=ai-diy-preview)
+
+> Vercel deployments from this project are intended for Preview testing. Do not attach a production domain or use `vercel --prod` for the beta workspace.
+
 > Open-source, BYOK AI chat — self-host on any Node server or Docker. **No API keys required on the server.**
 
 Built with [assistant-ui](https://assistant-ui.com), React Router v8, the Vercel AI SDK, and Tailwind CSS v4.
@@ -19,12 +24,16 @@ ai.diy is a privacy-first, bring-your-own-key chat interface. It proxies the use
 - **Tool-capable model picker** — Defaults to the live catalog and keeps the user's selection visible across provider switches; searchable command-style picker.
 - **Reasoning** — One compact input-bar selector exposes the supported effort levels for the selected model; provider-specific `providerOptions` are used for OpenAI, Anthropic, Gemini, xAI, DeepSeek, Bedrock, and Mistral.
 - **Image models** — Vision-capable models accept image attachments. Image-generation models are marked in the picker, expose supported size/count controls, and return generated images inline in chat.
+- **Voice input** — Supported browsers expose Web Speech dictation in the composer; unsupported browsers hide the control instead of failing.
 - **Streaming** — Real-time tokens, tool calls, generated files, and reasoning where the selected provider exposes it via the AI SDK UI message stream.
 - **Experimental multi-model preview** — An opt-in Settings → Experimental workspace runs up to three models in parallel and can synthesize their completed outputs with a fourth model. Each tab retains its own tool calls, reasoning, images, and artifacts.
+- **File inspection** — Vision/document-capable models receive supported PDF, image, text, CSV, JSON, office, and source files with MIME-aware gating; unsupported files are removed and explained on model switch.
 - **Auto thread titles** — New chat, first message, the model generates a short title; falls back to a slug if generation fails or the key is missing.
 - **Local-first** — Settings in localStorage; chats + messages in IndexedDB.
 - **Canvas** — Generated files, HTML, code, and SVG artifacts are saved per chat in IndexedDB, reopen from tool results or the bottom-right Artifacts button, and resize up to 50% of the viewport.
 - **Local memory** — Chat facts and imported memory exports are indexed in browser IndexedDB and only the top relevant 4,000 characters are sent with a request. API keys and full archives are never included automatically.
+- **Skills** — Import local `SKILL.md` files in Settings → Skills and type `/` in the composer to select one for the next request. Skill creation uses the `skill_architect` contract.
+- **Cloud storage Beta** — Google Drive app-data backup is listed as a consent-based, client-only Beta; local IndexedDB remains the source of truth.
 - **Dark / light / system theme**.
 
 ## Supported providers
@@ -80,7 +89,7 @@ The browser Python tool uses Pyodide. The first Python run downloads the browser
 Use this prompt with a coding agent from the project folder when you want it to run ai.diy locally:
 
 ```text
-You are working on the ai.diy repository at /Users/nirneet/Documents/GitHub/PrismiumLite.
+You are working on the ai.diy repository in the current workspace.
 
 Run the app locally and verify it before making changes:
 1. Inspect package.json and the current git status.

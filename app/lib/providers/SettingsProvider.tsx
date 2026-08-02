@@ -60,6 +60,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                         ...parsed.providers,
                     },
                     connectors: parsed.connectors ?? [],
+                    customSkills: parsed.customSkills ?? [],
                 });
             }
         } catch {
