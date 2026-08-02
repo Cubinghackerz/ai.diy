@@ -921,6 +921,8 @@ const PreviewRunPanel: FC<{
     callbacksRef.current = { onComplete, onError };
     const sentRef = useRef(false);
     const { settings } = useSettings();
+    const settingsRef = useRef(settings);
+    settingsRef.current = settings;
     const memoryEnabled = settings.memoryEnabled !== false;
     const modalities = getModelModalities(run.config.model, run.config.provider);
     const adapters = useMemo(
@@ -1002,7 +1004,9 @@ const PreviewRunPanel: FC<{
                           options: input.options,
                       })
                     : toolCall.toolName === "memory"
-                      ? readLocalMemory(input.query)
+                      ? settingsRef.current.memoryEnabled !== false
+                          ? readLocalMemory(input.query)
+                          : Promise.resolve("Memory is disabled for this chat.")
                       : runBrowserPython(input.code ?? "");
             void task.then(
                 (output) => {

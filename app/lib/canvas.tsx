@@ -14,6 +14,7 @@ import {
     useContext,
     type ReactNode,
 } from "react";
+import type { ArtifactContentEncoding } from "~/lib/artifacts";
 
 export type ArtifactKind = "html" | "python" | "code" | "file";
 
@@ -22,9 +23,10 @@ export interface Artifact {
     kind: ArtifactKind;
     title: string;
     language?: string;
-    content: string;       // code/HTML/text content
+    content: string;       // code/HTML/text content, or encoded binary data
     output?: string;       // execution output (for python)
     mimeType?: string;     // for file downloads
+    contentEncoding?: ArtifactContentEncoding;
     filename?: string;     // for file downloads
     /** Stable content identity used to reopen, not duplicate, an artifact. */
     sourceKey?: string;
@@ -129,7 +131,8 @@ export function CanvasProvider({ children }: { children: ReactNode }) {
     ) => {
         const scopeId = options?.scopeId ?? artifactScopeRef.current;
         const sourceKey =
-            a.sourceKey ?? `${a.kind}:${a.filename ?? a.title}:${a.content}`;
+            a.sourceKey ??
+            `${a.kind}:${a.filename ?? a.title}:${a.contentEncoding ?? "text"}:${a.content}`;
         const existing = artifactsRef.current.find(
             (artifact) =>
                 artifact.scopeId === scopeId && artifact.sourceKey === sourceKey,

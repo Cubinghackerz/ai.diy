@@ -212,7 +212,7 @@ function ChatsPanel({
                         haptic();
                         onNewChat();
                     }}
-                    className="h-9 w-full justify-center gap-2 rounded-xl text-xs font-medium outline-none focus-visible:ring-0 focus-visible:border-border"
+                    className="h-9 flex-1 justify-center gap-2 rounded-xl text-xs font-medium outline-none focus-visible:ring-0 focus-visible:border-border"
                 >
                     <Plus size={15} weight="bold" data-icon="inline-start" />
                     New Thread
@@ -235,13 +235,14 @@ function ChatsPanel({
                         updateSettings({ memoryEnabled: !memoryEnabled });
                     }}
                     className={cn(
-                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border text-xs font-medium outline-none transition-colors focus-visible:border-border focus-visible:ring-0",
+                        "flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border px-2.5 text-xs font-medium outline-none transition-colors focus-visible:border-border focus-visible:ring-0",
                         memoryEnabled
                             ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15"
                             : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
                     )}
                 >
                     <Brain size={16} weight={memoryEnabled ? "fill" : "regular"} />
+                    <span>Memory</span>
                 </button>
             </div>
 

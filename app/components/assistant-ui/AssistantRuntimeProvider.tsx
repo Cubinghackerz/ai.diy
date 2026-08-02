@@ -149,13 +149,15 @@ export function AssistantRuntimeProvider({
             };
             const task =
                 toolCall.toolName === "ask_user"
-                     ? askUserInBrowser({
+                    ? askUserInBrowser({
                           question: input.question ?? "Please provide more information.",
                           questionType: input.questionType,
                           options: input.options,
                       })
                     : toolCall.toolName === "memory"
-                      ? readLocalMemory(input.query)
+                      ? settingsRef.current.memoryEnabled !== false
+                          ? readLocalMemory(input.query)
+                          : Promise.resolve("Memory is disabled for this chat.")
                       : runBrowserPython(input.code ?? "");
             void task.then(
                 (output) => {

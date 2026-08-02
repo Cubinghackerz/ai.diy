@@ -41,6 +41,41 @@ const USEFUL_PACKAGE_ALIASES: Record<string, string> = {
     requests: "requests",
 };
 
+// These useful file/document packages are not bundled in every Pyodide
+// release. Install them lazily from PyPI when the user's code imports them.
+const MICROPIP_PACKAGE_ALIASES: Record<string, string> = {
+    openpyxl: "openpyxl",
+    xlsxwriter: "XlsxWriter",
+    docx: "python-docx",
+    pptx: "python-pptx",
+    reportlab: "reportlab",
+    fpdf: "fpdf2",
+};
+
+const micropipInstallPromises = new Map<string, Promise<void>>();
+
+async function installWithMicropip(
+    pyodide: PyodideRuntime,
+    packageName: string,
+): Promise<void> {
+    const existing = micropipInstallPromises.get(packageName);
+    if (existing) return existing;
+
+    const install = (async () => {
+        await pyodide.loadPackage?.("micropip");
+        await pyodide.runPythonAsync(`
+import micropip
+await micropip.install(${JSON.stringify(packageName)})
+        `);
+    })()
+        .catch((error) => {
+            micropipInstallPromises.delete(packageName);
+            throw error;
+        });
+    micropipInstallPromises.set(packageName, install);
+    return install;
+}
+
 function loadPyodide(): Promise<PyodideRuntime> {
     if (pyodidePromise) return pyodidePromise;
 
@@ -98,26 +133,36 @@ export async function runBrowserPython(code: string): Promise<string> {
         // Alias loading below handles common import names such as sklearn and
         // PIL. Unknown imports are reported by Python with a useful traceback.
     }
-    const importedModules = [...source.matchAll(/^\s*(?:from|import)\s+([A-Za-z0-9_]+)/gm)]
-        .map((match) => match[1])
-        .filter((module): module is string => Boolean(module));
-    const usefulPackages = [
+    const importedModules = [
         ...new Set(
-            importedModules
-                .map((module) => USEFUL_PACKAGE_ALIASES[module])
-                .filter((packageName): packageName is string => Boolean(packageName)),
+            [...source.matchAll(/^\s*(?:from|import)\s+([A-Za-z0-9_]+)/gm)]
+                .map((match) => match[1])
+                .filter((module): module is string => Boolean(module)),
         ),
     ];
-    for (const packageName of usefulPackages) {
+    for (const module of importedModules) {
+        const packageName = USEFUL_PACKAGE_ALIASES[module];
+        if (!packageName) continue;
         try {
             await pyodide.loadPackage?.(packageName);
         } catch {
-            // Let Python return the import traceback if this optional package
-            // is unavailable in the selected Pyodide release.
+            const micropipPackage = MICROPIP_PACKAGE_ALIASES[module];
+            if (!micropipPackage) {
+                // Let Python return the import traceback if this optional
+                // package is unavailable in the selected Pyodide release.
+                continue;
+            }
+            try {
+                await installWithMicropip(pyodide, micropipPackage);
+            } catch (error) {
+                const reason = error instanceof Error ? error.message : String(error);
+                return `Python error: The ${module} library could not be loaded automatically. Check the browser network connection and retry. ${reason.slice(0, 500)}`;
+            }
         }
     }
 
     const result = await pyodide.runPythonAsync(`
+import ast
 import contextlib
 import io
 import json
@@ -126,8 +171,22 @@ import traceback
 _prismium_stdout = io.StringIO()
 _prismium_stderr = io.StringIO()
 try:
+    _prismium_code = compile(
+        ${JSON.stringify(source)},
+        "<user>",
+        "exec",
+        flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
+    )
+
+    async def _prismium_run():
+        # eval returns the coroutine produced by PyCF_ALLOW_TOP_LEVEL_AWAIT;
+        # exec discards it and causes unawaited-coroutine warnings.
+        _prismium_coroutine = eval(_prismium_code, globals())
+        if _prismium_coroutine is not None:
+            await _prismium_coroutine
+
     with contextlib.redirect_stdout(_prismium_stdout), contextlib.redirect_stderr(_prismium_stderr):
-        exec(${JSON.stringify(source)}, globals())
+        await _prismium_run()
     _prismium_result = {
         "stdout": _prismium_stdout.getvalue(),
         "stderr": _prismium_stderr.getvalue(),

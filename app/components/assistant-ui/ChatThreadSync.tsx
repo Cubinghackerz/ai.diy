@@ -10,7 +10,7 @@ import {
     loadThreadUIMessages,
     replaceThreadMessages,
 } from "~/lib/chat-store";
-import { ARTIFACT_MARKER } from "~/lib/artifacts";
+import { ARTIFACT_MARKER, type ArtifactContentEncoding } from "~/lib/artifacts";
 import { useCanvas, type ArtifactKind } from "~/lib/canvas";
 import {
     getArtifactsForScope,
@@ -40,7 +40,11 @@ function extractArtifactFromText(text: string) {
         const content = String(parsed.content ?? "");
         const kind = mapArtifactKind(String(parsed.kind ?? "file"));
         const mimeType = parsed.mimeType ? String(parsed.mimeType) : undefined;
-        return { kind, title, filename, content, mimeType };
+        const contentEncoding =
+            parsed.contentEncoding === "base64" || parsed.contentEncoding === "hex"
+                ? (parsed.contentEncoding as ArtifactContentEncoding)
+                : undefined;
+        return { kind, title, filename, content, mimeType, contentEncoding };
     } catch {
         return null;
     }
@@ -95,6 +99,7 @@ export function ChatThreadSync({
                         filename: artifact.filename,
                         content: artifact.content,
                         mimeType: artifact.mimeType,
+                        contentEncoding: artifact.contentEncoding,
                         language: artifact.language,
                         output: artifact.output,
                         sourceKey: artifact.sourceKey,
@@ -210,7 +215,8 @@ export function ChatThreadSync({
                         filename: artifact.filename,
                         content: artifact.content,
                         mimeType: artifact.mimeType,
-                        sourceKey: `${artifact.kind}:${artifact.filename}:${artifact.content}`,
+                        contentEncoding: artifact.contentEncoding,
+                        sourceKey: `${artifact.kind}:${artifact.filename}:${artifact.contentEncoding ?? "text"}:${artifact.content}`,
                     },
                     {
                         scopeId: artifactScopeId,
@@ -221,7 +227,7 @@ export function ChatThreadSync({
                     void saveArtifactToDB(threadId, {
                         id: artifactId,
                         ...artifact,
-                        sourceKey: `${artifact.kind}:${artifact.filename}:${artifact.content}`,
+                        sourceKey: `${artifact.kind}:${artifact.filename}:${artifact.contentEncoding ?? "text"}:${artifact.content}`,
                         scopeId: threadId,
                         createdAt: Date.now(),
                     });

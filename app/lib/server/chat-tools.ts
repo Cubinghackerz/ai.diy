@@ -5,7 +5,7 @@
 
 import { tool, type Tool } from "ai";
 import { z } from "zod";
-import { ARTIFACT_MARKER } from "~/lib/artifacts";
+import { ARTIFACT_MARKER, type ArtifactContentEncoding } from "~/lib/artifacts";
 import { webSearch, type SearchEngine } from "~/lib/search";
 import { connectorSearch } from "~/lib/search/connectors";
 import type { ConnectorConfig } from "~/lib/types";
@@ -65,6 +65,7 @@ function artifactPayload(input: {
     content: string;
     kind: string;
     mimeType?: string;
+    contentEncoding?: ArtifactContentEncoding;
 }) {
     return JSON.stringify({
         [ARTIFACT_MARKER]: true,
@@ -73,6 +74,7 @@ function artifactPayload(input: {
         content: input.content,
         kind: input.kind,
         ...(input.mimeType ? { mimeType: input.mimeType } : {}),
+        ...(input.contentEncoding ? { contentEncoding: input.contentEncoding } : {}),
     });
 }
 
@@ -543,7 +545,7 @@ export async function buildChatTools(settings: ToolSettings = {}) {
     if (enablePython) {
         tools.run_python = tool({
             description:
-                "Execute Python 3 in the browser with Pyodide and return stdout or error logs. Data/analysis: numpy, pandas, scipy, sympy, scikit-learn, networkx. Plotting: matplotlib. Parsing: BeautifulSoup, lxml, regex, python-dateutil, pyyaml. File creation: openpyxl and xlsxwriter (Excel), python-docx (Word), python-pptx (PowerPoint), reportlab and fpdf2 (PDF), pillow (images), jinja2 (templates), requests (HTTP), plus the csv, json, and zipfile standard libraries. Return file bytes as hex or Base64 to hand to a file-writing tool.",
+                "Execute Python 3 in the browser with Pyodide and return stdout, stderr, or error logs. Every listed library auto-loads on first import; simply import it and never manage package installation yourself with micropip, pip, or subprocess. Top-level await is supported; do not use asyncio.run (Pyodide already runs inside an event loop), just write await at top level. Data/analysis: numpy, pandas, scipy, sympy, scikit-learn, networkx. Plotting: matplotlib. Parsing: BeautifulSoup, lxml, regex, python-dateutil, pyyaml. File creation: openpyxl and xlsxwriter (Excel), python-docx (Word), python-pptx (PowerPoint), reportlab and fpdf2 (PDF), pillow (images), jinja2 (templates), requests (HTTP), plus the csv, json, and zipfile standard libraries. Always use these real libraries instead of hand-rolling zip/XML files. For a binary file, read it back as bytes, Base64-encode it, and pass that exact string to create_file with contentEncoding set to base64 so the client delivers a valid download.",
             inputSchema: z.object({
                 code: z.string(),
                 description: z.string().optional(),
@@ -673,16 +675,17 @@ export async function buildChatTools(settings: ToolSettings = {}) {
 
     tools.create_file = tool({
         description:
-            "Create a document, code file, SVG, or interactive HTML preview in the Canvas panel. When the user asks for a downloadable file, always use this tool and cite the resulting file.",
+            "Create a document, code file, SVG, interactive HTML preview, or downloadable binary file in the Canvas panel. For binary bytes produced by run_python, pass the exact Base64 or hex string with contentEncoding set to base64 or hex; the client decodes it before download. Always use this tool for a file the user asked to download and cite the resulting file.",
         inputSchema: z.object({
             filename: z.string(),
             title: z.string(),
             content: z.string(),
             kind: z.string(),
             mimeType: z.string().optional(),
+            contentEncoding: z.enum(["base64", "hex"]).optional(),
         }),
-        execute: async ({ title, filename, content, kind, mimeType }) =>
-            artifactPayload({ title, filename, content, kind, mimeType }),
+        execute: async ({ title, filename, content, kind, mimeType, contentEncoding }) =>
+            artifactPayload({ title, filename, content, kind, mimeType, contentEncoding }),
     });
 
     tools.generate_file = tool({
@@ -694,8 +697,9 @@ export async function buildChatTools(settings: ToolSettings = {}) {
             content: z.string(),
             kind: z.string(),
             mimeType: z.string().optional(),
+            contentEncoding: z.enum(["base64", "hex"]).optional(),
         }),
-        execute: async ({ title, filename, content, kind, mimeType }) => {
+        execute: async ({ title, filename, content, kind, mimeType, contentEncoding }) => {
             if (
                 mimeType?.startsWith("image/") ||
                 /^(image|binary|blob)/i.test(kind) ||
@@ -703,7 +707,7 @@ export async function buildChatTools(settings: ToolSettings = {}) {
             ) {
                 return "No duplicate artifact was generated. The binary/image file was already created by run_python; do not Base64-encode it again unless the user explicitly asks for a separate downloadable copy.";
             }
-            return artifactPayload({ title, filename, content, kind, mimeType });
+            return artifactPayload({ title, filename, content, kind, mimeType, contentEncoding });
         },
     });
 

@@ -8,6 +8,7 @@
  */
 
 import { useCanvas } from "~/lib/canvas";
+import { decodeArtifactContent } from "~/lib/artifacts";
 import { X, Download, Code, Play, Eye, FileText, Check, Copy } from "@phosphor-icons/react";
 import { useState, useRef, useEffect } from "react";
 
@@ -15,6 +16,7 @@ export function CanvasPanel() {
     const { artifacts, activeArtifactId, canvasOpen, closeCanvas, setActiveArtifactId, canvasWidth, setCanvasWidth } = useCanvas();
     const [viewMode, setViewMode] = useState<"preview" | "code">("preview");
     const [copied, setCopied] = useState(false);
+    const [downloadError, setDownloadError] = useState<string | null>(null);
     const [isResizing, setIsResizing] = useState(false);
     const panelRef = useRef<HTMLElement>(null);
     const startXRef = useRef(0);
@@ -67,7 +69,16 @@ export function CanvasPanel() {
 
     const handleDownload = () => {
         if (!activeArtifact) return;
-        const blob = new Blob([activeArtifact.content], {
+        const binary = decodeArtifactContent(
+            activeArtifact.content,
+            activeArtifact.contentEncoding,
+        );
+        if (activeArtifact.contentEncoding && !binary) {
+            setDownloadError("The artifact bytes are invalid. Regenerate the file before downloading it.");
+            return;
+        }
+        setDownloadError(null);
+        const blob = new Blob([binary ?? activeArtifact.content], {
             type: activeArtifact.mimeType || "text/plain;charset=utf-8",
         });
         const url = URL.createObjectURL(blob);
@@ -199,6 +210,11 @@ export function CanvasPanel() {
 
             {/* Body */}
             <div className="flex-1 overflow-auto bg-background p-4">
+                {downloadError ? (
+                    <p className="mb-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">
+                        {downloadError}
+                    </p>
+                ) : null}
                 {activeArtifact?.kind === "html" && viewMode === "preview" ? (
                     <iframe
                         srcDoc={activeArtifact.content}
@@ -222,6 +238,14 @@ export function CanvasPanel() {
                                 </pre>
                             </div>
                         )}
+                    </div>
+                ) : activeArtifact?.contentEncoding ? (
+                    <div className="flex h-full flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card p-6 text-center">
+                        <FileText size={28} className="text-muted-foreground" />
+                        <p className="text-sm font-medium">Binary file ready</p>
+                        <p className="max-w-xs text-xs text-muted-foreground">
+                            Use Download to save the original file without converting its bytes.
+                        </p>
                     </div>
                 ) : (
                     <pre className="h-full w-full overflow-auto rounded-xl border border-border bg-card p-4 font-mono text-xs text-foreground leading-relaxed">

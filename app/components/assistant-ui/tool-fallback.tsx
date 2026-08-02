@@ -25,7 +25,7 @@ import {
 } from "~/components/ui/collapsible";
 import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
-import { ARTIFACT_MARKER } from "~/lib/artifacts";
+import { ARTIFACT_MARKER, decodeArtifactContent, type ArtifactContentEncoding } from "~/lib/artifacts";
 import { useCanvas, type ArtifactKind } from "~/lib/canvas";
 
 const ANIMATION_DURATION = 200;
@@ -56,6 +56,7 @@ function extractArtifact(result: string): {
   content: string;
   kind: ArtifactKind;
   mimeType?: string;
+  contentEncoding?: ArtifactContentEncoding;
 } | null {
   try {
     const parsed = JSON.parse(result) as Record<string, unknown>;
@@ -74,6 +75,10 @@ function extractArtifact(result: string): {
       content: String(parsed.content ?? ""),
       kind,
       mimeType: parsed.mimeType ? String(parsed.mimeType) : undefined,
+      contentEncoding:
+        parsed.contentEncoding === "base64" || parsed.contentEncoding === "hex"
+          ? (parsed.contentEncoding as ArtifactContentEncoding)
+          : undefined,
     };
   } catch {
     return null;
@@ -309,6 +314,7 @@ function ToolFallbackResult({
   result?: unknown;
 }) {
   const { addArtifact } = useCanvas();
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   if (result === undefined) return null;
 
   // Suppress raw JSON artifact payloads — Canvas panel shows them instead.
@@ -317,7 +323,13 @@ function ToolFallbackResult({
     const artifact = extractArtifact(result as string);
     const download = () => {
       if (!artifact) return;
-      const blob = new Blob([artifact.content], {
+      const binary = decodeArtifactContent(artifact.content, artifact.contentEncoding);
+      if (artifact.contentEncoding && !binary) {
+        setDownloadError("The artifact bytes are invalid. Regenerate the file before downloading it.");
+        return;
+      }
+      setDownloadError(null);
+      const blob = new Blob([binary ?? artifact.content], {
         type: artifact.mimeType || "text/plain;charset=utf-8",
       });
       const url = URL.createObjectURL(blob);
@@ -361,6 +373,11 @@ function ToolFallbackResult({
             <DownloadIcon className="size-3" />
             Download
           </button>
+          {downloadError ? (
+            <span className="ms-1 text-[11px] text-destructive" role="alert">
+              {downloadError}
+            </span>
+          ) : null}
         </p>
       </div>
     );
