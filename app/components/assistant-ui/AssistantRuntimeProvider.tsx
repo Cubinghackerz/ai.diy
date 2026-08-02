@@ -74,8 +74,12 @@ export function AssistantRuntimeProvider({
                     const apiKey = providerConfig?.apiKey?.trim() || "";
                     const baseUrl = providerConfig?.baseUrl?.trim() || undefined;
 
-                    const memoryContext = await buildLocalMemoryContext();
-                    const memoryAvailable = await hasLocalMemoryEntries();
+                    const memoryEnabled = s.memoryEnabled !== false;
+                    const memoryContext = memoryEnabled
+                        ? await buildLocalMemoryContext()
+                        : "";
+                    const memoryAvailable =
+                        memoryEnabled && (await hasLocalMemoryEntries());
                     return {
                         body: {
                             // Keep assistant-ui forwarded context (tools/system/etc).

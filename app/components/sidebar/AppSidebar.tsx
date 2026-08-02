@@ -178,6 +178,8 @@ function ChatsPanel({
     const [editingId, setEditingId] = useState<string | null>(null);
     const [draftTitle, setDraftTitle] = useState("");
     const cancelEditRef = useRef(false);
+    const { settings, updateSettings } = useSettings();
+    const memoryEnabled = settings.memoryEnabled !== false;
 
     const beginEditing = (thread: ThreadItem) => {
         cancelEditRef.current = false;
@@ -202,18 +204,46 @@ function ChatsPanel({
 
     return (
         <div className="flex flex-col gap-3">
-            <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                    haptic();
-                    onNewChat();
-                }}
-                className="h-9 w-full justify-center gap-2 rounded-xl text-xs font-medium outline-none focus-visible:ring-0 focus-visible:border-border"
-            >
-                <Plus size={15} weight="bold" data-icon="inline-start" />
-                New Thread
-            </Button>
+            <div className="flex items-center gap-2">
+                <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                        haptic();
+                        onNewChat();
+                    }}
+                    className="h-9 w-full justify-center gap-2 rounded-xl text-xs font-medium outline-none focus-visible:ring-0 focus-visible:border-border"
+                >
+                    <Plus size={15} weight="bold" data-icon="inline-start" />
+                    New Thread
+                </Button>
+                <button
+                    type="button"
+                    aria-pressed={memoryEnabled}
+                    aria-label={
+                        memoryEnabled
+                            ? "Memory is on. Saved memories are attached to every message."
+                            : "Memory is off. No saved memories are attached."
+                    }
+                    title={
+                        memoryEnabled
+                            ? "Memory on: saved memories are attached to every request."
+                            : "Memory off: no saved memories are attached. Click to turn on."
+                    }
+                    onClick={() => {
+                        haptic();
+                        updateSettings({ memoryEnabled: !memoryEnabled });
+                    }}
+                    className={cn(
+                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border text-xs font-medium outline-none transition-colors focus-visible:border-border focus-visible:ring-0",
+                        memoryEnabled
+                            ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15"
+                            : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
+                    )}
+                >
+                    <Brain size={16} weight={memoryEnabled ? "fill" : "regular"} />
+                </button>
+            </div>
 
             <div className="flex flex-col gap-1">
                 <div className="px-1 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -678,6 +708,8 @@ function MemorySettingsSection() {
     const [count, setCount] = useState(0);
     const [status, setStatus] = useState<string | null>(null);
     const [pastedMemory, setPastedMemory] = useState("");
+    const { settings, updateSettings } = useSettings();
+    const memoryEnabled = settings.memoryEnabled !== false;
 
     useEffect(() => {
         void getMemoryEntries().then((entries) => setCount(entries.length));
@@ -723,6 +755,16 @@ function MemorySettingsSection() {
 
     return (
         <div className="flex flex-col gap-3">
+            <ToolToggle
+                title="Attach memory to chats"
+                description={
+                    memoryEnabled
+                        ? "Saved memories are attached to every request; the AI can also read more on demand."
+                        : "No saved memories are attached. Turn on to give the AI memory."
+                }
+                checked={memoryEnabled}
+                onChange={(value) => updateSettings({ memoryEnabled: value })}
+            />
             <div>
                 <h3 className="text-xs font-semibold">Local memory</h3>
                 <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">

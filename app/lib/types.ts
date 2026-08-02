@@ -136,6 +136,7 @@ export interface AppSettings {
     searxngUrl: string;
     pythonEnabled: boolean;
     calculatorEnabled: boolean;
+    memoryEnabled: boolean;
     skillsEnabled: boolean;
     preview: PreviewSettings;
     // MCP settings
@@ -370,6 +371,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     searxngUrl: "",
     pythonEnabled: true,
     calculatorEnabled: true,
+    memoryEnabled: true,
     skillsEnabled: true,
     preview: {
         enabled: false,

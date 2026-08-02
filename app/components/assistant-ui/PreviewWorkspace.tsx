@@ -920,6 +920,8 @@ const PreviewRunPanel: FC<{
     const callbacksRef = useRef({ onComplete, onError });
     callbacksRef.current = { onComplete, onError };
     const sentRef = useRef(false);
+    const { settings } = useSettings();
+    const memoryEnabled = settings.memoryEnabled !== false;
     const modalities = getModelModalities(run.config.model, run.config.provider);
     const adapters = useMemo(
         () => ({ attachments: createAttachmentAdapter(modalities) }),
@@ -957,16 +959,19 @@ const PreviewRunPanel: FC<{
                             count: run.config.imageCount,
                         },
                         mcpServers: run.config.mcpServers,
-                        memoryContext: await buildLocalMemoryContext(),
+                        memoryContext: memoryEnabled
+                            ? await buildLocalMemoryContext()
+                            : "",
                         toolSettings: {
                             ...run.config.toolSettings,
-                            memoryAvailable: await hasLocalMemoryEntries(),
+                            memoryAvailable:
+                                memoryEnabled && await hasLocalMemoryEntries(),
                         },
                     },
                     };
                 },
             }),
-        [run.config],
+        [run.config, memoryEnabled],
     );
     const chatRef = useRef<ReturnType<typeof useChat> | null>(null);
     const pendingClientCalls = useRef(0);

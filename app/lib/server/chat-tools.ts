@@ -543,7 +543,7 @@ export async function buildChatTools(settings: ToolSettings = {}) {
     if (enablePython) {
         tools.run_python = tool({
             description:
-                "Execute Python 3 in the browser with Pyodide and return stdout or error logs. Useful imports include numpy, pandas, matplotlib, scipy, sympy, scikit-learn, pillow, networkx, BeautifulSoup, lxml, regex, python-dateutil, and pyyaml.",
+                "Execute Python 3 in the browser with Pyodide and return stdout or error logs. Data/analysis: numpy, pandas, scipy, sympy, scikit-learn, networkx. Plotting: matplotlib. Parsing: BeautifulSoup, lxml, regex, python-dateutil, pyyaml. File creation: openpyxl and xlsxwriter (Excel), python-docx (Word), python-pptx (PowerPoint), reportlab and fpdf2 (PDF), pillow (images), jinja2 (templates), requests (HTTP), plus the csv, json, and zipfile standard libraries. Return file bytes as hex or Base64 to hand to a file-writing tool.",
             inputSchema: z.object({
                 code: z.string(),
                 description: z.string().optional(),

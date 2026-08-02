@@ -14,8 +14,9 @@ const PYODIDE_VERSION = "0.26.4";
 const PYODIDE_BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
 
 // Pyodide loads these only when the user's code imports the matching module.
-// Keeping the map here makes common scientific, data, plotting, parsing, and
-// image workflows work without requiring a local Python installation.
+// Keeping the map here makes common scientific, data, plotting, parsing,
+// image, and document/file-creation workflows work without requiring a local
+// Python installation.
 const USEFUL_PACKAGE_ALIASES: Record<string, string> = {
     numpy: "numpy",
     pandas: "pandas",
@@ -30,6 +31,14 @@ const USEFUL_PACKAGE_ALIASES: Record<string, string> = {
     regex: "regex",
     dateutil: "python-dateutil",
     yaml: "pyyaml",
+    openpyxl: "openpyxl",
+    xlsxwriter: "xlsxwriter",
+    docx: "python-docx",
+    pptx: "python-pptx",
+    reportlab: "reportlab",
+    fpdf: "fpdf2",
+    jinja2: "jinja2",
+    requests: "requests",
 };
 
 function loadPyodide(): Promise<PyodideRuntime> {
