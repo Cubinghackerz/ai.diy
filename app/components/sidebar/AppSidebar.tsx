@@ -14,6 +14,7 @@ import { useSettings } from "~/lib/providers/SettingsProvider";
 import { isLocalProvider, isProviderReady } from "~/lib/setup";
 import {
     DEFAULT_MODELS,
+    FREE_SEARCH_MCP_PRESETS,
     PROVIDER_DEFAULTS,
     type CustomSkill,
     type McpServerConfig,
@@ -564,6 +565,7 @@ function SettingsPanel() {
                         Add any required request headers below; local/private targets
                         require the self-hosted opt-in environment setting.
                     </p>
+                    <FreeSearchMcpSection />
                     <div className="flex flex-col gap-1.5">
                         <Input
                             value={mcpName}
@@ -850,6 +852,95 @@ function MemorySettingsSection() {
                 </div>
             </div>
             {status ? <p className="text-[11px] text-primary">{status}</p> : null}
+        </div>
+    );
+}
+
+const FREE_SEARCH_MCP_DETAILS: Record<
+    string,
+    { description: string; tools: string }
+> = {
+    mcp_parallel_search: {
+        description: "Free web search and page fetch, no API key required. A saved Parallel connector key is attached automatically for higher rate limits.",
+        tools: "web_search · web_fetch",
+    },
+    mcp_firecrawl_keyless: {
+        description: "Free rate-limited web search, scrape, and parse. No API key required.",
+        tools: "firecrawl_search · firecrawl_scrape · firecrawl_parse",
+    },
+};
+
+function FreeSearchMcpSection() {
+    const { settings, addMcpServer, removeMcpServer } = useSettings();
+
+    const addPreset = (preset: (typeof FREE_SEARCH_MCP_PRESETS)[number]) => {
+        const parallelKey = settings.connectors.find(
+            (connector) =>
+                connector.kind === "parallel" &&
+                Boolean(connector.apiKey?.trim()),
+        )?.apiKey;
+        const headers =
+            preset.id === "mcp_parallel_search" && parallelKey
+                ? { Authorization: `Bearer ${parallelKey}` }
+                : undefined;
+        hapticConfirm();
+        addMcpServer({ ...preset, id: `mcp_${Date.now()}`, headers });
+    };
+
+    return (
+        <div className="flex flex-col gap-2 rounded-xl border border-primary/20 bg-primary/5 p-2.5">
+            <span className="text-[11px] font-semibold">Free search MCPs</span>
+            <p className="text-[10px] leading-relaxed text-muted-foreground">
+                Free hosted web search for the model, no API key. When enabled,
+                these are preferred over the built-in DuckDuckGo search.
+            </p>
+            {FREE_SEARCH_MCP_PRESETS.map((preset) => {
+                const added = settings.mcpServers.some(
+                    (server) => server.url === preset.url,
+                );
+                const details = FREE_SEARCH_MCP_DETAILS[preset.id];
+                return (
+                    <div
+                        key={preset.id}
+                        className="flex flex-col gap-1 rounded-xl border border-border/70 bg-background p-2.5"
+                    >
+                        <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-semibold">{preset.name}</span>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    hapticSelect();
+                                    if (added) {
+                                        const existing = settings.mcpServers.find(
+                                            (server) => server.url === preset.url,
+                                        );
+                                        if (existing) removeMcpServer(existing.id);
+                                    } else {
+                                        addPreset(preset);
+                                    }
+                                }}
+                                className={cn(
+                                    "rounded-md px-2 py-1 text-[10px] font-medium outline-none",
+                                    added
+                                        ? "bg-primary/15 text-primary"
+                                        : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground",
+                                )}
+                            >
+                                {added ? "Added" : "Add"}
+                            </button>
+                        </div>
+                        <p className="text-[10px] leading-relaxed text-muted-foreground">
+                            {details.description}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground/80">
+                            Tools: {details.tools}
+                        </p>
+                        <p className="truncate text-[9px] text-muted-foreground/60">
+                            {preset.url}
+                        </p>
+                    </div>
+                );
+            })}
         </div>
     );
 }

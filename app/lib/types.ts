@@ -160,6 +160,28 @@ export interface McpServerConfig {
     enabled: boolean;
 }
 
+/**
+ * Free hosted web-search MCP servers bundled with the app. No API key is
+ * required; the model is prompted to prefer these over the DuckDuckGo
+ * fallback whenever they are enabled.
+ */
+export const FREE_SEARCH_MCP_PRESETS: McpServerConfig[] = [
+    {
+        id: "mcp_parallel_search",
+        name: "Parallel Search MCP",
+        kind: "http",
+        url: "https://search.parallel.ai/mcp",
+        enabled: true,
+    },
+    {
+        id: "mcp_firecrawl_keyless",
+        name: "Firecrawl (Keyless)",
+        kind: "http",
+        url: "https://mcp.firecrawl.dev/v2/mcp",
+        enabled: true,
+    },
+];
+
 // ─── Agent & Prompt Types ────────────────────────────────────────
 
 export interface Agent {
@@ -381,7 +403,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
         primaryModels: [],
         fusionModel: null,
     },
-    mcpServers: [],
+    mcpServers: FREE_SEARCH_MCP_PRESETS,
     connectors: [],
     customSkills: [],
 };

@@ -193,6 +193,8 @@ Settings -> MCP Beta supports remote Streamable HTTP and SSE MCP servers.
 3. Optionally provide a JSON object of HTTP headers, for example `{"Authorization":"Bearer token"}`.
 4. Enable the server. Its discovered tools are namespaced before being passed to the selected model.
 
+Two free hosted web-search MCP servers are bundled by default and enabled on first run: Parallel Search MCP (`https://search.parallel.ai/mcp`, tools `web_search`/`web_fetch`) and Firecrawl Keyless (`https://mcp.firecrawl.dev/v2/mcp`, tools `firecrawl_search`/`firecrawl_scrape`/`firecrawl_parse`). No API keys are required; the model is instructed to prefer these over the built-in DuckDuckGo search. Existing installations can add them with one click from the MCP Beta panel.
+
 Remote MCP servers are contacted by the Node server for each chat request and are closed when that response finishes. Redirects are rejected. Browser-controlled Stdio MCP execution is disabled because it would permit arbitrary host command execution. MCP OAuth authorization flows and connection pooling are not implemented.
 
 ### Cloud Storage
