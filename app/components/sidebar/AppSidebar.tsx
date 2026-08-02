@@ -517,14 +517,14 @@ function SettingsPanel() {
 function MemorySettingsSection() {
     const [count, setCount] = useState(0);
     const [status, setStatus] = useState<string | null>(null);
+    const [pastedMemory, setPastedMemory] = useState("");
 
     useEffect(() => {
         void getMemoryEntries().then((entries) => setCount(entries.length));
     }, []);
 
-    const importFile = async (file: File) => {
+    const importText = async (raw: string) => {
         try {
-            const raw = await file.text();
             let payload: unknown = raw;
             try {
                 payload = JSON.parse(raw);
@@ -535,10 +535,13 @@ function MemorySettingsSection() {
             await saveMemoryEntries(entries);
             setCount((current) => current + entries.length);
             setStatus(`${entries.length} memories imported locally.`);
+            setPastedMemory("");
         } catch (error) {
             setStatus(error instanceof Error ? error.message : "Import failed.");
         }
     };
+
+    const importFile = async (file: File) => importText(await file.text());
 
     const copyPrompt = async () => {
         await navigator.clipboard.writeText(UNIVERSAL_MEMORY_EXPORT_PROMPT);
@@ -590,6 +593,24 @@ function MemorySettingsSection() {
                     />
                 </label>
             </div>
+            <textarea
+                value={pastedMemory}
+                onChange={(event) => setPastedMemory(event.target.value)}
+                placeholder='Paste exported JSON or a concise memory list here…'
+                rows={4}
+                className="w-full resize-y rounded-xl border border-border bg-background px-3 py-2 text-xs outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
+                aria-label="Paste memory export"
+            />
+            <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!pastedMemory.trim()}
+                onClick={() => void importText(pastedMemory)}
+                className="self-start rounded-xl"
+            >
+                Import pasted memory
+            </Button>
             <div className="flex items-center justify-between rounded-xl border border-border/70 px-3 py-2 text-xs">
                 <span>{count} stored memories</span>
                 <div className="flex items-center gap-1">
