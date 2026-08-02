@@ -16,6 +16,7 @@ import {
 } from "react";
 import {
     DEFAULT_SETTINGS,
+    FREE_SEARCH_MCP_PRESETS,
     type AppSettings,
     type ProviderId,
     type ProviderConfig,
@@ -49,9 +50,25 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             const raw = localStorage.getItem(STORAGE_KEY);
             if (raw) {
                 const parsed = JSON.parse(raw) as Partial<AppSettings>;
+                // Free search MCPs (Parallel, Firecrawl keyless) are enabled by
+                // default even for existing installs; keep any user-added
+                // servers and avoid duplicating the same URL.
+                const storedMcpServers = parsed.mcpServers ?? [];
+                const mcpServers: McpServerConfig[] = [
+                    ...FREE_SEARCH_MCP_PRESETS.filter(
+                        (preset) =>
+                            !storedMcpServers.some(
+                                (server) =>
+                                    server.url?.trim().toLowerCase() ===
+                                    preset.url?.trim().toLowerCase(),
+                            ),
+                    ),
+                    ...storedMcpServers,
+                ];
                 setSettings({
                     ...DEFAULT_SETTINGS,
                     ...parsed,
+                    mcpServers,
                     chat: {
                         ...DEFAULT_SETTINGS.chat,
                         ...parsed.chat,
