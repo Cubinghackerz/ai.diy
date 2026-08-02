@@ -34,11 +34,10 @@ Open `http://localhost:5173`, complete the setup gate, select a provider and mod
 ### Production server
 
 ```bash
-npm run build
-npm start
+npm run build && npm start
 ```
 
-The production server uses React Router SSR and listens on the port provided by the runtime. It does not require Vercel, serverless functions, or Edge functions.
+This is the same compiled React Router SSR path used by a Vercel deployment and is the recommended way to test deployment behavior locally. It does not require Vercel, serverless functions, or Edge functions. The server listens on the port provided by the runtime; use `PORT=5173 npm start` when you want to use the same URL as the development server.
 
 ### Docker
 
@@ -261,10 +260,13 @@ Do not attach a production domain or use `npx vercel --prod` for this beta works
 
 ```bash
 npm run dev        # Development server at http://localhost:5173
-npm run build      # Production React Router build
+npm run build      # Compile the production React Router SSR build
 npm start          # Serve build/server/index.js
+PORT=5173 npm start # Serve the production build at http://localhost:5173
 npm run typecheck  # React Router type generation then TypeScript
 ```
+
+`npm run dev` uses Vite's React development runtime and HMR. It is not the same runtime as a Vercel deployment. Use `npm run build && npm start` when validating the production behavior locally.
 
 The generated React Router type files can report path-resolution diagnostics in some local environments. Run `npm run build` as the release gate and investigate any source-file diagnostics independently.
 
