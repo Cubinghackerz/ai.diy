@@ -18,6 +18,7 @@ import { CanvasProvider } from "~/lib/canvas";
 import { haptic, hapticSelect } from "~/lib/haptics";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import { useThreads } from "~/lib/hooks/useThreads";
+import { useProjects } from "~/lib/hooks/useProjects";
 import { GearSix, Sidebar as SidebarIcon } from "@phosphor-icons/react";
 import { cn } from "~/lib/utils";
 
@@ -39,7 +40,15 @@ function HomeInner() {
         createNewThread,
         deleteThread,
         updateThreadTitle,
+        setThreadProject,
+        refreshThreads,
     } = useThreads();
+    const {
+        projects,
+        createProject,
+        updateProject,
+        deleteProject,
+    } = useProjects();
     const needsSetup = useNeedsSetup();
 
     // All local UI state must stay above any early returns (Rules of Hooks).
@@ -56,12 +65,15 @@ function HomeInner() {
         [updateThreadTitle],
     );
 
-    const handleNewChat = useCallback(() => {
-        haptic();
-        void createNewThread();
-        setSidebarPanel("chats");
-        setMobileSidebarOpen(false);
-    }, [createNewThread]);
+    const handleNewChat = useCallback(
+        (projectId: string | null = null) => {
+            haptic();
+            void createNewThread("New Chat", projectId);
+            setSidebarPanel("chats");
+            setMobileSidebarOpen(false);
+        },
+        [createNewThread],
+    );
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
@@ -80,6 +92,9 @@ function HomeInner() {
     }, [handleNewChat]);
 
     const activeThread = threads.find((t) => t.id === activeThreadId);
+    const activeProject = activeThread?.projectId
+        ? projects.find((p) => p.id === activeThread.projectId)
+        : undefined;
 
     if (!loaded) {
         return (
@@ -96,6 +111,7 @@ function HomeInner() {
     const sidebar = (
         <AppSidebar
             threads={threads}
+            projects={projects}
             activeThreadId={activeThreadId}
             onSelectThread={(id) => {
                 hapticSelect();
@@ -107,6 +123,21 @@ function HomeInner() {
                 void deleteThread(id);
             }}
             onRenameThread={handleTitleChange}
+            onMoveThread={(id, projectId) => {
+                void setThreadProject(id, projectId);
+            }}
+            onCreateProject={(name, color, instructions) => {
+                void createProject(name, color, instructions);
+            }}
+            onUpdateProject={(id, patch) => {
+                void updateProject(id, patch);
+            }}
+            onDeleteProject={(id) => {
+                void (async () => {
+                    await deleteProject(id);
+                    await refreshThreads();
+                })();
+            }}
             panel={sidebarPanel}
             onPanelChange={setSidebarPanel}
         />
@@ -215,6 +246,7 @@ function HomeInner() {
             <AssistantRuntimeProvider
                 key={activeThreadId ?? "draft"}
                 threadId={activeThreadId}
+                projectInstructions={activeProject?.instructions}
             >
                 {appShell}
             </AssistantRuntimeProvider>

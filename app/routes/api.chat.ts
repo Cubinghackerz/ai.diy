@@ -35,6 +35,7 @@ interface ChatRequestBody {
     baseUrl?: string;
     systemPrompt?: string;
     system?: string;
+    projectInstructions?: string;
     temperature?: number;
     maxTokens?: number | null;
     topP?: number;
@@ -289,6 +290,7 @@ export async function action({ request }: ActionFunctionArgs) {
                 body.memoryContext,
                 body.customSkill,
                 body.subagentMode === true ? "subagent" : "main",
+                body.projectInstructions,
             ),
             ...(anthropicThinkingOn
                 ? { temperature: 1 }

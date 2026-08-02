@@ -15,12 +15,14 @@ import { isLocalProvider, isProviderReady } from "~/lib/setup";
 import {
     DEFAULT_MODELS,
     FREE_SEARCH_MCP_PRESETS,
+    PROJECT_COLORS,
     PROVIDER_DEFAULTS,
     type CustomSkill,
     type McpServerConfig,
     type ConnectorConfig,
     type ConnectorKind,
     type ModelInfo,
+    type Project,
     type PreviewModelConfig,
     type ProviderId,
 } from "~/lib/types";
@@ -39,12 +41,15 @@ import {
 import { cn } from "~/lib/utils";
 import { localProviderKey } from "~/lib/provider-credentials";
 import {
+    CaretRight,
     ChatCircleDots,
     CheckCircle,
     Desktop,
     Brain,
     CloudArrowUp,
     Flask,
+    Folder,
+    FolderPlus,
     GearSix,
     Globe,
     HardDrives,
@@ -72,24 +77,34 @@ type SettingsSection =
     | "cloud"
     | "appearance";
 
-type ThreadItem = { id: string; title: string };
+type ThreadItem = { id: string; title: string; projectId?: string | null };
 
 export function AppSidebar({
     threads,
+    projects,
     activeThreadId,
     onSelectThread,
     onNewChat,
     onDeleteThread,
     onRenameThread,
+    onMoveThread,
+    onCreateProject,
+    onUpdateProject,
+    onDeleteProject,
     panel,
     onPanelChange,
 }: {
     threads: ThreadItem[];
+    projects: Project[];
     activeThreadId: string | null;
     onSelectThread: (id: string) => void;
-    onNewChat: () => void;
+    onNewChat: (projectId?: string | null) => void;
     onDeleteThread: (id: string) => void;
     onRenameThread: (id: string, title: string) => void;
+    onMoveThread: (threadId: string, projectId: string | null) => void;
+    onCreateProject: (name: string, color: string, instructions: string) => void;
+    onUpdateProject: (id: string, patch: Partial<Project>) => void;
+    onDeleteProject: (id: string) => void;
     panel: SidebarPanel;
     onPanelChange: (panel: SidebarPanel) => void;
 }) {
@@ -148,11 +163,16 @@ export function AppSidebar({
                 {panel === "chats" ? (
                     <ChatsPanel
                         threads={threads}
+                        projects={projects}
                         activeThreadId={activeThreadId}
                         onSelectThread={onSelectThread}
                         onNewChat={onNewChat}
                         onDeleteThread={onDeleteThread}
                         onRenameThread={onRenameThread}
+                        onMoveThread={onMoveThread}
+                        onCreateProject={onCreateProject}
+                        onUpdateProject={onUpdateProject}
+                        onDeleteProject={onDeleteProject}
                     />
                 ) : (
                     <SettingsPanel />
@@ -164,22 +184,42 @@ export function AppSidebar({
 
 function ChatsPanel({
     threads,
+    projects,
     activeThreadId,
     onSelectThread,
     onNewChat,
     onDeleteThread,
     onRenameThread,
+    onMoveThread,
+    onCreateProject,
+    onUpdateProject,
+    onDeleteProject,
 }: {
     threads: ThreadItem[];
+    projects: Project[];
     activeThreadId: string | null;
     onSelectThread: (id: string) => void;
-    onNewChat: () => void;
+    onNewChat: (projectId?: string | null) => void;
     onDeleteThread: (id: string) => void;
     onRenameThread: (id: string, title: string) => void;
+    onMoveThread: (threadId: string, projectId: string | null) => void;
+    onCreateProject: (name: string, color: string, instructions: string) => void;
+    onUpdateProject: (id: string, patch: Partial<Project>) => void;
+    onDeleteProject: (id: string) => void;
 }) {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [draftTitle, setDraftTitle] = useState("");
     const cancelEditRef = useRef(false);
+    const [creatingProject, setCreatingProject] = useState(false);
+    const [newProjectName, setNewProjectName] = useState("");
+    const [newProjectColor, setNewProjectColor] = useState<string>(PROJECT_COLORS[0]);
+    const [newProjectInstructions, setNewProjectInstructions] = useState("");
+    const [projectEditingId, setProjectEditingId] = useState<string | null>(null);
+    const [projectDraftName, setProjectDraftName] = useState("");
+    const [projectDraftColor, setProjectDraftColor] = useState<string>(PROJECT_COLORS[0]);
+    const [projectDraftInstructions, setProjectDraftInstructions] = useState("");
+    const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+    const [movingId, setMovingId] = useState<string | null>(null);
     const { settings, updateSettings } = useSettings();
     const memoryEnabled = settings.memoryEnabled !== false;
 
@@ -203,6 +243,164 @@ function ChatsPanel({
         cancelEditRef.current = true;
         setEditingId(null);
     };
+
+    const beginProjectEdit = (project: Project) => {
+        setProjectEditingId(project.id);
+        setProjectDraftName(project.name);
+        setProjectDraftColor(project.color);
+        setProjectDraftInstructions(project.instructions ?? "");
+    };
+
+    const saveProjectEdit = (project: Project) => {
+        const name = projectDraftName.trim();
+        if (!name) return;
+        onUpdateProject(project.id, {
+            name,
+            color: projectDraftColor,
+            instructions: projectDraftInstructions.trim() || undefined,
+        });
+        setProjectEditingId(null);
+    };
+
+    const submitCreateProject = () => {
+        const name = newProjectName.trim();
+        if (!name) return;
+        onCreateProject(name, newProjectColor, newProjectInstructions);
+        setCreatingProject(false);
+        setNewProjectName("");
+        setNewProjectInstructions("");
+    };
+
+    const renderThreadRow = (thread: ThreadItem, isActive: boolean) => (
+        <div
+            key={thread.id}
+            role="button"
+            tabIndex={0}
+            onClick={() => {
+                if (movingId === thread.id) return;
+                hapticSelect();
+                onSelectThread(thread.id);
+            }}
+            onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onSelectThread(thread.id);
+                }
+            }}
+            className={cn(
+                "group flex cursor-pointer items-center justify-between rounded-lg px-2.5 py-2 text-xs font-medium outline-none transition-colors",
+                isActive
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+            )}
+        >
+            {editingId === thread.id ? (
+                <input
+                    autoFocus
+                    value={draftTitle}
+                    onChange={(e) => setDraftTitle(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onBlur={() => {
+                        if (cancelEditRef.current) {
+                            cancelEditRef.current = false;
+                            return;
+                        }
+                        finishEditing(thread);
+                    }}
+                    onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === "Enter") {
+                            e.preventDefault();
+                            e.currentTarget.blur();
+                        } else if (e.key === "Escape") {
+                            e.preventDefault();
+                            cancelEditing();
+                        }
+                    }}
+                    className="min-w-0 flex-1 rounded border border-input bg-background px-1.5 py-0.5 text-xs text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    aria-label={`Rename ${thread.title}`}
+                />
+            ) : movingId === thread.id ? (
+                <select
+                    autoFocus
+                    value={thread.projectId ?? ""}
+                    onChange={(e) => {
+                        const value = e.target.value;
+                        setMovingId(null);
+                        hapticSelect();
+                        onMoveThread(thread.id, value === "" ? null : value);
+                    }}
+                    onBlur={() => setMovingId(null)}
+                    onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === "Escape") {
+                            e.preventDefault();
+                            setMovingId(null);
+                        }
+                    }}
+                    className="min-w-0 flex-1 rounded border border-input bg-background px-1.5 py-0.5 text-xs text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    aria-label="Move chat to project"
+                >
+                    <option value="">No project</option>
+                    {projects.map((project) => (
+                        <option key={project.id} value={project.id}>
+                            {project.name}
+                        </option>
+                    ))}
+                </select>
+            ) : (
+                <div className="flex min-w-0 items-center gap-2">
+                    <ChatCircleDots size={14} className="shrink-0" />
+                    <span className="truncate">{thread.title}</span>
+                </div>
+            )}
+            {editingId !== thread.id && movingId !== thread.id ? (
+                <>
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            hapticSelect();
+                            setMovingId(thread.id);
+                        }}
+                        className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity outline-none hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
+                        title="Move to project"
+                        aria-label={`Move ${thread.title} to a project`}
+                    >
+                        <FolderPlus size={13} />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            hapticSelect();
+                            beginEditing(thread);
+                        }}
+                        className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity outline-none hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
+                        title="Rename chat"
+                        aria-label={`Rename ${thread.title}`}
+                    >
+                        <Pencil size={13} />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            haptic();
+                            onDeleteThread(thread.id);
+                        }}
+                        className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity outline-none hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
+                        title="Delete chat"
+                        aria-label={`Delete ${thread.title}`}
+                    >
+                        <Trash size={13} />
+                    </button>
+                </>
+            ) : null}
+        </div>
+    );
+
+    const unassignedThreads = threads.filter((t) => !t.projectId);
 
     return (
         <div className="flex flex-col gap-3">
@@ -249,104 +447,278 @@ function ChatsPanel({
             </div>
 
             <div className="flex flex-col gap-1">
-                <div className="px-1 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                    Recent Chats
+                <div className="flex items-center justify-between px-1 pb-1">
+                    <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                        Projects
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            hapticSelect();
+                            setCreatingProject((v) => !v);
+                        }}
+                        className="rounded-md p-0.5 text-muted-foreground outline-none hover:text-foreground"
+                        title="New project"
+                        aria-label="New project"
+                    >
+                        <Plus size={14} />
+                    </button>
                 </div>
-                {threads.length === 0 ? (
-                    <p className="px-1 py-6 text-center text-xs text-muted-foreground">
-                        No chats yet. Start a new thread.
-                    </p>
-                ) : (
-                    threads.map((t) => {
-                        const isActive = t.id === activeThreadId;
-                        return (
-                            <div
-                                key={t.id}
-                                role="button"
-                                tabIndex={0}
-                                onClick={() => {
-                                    hapticSelect();
-                                    onSelectThread(t.id);
-                                }}
-                                onKeyDown={(e) => {
-                                    if (e.key === "Enter" || e.key === " ") {
-                                        e.preventDefault();
-                                        onSelectThread(t.id);
-                                    }
-                                }}
-                                className={cn(
-                                    "group flex cursor-pointer items-center justify-between rounded-lg px-2.5 py-2 text-xs font-medium outline-none transition-colors",
-                                    isActive
-                                        ? "bg-accent text-foreground"
-                                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-                                )}
-                            >
-                                {editingId === t.id ? (
-                                    <input
-                                        autoFocus
-                                        value={draftTitle}
-                                        onChange={(e) => setDraftTitle(e.target.value)}
-                                        onClick={(e) => e.stopPropagation()}
-                                        onBlur={() => {
-                                            if (cancelEditRef.current) {
-                                                cancelEditRef.current = false;
-                                                return;
-                                            }
-                                            finishEditing(t);
-                                        }}
-                                        onKeyDown={(e) => {
-                                            e.stopPropagation();
-                                            if (e.key === "Enter") {
-                                                e.preventDefault();
-                                                e.currentTarget.blur();
-                                            } else if (e.key === "Escape") {
-                                                e.preventDefault();
-                                                cancelEditing();
-                                            }
-                                        }}
-                                        className="min-w-0 flex-1 rounded border border-input bg-background px-1.5 py-0.5 text-xs text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                                        aria-label={`Rename ${t.title}`}
-                                    />
-                                ) : (
-                                    <div className="flex min-w-0 items-center gap-2">
-                                        <ChatCircleDots
-                                            size={14}
-                                            className="shrink-0"
-                                        />
-                                        <span className="truncate">{t.title}</span>
-                                    </div>
-                                )}
-                                {editingId !== t.id ? (
-                                    <button
-                                        type="button"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            hapticSelect();
-                                            beginEditing(t);
-                                        }}
-                                        className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity outline-none hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
-                                        title="Rename chat"
-                                        aria-label={`Rename ${t.title}`}
-                                    >
-                                        <Pencil size={13} />
-                                    </button>
-                                ) : null}
+
+                {creatingProject ? (
+                    <div className="flex flex-col gap-1.5 rounded-xl border border-primary/25 bg-primary/5 p-2">
+                        <Input
+                            autoFocus
+                            value={newProjectName}
+                            onChange={(e) => setNewProjectName(e.target.value)}
+                            placeholder="Project name"
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    submitCreateProject();
+                                } else if (e.key === "Escape") {
+                                    e.preventDefault();
+                                    setCreatingProject(false);
+                                }
+                            }}
+                            className="h-8 rounded-lg text-xs"
+                        />
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            {PROJECT_COLORS.map((color) => (
                                 <button
                                     type="button"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        haptic();
-                                        onDeleteThread(t.id);
+                                    key={color}
+                                    onClick={() => setNewProjectColor(color)}
+                                    className={cn(
+                                        "size-4 rounded-full border-2 outline-none transition-transform",
+                                        newProjectColor === color
+                                            ? "scale-110 border-foreground"
+                                            : "border-border/60 hover:scale-110",
+                                    )}
+                                    style={{ backgroundColor: color }}
+                                    aria-label={`Project color ${color}`}
+                                />
+                            ))}
+                        </div>
+                        <textarea
+                            value={newProjectInstructions}
+                            onChange={(e) => setNewProjectInstructions(e.target.value)}
+                            placeholder="Optional project instructions (applied to every chat in the project)"
+                            rows={2}
+                            className="w-full resize-y rounded-lg border border-border bg-background px-2 py-1.5 text-[10px] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring"
+                        />
+                        <div className="flex gap-1.5">
+                            <Button
+                                type="button"
+                                size="sm"
+                                onClick={submitCreateProject}
+                                className="h-7 rounded-lg text-[10px]"
+                            >
+                                Create
+                            </Button>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setCreatingProject(false)}
+                                className="h-7 rounded-lg text-[10px]"
+                            >
+                                Cancel
+                            </Button>
+                        </div>
+                    </div>
+                ) : null}
+
+                {projects.length === 0 && !creatingProject ? (
+                    <p className="px-1 py-1 text-[11px] text-muted-foreground/70">
+                        Keep related chats together with projects.
+                    </p>
+                ) : null}
+
+                {projects.map((project) => {
+                    const isOpen = !collapsed[project.id];
+                    const isActiveProject = projectEditingId === project.id;
+                    const projectThreads = threads.filter(
+                        (t) => t.projectId === project.id,
+                    );
+                    return (
+                        <div key={project.id} className="flex flex-col gap-0.5">
+                            <div className="group flex items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-xs font-semibold text-foreground hover:bg-accent/40">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        hapticSelect();
+                                        setCollapsed((c) => ({
+                                            ...c,
+                                            [project.id]: !c[project.id],
+                                        }));
                                     }}
-                                    className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity outline-none hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
-                                    title="Delete chat"
-                                    aria-label={`Delete ${t.title}`}
+                                    aria-label={isOpen ? "Collapse project" : "Expand project"}
+                                    className="flex min-w-0 flex-1 items-center gap-1.5 outline-none"
                                 >
-                                    <Trash size={13} />
+                                    <CaretRight
+                                        size={12}
+                                        weight="bold"
+                                        className={cn(
+                                            "shrink-0 text-muted-foreground transition-transform",
+                                            isOpen ? "rotate-90" : "",
+                                        )}
+                                    />
+                                    <Folder
+                                        size={15}
+                                        weight="fill"
+                                        className="shrink-0"
+                                        color={project.color}
+                                    />
+                                    <span className="truncate">{project.name}</span>
+                                    <span className="shrink-0 rounded-full bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">
+                                        {projectThreads.length}
+                                    </span>
                                 </button>
+                                <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 hover:opacity-100 group-hover:opacity-100">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            hapticSelect();
+                                            onNewChat(project.id);
+                                        }}
+                                        className="rounded-md p-1 text-muted-foreground outline-none hover:text-foreground"
+                                        title="New chat in this project"
+                                        aria-label={`New chat in ${project.name}`}
+                                    >
+                                        <Plus size={12} />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            hapticSelect();
+                                            if (isActiveProject) {
+                                                setProjectEditingId(null);
+                                            } else {
+                                                beginProjectEdit(project);
+                                            }
+                                        }}
+                                        className="rounded-md p-1 text-muted-foreground outline-none hover:text-foreground"
+                                        title="Edit project"
+                                        aria-label={`Edit ${project.name}`}
+                                    >
+                                        <Pencil size={12} />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            haptic();
+                                            onDeleteProject(project.id);
+                                        }}
+                                        className="rounded-md p-1 text-muted-foreground outline-none hover:text-destructive"
+                                        title="Delete project (chats become unassigned)"
+                                        aria-label={`Delete ${project.name}`}
+                                    >
+                                        <Trash size={12} />
+                                    </button>
+                                </div>
                             </div>
-                        );
-                    })
+                            {isActiveProject ? (
+                                <div className="flex flex-col gap-1.5 rounded-lg border border-border/70 bg-muted/40 p-2">
+                                    <Input
+                                        autoFocus
+                                        value={projectDraftName}
+                                        onChange={(e) => setProjectDraftName(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                                e.preventDefault();
+                                                saveProjectEdit(project);
+                                            } else if (e.key === "Escape") {
+                                                e.preventDefault();
+                                                setProjectEditingId(null);
+                                            }
+                                        }}
+                                        className="h-8 rounded-lg text-xs"
+                                        aria-label="Project name"
+                                    />
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                        {PROJECT_COLORS.map((color) => (
+                                            <button
+                                                type="button"
+                                                key={color}
+                                                onClick={() => setProjectDraftColor(color)}
+                                                className={cn(
+                                                    "size-4 rounded-full border-2 outline-none",
+                                                    projectDraftColor === color
+                                                        ? "border-foreground"
+                                                        : "border-border/60",
+                                                )}
+                                                style={{ backgroundColor: color }}
+                                                aria-label={`Project color ${color}`}
+                                            />
+                                        ))}
+                                    </div>
+                                    <textarea
+                                        value={projectDraftInstructions}
+                                        onChange={(e) =>
+                                            setProjectDraftInstructions(e.target.value)
+                                        }
+                                        placeholder="Project instructions (applied to every chat in this project)"
+                                        rows={2}
+                                        className="w-full resize-y rounded-lg border border-border bg-background px-2 py-1.5 text-[10px] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring"
+                                    />
+                                    <div className="flex gap-1.5">
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            onClick={() => saveProjectEdit(project)}
+                                            className="h-7 rounded-lg text-[10px]"
+                                        >
+                                            Save
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => setProjectEditingId(null)}
+                                            className="h-7 rounded-lg text-[10px]"
+                                        >
+                                            Cancel
+                                        </Button>
+                                    </div>
+                                </div>
+                            ) : null}
+                            {isOpen ? (
+                                <div className="flex flex-col gap-0.5">
+                                    {projectThreads.length === 0 ? (
+                                        <p className="px-2 py-1.5 pl-7 text-[10px] text-muted-foreground/70">
+                                            No chats in this project yet.
+                                        </p>
+                                    ) : (
+                                        projectThreads.map((t) =>
+                                            renderThreadRow(t, t.id === activeThreadId),
+                                        )
+                                    )}
+                                </div>
+                            ) : null}
+                        </div>
+                    );
+                })}
+            </div>
+
+            <div className="flex flex-col gap-1">
+                <div className="px-1 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                    Chats
+                </div>
+                {unassignedThreads.length === 0 ? (
+                    projects.length > 0 ? (
+                        <p className="px-1 py-2 text-[11px] text-muted-foreground/70">
+                            All chats are in projects.
+                        </p>
+                    ) : (
+                        <p className="px-1 py-6 text-center text-xs text-muted-foreground">
+                            No chats yet. Start a new thread.
+                        </p>
+                    )
+                ) : (
+                    unassignedThreads.map((t) =>
+                        renderThreadRow(t, t.id === activeThreadId),
+                    )
                 )}
             </div>
         </div>

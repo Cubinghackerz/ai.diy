@@ -4,13 +4,18 @@
  */
 
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
-import type { ThreadData, MessageData, MemoryEntry } from "~/lib/types";
+import type { ThreadData, MessageData, MemoryEntry, Project } from "~/lib/types";
 import type { Artifact } from "~/lib/canvas";
 
 interface PrismiumDB extends DBSchema {
     threads: {
         key: string;
         value: ThreadData;
+        indexes: { "by-updated": number };
+    };
+    projects: {
+        key: string;
+        value: Project;
         indexes: { "by-updated": number };
     };
     messages: {
@@ -36,7 +41,7 @@ interface PrismiumDB extends DBSchema {
 }
 
 const DB_NAME = "prismium-lite-db";
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 let dbPromise: Promise<IDBPDatabase<PrismiumDB>> | null = null;
 
@@ -73,6 +78,12 @@ function getDB() {
                     });
                     memoryStore.createIndex("by-updated", "updatedAt");
                     memoryStore.createIndex("by-source", "source");
+                }
+                if (!db.objectStoreNames.contains("projects")) {
+                    const projectStore = db.createObjectStore("projects", {
+                        keyPath: "id",
+                    });
+                    projectStore.createIndex("by-updated", "updatedAt");
                 }
             },
         });
@@ -168,6 +179,7 @@ export async function exportLocalBackup(): Promise<{
     artifacts: Artifact[];
     previewSessions: Array<{ id: string; data: unknown; updatedAt: number }>;
     memories: MemoryEntry[];
+    projects: Project[];
 }> {
     const db = await getDB();
     if (!db) {
@@ -179,14 +191,16 @@ export async function exportLocalBackup(): Promise<{
             artifacts: [],
             previewSessions: [],
             memories: [],
+            projects: [],
         };
     }
-    const [threads, messages, artifacts, previewSessions, memories] = await Promise.all([
+    const [threads, messages, artifacts, previewSessions, memories, projects] = await Promise.all([
         db.getAll("threads"),
         db.getAll("messages"),
         db.getAll("artifacts"),
         db.getAll("previewSessions"),
         db.getAll("memories"),
+        db.getAll("projects"),
     ]);
     return {
         version: 1,
@@ -196,6 +210,7 @@ export async function exportLocalBackup(): Promise<{
         artifacts,
         previewSessions,
         memories,
+        projects,
     };
 }
 
@@ -226,6 +241,34 @@ export async function clearMemoryEntries(): Promise<void> {
     const db = await getDB();
     if (!db) return;
     await db.clear("memories");
+}
+
+export async function getAllProjects(): Promise<Project[]> {
+    const db = await getDB();
+    if (!db) return [];
+    const projects = await db.getAllFromIndex("projects", "by-updated");
+    return projects.reverse();
+}
+
+export async function saveProject(project: Project): Promise<void> {
+    const db = await getDB();
+    if (!db) return;
+    await db.put("projects", project);
+}
+
+/** Deletes a project and unassigns every thread that belonged to it. */
+export async function deleteProjectFromDB(projectId: string): Promise<void> {
+    const db = await getDB();
+    if (!db) return;
+    await db.delete("projects", projectId);
+    const tx = db.transaction("threads", "readwrite");
+    const threads = await tx.store.getAll();
+    for (const thread of threads) {
+        if (thread.projectId === projectId) {
+            await tx.store.put({ ...thread, projectId: null });
+        }
+    }
+    await tx.done;
 }
 
 export async function getThreadMessages(threadId: string): Promise<MessageData[]> {

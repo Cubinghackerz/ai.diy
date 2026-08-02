@@ -11,12 +11,13 @@ import {
     getThreadMessages,
 } from "~/lib/db";
 
-async function createBlankThread(title = "New Chat") {
+async function createBlankThread(title = "New Chat", projectId: string | null = null) {
     const newThread: ThreadData = {
         id: `thread_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         title,
         createdAt: Date.now(),
         updatedAt: Date.now(),
+        projectId,
     };
     await saveThread(newThread);
     return newThread;
@@ -60,17 +61,22 @@ export function useThreads() {
      * Bumps updatedAt so it sorts to the top of the sidebar.
      */
     const createNewThread = useCallback(
-        async (title = "New Chat") => {
+        async (title = "New Chat", projectId: string | null = null) => {
             const list = await getAllThreads();
 
             // If the current thread is already an empty New Chat, just focus it.
             if (activeThreadId) {
                 const current = list.find((t) => t.id === activeThreadId);
-                if (current && current.title === "New Chat") {
+                if (
+                    current &&
+                    current.title === "New Chat" &&
+                    (current.projectId ?? null) === projectId
+                ) {
                     const msgs = await getThreadMessages(current.id);
                     if (msgs.length === 0) {
                         const bumped = {
                             ...current,
+                            projectId,
                             updatedAt: Date.now(),
                         };
                         await saveThread(bumped);
@@ -84,9 +90,10 @@ export function useThreads() {
             for (const t of list) {
                 if (t.id === activeThreadId) continue;
                 if (t.title !== "New Chat" && t.title !== title) continue;
+                if ((t.projectId ?? null) !== projectId) continue;
                 const msgs = await getThreadMessages(t.id);
                 if (msgs.length === 0) {
-                    const bumped = { ...t, title, updatedAt: Date.now() };
+                    const bumped = { ...t, title, projectId, updatedAt: Date.now() };
                     await saveThread(bumped);
                     setActiveThreadId(t.id);
                     await refreshThreads();
@@ -94,7 +101,7 @@ export function useThreads() {
                 }
             }
 
-            const blank = await createBlankThread(title);
+            const blank = await createBlankThread(title, projectId);
             setActiveThreadId(blank.id);
             await refreshThreads();
             return blank.id;
@@ -131,6 +138,19 @@ export function useThreads() {
         }
     }, []);
 
+    /** Moves a thread into (or out of) a project folder. */
+    const setThreadProject = useCallback(
+        async (id: string, projectId: string | null) => {
+            const list = await getAllThreads();
+            const existing = list.find((t) => t.id === id);
+            if (!existing) return;
+            const next: ThreadData = { ...existing, projectId };
+            await saveThread(next);
+            setThreads((prev) => prev.map((t) => (t.id === id ? next : t)));
+        },
+        [],
+    );
+
     return {
         threads,
         activeThreadId,
@@ -138,6 +158,7 @@ export function useThreads() {
         createNewThread,
         deleteThread,
         updateThreadTitle,
+        setThreadProject,
         loading,
         refreshThreads,
     };

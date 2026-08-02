@@ -51,9 +51,12 @@ async function parseChatError(res: Response): Promise<string> {
 
 export function AssistantRuntimeProvider({
     threadId,
+    projectInstructions,
     children,
 }: {
     threadId: string | null;
+    /** Project-level instructions appended to the system prompt. */
+    projectInstructions?: string;
     children: ReactNode;
 }) {
     const { settings } = useSettings();
@@ -61,6 +64,8 @@ export function AssistantRuntimeProvider({
     const { runSubagent } = useSubagent();
     const settingsRef = useRef(settings);
     settingsRef.current = settings;
+    const projectInstructionsRef = useRef(projectInstructions ?? "");
+    projectInstructionsRef.current = projectInstructions ?? "";
 
     const transport = useMemo(
         () =>
@@ -107,7 +112,8 @@ export function AssistantRuntimeProvider({
                                     : apiKey || localProviderKey(provider),
                             baseUrl,
                             openAICompatible: providerConfig?.openAICompatible,
-                            systemPrompt: s.chat.systemPrompt,
+                             systemPrompt: s.chat.systemPrompt,
+                             projectInstructions: projectInstructionsRef.current || undefined,
                             temperature: s.chat.temperature,
                             maxTokens: s.chat.maxTokens,
                             topP: s.chat.topP,

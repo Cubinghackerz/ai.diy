@@ -227,6 +227,30 @@ export interface CustomSkill {
     enabled: boolean;
 }
 
+// ─── Project Types (ChatGPT-style folders) ───────────────────────
+
+/** Accent colors available for project folders. */
+export const PROJECT_COLORS = [
+    "#ef4444",
+    "#f97316",
+    "#eab308",
+    "#22c55e",
+    "#14b8a6",
+    "#3b82f6",
+    "#8b5cf6",
+    "#ec4899",
+] as const;
+
+export interface Project {
+    id: string;
+    name: string;
+    color: string;
+    /** Project-level instructions appended to every chat in the project. */
+    instructions?: string;
+    createdAt: number;
+    updatedAt: number;
+}
+
 // ─── Thread/Message Types ────────────────────────────────────────
 
 export interface ThreadData {
@@ -237,6 +261,8 @@ export interface ThreadData {
     systemPrompt?: string;
     model?: string;
     provider?: ProviderId;
+    /** Optional ChatGPT-style project folder this thread belongs to. */
+    projectId?: string | null;
 }
 
 export interface MessageData {

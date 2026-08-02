@@ -66,6 +66,7 @@ export function buildChatSystemPrompt(
     memoryContext?: string,
     activeSkill?: { name: string; content: string },
     role: "main" | "subagent" = "main",
+    projectInstructions?: string,
 ): string {
     const now = new Date();
     const dateLine = `Current date and time: ${now.toISOString()} (UTC). Today's date: ${now.toLocaleDateString("en-US", {
@@ -89,6 +90,9 @@ export function buildChatSystemPrompt(
     const skill = activeSkill?.content?.trim()
         ? `\n\nActive user-selected skill: ${activeSkill.name}\n---\n${activeSkill.content.slice(0, 16_000)}\n---\nApply it only to this request and follow its output/validation contract.`
         : "";
+    const project = projectInstructions?.trim()
+        ? `\n\nProject instructions for this conversation:\n---\n${projectInstructions.trim().slice(0, 16_000)}\n---\nApply these instructions to chats in this project while following the current user request and higher-priority system rules.`
+        : "";
     const subagent = role === "subagent" ? SUBAGENT_PROMPT : "";
-    return `${dateLine}\n\n${body}${TOOL_EFFICIENCY_PROMPT}${memory}${skill}${subagent}`;
+    return `${dateLine}\n\n${body}${project}${TOOL_EFFICIENCY_PROMPT}${memory}${skill}${subagent}`;
 }
