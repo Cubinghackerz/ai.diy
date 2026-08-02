@@ -25,6 +25,29 @@ export type ProviderId =
     | "ollama"
     | "custom";
 
+export type ConnectorKind =
+    | "tavily"
+    | "brave"
+    | "exa"
+    | "parallel"
+    | "github"
+    | "supabase"
+    | "postgres"
+    | "s3"
+    | "remote-mcp";
+
+export interface ConnectorConfig {
+    id: string;
+    kind: ConnectorKind;
+    name: string;
+    enabled: boolean;
+    apiKey?: string;
+    endpoint?: string;
+    projectUrl?: string;
+    bucket?: string;
+    region?: string;
+}
+
 export interface ProviderConfig {
     id: ProviderId;
     name: string;
@@ -100,6 +123,7 @@ export interface AppSettings {
     preview: PreviewSettings;
     // MCP settings
     mcpServers: McpServerConfig[];
+    connectors: ConnectorConfig[];
 }
 
 export interface McpServerConfig {
@@ -138,6 +162,16 @@ export interface KnowledgeDocument {
     content: string;
     size: number;
     createdAt: number;
+}
+
+export interface MemoryEntry {
+    id: string;
+    content: string;
+    source: "chat" | "import" | "manual";
+    sourceId?: string;
+    keywords: string[];
+    createdAt: number;
+    updatedAt: number;
 }
 
 // ─── Thread/Message Types ────────────────────────────────────────
@@ -315,6 +349,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
         fusionModel: null,
     },
     mcpServers: [],
+    connectors: [],
 };
 
 // ─── Default Models per Provider ─────────────────────────────────

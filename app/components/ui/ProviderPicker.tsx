@@ -81,21 +81,33 @@ export function ProviderPicker({
             const rect = triggerRef.current?.getBoundingClientRect();
             if (!rect) return;
             const menuHeight = 288;
-            const maxTop = Math.max(8, window.innerHeight - menuHeight - 8);
-            const top = compact
+            const width = Math.min(288, window.innerWidth - 16);
+            const openAbove =
+                window.innerHeight - rect.bottom < menuHeight + 8 &&
+                rect.top > window.innerHeight - rect.bottom;
+            const top = openAbove
                 ? Math.max(8, rect.top - menuHeight - 6)
-                : Math.min(maxTop, rect.bottom + 6);
+                : Math.min(
+                      Math.max(8, window.innerHeight - menuHeight - 8),
+                      rect.bottom + 6,
+                  );
             const style: React.CSSProperties = {
                 position: "fixed",
                 top,
-                width: "min(18rem, calc(100vw - 2rem))",
+                width,
                 maxHeight: "min(18rem, calc(100vh - 1rem))",
                 zIndex: 100,
             };
             if (align === "right") {
-                style.right = Math.max(8, window.innerWidth - rect.right);
+                style.right = Math.min(
+                    Math.max(8, window.innerWidth - rect.right),
+                    Math.max(8, window.innerWidth - width - 8),
+                );
             } else {
-                style.left = Math.max(8, rect.left);
+                style.left = Math.min(
+                    Math.max(8, rect.left),
+                    Math.max(8, window.innerWidth - width - 8),
+                );
             }
             setMenuStyle(style);
         };

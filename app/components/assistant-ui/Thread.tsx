@@ -3,6 +3,7 @@
 import {
   ComposerAddAttachment,
   ComposerAttachments,
+  ComposerAttachmentGuard,
   UserMessageAttachments,
 } from "~/components/assistant-ui/attachment";
 import { ComposerModelControls } from "~/components/assistant-ui/ComposerModelControls";
@@ -337,6 +338,7 @@ const Composer: FC = () => {
           className="border-border/70 flex w-full flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding)"
         >
           <ComposerAttachments />
+          <ComposerAttachmentGuard />
           <ComposerInput />
           <ComposerAction />
         </div>

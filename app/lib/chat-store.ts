@@ -64,6 +64,7 @@ export function storedToUIMessages(stored: MessageData[]): UIMessage[] {
 export async function replaceThreadMessages(
     threadId: string,
     messages: UIMessage[],
+    metadata?: { model?: string; provider?: import("~/lib/types").ProviderId },
 ): Promise<void> {
     const existing = await getThreadMessages(threadId);
     const next = uiMessagesToStored(threadId, messages);
@@ -83,7 +84,7 @@ export async function replaceThreadMessages(
     const threads = await getAllThreads();
     const thread = threads.find((t) => t.id === threadId);
     if (thread) {
-        await saveThread({ ...thread, updatedAt: Date.now() });
+        await saveThread({ ...thread, ...metadata, updatedAt: Date.now() });
     }
 }
 

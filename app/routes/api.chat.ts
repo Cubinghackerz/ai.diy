@@ -15,7 +15,7 @@ import {
     buildReasoningProviderOptions,
     type ReasoningEffort,
 } from "~/lib/reasoning";
-import type { McpServerConfig, ProviderId } from "~/lib/types";
+import type { ConnectorConfig, McpServerConfig, ProviderId } from "~/lib/types";
 import {
     createChatModel,
     createImageModel,
@@ -45,12 +45,14 @@ interface ChatRequestBody {
         webSearchEngine?: "duckduckgo" | "searxng";
         searxngUrl?: string;
         skillsEnabled?: boolean;
+        connectors?: ConnectorConfig[];
     };
     mcpServers?: McpServerConfig[];
     imageSettings?: {
         size?: "1024x1024" | "1536x1024" | "1024x1536";
         count?: number;
     };
+    memoryContext?: string;
 }
 
 function imagePrompt(messages: UIMessage[]): string {
@@ -215,6 +217,7 @@ export async function action({ request }: ActionFunctionArgs) {
             messages: modelMessages,
             system: buildChatSystemPrompt(
                 body.system || body.systemPrompt || undefined,
+                body.memoryContext,
             ),
             ...(anthropicThinkingOn
                 ? { temperature: 1 }

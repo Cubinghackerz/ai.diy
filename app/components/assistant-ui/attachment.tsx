@@ -277,6 +277,58 @@ export const ComposerAttachments: FC = () => {
   );
 };
 
+/** Remove pending files that became invalid after a model switch. */
+export const ComposerAttachmentGuard: FC = () => {
+  const aui = useAui();
+  const { settings } = useSettings();
+  const modalities = getModelModalities(
+    settings.chat.model,
+    settings.chat.provider,
+  );
+  const attachments = useAuiState((state) => state.composer.attachments);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsupported = attachments
+      .map((attachment, index) => ({ attachment, index }))
+      .filter(({ attachment }) => {
+        if (attachment.type === "image") return !modalities.vision;
+        if (modalities.documents) return false;
+        const contentType = attachment.contentType?.toLowerCase() ?? "";
+        const name = attachment.name.toLowerCase();
+        const textLike =
+          contentType.startsWith("text/") ||
+          /json|javascript|typescript|xml|csv|markdown|yaml/.test(contentType) ||
+          /\.(txt|md|markdown|csv|json|js|jsx|ts|tsx|css|html|xml|yaml|yml)$/.test(name);
+        return !textLike;
+      });
+
+    if (unsupported.length === 0) return;
+    for (const { index } of [...unsupported].reverse()) {
+      void aui.composer.attachment({ index }).remove();
+    }
+
+    const removedImages = unsupported.some(({ attachment }) => attachment.type === "image");
+    const removedDocuments = unsupported.some(({ attachment }) => attachment.type !== "image");
+    const kinds = [
+      removedImages ? "images" : "",
+      removedDocuments ? "PDF/binary files" : "",
+    ].filter(Boolean).join(" and ");
+    setNotice(
+      `Removed ${unsupported.length} unsupported attachment${unsupported.length === 1 ? "" : "s"}: this model cannot process ${kinds}.`,
+    );
+    const timer = window.setTimeout(() => setNotice(null), 7000);
+    return () => window.clearTimeout(timer);
+  }, [aui.composer, attachments, modalities.documents, modalities.vision]);
+
+  if (!notice) return null;
+  return (
+    <p role="status" className="text-[11px] leading-relaxed text-destructive">
+      {notice}
+    </p>
+  );
+};
+
 export const ComposerAddAttachment: FC = () => {
   const { settings } = useSettings();
   const modalities = getModelModalities(

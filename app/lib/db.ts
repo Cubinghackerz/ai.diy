@@ -4,7 +4,7 @@
  */
 
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
-import type { ThreadData, MessageData } from "~/lib/types";
+import type { ThreadData, MessageData, MemoryEntry } from "~/lib/types";
 import type { Artifact } from "~/lib/canvas";
 
 interface PrismiumDB extends DBSchema {
@@ -23,10 +23,20 @@ interface PrismiumDB extends DBSchema {
         value: Artifact;
         indexes: { "by-scope": string; "by-created": number };
     };
+    previewSessions: {
+        key: string;
+        value: { id: string; data: unknown; updatedAt: number };
+        indexes: { "by-updated": number };
+    };
+    memories: {
+        key: string;
+        value: MemoryEntry;
+        indexes: { "by-updated": number; "by-source": string };
+    };
 }
 
 const DB_NAME = "prismium-lite-db";
-const DB_VERSION = 2;
+const DB_VERSION = 4;
 
 let dbPromise: Promise<IDBPDatabase<PrismiumDB>> | null = null;
 
@@ -50,6 +60,19 @@ function getDB() {
                     });
                     artifactStore.createIndex("by-scope", "scopeId");
                     artifactStore.createIndex("by-created", "createdAt");
+                }
+                if (!db.objectStoreNames.contains("previewSessions")) {
+                    const previewStore = db.createObjectStore("previewSessions", {
+                        keyPath: "id",
+                    });
+                    previewStore.createIndex("by-updated", "updatedAt");
+                }
+                if (!db.objectStoreNames.contains("memories")) {
+                    const memoryStore = db.createObjectStore("memories", {
+                        keyPath: "id",
+                    });
+                    memoryStore.createIndex("by-updated", "updatedAt");
+                    memoryStore.createIndex("by-source", "source");
                 }
             },
         });
@@ -112,6 +135,49 @@ export async function deleteArtifactsForScope(scopeId: string): Promise<void> {
         cursor = await cursor.continue();
     }
     await tx.done;
+}
+
+export async function loadPreviewSession<T>(id: string): Promise<T | null> {
+    const db = await getDB();
+    if (!db) return null;
+    const record = await db.get("previewSessions", id);
+    return (record?.data as T | undefined) ?? null;
+}
+
+export async function savePreviewSession<T>(
+    id: string,
+    data: T,
+): Promise<void> {
+    const db = await getDB();
+    if (!db) return;
+    await db.put("previewSessions", { id, data, updatedAt: Date.now() });
+}
+
+export async function deletePreviewSession(id: string): Promise<void> {
+    const db = await getDB();
+    if (!db) return;
+    await db.delete("previewSessions", id);
+}
+
+export async function getMemoryEntries(): Promise<MemoryEntry[]> {
+    const db = await getDB();
+    if (!db) return [];
+    const entries = await db.getAllFromIndex("memories", "by-updated");
+    return entries.reverse();
+}
+
+export async function saveMemoryEntries(entries: MemoryEntry[]): Promise<void> {
+    const db = await getDB();
+    if (!db || entries.length === 0) return;
+    const tx = db.transaction("memories", "readwrite");
+    for (const entry of entries) await tx.store.put(entry);
+    await tx.done;
+}
+
+export async function clearMemoryEntries(): Promise<void> {
+    const db = await getDB();
+    if (!db) return;
+    await db.clear("memories");
 }
 
 export async function getThreadMessages(threadId: string): Promise<MessageData[]> {

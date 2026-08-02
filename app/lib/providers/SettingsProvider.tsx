@@ -59,6 +59,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                         ...DEFAULT_SETTINGS.providers,
                         ...parsed.providers,
                     },
+                    connectors: parsed.connectors ?? [],
                 });
             }
         } catch {

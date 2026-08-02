@@ -25,6 +25,12 @@ import { ModelPicker } from "~/components/ui/ModelPicker";
 import { ProviderPicker } from "~/components/ui/ProviderPicker";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { runBrowserPython } from "~/lib/pyodide";
+import { buildLocalMemoryContext } from "~/lib/memory";
+import {
+    deletePreviewSession,
+    loadPreviewSession,
+    savePreviewSession,
+} from "~/lib/db";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import { isProviderReady } from "~/lib/setup";
 import { getReasoningEffortOptions } from "~/lib/reasoning";
@@ -56,6 +62,7 @@ type ResolvedConfig = PreviewModelConfig & {
         webSearchEngine: "duckduckgo" | "searxng";
         searxngUrl: string;
         skillsEnabled: boolean;
+        connectors: import("~/lib/types").ConnectorConfig[];
     };
     mcpServers: Array<{
         id: string;
@@ -78,6 +85,7 @@ type PreviewRun = {
     status: RunStatus;
     output: string;
     error?: string;
+    messages?: UIMessage[];
 };
 
 type PreviewSession = {
@@ -86,6 +94,25 @@ type PreviewSession = {
     primaryCount: number;
     fusionStarted: boolean;
 };
+
+type StoredPreviewRun = Omit<PreviewRun, "config"> & {
+    config: PreviewModelConfig;
+};
+
+type StoredPreviewSession = {
+    prompt: string;
+    runs: StoredPreviewRun[];
+    session: {
+        prompt: string;
+        fusionConfig: PreviewModelConfig | null;
+        primaryCount: number;
+        fusionStarted: boolean;
+    } | null;
+    activeTab: string | null;
+    activeSlot: DraftSlot;
+};
+
+const PREVIEW_SESSION_ID = "last-preview-session";
 
 type DraftSlot = `primary:${number}` | "fusion";
 
@@ -123,6 +150,7 @@ export const PreviewWorkspace: FC = () => {
     const [activeTab, setActiveTab] = useState<string | null>(null);
     const [activeSlot, setActiveSlot] = useState<DraftSlot>("primary:0");
     const [configurationError, setConfigurationError] = useState<string | null>(null);
+    const previewHydrated = useRef(false);
 
     const resolveConfig = (config: PreviewModelConfig): ResolvedConfig => {
         const provider = settings.providers[config.provider];
@@ -143,10 +171,83 @@ export const PreviewWorkspace: FC = () => {
                 webSearchEngine: settings.webSearchEngine,
                 searxngUrl: settings.searxngUrl,
                 skillsEnabled: settings.skillsEnabled,
+                connectors: settings.connectors,
             },
             mcpServers: settings.mcpServers.filter((server) => server.enabled),
         };
     };
+
+    useEffect(() => {
+        let cancelled = false;
+        void loadPreviewSession<StoredPreviewSession>(PREVIEW_SESSION_ID).then(
+            (stored) => {
+                if (cancelled || !stored) {
+                    previewHydrated.current = true;
+                    return;
+                }
+                setPrompt(stored.prompt);
+                setRuns(
+                    stored.runs.map((run) => ({
+                        ...run,
+                        config: resolveConfig(run.config),
+                    })),
+                );
+                setSession(
+                    stored.session
+                        ? {
+                              ...stored.session,
+                              fusionConfig: stored.session.fusionConfig
+                                  ? resolveConfig(stored.session.fusionConfig)
+                                  : null,
+                          }
+                        : null,
+                );
+                setActiveTab(stored.activeTab);
+                setActiveSlot(stored.activeSlot);
+                previewHydrated.current = true;
+            },
+        );
+        return () => {
+            cancelled = true;
+        };
+        // Preview is restored once when this workspace mounts. Credentials are
+        // deliberately re-resolved from current local settings, never stored.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    useEffect(() => {
+        if (!previewHydrated.current) return;
+        const timer = window.setTimeout(() => {
+            const stored: StoredPreviewSession = {
+                prompt,
+                runs: runs.map((run) => ({
+                    ...run,
+                    config: {
+                        provider: run.config.provider,
+                        model: run.config.model,
+                        reasoningEffort: run.config.reasoningEffort,
+                    },
+                })),
+                session: session
+                    ? {
+                          ...session,
+                          fusionConfig: session.fusionConfig
+                              ? {
+                                    provider: session.fusionConfig.provider,
+                                    model: session.fusionConfig.model,
+                                    reasoningEffort:
+                                        session.fusionConfig.reasoningEffort,
+                                }
+                              : null,
+                      }
+                    : null,
+                activeTab,
+                activeSlot,
+            };
+            void savePreviewSession(PREVIEW_SESSION_ID, stored);
+        }, 300);
+        return () => window.clearTimeout(timer);
+    }, [activeSlot, activeTab, prompt, runs, session]);
 
     const startRuns = () => {
         const input = prompt.trim();
@@ -207,7 +308,7 @@ export const PreviewWorkspace: FC = () => {
         setRuns((current) =>
             current.map((run) =>
                 run.id === runId
-                    ? { ...run, status: "complete", output: responseText(messages) }
+                    ? { ...run, status: "complete", output: responseText(messages), messages }
                     : run,
             ),
         );
@@ -377,6 +478,7 @@ export const PreviewWorkspace: FC = () => {
         setSession(null);
         setActiveTab(null);
         setActiveSlot("primary:0");
+        void deletePreviewSession(PREVIEW_SESSION_ID);
     };
 
     return (
@@ -738,8 +840,14 @@ const PreviewRunPanel: FC<{
                     }
                     return response;
                 },
-                prepareSendMessagesRequest: async (options) => ({
-                    body: {
+                prepareSendMessagesRequest: async (options) => {
+                    const latestText = [...options.messages]
+                        .reverse()
+                        .find((message) => message.role === "user")
+                        ?.parts.filter((part) => part.type === "text")
+                        .map((part) => part.text)
+                        .join(" ") ?? "";
+                    return { body: {
                         ...options.body,
                         messages: options.messages,
                         model: run.config.model,
@@ -757,8 +865,10 @@ const PreviewRunPanel: FC<{
                         },
                         toolSettings: run.config.toolSettings,
                         mcpServers: run.config.mcpServers,
+                        memoryContext: await buildLocalMemoryContext(latestText),
                     },
-                }),
+                    };
+                },
             }),
         [run.config],
     );
@@ -767,6 +877,7 @@ const PreviewRunPanel: FC<{
     const chat = useChat({
         id: run.id,
         transport,
+        messages: run.messages,
         onToolCall: ({ toolCall }) => {
             if (toolCall.toolName !== "run_python") return;
             pendingPythonCalls.current += 1;
@@ -832,10 +943,10 @@ const PreviewRunPanel: FC<{
     }, [transport, runtime]);
 
     useEffect(() => {
-        if (sentRef.current) return;
+        if (sentRef.current || run.messages?.length) return;
         sentRef.current = true;
         void chat.sendMessage({ text: run.prompt });
-    }, [chat, run.prompt]);
+    }, [chat, run.messages?.length, run.prompt]);
 
     return (
         <ChatSessionProvider value={chat}>

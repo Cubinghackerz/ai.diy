@@ -151,14 +151,23 @@ export function SearchableModelSelect({
             const rect = triggerRef.current?.getBoundingClientRect();
             if (!rect) return;
             const menuHeight = 328;
+            const width = Math.min(360, window.innerWidth - 16);
+            const openAbove =
+                window.innerHeight - rect.bottom < menuHeight + 8 &&
+                rect.top > window.innerHeight - rect.bottom;
             const style: React.CSSProperties = {
                 position: "fixed",
-                top: Math.min(
-                    Math.max(8, window.innerHeight - menuHeight - 8),
-                    rect.bottom + 6,
+                top: openAbove
+                    ? Math.max(8, rect.top - menuHeight - 6)
+                    : Math.min(
+                          Math.max(8, window.innerHeight - menuHeight - 8),
+                          rect.bottom + 6,
+                      ),
+                left: Math.min(
+                    Math.max(8, rect.left),
+                    Math.max(8, window.innerWidth - width - 8),
                 ),
-                left: Math.max(8, rect.left),
-                width: Math.min(360, window.innerWidth - 16),
+                width,
                 maxHeight: "min(20rem, calc(100vh - 1rem))",
                 zIndex: 100,
             };
@@ -360,7 +369,11 @@ export function ModelPicker({
             const rect = triggerRef.current?.getBoundingClientRect();
             if (!rect) return;
             const menuHeight = 328;
-            const top = compact
+            const width = Math.min(352, window.innerWidth - 16);
+            const openAbove =
+                window.innerHeight - rect.bottom < menuHeight + 8 &&
+                rect.top > window.innerHeight - rect.bottom;
+            const top = openAbove
                 ? Math.max(8, rect.top - menuHeight - 6)
                 : Math.min(
                       Math.max(8, window.innerHeight - menuHeight - 8),
@@ -369,14 +382,20 @@ export function ModelPicker({
             const style: React.CSSProperties = {
                 position: "fixed",
                 top,
-                width: "min(22rem, calc(100vw - 2rem))",
+                width,
                 maxHeight: "min(20rem, calc(100vh - 1rem))",
                 zIndex: 100,
             };
             if (align === "right") {
-                style.right = Math.max(8, window.innerWidth - rect.right);
+                style.right = Math.min(
+                    Math.max(8, window.innerWidth - rect.right),
+                    Math.max(8, window.innerWidth - width - 8),
+                );
             } else {
-                style.left = Math.max(8, rect.left);
+                style.left = Math.min(
+                    Math.max(8, rect.left),
+                    Math.max(8, window.innerWidth - width - 8),
+                );
             }
             setMenuStyle(style);
         };

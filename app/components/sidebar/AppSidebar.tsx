@@ -16,17 +16,29 @@ import {
     DEFAULT_MODELS,
     PROVIDER_DEFAULTS,
     type McpServerConfig,
+    type ConnectorConfig,
+    type ConnectorKind,
     type PreviewModelConfig,
     type ProviderId,
 } from "~/lib/types";
 import { resolveModel } from "~/lib/model-capabilities";
 import { getReasoningEffortOptions } from "~/lib/reasoning";
+import {
+    UNIVERSAL_MEMORY_EXPORT_PROMPT,
+    importMemoryEntries,
+} from "~/lib/memory";
+import {
+    clearMemoryEntries,
+    getMemoryEntries,
+    saveMemoryEntries,
+} from "~/lib/db";
 import { cn } from "~/lib/utils";
 import { localProviderKey } from "~/lib/provider-credentials";
 import {
     ChatCircleDots,
     CheckCircle,
     Desktop,
+    Brain,
     Flask,
     GearSix,
     Globe,
@@ -44,7 +56,14 @@ import {
 import * as Switch from "@radix-ui/react-switch";
 
 type SidebarPanel = "chats" | "settings";
-type SettingsSection = "keys" | "tools" | "mcp" | "experimental" | "appearance";
+type SettingsSection =
+    | "keys"
+    | "tools"
+    | "mcp"
+    | "experimental"
+    | "memory"
+    | "connectors"
+    | "appearance";
 
 type ThreadItem = { id: string; title: string };
 
@@ -244,8 +263,10 @@ function SettingsPanel() {
     }[] = [
         { id: "keys", label: "API Keys", icon: Key },
         { id: "tools", label: "Tools", icon: Globe },
-        { id: "mcp", label: "MCP", icon: Plug },
+        { id: "mcp", label: "MCP Beta", icon: Plug },
         { id: "experimental", label: "Experimental", icon: Flask },
+        { id: "memory", label: "Memory", icon: Brain },
+        { id: "connectors", label: "Connectors Beta", icon: HardDrives },
         { id: "appearance", label: "Theme", icon: Sun },
     ];
 
@@ -441,6 +462,10 @@ function SettingsPanel() {
 
             {section === "experimental" && <PreviewSettingsSection />}
 
+            {section === "memory" && <MemorySettingsSection />}
+
+            {section === "connectors" && <ConnectorsSection />}
+
             {section === "appearance" && (
                 <div className="grid grid-cols-3 gap-2">
                     {(
@@ -485,6 +510,216 @@ function SettingsPanel() {
             >
                 Reset all settings
             </button>
+        </div>
+    );
+}
+
+function MemorySettingsSection() {
+    const [count, setCount] = useState(0);
+    const [status, setStatus] = useState<string | null>(null);
+
+    useEffect(() => {
+        void getMemoryEntries().then((entries) => setCount(entries.length));
+    }, []);
+
+    const importFile = async (file: File) => {
+        try {
+            const raw = await file.text();
+            let payload: unknown = raw;
+            try {
+                payload = JSON.parse(raw);
+            } catch {
+                // Plain text and markdown are supported as universal imports.
+            }
+            const entries = importMemoryEntries(payload);
+            await saveMemoryEntries(entries);
+            setCount((current) => current + entries.length);
+            setStatus(`${entries.length} memories imported locally.`);
+        } catch (error) {
+            setStatus(error instanceof Error ? error.message : "Import failed.");
+        }
+    };
+
+    const copyPrompt = async () => {
+        await navigator.clipboard.writeText(UNIVERSAL_MEMORY_EXPORT_PROMPT);
+        setStatus("Universal export prompt copied.");
+    };
+
+    const downloadMemory = async () => {
+        const entries = await getMemoryEntries();
+        const blob = new Blob([JSON.stringify({ version: 1, memories: entries }, null, 2)], {
+            type: "application/json",
+        });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = "ai-diy-memory.json";
+        anchor.click();
+        URL.revokeObjectURL(url);
+    };
+
+    return (
+        <div className="flex flex-col gap-3">
+            <div>
+                <h3 className="text-xs font-semibold">Local memory</h3>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                    Memories stay in this browser. Relevant matches are injected in
+                    small context slices; full archives are never sent automatically.
+                </p>
+            </div>
+            <div className="rounded-xl border border-border/70 bg-muted/20 p-3 text-[11px] leading-relaxed text-muted-foreground">
+                <strong className="text-foreground">Import from another AI:</strong>{" "}
+                copy the export prompt below into ChatGPT, Gemini, Claude, or Grok,
+                save its JSON response, then import that file here.
+            </div>
+            <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant="outline" onClick={copyPrompt} className="rounded-xl">
+                    Copy export prompt
+                </Button>
+                <label className="inline-flex h-8 cursor-pointer items-center rounded-xl border border-border px-3 text-xs font-medium hover:bg-accent">
+                    Import memory
+                    <input
+                        type="file"
+                        accept=".json,.txt,.md,text/plain,application/json"
+                        className="sr-only"
+                        onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            if (file) void importFile(file);
+                            event.currentTarget.value = "";
+                        }}
+                    />
+                </label>
+            </div>
+            <div className="flex items-center justify-between rounded-xl border border-border/70 px-3 py-2 text-xs">
+                <span>{count} stored memories</span>
+                <div className="flex items-center gap-1">
+                    <button type="button" onClick={() => void downloadMemory()} className="rounded-md px-2 py-1 text-muted-foreground hover:bg-accent hover:text-foreground">
+                        Export
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            void clearMemoryEntries();
+                            setCount(0);
+                            setStatus("Local memory cleared.");
+                        }}
+                        className="rounded-md px-2 py-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    >
+                        Clear
+                    </button>
+                </div>
+            </div>
+            {status ? <p className="text-[11px] text-primary">{status}</p> : null}
+        </div>
+    );
+}
+
+const SEARCH_CONNECTOR_OPTIONS: Array<{
+    kind: Extract<ConnectorKind, "tavily" | "brave" | "exa" | "parallel">;
+    label: string;
+    placeholder: string;
+}> = [
+    { kind: "tavily", label: "Tavily", placeholder: "tvly-…" },
+    { kind: "brave", label: "Brave Search", placeholder: "Subscription token" },
+    { kind: "exa", label: "Exa", placeholder: "Exa API key" },
+    { kind: "parallel", label: "Parallel", placeholder: "Parallel API key" },
+];
+
+function ConnectorsSection() {
+    const { settings, updateSettings } = useSettings();
+    const [status, setStatus] = useState<Record<string, string>>({});
+    const connectors = settings.connectors ?? [];
+
+    const getConnector = (kind: ConnectorKind): ConnectorConfig =>
+        connectors.find((connector) => connector.kind === kind) ?? {
+            id: `connector_${kind}`,
+            kind,
+            name: kind,
+            enabled: false,
+            apiKey: "",
+        };
+
+    const saveConnector = (connector: ConnectorConfig, exclusive = false) => {
+        const next = exclusive
+            ? connectors.map((current) =>
+                  ["tavily", "brave", "exa", "parallel"].includes(current.kind) &&
+                  current.kind !== connector.kind
+                      ? { ...current, enabled: false }
+                      : current,
+              )
+            : [...connectors];
+        const index = next.findIndex((current) => current.kind === connector.kind);
+        if (index >= 0) next[index] = connector;
+        else next.push(connector);
+        updateSettings({ connectors: next });
+    };
+
+    const testConnector = async (connector: ConnectorConfig) => {
+        setStatus((current) => ({ ...current, [connector.kind]: "Testing…" }));
+        try {
+            const response = await fetch("/api/connectors", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "test", connector }),
+            });
+            const data = (await response.json()) as { ok?: boolean; error?: string };
+            setStatus((current) => ({
+                ...current,
+                [connector.kind]: data.ok ? "Connected" : data.error || "Test failed",
+            }));
+            if (data.ok) saveConnector({ ...connector, enabled: true }, true);
+        } catch (error) {
+            setStatus((current) => ({
+                ...current,
+                [connector.kind]: error instanceof Error ? error.message : "Test failed",
+            }));
+        }
+    };
+
+    return (
+        <div className="flex flex-col gap-3">
+            <div>
+                <h3 className="text-xs font-semibold">Connectors <span className="text-[9px] uppercase tracking-wider text-primary">Beta</span></h3>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                    Search connectors are BYOK and sent only for the current request. The first enabled connector wins.
+                </p>
+            </div>
+            {SEARCH_CONNECTOR_OPTIONS.map((option) => {
+                const connector = getConnector(option.kind);
+                return (
+                    <div key={option.kind} className="flex flex-col gap-2 rounded-xl border border-border/70 p-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-semibold">{option.label}</span>
+                            <button
+                                type="button"
+                                onClick={() => saveConnector({ ...connector, enabled: !connector.enabled }, true)}
+                                className={cn(
+                                    "rounded-md px-2 py-1 text-[10px] font-medium",
+                                    connector.enabled ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
+                                )}
+                            >
+                                {connector.enabled ? "On" : "Off"}
+                            </button>
+                        </div>
+                        <div className="flex gap-1.5">
+                            <Input
+                                type="password"
+                                value={connector.apiKey ?? ""}
+                                onChange={(event) => saveConnector({ ...connector, apiKey: event.target.value })}
+                                placeholder={option.placeholder}
+                                className="h-8 min-w-0 flex-1 rounded-lg text-xs"
+                            />
+                            <Button type="button" size="sm" variant="outline" onClick={() => void testConnector(connector)} className="h-8 rounded-lg px-2 text-[11px]">
+                                Test
+                            </Button>
+                        </div>
+                        {status[option.kind] ? <p className="text-[10px] text-muted-foreground">{status[option.kind]}</p> : null}
+                    </div>
+                );
+            })}
+            <div className="rounded-xl border border-dashed border-border/70 p-3 text-[11px] leading-relaxed text-muted-foreground">
+                <strong className="text-foreground">GitHub, Supabase, PostgreSQL, S3:</strong> connect these through a permission-scoped Remote MCP server in MCP Beta. Direct database/service-role proxying is intentionally blocked.
+            </div>
         </div>
     );
 }

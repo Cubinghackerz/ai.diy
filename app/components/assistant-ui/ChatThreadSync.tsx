@@ -16,7 +16,9 @@ import {
     getArtifactsForScope,
     saveArtifactToDB,
 } from "~/lib/db";
+import { indexChatMemories } from "~/lib/memory";
 import { useChatSession } from "~/components/assistant-ui/ChatSessionContext";
+import { useSettings } from "~/lib/providers/SettingsProvider";
 import { isToolUIPart, type UIMessage } from "ai";
 import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
@@ -52,6 +54,7 @@ export function ChatThreadSync({
     artifactScopeId?: string | null;
 }) {
     const { chat } = useChatSession();
+    const { settings } = useSettings();
     const { addArtifact, setArtifactScope } = useCanvas();
     const seenArtifacts = useRef(new Set<string>());
     const restoredMessageIds = useRef(new Set<string>());
@@ -151,10 +154,14 @@ export function ChatThreadSync({
         if (hydratedThreadId.current !== threadId) return;
         if (chat.messages.length === 0) return;
         const timer = setTimeout(() => {
-            void replaceThreadMessages(threadId, chat.messages);
+            void replaceThreadMessages(threadId, chat.messages, {
+                model: settings.chat.model,
+                provider: settings.chat.provider,
+            });
+            void indexChatMemories(chat.messages as UIMessage[]);
         }, 400);
         return () => clearTimeout(timer);
-    }, [threadId, chat.status, chat.messages]);
+    }, [threadId, chat.status, chat.messages, settings.chat.model, settings.chat.provider]);
 
     // Push create_file / create_skill / frontend_design_skill results into Canvas.
     useEffect(() => {

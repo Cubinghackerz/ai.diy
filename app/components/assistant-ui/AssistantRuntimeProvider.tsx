@@ -19,6 +19,7 @@ import { createAttachmentAdapter } from "~/lib/attachments";
 import { getModelModalities } from "~/lib/model-modalities";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { runBrowserPython } from "~/lib/pyodide";
+import { buildLocalMemoryContext } from "~/lib/memory";
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
 
 async function parseChatError(res: Response): Promise<string> {
@@ -62,6 +63,12 @@ export function AssistantRuntimeProvider({
                     const apiKey = providerConfig?.apiKey?.trim() || "";
                     const baseUrl = providerConfig?.baseUrl?.trim() || undefined;
 
+                    const latestText = [...options.messages]
+                        .reverse()
+                        .find((message) => message.role === "user")
+                        ?.parts.filter((part) => part.type === "text")
+                        .map((part) => part.text)
+                        .join(" ") ?? "";
                     return {
                         body: {
                             // Keep assistant-ui forwarded context (tools/system/etc).
@@ -91,8 +98,10 @@ export function AssistantRuntimeProvider({
                                 webSearchEngine: s.webSearchEngine,
                                 searxngUrl: s.searxngUrl,
                                 skillsEnabled: s.skillsEnabled,
+                                connectors: s.connectors,
                             },
                             mcpServers: s.mcpServers.filter((m) => m.enabled),
+                            memoryContext: await buildLocalMemoryContext(latestText),
                         },
                     };
                 },
