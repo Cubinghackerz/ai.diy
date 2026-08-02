@@ -40,6 +40,11 @@ export function useProviderModels(provider: ProviderId, enabled: boolean) {
 
     const apiKey = settings.providers[provider]?.apiKey || "";
     const baseUrl = settings.providers[provider]?.baseUrl;
+    const compatibleHeaders = settings.providers[provider]?.openAICompatible?.headers;
+    const timeoutMs = settings.providers[provider]?.openAICompatible?.timeoutMs;
+    const maxRetries = settings.providers[provider]?.openAICompatible?.maxRetries;
+    const authMode = settings.providers[provider]?.openAICompatible?.authMode;
+    const capabilityOverrides = settings.providers[provider]?.openAICompatible?.capabilityOverrides;
 
     const refresh = useCallback(async () => {
         if (!enabled) {
@@ -54,8 +59,17 @@ export function useProviderModels(provider: ProviderId, enabled: boolean) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     provider,
-                    apiKey: apiKey || localProviderKey(provider),
+                    apiKey:
+                        provider === "custom" &&
+                        settings.providers[provider]?.openAICompatible?.authMode &&
+                        settings.providers[provider].openAICompatible.authMode !== "bearer"
+                            ? ""
+                            : apiKey || localProviderKey(provider),
                     baseUrl: baseUrl || undefined,
+                    headers: compatibleHeaders,
+                    timeoutMs,
+                    maxRetries,
+                    authMode,
                 }),
             });
             const data = (await res.json()) as {
@@ -65,11 +79,15 @@ export function useProviderModels(provider: ProviderId, enabled: boolean) {
             const raw =
                 data.models && data.models.length > 0
                     ? data.models.map((m) =>
-                          enrichModelInfo({
+                        enrichModelInfo({
                               ...m,
                               id: m.id,
                               name: m.name || m.id,
                               provider,
+                              ...(capabilityOverrides?.tools === undefined ? {} : { supportsTools: capabilityOverrides.tools }),
+                              ...(capabilityOverrides?.vision === undefined ? {} : { supportsVision: capabilityOverrides.vision }),
+                              ...(capabilityOverrides?.structuredOutput === undefined ? {} : { supportsStructuredOutputs: capabilityOverrides.structuredOutput }),
+                              ...(capabilityOverrides?.reasoning === undefined ? {} : { supportsReasoning: capabilityOverrides.reasoning }),
                           }),
                       )
                     : (DEFAULT_MODELS[provider] ?? []).map(enrichModelInfo);
@@ -93,7 +111,7 @@ export function useProviderModels(provider: ProviderId, enabled: boolean) {
         } finally {
             setLoading(false);
         }
-    }, [enabled, provider, apiKey, baseUrl]);
+    }, [enabled, provider, apiKey, baseUrl, compatibleHeaders, timeoutMs, maxRetries, authMode, capabilityOverrides]);
 
     useEffect(() => {
         void refresh();

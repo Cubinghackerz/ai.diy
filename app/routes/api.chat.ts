@@ -25,6 +25,7 @@ import { inferModelSupportsImageGeneration } from "~/lib/model-capabilities";
 import { imageRequestOptions } from "~/lib/image-generation";
 import { providerNeedsKey } from "~/lib/provider-credentials";
 import { corsPreflight, withCors } from "~/lib/server/cors";
+import { normalizeProviderBaseUrl } from "~/lib/server/provider-url";
 
 interface ChatRequestBody {
     messages: UIMessage[];
@@ -46,6 +47,7 @@ interface ChatRequestBody {
         searxngUrl?: string;
         skillsEnabled?: boolean;
         connectors?: ConnectorConfig[];
+        memoryAvailable?: boolean;
     };
     mcpServers?: McpServerConfig[];
     imageSettings?: {
@@ -55,8 +57,20 @@ interface ChatRequestBody {
     memoryContext?: string;
     customSkill?: { name: string; content: string };
     openAICompatible?: {
-        apiMode: "chat" | "responses";
-        reasoningWithTools: "none" | "allow";
+        apiMode: "auto" | "chat" | "responses";
+        reasoningWithTools: "auto" | "none" | "allow";
+        headers?: Record<string, string>;
+        timeoutMs?: number;
+        maxRetries?: number;
+        authMode?: "bearer" | "api-key-header" | "custom-header" | "none";
+        capabilityOverrides?: {
+            tools?: boolean;
+            vision?: boolean;
+            structuredOutput?: boolean;
+            reasoning?: boolean;
+            embeddings?: boolean;
+            parallelTools?: boolean;
+        };
     };
 }
 
@@ -69,6 +83,26 @@ function imagePrompt(messages: UIMessage[]): string {
             .join(" ")
             .trim() || "Generate an image based on the conversation."
     );
+}
+
+function publicChatError(error: unknown): string {
+    const message = error instanceof Error ? error.message : "";
+    if (/only http\(s\)|valid http\(s\)|credentials must not be embedded|private.*not allowed/i.test(message)) {
+        return message;
+    }
+    if (/invalid|unauthorized|forbidden|api key|authentication/i.test(message)) {
+        return "Provider authentication failed. Check the API key and permissions.";
+    }
+    if (/model.*not found|not found.*model/i.test(message)) {
+        return "The selected model was not found by this provider.";
+    }
+    if (/rate limit|\b429\b/i.test(message)) {
+        return "The provider rate limit was reached. Wait and try again.";
+    }
+    if (/timeout|timed out|network|fetch failed|econn/i.test(message)) {
+        return "Could not reach the provider. Check the API root and network connection.";
+    }
+    return "Provider request failed. Check the selected model and provider compatibility.";
 }
 
 async function generateImageResponse(body: ChatRequestBody): Promise<Response> {
@@ -156,13 +190,24 @@ export async function action({ request }: ActionFunctionArgs) {
         );
     }
 
+    try {
+        body.baseUrl = normalizeProviderBaseUrl(body.provider, body.baseUrl);
+    } catch (err) {
+        return withCors(
+            request,
+            Response.json(
+                { error: err instanceof Error ? err.message : "Invalid provider URL" },
+                { status: 400 },
+            ),
+        );
+    }
+
     if (inferModelSupportsImageGeneration(body.model, body.provider)) {
         try {
             return withCors(request, await generateImageResponse(body));
         } catch (err) {
-            const message =
-                err instanceof Error ? err.message : "Image generation failed";
-            console.error("[api/chat:image]", err);
+            const message = publicChatError(err);
+            console.error("[api/chat:image]", message);
             return withCors(
                 request,
                 Response.json({ error: message }, { status: 500 }),
@@ -170,14 +215,19 @@ export async function action({ request }: ActionFunctionArgs) {
         }
     }
 
-    const { tools: mcpTools, clients: mcpClients } = await loadMcpTools(
-        body.mcpServers,
-    );
+    let mcpTools = {};
+    let mcpClients: Awaited<ReturnType<typeof loadMcpTools>>["clients"] = [];
 
     try {
+        const loadedMcp = await loadMcpTools(body.mcpServers);
+        mcpTools = loadedMcp.tools;
+        mcpClients = loadedMcp.clients;
         const modelInstance = createChatModel(body);
         const builtIn = await buildChatTools(body.toolSettings ?? {});
-        const tools = { ...builtIn, ...mcpTools };
+        const tools =
+            body.openAICompatible?.capabilityOverrides?.tools === false
+                ? {}
+                : { ...builtIn, ...mcpTools };
 
         const modelMessages = await convertToModelMessages(body.messages);
         const effort = body.reasoningEffort ?? "medium";
@@ -253,15 +303,13 @@ export async function action({ request }: ActionFunctionArgs) {
             request,
             result.toUIMessageStreamResponse({
                 sendReasoning: true,
-                onError: (err) =>
-                    err instanceof Error ? err.message : "Unknown chat error",
+                onError: publicChatError,
             }),
         );
     } catch (err) {
         await closeMcpClients(mcpClients);
-        const errorMsg =
-            err instanceof Error ? err.message : "Unknown server error";
-        console.error("[api/chat]", err);
+        const errorMsg = publicChatError(err);
+        console.error("[api/chat]", errorMsg);
         return withCors(
             request,
             Response.json({ error: errorMsg }, { status: 500 }),

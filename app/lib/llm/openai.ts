@@ -8,6 +8,7 @@
 import OpenAI from "openai";
 import type { ChatRequest, StreamCallbacks, LLMProvider } from "./types";
 import type { ProviderId } from "~/lib/types";
+import { createCompatibleFetch } from "~/lib/server/compatible-fetch";
 
 export class OpenAIProvider implements LLMProvider {
     id: ProviderId;
@@ -18,7 +19,7 @@ export class OpenAIProvider implements LLMProvider {
 
     async streamChat(request: ChatRequest, callbacks: StreamCallbacks): Promise<void> {
         const client = new OpenAI({
-            apiKey: request.apiKey,
+            apiKey: request.apiKey || undefined,
             baseURL: request.baseUrl,
         });
 
@@ -100,9 +101,26 @@ export class OpenAIProvider implements LLMProvider {
         }
     }
 
-    async listModels(apiKey: string, baseUrl?: string): Promise<{ id: string; name: string }[]> {
+    async listModels(
+        apiKey: string,
+        baseUrl?: string,
+        headers?: Record<string, string>,
+        timeoutMs?: number,
+        maxRetries?: number,
+        authMode?: "bearer" | "api-key-header" | "custom-header" | "none",
+    ): Promise<{ id: string; name: string }[]> {
         try {
-            const client = new OpenAI({ apiKey, baseURL: baseUrl });
+            const client = new OpenAI({
+                apiKey: apiKey || "custom",
+                baseURL: baseUrl,
+                defaultHeaders: headers,
+                fetch: createCompatibleFetch(timeoutMs, maxRetries, {
+                    stripAuthorization:
+                        authMode === "api-key-header" ||
+                        authMode === "custom-header" ||
+                        authMode === "none",
+                }),
+            });
             const list = await client.models.list();
             return list.data
                 .map((m) => ({ id: m.id, name: m.id }))

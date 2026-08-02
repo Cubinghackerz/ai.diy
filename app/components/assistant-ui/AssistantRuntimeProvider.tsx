@@ -7,7 +7,6 @@
 
 import {
     AssistantRuntimeProvider as AuiRuntimeProvider,
-    WebSpeechDictationAdapter,
 } from "@assistant-ui/react";
 import {
     useAISDKRuntime,
@@ -22,8 +21,16 @@ import { createAttachmentAdapter } from "~/lib/attachments";
 import { getModelModalities } from "~/lib/model-modalities";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { runBrowserPython } from "~/lib/pyodide";
-import { buildLocalMemoryContext } from "~/lib/memory";
+import {
+    buildLocalMemoryContext,
+    hasLocalMemoryEntries,
+    readLocalMemory,
+} from "~/lib/memory";
 import { askUserInBrowser } from "~/lib/client-tools";
+import {
+    createWebSpeechDictationAdapter,
+    isWebSpeechDictationSupported,
+} from "~/lib/dictation";
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
 
 async function parseChatError(res: Response): Promise<string> {
@@ -73,6 +80,8 @@ export function AssistantRuntimeProvider({
                         ?.parts.filter((part) => part.type === "text")
                         .map((part) => part.text)
                         .join(" ") ?? "";
+                    const memoryContext = await buildLocalMemoryContext(latestText);
+                    const memoryAvailable = await hasLocalMemoryEntries();
                     return {
                         body: {
                             // Keep assistant-ui forwarded context (tools/system/etc).
@@ -84,7 +93,12 @@ export function AssistantRuntimeProvider({
                             metadata: options.requestMetadata,
                             model: s.chat.model,
                             provider,
-                            apiKey: apiKey || localProviderKey(provider),
+                            apiKey:
+                                provider === "custom" &&
+                                providerConfig?.openAICompatible?.authMode &&
+                                providerConfig.openAICompatible.authMode !== "bearer"
+                                    ? ""
+                                    : apiKey || localProviderKey(provider),
                             baseUrl,
                             openAICompatible: providerConfig?.openAICompatible,
                             systemPrompt: s.chat.systemPrompt,
@@ -104,9 +118,10 @@ export function AssistantRuntimeProvider({
                                 searxngUrl: s.searxngUrl,
                                 skillsEnabled: s.skillsEnabled,
                                 connectors: s.connectors,
+                                memoryAvailable,
                             },
                             mcpServers: s.mcpServers.filter((m) => m.enabled),
-                            memoryContext: await buildLocalMemoryContext(latestText),
+                            memoryContext,
                         },
                     };
                 },
@@ -124,6 +139,7 @@ export function AssistantRuntimeProvider({
                 "run_python",
                 "run_code",
                 "ask_user",
+                "memory",
             ].includes(toolCall.toolName)) return;
             pendingClientCalls.current += 1;
             const input = toolCall.input as {
@@ -131,15 +147,18 @@ export function AssistantRuntimeProvider({
                 question?: string;
                 questionType?: "single" | "multiple" | "short";
                 options?: string[];
+                query?: string;
             };
             const task =
                 toolCall.toolName === "ask_user"
-                    ? askUserInBrowser({
+                     ? askUserInBrowser({
                           question: input.question ?? "Please provide more information.",
                           questionType: input.questionType,
                           options: input.options,
                       })
-                    : runBrowserPython(input.code ?? "");
+                    : toolCall.toolName === "memory"
+                      ? readLocalMemory(input.query)
+                      : runBrowserPython(input.code ?? "");
             void task.then(
                 (output) => {
                     const addToolOutput = chatRef.current
@@ -201,15 +220,11 @@ export function AssistantRuntimeProvider({
     const dictation = useMemo(() => {
         if (
             typeof window === "undefined" ||
-            !WebSpeechDictationAdapter.isSupported()
+            !isWebSpeechDictationSupported()
         ) {
             return undefined;
         }
-        return new WebSpeechDictationAdapter({
-            language: navigator.language || "en-US",
-            continuous: true,
-            interimResults: true,
-        });
+        return createWebSpeechDictationAdapter(navigator.language || "en-US");
     }, []);
 
     const adapters = useMemo(

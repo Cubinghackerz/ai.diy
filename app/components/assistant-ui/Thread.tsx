@@ -385,6 +385,8 @@ const ComposerSendButton: FC = () => {
 };
 
 const ComposerAction: FC = () => {
+  const dictationStatus = useAuiState((s) => s.composer.dictation?.status.type);
+
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between gap-2">
       <div className="flex min-w-0 flex-1 items-center gap-1.5">
@@ -392,13 +394,16 @@ const ComposerAction: FC = () => {
         <ComposerModelControls />
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
-        <AuiIf condition={(s) => s.thread.capabilities.dictation}>
+        <AuiIf condition={(s) => s.thread.capabilities.dictation && !s.thread.isRunning}>
           <AuiIf condition={(s) => s.composer.dictation == null}>
             <ComposerPrimitive.Dictate render={<TooltipIconButton tooltip="Voice input" side="bottom" type="button" variant="ghost" size="icon" className="aui-composer-dictate size-7 rounded-full" aria-label="Start voice input" />}><MicIcon className="aui-composer-dictate-icon size-4" /></ComposerPrimitive.Dictate>
           </AuiIf>
           <AuiIf condition={(s) => s.composer.dictation != null}>
             <ComposerPrimitive.StopDictation render={<TooltipIconButton tooltip="Stop dictation" side="bottom" type="button" variant="ghost" size="icon" className="aui-composer-stop-dictation text-destructive size-7 rounded-full" aria-label="Stop voice input" />}><SquareIcon className="aui-composer-stop-dictation-icon size-3.5 animate-pulse fill-current" /></ComposerPrimitive.StopDictation>
           </AuiIf>
+          <span className="sr-only" aria-live="polite">
+            {dictationStatus === "starting" ? "Starting voice input" : dictationStatus === "running" ? "Listening for voice input" : ""}
+          </span>
         </AuiIf>
         <ComposerSendButton />
       </div>

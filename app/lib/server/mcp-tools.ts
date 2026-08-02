@@ -1,6 +1,7 @@
 import { createMCPClient } from "@ai-sdk/mcp";
 import type { ToolSet } from "ai";
 import type { McpServerConfig } from "~/lib/types";
+import { assertConfiguredHttpUrl } from "~/lib/server/provider-url";
 
 export type McpClientHandle = {
     close: () => Promise<void>;
@@ -43,30 +44,19 @@ async function connectMcpServer(
     server: McpServerConfig,
 ): Promise<(McpClientHandle & { tools: () => Promise<ToolSet> }) | null> {
     if (server.kind === "stdio") {
-        if (!server.command?.trim()) return null;
-        const { Experimental_StdioMCPTransport } = await import(
-            "@ai-sdk/mcp/mcp-stdio"
-        );
-        const client = await createMCPClient({
-            transport: new Experimental_StdioMCPTransport({
-                command: server.command,
-                args: server.args ?? [],
-                env: server.env,
-            }),
-            clientName: `prismium-${slugify(server.name)}`,
-        });
-        return {
-            tools: () => client.tools() as Promise<ToolSet>,
-            close: () => client.close(),
-        };
+        // Browser-controlled settings must never execute commands on the host.
+        throw new Error("Stdio MCP servers are disabled. Connect a remote HTTP or SSE MCP server instead.");
     }
 
     if (!server.url?.trim()) return null;
+    const url = assertConfiguredHttpUrl(server.url);
     const type = server.kind === "http" ? "http" : "sse";
     const client = await createMCPClient({
         transport: {
             type,
-            url: server.url.trim(),
+            url: url.toString(),
+            headers: sanitizeHeaders(server.headers),
+            redirect: "error",
         },
         clientName: `prismium-${slugify(server.name)}`,
     });
@@ -74,6 +64,17 @@ async function connectMcpServer(
         tools: () => client.tools() as Promise<ToolSet>,
         close: () => client.close(),
     };
+}
+
+function sanitizeHeaders(headers?: Record<string, string>): Record<string, string> | undefined {
+    if (!headers) return undefined;
+    const safeEntries = Object.entries(headers).filter(
+        ([name, value]) =>
+            /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name) &&
+            typeof value === "string" &&
+            !/[\r\n]/.test(value),
+    );
+    return safeEntries.length > 0 ? Object.fromEntries(safeEntries) : undefined;
 }
 
 function slugify(name: string): string {

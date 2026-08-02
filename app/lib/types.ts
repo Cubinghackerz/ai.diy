@@ -55,8 +55,21 @@ export interface ProviderConfig {
     baseUrl?: string;
     enabled: boolean;
     openAICompatible?: {
-        apiMode: "chat" | "responses";
-        reasoningWithTools: "none" | "allow";
+        apiMode: "auto" | "chat" | "responses";
+        reasoningWithTools: "auto" | "none" | "allow";
+        authMode?: "bearer" | "api-key-header" | "custom-header" | "none";
+        authHeader?: string;
+        headers?: Record<string, string>;
+        timeoutMs?: number;
+        maxRetries?: number;
+        capabilityOverrides?: {
+            tools?: boolean;
+            vision?: boolean;
+            structuredOutput?: boolean;
+            reasoning?: boolean;
+            embeddings?: boolean;
+            parallelTools?: boolean;
+        };
     };
 }
 
@@ -139,6 +152,8 @@ export interface McpServerConfig {
     command?: string;
     args?: string[];
     env?: Record<string, string>;
+    /** Additional request headers for authenticated HTTP/SSE MCP servers. */
+    headers?: Record<string, string>;
     enabled: boolean;
 }
 

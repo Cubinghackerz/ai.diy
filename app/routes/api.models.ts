@@ -1,10 +1,11 @@
-import type { LoaderFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { getProvider } from "~/lib/llm";
 import { enrichModelInfo } from "~/lib/model-capabilities";
 import { DEFAULT_MODELS, type ModelInfo, type ProviderId } from "~/lib/types";
 import { isLocalProvider } from "~/lib/setup";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { corsPreflight, withCors } from "~/lib/server/cors";
+import { normalizeProviderBaseUrl } from "~/lib/server/provider-url";
 
 export function loader({ request }: LoaderFunctionArgs) {
     const preflight = corsPreflight(request);
@@ -15,7 +16,7 @@ export function loader({ request }: LoaderFunctionArgs) {
     );
 }
 
-export async function action({ request }: LoaderFunctionArgs) {
+export async function action({ request }: ActionFunctionArgs) {
     const preflight = corsPreflight(request);
     if (preflight) return preflight;
 
@@ -30,6 +31,10 @@ export async function action({ request }: LoaderFunctionArgs) {
         provider: ProviderId;
         apiKey: string;
         baseUrl?: string;
+        headers?: Record<string, string>;
+        timeoutMs?: number;
+        maxRetries?: number;
+        authMode?: "bearer" | "api-key-header" | "custom-header" | "none";
     };
     try {
         body = (await request.json()) as typeof body;
@@ -64,11 +69,30 @@ export async function action({ request }: LoaderFunctionArgs) {
         );
     }
 
+    let baseUrl: string | undefined;
+    try {
+        baseUrl = normalizeProviderBaseUrl(body.provider, body.baseUrl);
+    } catch (err) {
+        return withCors(
+            request,
+            Response.json(
+                { error: err instanceof Error ? err.message : "Invalid provider URL", models: [] },
+                { status: 400, headers: { "Cache-Control": "no-store" } },
+            ),
+        );
+    }
+
     try {
         const provider = getProvider(body.provider);
         const live = await provider.listModels(
-            apiKey || localProviderKey(body.provider),
-            body.baseUrl,
+            body.provider === "custom"
+                ? apiKey
+                : apiKey || localProviderKey(body.provider),
+            baseUrl,
+            body.headers,
+            body.timeoutMs,
+            body.maxRetries,
+            body.authMode,
         );
 
         const raw: ModelInfo[] =
@@ -96,12 +120,13 @@ export async function action({ request }: LoaderFunctionArgs) {
                         modelsListed: raw.length > 0,
                         provider: body.provider,
                     },
+                    resolvedBaseUrl: baseUrl,
                 },
                 { headers: { "Cache-Control": "no-store" } },
             ),
         );
     } catch (err) {
-        const message = err instanceof Error ? err.message : "Unknown error";
+        const message = modelDiscoveryError(err);
         const fallback = (DEFAULT_MODELS[body.provider] ?? []).map((m) =>
             enrichModelInfo({ ...m, provider: body.provider }),
         );
@@ -113,6 +138,7 @@ export async function action({ request }: LoaderFunctionArgs) {
                         models: fallback,
                         live: false,
                         error: message,
+                        resolvedBaseUrl: baseUrl,
                         fetchedAt: Date.now(),
                     },
                     { headers: { "Cache-Control": "no-store" } },
@@ -129,4 +155,15 @@ export async function action({ request }: LoaderFunctionArgs) {
             ),
         );
     }
+}
+
+function modelDiscoveryError(error: unknown): string {
+    const message = error instanceof Error ? error.message : "";
+    if (/invalid|unauthorized|forbidden|api key|authentication/i.test(message)) {
+        return "Provider authentication failed. Check the API key and permissions.";
+    }
+    if (/timeout|timed out|network|fetch failed|econn/i.test(message)) {
+        return "Could not reach the provider. Check the API root and network connection.";
+    }
+    return "Model discovery failed. Check the API root and provider compatibility.";
 }

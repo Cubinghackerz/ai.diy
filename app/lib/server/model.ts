@@ -14,6 +14,8 @@ import type { ImageModel } from "ai";
 import type { ProviderConfig, ProviderId } from "~/lib/types";
 import { parseProviderCredentials } from "~/lib/provider-credentials";
 import { modelSupportsReasoning } from "~/lib/reasoning";
+import { normalizeProviderBaseUrl } from "~/lib/server/provider-url";
+import { createCompatibleFetch } from "~/lib/server/compatible-fetch";
 
 export type ModelRequest = {
     provider: ProviderId;
@@ -27,29 +29,32 @@ export function createChatModel(body: ModelRequest) {
     const { provider, apiKey, baseUrl, model } = body;
     const credentials = parseProviderCredentials(provider, apiKey);
     const key = credentials.apiKey || apiKey;
+    const resolvedBaseUrl = normalizeProviderBaseUrl(provider, baseUrl);
+    const compatibleHeaders = body.openAICompatible?.headers;
 
     switch (provider) {
         case "openai": {
             const openai = createOpenAI({
                 apiKey: key,
-                baseURL: baseUrl || undefined,
+                baseURL: resolvedBaseUrl,
+                headers: compatibleHeaders,
             });
-            return shouldUseOpenAIResponses(provider, model, baseUrl, body.openAICompatible)
+            return shouldUseOpenAIResponses(provider, model, resolvedBaseUrl, body.openAICompatible)
                 ? openai.responses(model)
                 : openai.chat(model);
         }
         case "anthropic":
-            return createAnthropic({ apiKey: key, baseURL: baseUrl || undefined })(model);
+            return createAnthropic({ apiKey: key, baseURL: resolvedBaseUrl })(model);
         case "gemini":
             return createGoogleGenerativeAI({ apiKey: key })(model);
         case "groq":
-            return createOpenAI({ apiKey: key, baseURL: baseUrl || "https://api.groq.com/openai/v1" }).chat(model);
+            return createOpenAI({ apiKey: key, baseURL: resolvedBaseUrl || "https://api.groq.com/openai/v1", headers: compatibleHeaders }).chat(model);
         case "xai":
-            return createXai({ apiKey: key, baseURL: baseUrl || "https://api.x.ai/v1" }).chat(model);
+            return createXai({ apiKey: key, baseURL: resolvedBaseUrl || "https://api.x.ai/v1" }).chat(model);
         case "openrouter":
-            return createOpenAI({ apiKey: key, baseURL: baseUrl || "https://openrouter.ai/api/v1" }).chat(model);
+            return createOpenAI({ apiKey: key, baseURL: resolvedBaseUrl || "https://openrouter.ai/api/v1", headers: compatibleHeaders }).chat(model);
         case "deepseek":
-            return createDeepSeek({ apiKey: key, baseURL: baseUrl || undefined }).chat(model);
+            return createDeepSeek({ apiKey: key, baseURL: resolvedBaseUrl }).chat(model);
         case "bedrock":
             return createAmazonBedrock({
                 apiKey: credentials.apiKey,
@@ -57,21 +62,21 @@ export function createChatModel(body: ModelRequest) {
                 accessKeyId: credentials.accessKeyId,
                 secretAccessKey: credentials.secretAccessKey,
                 sessionToken: credentials.sessionToken,
-                baseURL: baseUrl || credentials.baseURL || undefined,
+                baseURL: resolvedBaseUrl || credentials.baseURL || undefined,
             })(model);
         case "azure":
             return createAzure({
                 apiKey: credentials.apiKey,
                 resourceName: credentials.resourceName,
                 apiVersion: credentials.apiVersion,
-                baseURL: baseUrl || credentials.baseURL || undefined,
+                baseURL: resolvedBaseUrl || credentials.baseURL || undefined,
             }).chat(model);
         case "vertex":
             return createGoogleVertex({
                 apiKey: credentials.apiKey,
                 project: credentials.project,
                 location: credentials.location,
-                baseURL: baseUrl || credentials.baseURL || undefined,
+                baseURL: resolvedBaseUrl || credentials.baseURL || undefined,
                 ...(credentials.clientEmail && credentials.privateKey
                     ? {
                           googleAuthOptions: {
@@ -86,22 +91,31 @@ export function createChatModel(body: ModelRequest) {
         case "gateway":
             return createGateway({
                 apiKey: key,
-                baseURL: baseUrl || undefined,
+                baseURL: resolvedBaseUrl,
             }).chat(model);
         case "togetherai":
-            return createTogetherAI({ apiKey: key, baseURL: baseUrl || undefined })(model);
+            return createTogetherAI({ apiKey: key, baseURL: resolvedBaseUrl })(model);
         case "mistral":
-            return createMistral({ apiKey: key, baseURL: baseUrl || undefined }).chat(model);
+            return createMistral({ apiKey: key, baseURL: resolvedBaseUrl }).chat(model);
         case "huggingface":
-            return createHuggingFace({ apiKey: key, baseURL: baseUrl || undefined })(model);
+            return createHuggingFace({ apiKey: key, baseURL: resolvedBaseUrl }).responses(model);
         case "ollama":
-            return createOpenAI({ apiKey: key || "ollama", baseURL: baseUrl || "http://localhost:11434/v1" }).chat(model);
+            return createOpenAI({ apiKey: key || "ollama", baseURL: resolvedBaseUrl || "http://localhost:11434/v1", headers: compatibleHeaders }).chat(model);
         case "lmstudio":
-            return createOpenAI({ apiKey: key || "lmstudio", baseURL: baseUrl || "http://localhost:1234/v1" }).chat(model);
+            return createOpenAI({ apiKey: key || "lmstudio", baseURL: resolvedBaseUrl || "http://localhost:1234/v1", headers: compatibleHeaders }).chat(model);
         case "custom": {
+            const useBearer = body.openAICompatible?.authMode !== "none" &&
+                body.openAICompatible?.authMode !== "api-key-header" &&
+                body.openAICompatible?.authMode !== "custom-header";
             const compatible = createOpenAI({
-                apiKey: key || "custom",
-                baseURL: baseUrl || "http://localhost:1234/v1",
+                apiKey: useBearer ? key || "custom" : "custom",
+                baseURL: resolvedBaseUrl || "http://localhost:1234/v1",
+                headers: compatibleHeaders,
+                fetch: createCompatibleFetch(
+                    body.openAICompatible?.timeoutMs,
+                    body.openAICompatible?.maxRetries,
+                    { stripAuthorization: !useBearer },
+                ),
             });
             return body.openAICompatible?.apiMode === "responses"
                 ? compatible.responses(model)
@@ -139,6 +153,8 @@ export function createImageModel(body: ModelRequest): ImageModel {
     const { provider, apiKey, baseUrl, model } = body;
     const credentials = parseProviderCredentials(provider, apiKey);
     const key = credentials.apiKey || apiKey;
+    const resolvedBaseUrl = normalizeProviderBaseUrl(provider, baseUrl);
+    const compatibleHeaders = body.openAICompatible?.headers;
 
     switch (provider) {
         case "openai":
@@ -146,19 +162,20 @@ export function createImageModel(body: ModelRequest): ImageModel {
         case "custom":
             return createOpenAI({
                 apiKey: key,
-                baseURL: baseUrl || undefined,
+                baseURL: resolvedBaseUrl,
+                headers: compatibleHeaders,
             }).imageModel(model);
         case "xai":
             return createXai({
                 apiKey: key,
-                baseURL: baseUrl || undefined,
+                baseURL: resolvedBaseUrl,
             }).imageModel(model);
         case "gemini":
             return createGoogleGenerativeAI({ apiKey: key }).image(model);
         case "gateway":
             return createGateway({
                 apiKey: key,
-                baseURL: baseUrl || undefined,
+                baseURL: resolvedBaseUrl,
             }).imageModel(model);
         case "bedrock":
             return createAmazonBedrock({
@@ -167,26 +184,26 @@ export function createImageModel(body: ModelRequest): ImageModel {
                 accessKeyId: credentials.accessKeyId,
                 secretAccessKey: credentials.secretAccessKey,
                 sessionToken: credentials.sessionToken,
-                baseURL: baseUrl || credentials.baseURL || undefined,
+                baseURL: resolvedBaseUrl || credentials.baseURL || undefined,
             }).image(model);
         case "azure":
             return createAzure({
                 apiKey: credentials.apiKey,
                 resourceName: credentials.resourceName,
                 apiVersion: credentials.apiVersion,
-                baseURL: baseUrl || credentials.baseURL || undefined,
+                baseURL: resolvedBaseUrl || credentials.baseURL || undefined,
             }).imageModel(model);
         case "vertex":
             return createGoogleVertex({
                 apiKey: credentials.apiKey,
                 project: credentials.project,
                 location: credentials.location,
-                baseURL: baseUrl || credentials.baseURL || undefined,
+                baseURL: resolvedBaseUrl || credentials.baseURL || undefined,
             }).imageModel(model);
         case "togetherai":
             return createTogetherAI({
                 apiKey: key,
-                baseURL: baseUrl || undefined,
+                baseURL: resolvedBaseUrl,
             }).imageModel(model);
         default:
             throw new Error(

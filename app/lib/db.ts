@@ -159,6 +159,46 @@ export async function deletePreviewSession(id: string): Promise<void> {
     await db.delete("previewSessions", id);
 }
 
+/** Export all local-first application data for an explicit user backup. */
+export async function exportLocalBackup(): Promise<{
+    version: 1;
+    exportedAt: string;
+    threads: ThreadData[];
+    messages: MessageData[];
+    artifacts: Artifact[];
+    previewSessions: Array<{ id: string; data: unknown; updatedAt: number }>;
+    memories: MemoryEntry[];
+}> {
+    const db = await getDB();
+    if (!db) {
+        return {
+            version: 1,
+            exportedAt: new Date().toISOString(),
+            threads: [],
+            messages: [],
+            artifacts: [],
+            previewSessions: [],
+            memories: [],
+        };
+    }
+    const [threads, messages, artifacts, previewSessions, memories] = await Promise.all([
+        db.getAll("threads"),
+        db.getAll("messages"),
+        db.getAll("artifacts"),
+        db.getAll("previewSessions"),
+        db.getAll("memories"),
+    ]);
+    return {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        threads,
+        messages,
+        artifacts,
+        previewSessions,
+        memories,
+    };
+}
+
 export async function getMemoryEntries(): Promise<MemoryEntry[]> {
     const db = await getDB();
     if (!db) return [];

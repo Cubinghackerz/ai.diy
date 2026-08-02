@@ -81,6 +81,25 @@ export async function buildLocalMemoryContext(query: string): Promise<string> {
         .slice(0, 4_000);
 }
 
+export async function hasLocalMemoryEntries(): Promise<boolean> {
+    const entries = await getMemoryEntries();
+    return entries.length > 0;
+}
+
+export async function readLocalMemory(query?: string): Promise<string> {
+    const entries = await getMemoryEntries();
+    if (entries.length === 0) return "No local memory is stored.";
+    if (query?.trim()) {
+        const relevant = await buildLocalMemoryContext(query);
+        return relevant || "No relevant local memory matched that query.";
+    }
+    return entries
+        .slice(0, 6)
+        .map((item) => `- ${item.content}`)
+        .join("\n")
+        .slice(0, 4_000);
+}
+
 export function importMemoryEntries(payload: unknown): MemoryEntry[] {
     const textValues: string[] = [];
     const walk = (value: unknown, depth = 0) => {

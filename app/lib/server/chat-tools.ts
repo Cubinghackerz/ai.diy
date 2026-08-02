@@ -21,6 +21,7 @@ export type ToolSettings = {
     searxngUrl?: string;
     skillsEnabled?: boolean;
     connectors?: ConnectorConfig[];
+    memoryAvailable?: boolean;
 };
 
 function evaluateMath(expression: string): string {
@@ -178,9 +179,58 @@ function frontendDesignBrief(input: {
     surface?: string;
     constraints?: string;
 }) {
+    const skill = `---
+name: frontend-design
+description: Guidance for distinctive, intentional visual design when building new UI or reshaping an existing one. Helps with aesthetic direction, typography, and making choices that do not read as templated defaults.
+license: Complete terms in LICENSE.txt
+---
+
+# Frontend Design
+
+Approach this as the design lead at a small studio known for giving every client a visual identity that could not be mistaken for anyone else's. Make deliberate, opinionated choices about palette, typography, and layout, and take one real aesthetic risk you can justify.
+
+## Ground it in the subject
+
+If the brief does not pin down the product or subject, name one concrete subject, its audience, and the page's single job before designing. Use the subject's materials, instruments, artifacts, and vernacular throughout. Build with real content and subject matter rather than generic filler.
+
+## Design principles
+
+- Treat the hero or opening state as a thesis, not a generic slogan.
+- Pair display and body type deliberately; make typography part of the identity.
+- Use structure, labels, numbering, and dividers only when they encode something true.
+- Use motion for hierarchy, causality, state change, spatial relationship, progress, feedback, or story sequence; respect reduced motion.
+- Match implementation complexity to the visual direction. Minimal directions require precision; maximal directions require complete execution.
+- Spend boldness in one signature element and keep surrounding decisions disciplined.
+
+## Process
+
+1. Extract the artifact, audience, primary task, required states, assets, constraints, brand tone, accessibility risk, and success definition.
+2. Classify the interface as marketing, product, dashboard, utility, editorial, visualization, game, or 3D.
+3. Write a concise design thesis before coding.
+4. Set expression, density, and motion deliberately.
+5. Map default, hover/focus, loading, empty, error, success, disabled, and offline states where applicable.
+6. Inspect the existing framework, tokens, routing, data flow, accessibility conventions, and nearby components before modifying an existing project.
+7. Brainstorm a compact token system: 4–6 named colors, deliberate type roles, layout concept, wireframe, and one signature device.
+8. Critique the plan against the brief. If it could have been produced for any similar prompt, revise it before coding.
+9. Implement semantic structure, responsive layout, primary interaction, visual system, secondary motion, then accessibility/performance/security hardening.
+10. Validate at mobile around 390px, tablet around 768px, and desktop around 1440px, including keyboard-only, reduced-motion, empty/error states, controls, and console errors.
+
+## Required guardrails
+
+- Reuse the existing design system and framework when modifying an existing project.
+- Support widths down to 320px and prevent horizontal overflow.
+- Use semantic controls, visible focus, accessible names, keyboard access, sufficient contrast, and reduced-motion support.
+- Use real content and never invent metrics, testimonials, awards, compliance claims, or private data.
+- Avoid generic cream/serif/terracotta, black/acid-green, broadsheet, mesh-gradient, glass, random bento, and meaningless dashboard defaults unless the brief justifies them.
+- Do not use eval, unsafe DOM insertion, exposed secrets, or unimplemented visible controls.
+
+## Output and validation contract
+
+Return the completed implementation or implementation-ready brief, followed by material assumptions, validation results, and unresolved blockers. Before delivery verify scope, inputs, decision rules, output completeness, claims/tool results, accessibility, responsive behavior, performance, security, and realistic content lengths. Do not narrate routine hidden reasoning.`;
     return JSON.stringify(
         {
             skill: "frontend-design",
+            instructions: skill,
             request: input.request.trim(),
             surface: input.surface?.trim() || "web interface",
             constraints: input.constraints?.trim() || "Use the existing design system and preserve accessibility.",
@@ -269,6 +319,29 @@ function connectorGuide(connectors: ConnectorConfig[]): string {
         .join("\n");
 }
 
+function researchSkillGuide(input: { question: string; depth?: "quick" | "standard" | "deep" }): string {
+    return `# Research Skill
+
+Research task: ${input.question.trim()}
+Depth: ${input.depth || "standard"}
+
+## Workflow
+1. Define the decision or factual question and split it into answerable subquestions.
+2. Search with the available provider-specific web search tool using focused queries, synonyms, dates, and authoritative domains.
+3. Prefer primary sources: official documentation, specifications, original research, direct datasets, and maintained repositories.
+4. Read the most relevant pages with read_url; do not treat snippets as evidence.
+5. Extract the exact claim, source URL, publication/update date, and relevant section for each important finding.
+6. Cross-check consequential claims with an independent source and explicitly report disagreement or uncertainty.
+7. Stop when the requested question is answered, sources converge, or additional searches are no longer changing the conclusion.
+
+## Output contract
+- Give the direct answer first.
+- Cite each material claim with a stable URL and identify the source type/date when useful.
+- Separate verified facts, reasonable inferences, and unresolved uncertainty.
+- Do not invent sources, dates, quotes, metrics, or tool results.
+- Keep the evidence concise; do not expose private chain-of-thought or narrate routine searches.`;
+}
+
 export async function buildChatTools(settings: ToolSettings = {}) {
     const enableSearch = settings.webSearchEnabled !== false;
     const enableCalc = settings.calculatorEnabled !== false;
@@ -277,6 +350,18 @@ export async function buildChatTools(settings: ToolSettings = {}) {
     const enablePython = settings.pythonEnabled !== false;
 
     const tools: Record<string, Tool> = {};
+
+    if (enableSearch) {
+        tools.research_skill = tool({
+            description:
+                "Callable research skill. Use before substantial factual, current, technical, or comparison research to plan source-first searches, read pages, cross-check evidence, cite claims, and stop efficiently.",
+            inputSchema: z.object({
+                question: z.string(),
+                depth: z.enum(["quick", "standard", "deep"]).optional(),
+            }),
+            execute: async (input) => researchSkillGuide(input),
+        });
+    }
 
     if (settings.connectors?.some((connector) => connector.enabled)) {
         tools.connector_guide = tool({
@@ -303,34 +388,79 @@ export async function buildChatTools(settings: ToolSettings = {}) {
                 ? "SearXNG"
                 : "DuckDuckGo");
 
+        const formatResults = (results: Awaited<ReturnType<typeof webSearch>>) =>
+            results.length
+                ? results
+                      .map(
+                          (result, index) =>
+                              `[${index + 1}] ${result.title}\nURL: ${result.url}\nSnippet: ${result.snippet}`,
+                      )
+                      .join("\n\n")
+                : "No results found.";
+
+        const builtInSearch = async (query: string, maxResults: number) =>
+            formatResults(
+                await webSearch(query, {
+                    maxResults,
+                    engine,
+                    searxngUrl: settings.searxngUrl,
+                }),
+            );
+
         const searchTool = tool({
             description: `Search the web using ${engineLabel} for real-time information, facts, news, and technical topics. Cite result URLs.`,
             inputSchema: z.object({
-                query: z.string(),
+                query: z.string().optional(),
                 maxResults: z.number().optional(),
             }),
             execute: async ({ query, maxResults }) => {
+                const normalizedQuery = query?.trim();
+                if (!normalizedQuery) {
+                    return "Search query required. Retry with a focused query string.";
+                }
                 try {
                     const results = activeConnector
-                        ? await connectorSearch(activeConnector, query, maxResults ?? 5)
-                        : await webSearch(query, {
+                        ? await connectorSearch(activeConnector, normalizedQuery, maxResults ?? 5)
+                        : await webSearch(normalizedQuery, {
                               maxResults: maxResults ?? 5,
                               engine,
                               searxngUrl: settings.searxngUrl,
                           });
-                    if (!results.length) return "No results found.";
-                    return results
-                        .map(
-                            (r, i) =>
-                                `[${i + 1}] ${r.title}\nURL: ${r.url}\nSnippet: ${r.snippet}`,
-                        )
-                        .join("\n\n");
+                    return formatResults(results);
                 } catch (err) {
-                    return `Search error: ${err instanceof Error ? err.message : String(err)}`;
+                    if (activeConnector) {
+                        try {
+                            return `${await builtInSearch(normalizedQuery, maxResults ?? 5)}\n\nNote: ${activeConnector.name} was unavailable, so built-in web search was used instead.`;
+                        } catch {
+                            // Return a model-readable result instead of failing the stream.
+                        }
+                    }
+                    return `Search unavailable: ${err instanceof Error ? err.message : "the search provider failed"}`;
                 }
             },
         });
         tools[activeConnector ? `${activeConnector.kind}_search` : "web_search"] = searchTool;
+        if (activeConnector) {
+            tools.web_search = tool({
+                description:
+                    "Built-in web search fallback. Use this when the configured provider search connector is unavailable.",
+                inputSchema: z.object({
+                    query: z.string().optional(),
+                    maxResults: z.number().optional(),
+                }),
+                execute: async ({ query, maxResults }) => {
+                    const normalizedQuery = query?.trim();
+                    if (!normalizedQuery) {
+                        return "Search query required. Retry with a focused query string.";
+                    }
+                    try {
+                        return await builtInSearch(normalizedQuery, maxResults ?? 5);
+                    } catch (err) {
+                        return `Search unavailable: ${err instanceof Error ? err.message : "the built-in provider failed"}`;
+                    }
+                },
+            });
+        }
 
         tools.fetch_url = tool({
             description:
@@ -402,6 +532,16 @@ export async function buildChatTools(settings: ToolSettings = {}) {
             });
         },
     });
+
+    if (settings.memoryAvailable) {
+        tools.memory = tool({
+            description:
+                "Read relevant user-approved local memory from the browser. Use only when it can improve the answer; never infer or invent memories and never request credentials or secrets.",
+            inputSchema: z.object({
+                query: z.string().optional(),
+            }),
+        });
+    }
 
     tools.list_connections = tool({
         description: "List enabled integrations and their capability categories without exposing credentials.",
@@ -515,7 +655,7 @@ export async function buildChatTools(settings: ToolSettings = {}) {
 
     tools.generate_file = tool({
         description:
-            "Generate a downloadable file from content and cite it in the response. Use this for CSV, JSON, Markdown, TXT, SVG, HTML, or code files. For data-heavy files, use run_python first, then pass the generated content here.",
+            "Generate a downloadable text/data/code file from content and cite it in the response. Use this for CSV, JSON, Markdown, TXT, SVG, HTML, or source code when the user asks for a file. Do not call this for an image or binary file already created by run_python; do not Base64-encode and duplicate a Python-created file. For data-heavy text files, use run_python first, then pass the resulting text here.",
         inputSchema: z.object({
             filename: z.string(),
             title: z.string(),
@@ -523,8 +663,16 @@ export async function buildChatTools(settings: ToolSettings = {}) {
             kind: z.string(),
             mimeType: z.string().optional(),
         }),
-        execute: async ({ title, filename, content, kind, mimeType }) =>
-            artifactPayload({ title, filename, content, kind, mimeType }),
+        execute: async ({ title, filename, content, kind, mimeType }) => {
+            if (
+                mimeType?.startsWith("image/") ||
+                /^(image|binary|blob)/i.test(kind) ||
+                /\.(png|jpe?g|gif|webp|bmp|ico|pdf|zip)$/i.test(filename)
+            ) {
+                return "No duplicate artifact was generated. The binary/image file was already created by run_python; do not Base64-encode it again unless the user explicitly asks for a separate downloadable copy.";
+            }
+            return artifactPayload({ title, filename, content, kind, mimeType });
+        },
     });
 
     return tools;

@@ -5,6 +5,7 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { webSearch } from "~/lib/search";
 import { corsPreflight, withCors } from "~/lib/server/cors";
+import { assertConfiguredHttpUrl } from "~/lib/server/provider-url";
 
 export function loader({ request }: LoaderFunctionArgs) {
     const preflight = corsPreflight(request);
@@ -47,6 +48,20 @@ export async function action({ request }: ActionFunctionArgs) {
             request,
             Response.json({ error: "Query required" }, { status: 400 }),
         );
+    }
+
+    if (body.engine === "searxng" && body.searxngUrl?.trim()) {
+        try {
+            assertConfiguredHttpUrl(body.searxngUrl);
+        } catch (err) {
+            return withCors(
+                request,
+                Response.json(
+                    { error: err instanceof Error ? err.message : "Invalid SearXNG URL", results: [] },
+                    { status: 400 },
+                ),
+            );
+        }
     }
 
     try {

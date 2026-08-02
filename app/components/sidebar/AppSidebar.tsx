@@ -18,6 +18,7 @@ import {
     type McpServerConfig,
     type ConnectorConfig,
     type ConnectorKind,
+    type ModelInfo,
     type PreviewModelConfig,
     type ProviderId,
 } from "~/lib/types";
@@ -29,6 +30,7 @@ import {
 } from "~/lib/memory";
 import {
     clearMemoryEntries,
+    exportLocalBackup,
     getMemoryEntries,
     saveMemoryEntries,
 } from "~/lib/db";
@@ -257,6 +259,9 @@ function SettingsPanel() {
     const [section, setSection] = useState<SettingsSection>("keys");
     const [mcpName, setMcpName] = useState("");
     const [mcpUrl, setMcpUrl] = useState("");
+    const [mcpKind, setMcpKind] = useState<McpServerConfig["kind"]>("http");
+    const [mcpHeaders, setMcpHeaders] = useState("");
+    const [mcpError, setMcpError] = useState<string | null>(null);
 
     const sections: {
         id: SettingsSection;
@@ -275,21 +280,38 @@ function SettingsPanel() {
 
     const handleAddMcp = () => {
         if (!mcpName.trim() || !mcpUrl.trim()) return;
+        let headers: Record<string, string> | undefined;
+        if (mcpHeaders.trim()) {
+            try {
+                const parsed = JSON.parse(mcpHeaders) as unknown;
+                if (
+                    !parsed ||
+                    typeof parsed !== "object" ||
+                    Array.isArray(parsed) ||
+                    Object.values(parsed).some((value) => typeof value !== "string")
+                ) {
+                    throw new Error();
+                }
+                headers = parsed as Record<string, string>;
+            } catch {
+                setMcpError("Headers must be a JSON object with string values.");
+                return;
+            }
+        }
         hapticConfirm();
-        const url = mcpUrl.trim();
-        const kind: McpServerConfig["kind"] = /\/mcp\/?$/i.test(url)
-            ? "http"
-            : "sse";
         const newServer: McpServerConfig = {
             id: `mcp_${Date.now()}`,
             name: mcpName.trim(),
-            kind,
-            url,
+            kind: mcpKind,
+            url: mcpUrl.trim(),
+            headers,
             enabled: true,
         };
         addMcpServer(newServer);
         setMcpName("");
         setMcpUrl("");
+        setMcpHeaders("");
+        setMcpError(null);
     };
 
     return (
@@ -323,12 +345,23 @@ function SettingsPanel() {
 
             {section === "tools" && (
                 <div className="flex flex-col gap-2">
+                    {(() => {
+                        const activeSearchConnector = settings.connectors.find(
+                            (connector) =>
+                                connector.enabled &&
+                                Boolean(connector.apiKey?.trim()) &&
+                                ["tavily", "brave", "exa", "parallel"].includes(connector.kind),
+                        );
+                        const searchConnectorKinds = ["tavily", "brave", "exa", "parallel"];
+                        return (
+                            <>
                     <ToolToggle
                         title="Web search"
                         description={
-                            settings.webSearchEngine === "searxng"
+                            activeSearchConnector?.name ||
+                            (settings.webSearchEngine === "searxng"
                                 ? "SearXNG (self-hosted)"
-                                : "DuckDuckGo — no API key"
+                                : "DuckDuckGo — no API key")
                         }
                         checked={settings.webSearchEnabled}
                         onChange={(v) =>
@@ -341,18 +374,44 @@ function SettingsPanel() {
                                 Search engine
                             </label>
                             <select
-                                value={settings.webSearchEngine}
-                                onChange={(e) =>
-                                    updateSettings({
-                                        webSearchEngine: e.target.value as
-                                            | "duckduckgo"
-                                            | "searxng",
-                                    })
-                                }
+                                value={activeSearchConnector?.kind || settings.webSearchEngine}
+                                onChange={(e) => {
+                                    const value = e.target.value;
+                                    if (searchConnectorKinds.includes(value)) {
+                                        updateSettings({
+                                            webSearchEnabled: true,
+                                            connectors: settings.connectors.map((connector) =>
+                                                searchConnectorKinds.includes(connector.kind)
+                                                    ? { ...connector, enabled: connector.kind === value }
+                                                    : connector,
+                                            ),
+                                        });
+                                    } else {
+                                        updateSettings({
+                                            webSearchEngine: value as "duckduckgo" | "searxng",
+                                            connectors: settings.connectors.map((connector) =>
+                                                searchConnectorKinds.includes(connector.kind)
+                                                    ? { ...connector, enabled: false }
+                                                    : connector,
+                                            ),
+                                        });
+                                    }
+                                }}
                                 className="h-8 w-full rounded-lg border border-border bg-background px-2 text-xs outline-none"
                             >
                                 <option value="duckduckgo">DuckDuckGo</option>
                                 <option value="searxng">SearXNG</option>
+                                {settings.connectors
+                                    .filter(
+                                        (connector) =>
+                                            searchConnectorKinds.includes(connector.kind) &&
+                                            Boolean(connector.apiKey?.trim()),
+                                    )
+                                    .map((connector) => (
+                                        <option key={connector.kind} value={connector.kind}>
+                                            {connector.name}
+                                        </option>
+                                    ))}
                             </select>
                             {settings.webSearchEngine === "searxng" ? (
                                 <Input
@@ -368,6 +427,9 @@ function SettingsPanel() {
                             ) : null}
                         </div>
                     ) : null}
+                            </>
+                        );
+                    })()}
                     <ToolToggle
                         title="Calculator"
                         description="Math & trig evaluations"
@@ -388,14 +450,32 @@ function SettingsPanel() {
             {section === "mcp" && (
                 <div className="flex flex-col gap-3">
                     <p className="text-[11px] leading-relaxed text-muted-foreground">
-                        HTTP/SSE MCP tools are sent with each chat request.
-                        Stdio servers launch server-side on your host.
+                        Remote HTTP/SSE MCP tools are loaded for each chat request.
+                        Add any required request headers below; local/private targets
+                        require the self-hosted opt-in environment setting.
                     </p>
                     <div className="flex flex-col gap-1.5">
                         <Input
                             value={mcpName}
                             onChange={(e) => setMcpName(e.target.value)}
                             placeholder="Server name"
+                            className="h-9 rounded-xl text-xs"
+                        />
+                        <select
+                            value={mcpKind}
+                            onChange={(event) =>
+                                setMcpKind(event.target.value as "http" | "sse")
+                            }
+                            className="h-9 rounded-xl border border-border bg-background px-2 text-xs outline-none"
+                            aria-label="MCP transport"
+                        >
+                            <option value="http">Streamable HTTP</option>
+                            <option value="sse">Server-sent events</option>
+                        </select>
+                        <Input
+                            value={mcpHeaders}
+                            onChange={(event) => setMcpHeaders(event.target.value)}
+                            placeholder='Optional headers JSON, e.g. {"Authorization":"Bearer …"}'
                             className="h-9 rounded-xl text-xs"
                         />
                         <Input
@@ -412,6 +492,7 @@ function SettingsPanel() {
                         >
                             Add MCP server
                         </Button>
+                        {mcpError ? <p className="text-[11px] text-destructive">{mcpError}</p> : null}
                     </div>
                     {settings.mcpServers.length === 0 ? (
                         <p className="text-xs text-muted-foreground">
@@ -428,7 +509,7 @@ function SettingsPanel() {
                                         {s.name}
                                     </div>
                                     <div className="truncate text-[10px] text-muted-foreground">
-                                        {s.kind.toUpperCase()} · {s.url}
+                                        {s.kind.toUpperCase()} · {s.url}{s.headers && Object.keys(s.headers).length > 0 ? " · headers" : ""}
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-1">
@@ -807,22 +888,70 @@ function ConnectorHelp({
 }
 
 function CloudStorageSection() {
+    const [guideOpen, setGuideOpen] = useState(false);
+
+    const downloadBackup = async () => {
+        const backup = await exportLocalBackup();
+        const blob = new Blob([JSON.stringify(backup, null, 2)], {
+            type: "application/json",
+        });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `ai-diy-backup-${new Date().toISOString().slice(0, 10)}.json`;
+        anchor.click();
+        URL.revokeObjectURL(url);
+    };
+
     return (
         <div className="flex flex-col gap-3">
             <div>
                 <h3 className="text-xs font-semibold">
-                    Cloud storage <span className="text-[9px] uppercase tracking-wider text-primary">Beta</span>
+                    Cloud storage <span className="text-[9px] uppercase tracking-wider text-primary">Beta</span> <span className="text-[9px] uppercase tracking-wider text-muted-foreground">Coming soon</span>
                 </h3>
                 <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                    Optional zero-cost backup is being prepared with Google Drive&apos;s private app-data space. Local IndexedDB remains the source of truth.
+                    Automatic cloud sync is coming soon. Download a complete local backup now; local IndexedDB remains the source of truth.
                 </p>
             </div>
             <div className="rounded-xl border border-dashed border-border/70 p-3 text-[11px] leading-relaxed text-muted-foreground">
-                Drive OAuth uses user consent and a narrow app-data scope. No server credential or production sync is enabled yet.
+                A backup can contain chat content and generated artifacts. Store it securely and do not upload it to a service you do not trust.
             </div>
-            <Button type="button" size="sm" variant="outline" disabled className="rounded-xl">
-                Connect Google Drive (Beta)
+            <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void downloadBackup()}
+                className="self-start rounded-xl"
+            >
+                Download local backup
             </Button>
+            <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setGuideOpen((open) => !open)}
+                className="rounded-xl"
+            >
+                {guideOpen ? "Hide setup guide" : "View Google Drive setup"}
+            </Button>
+            {guideOpen ? (
+                <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-[11px] leading-relaxed text-muted-foreground">
+                    <p>
+                        Google Drive backup is not connected yet. The safe planned
+                        flow uses a user-supplied OAuth client ID, PKCE, and the
+                        restricted <code>drive.appdata</code> scope. No Drive key,
+                        refresh token, or chat data is accepted by this Beta panel.
+                    </p>
+                    <a
+                        href="https://developers.google.com/drive/api/quickstart/js"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-2 inline-block font-medium text-primary underline-offset-2 hover:underline"
+                    >
+                        Read Google&apos;s official setup guide ↗
+                    </a>
+                </div>
+            ) : null}
         </div>
     );
 }
@@ -1034,6 +1163,9 @@ function KeysSection() {
     const { settings, updateProvider, updateChat, updateSettings } =
         useSettings();
     const [active, setActive] = useState<ProviderId>(settings.chat.provider);
+    const [draftName, setDraftName] = useState(
+        settings.providers[active]?.name || PROVIDER_DEFAULTS[active].name,
+    );
     const [draftKey, setDraftKey] = useState(
         settings.providers[active]?.apiKey || "",
     );
@@ -1044,10 +1176,23 @@ function KeysSection() {
     );
     const [draftCompatible, setDraftCompatible] = useState(
         settings.providers[active]?.openAICompatible ?? {
-            apiMode: "chat" as const,
-            reasoningWithTools: "none" as const,
+            apiMode: "auto" as const,
+            reasoningWithTools: "auto" as const,
+            authMode: "bearer" as const,
+            timeoutMs: 60_000,
+            maxRetries: 2,
         },
     );
+    const [draftHeaders, setDraftHeaders] = useState("");
+    const [manualModelId, setManualModelId] = useState("");
+    const [discoveredModels, setDiscoveredModels] = useState<ModelInfo[]>([]);
+    const [advancedOpen, setAdvancedOpen] = useState(false);
+    const [testResult, setTestResult] = useState<{
+        models: ModelInfo[];
+        live: boolean;
+        latencyMs: number;
+        resolvedBaseUrl?: string;
+    } | null>(null);
     const [testing, setTesting] = useState(false);
     const [status, setStatus] = useState<{
         kind: "idle" | "ok" | "error";
@@ -1056,33 +1201,113 @@ function KeysSection() {
 
     useEffect(() => {
         const cfg = settings.providers[active];
+        setDraftName(cfg?.name || PROVIDER_DEFAULTS[active].name);
         setDraftKey(cfg?.apiKey || "");
         setDraftUrl(cfg?.baseUrl || PROVIDER_DEFAULTS[active].baseUrl || "");
         setDraftCompatible(
             cfg?.openAICompatible ?? {
-                apiMode: "chat",
-                reasoningWithTools: "none",
+                apiMode: "auto",
+                reasoningWithTools: "auto",
+                authMode: "bearer",
+                timeoutMs: 60_000,
+                maxRetries: 2,
             },
         );
+        setDraftHeaders(
+            cfg?.openAICompatible?.headers
+                ? JSON.stringify(cfg.openAICompatible.headers)
+                : "",
+        );
+        setManualModelId("");
+        setDiscoveredModels([]);
+        setTestResult(null);
         setStatus({ kind: "idle" });
     }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const local = isLocalProvider(active);
+    const custom = active === "custom";
     const keyReady = local || draftKey.trim().length > 0;
+
+    const parseHeaders = (): Record<string, string> | undefined => {
+        let headers: Record<string, string> = {};
+        if (draftHeaders.trim()) {
+            const parsed = JSON.parse(draftHeaders) as unknown;
+            if (
+                !parsed ||
+                typeof parsed !== "object" ||
+                Array.isArray(parsed) ||
+                Object.values(parsed).some((value) => typeof value !== "string")
+            ) {
+                throw new Error("Custom headers must be a JSON object with string values.");
+            }
+            headers = { ...(parsed as Record<string, string>) };
+        }
+        if (draftCompatible.authMode === "api-key-header" && draftKey.trim()) {
+            headers["X-API-Key"] = draftKey.trim();
+        }
+        if (
+            draftCompatible.authMode === "custom-header" &&
+            draftCompatible.authHeader?.trim() &&
+            draftKey.trim()
+        ) {
+            headers[draftCompatible.authHeader.trim()] = draftKey.trim();
+        }
+        return Object.keys(headers).length > 0 ? headers : undefined;
+    };
 
     const runTest = useCallback(async () => {
         haptic();
         setTesting(true);
         setStatus({ kind: "idle" });
-        const result = await testProviderKey({
-            provider: active,
-            apiKey: draftKey,
-            baseUrl: draftUrl,
-        });
+        if (custom && !draftUrl.trim()) {
+            setTesting(false);
+            setStatus({ kind: "error", message: "Enter the custom provider API root first." });
+            return;
+        }
+        let result;
+        try {
+            result = await testProviderKey({
+                provider: active,
+                apiKey:
+                    custom && draftCompatible.authMode && draftCompatible.authMode !== "bearer"
+                        ? ""
+                        : draftKey,
+                baseUrl: draftUrl,
+                    headers: parseHeaders(),
+                    timeoutMs: draftCompatible.timeoutMs,
+                    maxRetries: draftCompatible.maxRetries,
+                    authMode: draftCompatible.authMode,
+            });
+        } catch (error) {
+            setTesting(false);
+            setStatus({
+                kind: "error",
+                message: error instanceof Error ? error.message : "Invalid connection settings.",
+            });
+            return;
+        }
         setTesting(false);
 
         if (!result.ok) {
+            setDiscoveredModels([]);
+            setTestResult(null);
             setStatus({ kind: "error", message: result.error });
+            return;
+        }
+
+        setDiscoveredModels(result.models);
+        setTestResult({
+            models: result.models,
+            live: result.live === true,
+            latencyMs: result.latencyMs ?? 0,
+            resolvedBaseUrl: result.resolvedBaseUrl,
+        });
+
+        if (custom) {
+            setStatus({
+                kind: "ok",
+                message: `Connected — ${result.models.length} model${result.models.length === 1 ? "" : "s"} found in ${result.latencyMs ?? 0} ms.`,
+            });
             return;
         }
 
@@ -1094,7 +1319,7 @@ function KeysSection() {
             apiKey: storedKey,
             baseUrl: draftUrl || PROVIDER_DEFAULTS[active].baseUrl,
             enabled: true,
-            openAICompatible: active === "custom" ? draftCompatible : undefined,
+            openAICompatible: custom ? draftCompatible : undefined,
         });
         const nextModel = resolveModel(
             active,
@@ -1111,12 +1336,37 @@ function KeysSection() {
         active,
         draftKey,
         draftUrl,
+        custom,
         local,
         settings.chat.model,
         updateProvider,
         updateChat,
         updateSettings,
     ]);
+
+    const saveCustomConnection = () => {
+        try {
+            if (!draftUrl.trim()) throw new Error("Enter the custom provider API root first.");
+            const headers = parseHeaders();
+            const model =
+                manualModelId.trim() || discoveredModels[0]?.id || "default-model";
+            updateProvider(active, {
+                name: draftName.trim() || "Custom OpenAI Proxy",
+                apiKey: draftKey.trim() || localProviderKey(active),
+                baseUrl: draftUrl.trim(),
+                enabled: true,
+                openAICompatible: { ...draftCompatible, headers },
+            });
+            updateChat({ provider: active, model });
+            updateSettings({ setupComplete: true });
+            setStatus({ kind: "ok", message: `Saved connection — ${model}.` });
+        } catch (error) {
+            setStatus({
+                kind: "error",
+                message: error instanceof Error ? error.message : "Invalid connection settings.",
+            });
+        }
+    };
 
     return (
         <div className="flex flex-col gap-3">
@@ -1160,7 +1410,21 @@ function KeysSection() {
                 })}
             </div>
 
-            {!local ? (
+            {custom ? (
+                <div className="flex flex-col gap-1.5">
+                    <label className="text-[11px] font-medium text-muted-foreground">
+                        Connection name
+                    </label>
+                    <Input
+                        value={draftName}
+                        onChange={(e) => setDraftName(e.target.value)}
+                        placeholder="LM Studio, Local vLLM, Company gateway"
+                        className="h-9 rounded-xl text-xs"
+                    />
+                </div>
+            ) : null}
+
+            {!local || custom ? (
                 <div className="flex flex-col gap-1.5">
                     <label className="text-[11px] font-medium text-muted-foreground">
                         API key
@@ -1174,7 +1438,7 @@ function KeysSection() {
                             setDraftKey(e.target.value);
                             setStatus({ kind: "idle" });
                         }}
-                        placeholder={`${PROVIDER_DEFAULTS[active].name} key`}
+                        placeholder={custom ? "Optional API key for hosted endpoints" : `${PROVIDER_DEFAULTS[active].name} key`}
                         className="h-9 rounded-xl font-mono text-xs"
                     />
                 </div>
@@ -1192,63 +1456,241 @@ function KeysSection() {
                 />
             </div>
 
-            {active === "custom" ? (
+            {custom ? (
                 <div className="flex flex-col gap-2 rounded-xl border border-border/70 bg-muted/20 p-2.5">
-                    <p className="text-[11px] font-medium">OpenAI-compatible API</p>
-                    <label className="text-[10px] text-muted-foreground">
-                        API mode
-                        <select
-                            value={draftCompatible.apiMode}
-                            onChange={(event) =>
-                                setDraftCompatible((current) => ({
-                                    ...current,
-                                    apiMode: event.target.value as "chat" | "responses",
-                                }))
-                            }
-                            className="mt-1 h-8 w-full rounded-lg border border-border bg-background px-2 text-xs outline-none"
+                    <div className="flex items-center justify-between gap-2">
+                        <div>
+                            <p className="text-[11px] font-medium">OpenAI-compatible API</p>
+                            <p className="text-[10px] text-muted-foreground">Chat Completions is the safest default.</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setAdvancedOpen((open) => !open)}
+                            className="rounded-lg border border-border px-2 py-1 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
                         >
-                            <option value="chat">Chat Completions</option>
-                            <option value="responses">Responses API</option>
-                        </select>
-                    </label>
-                    <label className="text-[10px] text-muted-foreground">
-                        Reasoning with tools
-                        <select
-                            value={draftCompatible.reasoningWithTools}
-                            onChange={(event) =>
-                                setDraftCompatible((current) => ({
-                                    ...current,
-                                    reasoningWithTools: event.target.value as "none" | "allow",
-                                }))
-                            }
-                            className="mt-1 h-8 w-full rounded-lg border border-border bg-background px-2 text-xs outline-none"
-                        >
-                            <option value="none">Disable safely (recommended)</option>
-                            <option value="allow">Allow if endpoint supports it</option>
-                        </select>
-                    </label>
+                            {advancedOpen ? "Hide advanced" : "Advanced"}
+                        </button>
+                    </div>
+                    {advancedOpen ? (
+                        <div className="flex flex-col gap-2 border-t border-border/60 pt-2">
+                            <label className="text-[10px] text-muted-foreground">
+                                API mode
+                                <select
+                                    value={draftCompatible.apiMode}
+                                    onChange={(event) =>
+                                        setDraftCompatible((current) => ({
+                                            ...current,
+                                            apiMode: event.target.value as "auto" | "chat" | "responses",
+                                        }))
+                                    }
+                                    className="mt-1 h-8 w-full rounded-lg border border-border bg-background px-2 text-xs outline-none"
+                                >
+                                    <option value="auto">Auto-detect (Chat default)</option>
+                                    <option value="chat">Chat Completions</option>
+                                    <option value="responses">Responses API</option>
+                                </select>
+                            </label>
+                            <label className="text-[10px] text-muted-foreground">
+                                Authentication method
+                                <select
+                                    value={draftCompatible.authMode ?? "bearer"}
+                                    onChange={(event) =>
+                                        setDraftCompatible((current) => ({
+                                            ...current,
+                                            authMode: event.target.value as NonNullable<typeof current.authMode>,
+                                        }))
+                                    }
+                                    className="mt-1 h-8 w-full rounded-lg border border-border bg-background px-2 text-xs outline-none"
+                                >
+                                    <option value="bearer">Bearer token</option>
+                                    <option value="api-key-header">X-API-Key</option>
+                                    <option value="custom-header">Custom header</option>
+                                    <option value="none">No authentication</option>
+                                </select>
+                            </label>
+                            {draftCompatible.authMode === "custom-header" ? (
+                                <Input
+                                    value={draftCompatible.authHeader ?? ""}
+                                    onChange={(event) =>
+                                        setDraftCompatible((current) => ({
+                                            ...current,
+                                            authHeader: event.target.value,
+                                        }))
+                                    }
+                                    placeholder="Header name, e.g. X-API-Key"
+                                    className="h-8 rounded-lg text-xs"
+                                />
+                            ) : null}
+                            <label className="text-[10px] text-muted-foreground">
+                                Custom headers JSON
+                                <Input
+                                    value={draftHeaders}
+                                    onChange={(event) => setDraftHeaders(event.target.value)}
+                                    placeholder='{"HTTP-Referer":"https://…","X-Title":"ai.diy"}'
+                                    className="mt-1 h-8 rounded-lg font-mono text-[10px]"
+                                />
+                            </label>
+                            <label className="text-[10px] text-muted-foreground">
+                                Tool compatibility
+                                <select
+                                    value={draftCompatible.reasoningWithTools}
+                                    onChange={(event) =>
+                                        setDraftCompatible((current) => ({
+                                            ...current,
+                                            reasoningWithTools: event.target.value as "auto" | "none" | "allow",
+                                        }))
+                                    }
+                                    className="mt-1 h-8 w-full rounded-lg border border-border bg-background px-2 text-xs outline-none"
+                                >
+                                    <option value="auto">Auto-detect</option>
+                                    <option value="none">Disable tools for reasoning models</option>
+                                    <option value="allow">Force tools on</option>
+                                </select>
+                            </label>
+                            <div className="grid grid-cols-2 gap-2">
+                                <label className="text-[10px] text-muted-foreground">
+                                    Timeout (seconds)
+                                    <Input
+                                        type="number"
+                                        min={5}
+                                        max={300}
+                                        value={Math.round((draftCompatible.timeoutMs ?? 60_000) / 1000)}
+                                        onChange={(event) =>
+                                            setDraftCompatible((current) => ({
+                                                ...current,
+                                                timeoutMs: Math.max(5, Number(event.target.value) || 60) * 1000,
+                                            }))
+                                        }
+                                        className="mt-1 h-8 rounded-lg text-xs"
+                                    />
+                                </label>
+                                <label className="text-[10px] text-muted-foreground">
+                                    Maximum retries
+                                    <Input
+                                        type="number"
+                                        min={0}
+                                        max={5}
+                                        value={draftCompatible.maxRetries ?? 2}
+                                        onChange={(event) =>
+                                            setDraftCompatible((current) => ({
+                                                ...current,
+                                                maxRetries: Math.min(5, Math.max(0, Number(event.target.value) || 0)),
+                                            }))
+                                        }
+                                        className="mt-1 h-8 rounded-lg text-xs"
+                                    />
+                                </label>
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                                <p className="text-[10px] text-muted-foreground">Capability overrides</p>
+                                <div className="grid grid-cols-2 gap-1.5">
+                                    {([
+                                        ["tools", "Tool calling"],
+                                        ["vision", "Vision"],
+                                        ["structuredOutput", "Structured output"],
+                                        ["reasoning", "Reasoning controls"],
+                                        ["embeddings", "Embeddings"],
+                                        ["parallelTools", "Parallel tools"],
+                                    ] as const).map(([key, label]) => {
+                                        const value = draftCompatible.capabilityOverrides?.[key];
+                                        return (
+                                            <label key={key} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                                                <span className="min-w-0 flex-1 truncate">{label}</span>
+                                                <select
+                                                    value={value === undefined ? "auto" : value ? "on" : "off"}
+                                                    onChange={(event) =>
+                                                        setDraftCompatible((current) => ({
+                                                            ...current,
+                                                            capabilityOverrides: {
+                                                                ...current.capabilityOverrides,
+                                                                [key]: event.target.value === "auto" ? undefined : event.target.value === "on",
+                                                            },
+                                                        }))
+                                                    }
+                                                    className="h-7 rounded-md border border-border bg-background px-1 text-[10px] outline-none"
+                                                >
+                                                    <option value="auto">Auto</option>
+                                                    <option value="on">On</option>
+                                                    <option value="off">Off</option>
+                                                </select>
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                    ) : null}
                 </div>
             ) : null}
 
-            <Button
-                type="button"
-                size="sm"
-                disabled={!keyReady || testing}
-                onClick={runTest}
-                className="h-9 rounded-xl"
-            >
-                {testing ? (
-                    <>
-                        <SpinnerGap
-                            className="animate-spin"
-                            data-icon="inline-start"
-                        />
-                        Testing…
-                    </>
-                ) : (
-                    "Test & save"
-                )}
-            </Button>
+            {custom ? (
+                <div className="flex flex-col gap-2 rounded-xl border border-border/70 p-2.5">
+                    <p className="text-[11px] font-medium">Default model</p>
+                    {discoveredModels.length > 0 ? (
+                        <select
+                            value={manualModelId}
+                            onChange={(event) => setManualModelId(event.target.value)}
+                            className="h-8 w-full rounded-lg border border-border bg-background px-2 text-xs outline-none"
+                        >
+                            <option value="">Select a discovered model</option>
+                            {discoveredModels.map((model) => (
+                                <option key={model.id} value={model.id}>
+                                    {model.name || model.id}
+                                </option>
+                            ))}
+                        </select>
+                    ) : null}
+                    <Input
+                        value={manualModelId}
+                        onChange={(event) => setManualModelId(event.target.value)}
+                        placeholder="Manual model ID if /models is unavailable"
+                        className="h-8 rounded-lg font-mono text-xs"
+                    />
+                </div>
+            ) : null}
+
+            <div className={cn("grid gap-2", custom ? "grid-cols-2" : "grid-cols-1")}>
+                <Button
+                    type="button"
+                    size="sm"
+                    disabled={!keyReady || testing}
+                    onClick={runTest}
+                    className="h-9 rounded-xl"
+                >
+                    {testing ? (
+                        <>
+                            <SpinnerGap
+                                className="animate-spin"
+                                data-icon="inline-start"
+                            />
+                            Testing…
+                        </>
+                    ) : (
+                        custom ? "Test connection" : "Test & save"
+                    )}
+                </Button>
+                {custom ? (
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={testing || !manualModelId.trim() && !discoveredModels.length}
+                        onClick={saveCustomConnection}
+                        className="h-9 rounded-xl"
+                    >
+                        Save connection
+                    </Button>
+                ) : null}
+            </div>
+
+            {custom && testResult ? (
+                <div className="rounded-xl border border-success/25 bg-success/5 p-2.5 text-[10px] leading-relaxed text-muted-foreground">
+                    <p className="font-medium text-success">Connection successful</p>
+                    <p>{testResult.models.length} models found · {testResult.live ? "Live discovery" : "Fallback catalog"} · {testResult.latencyMs} ms</p>
+                    <p className="truncate">Resolved endpoint: {testResult.resolvedBaseUrl || draftUrl || "default"}</p>
+                    <p>Streaming and tool support are selected by compatibility settings; they are not independently probed yet.</p>
+                </div>
+            ) : null}
 
             {status.kind === "ok" && (
                 <p className="flex items-start gap-1.5 text-[11px] text-success">

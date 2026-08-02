@@ -2,7 +2,8 @@
  * SettingsProvider — Client-side BYOK settings context
  * 
  * Manages provider API keys, chat settings, theme, tool config, and MCP servers.
- * Persists to localStorage. Supports optional JWE encryption of API keys.
+ * Persists settings locally in the browser. API keys are never persisted by
+ * the server, but browser storage is not a substitute for device security.
  */
 
 import {

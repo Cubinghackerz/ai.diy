@@ -26,7 +26,11 @@ import { ModelPicker } from "~/components/ui/ModelPicker";
 import { ProviderPicker } from "~/components/ui/ProviderPicker";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { runBrowserPython } from "~/lib/pyodide";
-import { buildLocalMemoryContext } from "~/lib/memory";
+import {
+    buildLocalMemoryContext,
+    hasLocalMemoryEntries,
+    readLocalMemory,
+} from "~/lib/memory";
 import { askUserInBrowser } from "~/lib/client-tools";
 import {
     deletePreviewSession,
@@ -75,6 +79,7 @@ type ResolvedConfig = PreviewModelConfig & {
         command?: string;
         args?: string[];
         env?: Record<string, string>;
+        headers?: Record<string, string>;
         enabled: boolean;
     }>;
 };
@@ -193,7 +198,12 @@ export const PreviewWorkspace: FC = () => {
         const provider = settings.providers[config.provider];
         return {
             ...config,
-            apiKey: provider?.apiKey?.trim() || localProviderKey(config.provider),
+            apiKey:
+                config.provider === "custom" &&
+                provider?.openAICompatible?.authMode &&
+                provider.openAICompatible.authMode !== "bearer"
+                    ? ""
+                    : provider?.apiKey?.trim() || localProviderKey(config.provider),
             baseUrl: provider?.baseUrl?.trim() || undefined,
             openAICompatible: provider?.openAICompatible,
             systemPrompt: settings.chat.systemPrompt,
@@ -952,9 +962,12 @@ const PreviewRunPanel: FC<{
                             size: run.config.imageSize,
                             count: run.config.imageCount,
                         },
-                        toolSettings: run.config.toolSettings,
                         mcpServers: run.config.mcpServers,
                         memoryContext: await buildLocalMemoryContext(latestText),
+                        toolSettings: {
+                            ...run.config.toolSettings,
+                            memoryAvailable: await hasLocalMemoryEntries(),
+                        },
                     },
                     };
                 },
@@ -972,6 +985,7 @@ const PreviewRunPanel: FC<{
                 "run_python",
                 "run_code",
                 "ask_user",
+                "memory",
             ].includes(toolCall.toolName)) return;
             pendingClientCalls.current += 1;
             const input = toolCall.input as {
@@ -979,6 +993,7 @@ const PreviewRunPanel: FC<{
                 question?: string;
                 questionType?: "single" | "multiple" | "short";
                 options?: string[];
+                query?: string;
             };
             const task =
                 toolCall.toolName === "ask_user"
@@ -987,7 +1002,9 @@ const PreviewRunPanel: FC<{
                           questionType: input.questionType,
                           options: input.options,
                       })
-                    : runBrowserPython(input.code ?? "");
+                    : toolCall.toolName === "memory"
+                      ? readLocalMemory(input.query)
+                      : runBrowserPython(input.code ?? "");
             void task.then(
                 (output) => {
                     const addToolOutput = chatRef.current

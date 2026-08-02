@@ -13,6 +13,9 @@ export type KeyTestResult = {
     ok: boolean;
     models: ModelInfo[];
     error?: string;
+    live?: boolean;
+    latencyMs?: number;
+    resolvedBaseUrl?: string;
 };
 
 /** Soft format hints only — real validity comes from the live provider call. */
@@ -57,8 +60,12 @@ export async function testProviderKey(options: {
     provider: ProviderId;
     apiKey: string;
     baseUrl?: string;
+    headers?: Record<string, string>;
+    timeoutMs?: number;
+    maxRetries?: number;
+    authMode?: "bearer" | "api-key-header" | "custom-header" | "none";
 }): Promise<KeyTestResult> {
-    const { provider, apiKey, baseUrl } = options;
+    const { provider, apiKey, baseUrl, headers, timeoutMs, maxRetries, authMode } = options;
     const key = apiKey.trim();
 
     if (!isLocalProvider(provider) && !key) {
@@ -73,20 +80,29 @@ export async function testProviderKey(options: {
         };
     }
 
+    const startedAt = performance.now();
     try {
         const res = await fetch("/api/models", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 provider,
-                apiKey: key || localProviderKey(provider),
-                baseUrl: baseUrl || undefined,
+                    apiKey:
+                        provider === "custom"
+                            ? key
+                            : key || localProviderKey(provider),
+                    baseUrl: baseUrl || undefined,
+                    headers,
+                    timeoutMs,
+                    maxRetries,
+                    authMode,
             }),
         });
         const data = (await res.json()) as {
             models?: ModelInfo[];
             error?: string;
             live?: boolean;
+            resolvedBaseUrl?: string;
         };
 
         if (!res.ok || data.error) {
@@ -96,6 +112,9 @@ export async function testProviderKey(options: {
                 error:
                     data.error ||
                     `Provider rejected the key (HTTP ${res.status}).`,
+                live: data.live,
+                latencyMs: Math.round(performance.now() - startedAt),
+                resolvedBaseUrl: data.resolvedBaseUrl,
             };
         }
 
@@ -120,7 +139,13 @@ export async function testProviderKey(options: {
             };
         }
 
-        return { ok: true, models };
+        return {
+            ok: true,
+            models,
+            live: data.live,
+            latencyMs: Math.round(performance.now() - startedAt),
+            resolvedBaseUrl: data.resolvedBaseUrl,
+        };
     } catch (err) {
         return {
             ok: false,

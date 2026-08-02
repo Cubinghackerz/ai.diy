@@ -51,5 +51,12 @@ export interface StreamCallbacks {
 export interface LLMProvider {
     id: ProviderId;
     streamChat(request: ChatRequest, callbacks: StreamCallbacks): Promise<void>;
-    listModels(apiKey: string, baseUrl?: string): Promise<{ id: string; name: string }[]>;
+    listModels(
+        apiKey: string,
+        baseUrl?: string,
+        headers?: Record<string, string>,
+        timeoutMs?: number,
+        maxRetries?: number,
+        authMode?: "bearer" | "api-key-header" | "custom-header" | "none",
+    ): Promise<{ id: string; name: string }[]>;
 }
