@@ -325,6 +325,11 @@ function researchSkillGuide(input: { question: string; depth?: "quick" | "standa
 Research task: ${input.question.trim()}
 Depth: ${input.depth || "standard"}
 
+## Freshness requirement
+- Do not answer from training data, a knowledge cutoff, or local memory when the question asks about current or changing information.
+- Use the available search tool and read authoritative pages before making current claims.
+- If live sources are unavailable or disagree, state the limitation and uncertainty instead of guessing.
+
 ## Workflow
 1. Define the decision or factual question and split it into answerable subquestions.
 2. Search with the available provider-specific web search tool using focused queries, synonyms, dates, and authoritative domains.
