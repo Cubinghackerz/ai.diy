@@ -26,10 +26,12 @@ This is a beta project. Features described as **available** are wired into the a
 
 ```bash
 npm install
-npm run dev
+npm run build && npm start
 ```
 
 Open `http://localhost:5173`, complete the setup gate, select a provider and model, then send a message.
+
+`npm run dev` is not recommended: the Vite/React development runtime has a known composer input regression that does not affect the compiled production build. Use `npm run build && npm start` for local testing, or `PORT=5173 npm start` if you need the app on the same port.
 
 ### Production server
 
