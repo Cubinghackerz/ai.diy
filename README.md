@@ -159,7 +159,7 @@ The composer displays Voice input only when the browser exposes the Web Speech R
 
 ### Local Memory and Backup
 
-Chats, messages, artifacts, memory entries, and Preview sessions live in browser IndexedDB. Relevant memory is selected locally and bounded before being added to a model request; full memory archives are not injected automatically.
+Chats, messages, artifacts, memory entries, and Preview sessions live in browser IndexedDB. Relevant memory is selected locally and bounded before being attached to the system prompt; when no keyword matches, only a small recent-memory fallback is attached. The full memory archive is never injected automatically, and the memory tool is available only when entries exist.
 
 Settings -> Memory can import supported text/JSON memory exports and export the memory index. Settings -> Cloud storage (Beta, coming soon) can download a complete local JSON backup containing chats, artifacts, Preview sessions, and memories. This is a manual backup file today; automatic cloud upload and restore are not implemented.
 

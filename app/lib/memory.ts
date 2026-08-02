@@ -6,6 +6,15 @@ const STOP_WORDS = new Set(
     "a an and are as at be by for from has have if in into is it its of on or that the their then there these they this to was were will with you your i we our".split(" "),
 );
 
+const MAX_MEMORY_ENTRIES = 500;
+const MAX_CONTEXT_ENTRIES = 6;
+const MAX_CONTEXT_CHARS = 4_000;
+const SECRET_PATTERNS = [
+    /(?:api[_ -]?key|access[_ -]?token|secret|password|private[_ -]?key|bearer\s+[a-z0-9._-]{12,})\s*[:=]/i,
+    /(?:sk-[a-z0-9]{16,}|sk-ant-[a-z0-9_-]{16,}|gsk_[a-z0-9_-]{16,}|xai-[a-z0-9_-]{16,}|hf_[a-z0-9_-]{12,}|gh[pousr]_[a-z0-9_-]{16,})/i,
+    /-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----/i,
+];
+
 function tokens(value: string): string[] {
     return [...new Set(
         value
@@ -24,15 +33,19 @@ function stableId(value: string): string {
     return `memory_${(hash >>> 0).toString(36)}`;
 }
 
+function containsSecret(value: string): boolean {
+    return SECRET_PATTERNS.some((pattern) => pattern.test(value));
+}
+
 function entry(content: string, source: MemoryEntry["source"], sourceId?: string): MemoryEntry | null {
     const text = content.replace(/\s+/g, " ").trim().slice(0, 1600);
     if (text.length < 24) return null;
-    if (/(?:api[_ -]?key|access[_ -]?token|secret|password|private[_ -]?key|bearer\s+[a-z0-9._-]{12,})\s*[:=]/i.test(text)) {
+    if (containsSecret(text)) {
         return null;
     }
     const now = Date.now();
     return {
-        id: stableId(`${source}:${sourceId ?? ""}:${text}`),
+        id: stableId(`${source}:${text}`),
         content: text,
         source,
         sourceId,
@@ -56,54 +69,81 @@ export async function indexChatMemories(messages: UIMessage[]): Promise<void> {
             ),
         )
         .filter((value): value is MemoryEntry => Boolean(value));
-    await saveMemoryEntries(entries);
+    try {
+        await saveMemoryEntries(entries);
+    } catch {
+        // Memory is an enhancement. Storage failures must never break chat.
+        console.warn("Local memory could not be saved.");
+    }
 }
 
 export async function buildLocalMemoryContext(query: string): Promise<string> {
-    const queryTokens = tokens(query);
-    if (queryTokens.length === 0) return "";
-    const entries = await getMemoryEntries();
-    const ranked = entries
-        .map((item) => ({
-            item,
-            score: item.keywords.reduce(
-                (score, keyword) => score + (queryTokens.includes(keyword) ? 1 : 0),
-                0,
-            ),
-        }))
-        .filter((value) => value.score > 0)
-        .sort((a, b) => b.score - a.score || b.item.updatedAt - a.item.updatedAt)
-        .slice(0, 6);
-    if (ranked.length === 0) return "";
-    return ranked
-        .map(({ item }) => `- ${item.content}`)
-        .join("\n")
-        .slice(0, 4_000);
+    try {
+        const entries = await getMemoryEntries();
+        if (entries.length === 0) return "";
+        return formatMemoryEntries(selectMemoryEntries(entries, query, true));
+    } catch {
+        // A blocked or unavailable IndexedDB must fail open to normal chat.
+        return "";
+    }
 }
 
 export async function hasLocalMemoryEntries(): Promise<boolean> {
-    const entries = await getMemoryEntries();
-    return entries.length > 0;
+    try {
+        const entries = await getMemoryEntries();
+        return entries.length > 0;
+    } catch {
+        return false;
+    }
 }
 
 export async function readLocalMemory(query?: string): Promise<string> {
-    const entries = await getMemoryEntries();
-    if (entries.length === 0) return "No local memory is stored.";
-    if (query?.trim()) {
-        const relevant = await buildLocalMemoryContext(query);
-        return relevant || "No relevant local memory matched that query.";
+    try {
+        const entries = await getMemoryEntries();
+        if (entries.length === 0) return "No local memory is stored.";
+        const selected = selectMemoryEntries(entries, query, false);
+        if (selected.length === 0) return "No relevant local memory matched that query.";
+        return formatMemoryEntries(selected);
+    } catch {
+        return "Local memory is unavailable in this browser session.";
     }
+}
+
+function selectMemoryEntries(
+    entries: MemoryEntry[],
+    query: string | undefined,
+    fallbackToRecent: boolean,
+): MemoryEntry[] {
+    const queryTokens = tokens(query ?? "");
+    const ranked = queryTokens.length
+        ? entries
+              .map((item) => ({
+                  item,
+                  score: item.keywords.reduce(
+                      (score, keyword) => score + (queryTokens.includes(keyword) ? 1 : 0),
+                      0,
+                  ),
+              }))
+              .filter((value) => value.score > 0)
+              .sort((a, b) => b.score - a.score || b.item.updatedAt - a.item.updatedAt)
+              .slice(0, MAX_CONTEXT_ENTRIES)
+              .map(({ item }) => item)
+        : [];
+    if (ranked.length > 0) return ranked;
+    return fallbackToRecent ? entries.slice(0, 3) : [];
+}
+
+function formatMemoryEntries(entries: MemoryEntry[]): string {
     return entries
-        .slice(0, 6)
         .map((item) => `- ${item.content}`)
         .join("\n")
-        .slice(0, 4_000);
+        .slice(0, MAX_CONTEXT_CHARS);
 }
 
 export function importMemoryEntries(payload: unknown): MemoryEntry[] {
     const textValues: string[] = [];
     const walk = (value: unknown, depth = 0) => {
-        if (depth > 8 || textValues.length >= 500) return;
+        if (depth > 8 || textValues.length >= MAX_MEMORY_ENTRIES) return;
         if (typeof value === "string") {
             if (value.trim().length >= 24) textValues.push(value);
             return;

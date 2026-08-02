@@ -210,7 +210,14 @@ export async function saveMemoryEntries(entries: MemoryEntry[]): Promise<void> {
     const db = await getDB();
     if (!db || entries.length === 0) return;
     const tx = db.transaction("memories", "readwrite");
-    for (const entry of entries) await tx.store.put(entry);
+    const existing = await tx.store.getAll();
+    const merged = new Map(existing.map((entry) => [entry.id, entry]));
+    for (const entry of entries) merged.set(entry.id, entry);
+    const retained = [...merged.values()]
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .slice(0, 500);
+    await tx.store.clear();
+    for (const entry of retained) await tx.store.put(entry);
     await tx.done;
 }
 
