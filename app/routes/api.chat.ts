@@ -53,6 +53,7 @@ interface ChatRequestBody {
         count?: number;
     };
     memoryContext?: string;
+    customSkill?: { name: string; content: string };
     openAICompatible?: {
         apiMode: "chat" | "responses";
         reasoningWithTools: "none" | "allow";
@@ -228,6 +229,7 @@ export async function action({ request }: ActionFunctionArgs) {
             system: buildChatSystemPrompt(
                 body.system || body.systemPrompt || undefined,
                 body.memoryContext,
+                body.customSkill,
             ),
             ...(anthropicThinkingOn
                 ? { temperature: 1 }

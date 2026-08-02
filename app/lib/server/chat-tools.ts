@@ -291,27 +291,28 @@ export async function buildChatTools(settings: ToolSettings = {}) {
 
     if (enableSearch) {
         const engine = settings.webSearchEngine ?? "duckduckgo";
+        const activeConnector = settings.connectors?.find(
+            (connector) =>
+                connector.enabled &&
+                Boolean(connector.apiKey?.trim()) &&
+                ["tavily", "brave", "exa", "parallel"].includes(connector.kind),
+        );
         const engineLabel =
-            engine === "searxng" && settings.searxngUrl?.trim()
+            activeConnector?.name ||
+            (engine === "searxng" && settings.searxngUrl?.trim()
                 ? "SearXNG"
-                : "DuckDuckGo";
+                : "DuckDuckGo");
 
-        tools.web_search = tool({
-            description: `Search the web using ${settings.connectors?.find((connector) => connector.enabled && ["tavily", "brave", "exa", "parallel"].includes(connector.kind))?.name || engineLabel} for real-time information, facts, news, and technical topics. Cite result URLs.`,
+        const searchTool = tool({
+            description: `Search the web using ${engineLabel} for real-time information, facts, news, and technical topics. Cite result URLs.`,
             inputSchema: z.object({
                 query: z.string(),
                 maxResults: z.number().optional(),
             }),
             execute: async ({ query, maxResults }) => {
                 try {
-                    const connector = settings.connectors?.find(
-                        (candidate) =>
-                            candidate.enabled &&
-                            Boolean(candidate.apiKey?.trim()) &&
-                            ["tavily", "brave", "exa", "parallel"].includes(candidate.kind),
-                    );
-                    const results = connector
-                        ? await connectorSearch(connector, query, maxResults ?? 5)
+                    const results = activeConnector
+                        ? await connectorSearch(activeConnector, query, maxResults ?? 5)
                         : await webSearch(query, {
                               maxResults: maxResults ?? 5,
                               engine,
@@ -329,6 +330,7 @@ export async function buildChatTools(settings: ToolSettings = {}) {
                 }
             },
         });
+        tools[activeConnector ? `${activeConnector.kind}_search` : "web_search"] = searchTool;
 
         tools.fetch_url = tool({
             description:
