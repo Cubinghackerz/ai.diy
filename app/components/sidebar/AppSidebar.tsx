@@ -530,6 +530,9 @@ function SettingsPanel() {
                                     className="h-8 rounded-lg text-xs"
                                 />
                             ) : null}
+                            <p className="text-[10px] leading-relaxed text-muted-foreground">
+                                DuckDuckGo Instant Answers are included by default as a fast research overview. This free service is intended for non-commercial use; review DuckDuckGo&apos;s current terms before commercial deployment. Verify important claims with fetched sources.
+                            </p>
                         </div>
                     ) : null}
                             </>

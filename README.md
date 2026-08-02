@@ -133,7 +133,7 @@ Tools available to a selected model depend on the settings toggles and provider 
 
 | Tool | Behavior |
 | --- | --- |
-| Web search | DuckDuckGo/Bing fallbacks, self-hosted SearXNG, or one enabled Tavily, Brave, Exa, or Parallel search connector |
+| Web search | DuckDuckGo Instant Answer first-pass overviews, DuckDuckGo/Bing ranked-search fallbacks, self-hosted SearXNG, or one enabled Tavily, Brave, Exa, or Parallel search connector |
 | URL fetch | Fetches public HTTP(S) pages/PDFs with private/localhost restrictions |
 | Calculator | Evaluates bounded arithmetic expressions |
 | Browser Python | Runs Pyodide in the browser and returns output to the model |
@@ -144,6 +144,8 @@ Tools available to a selected model depend on the settings toggles and provider 
 | Memory | Bounded local memory is automatically attached to provider system instructions when entries exist; optional retrieval stays in the browser |
 | Ask user | Uses the browser's native prompt while an in-app panel is planned |
 | MCP | Loads tools from enabled remote HTTP or SSE MCP servers per chat request |
+
+DuckDuckGo Instant Answers are enabled by default with Web Search for fast definitions, entity lookups, and broad overviews. They are a discovery layer, not an LLM or a substitute for fetching authoritative sources. The free DuckDuckGo Instant Answer service is intended for non-commercial use; review DuckDuckGo's current terms before commercial deployment.
 
 Pyodide loads in the browser on first use. NumPy, pandas, Matplotlib, SciPy, SymPy, scikit-learn, Pillow, NetworkX, BeautifulSoup, lxml, regex, dateutil, and PyYAML can be loaded on demand. A local server-side Python installation is not required.
 

@@ -10,6 +10,19 @@ export interface SearchResult {
 
 export type SearchEngine = "duckduckgo" | "searxng";
 
+export interface DuckDuckGoInstantAnswer {
+    query: string;
+    answer?: string;
+    answerType?: string;
+    abstractText?: string;
+    abstractUrl?: string;
+    abstractSource?: string;
+    definition?: string;
+    definitionUrl?: string;
+    definitionSource?: string;
+    relatedTopics: SearchResult[];
+}
+
 export async function webSearch(
     query: string,
     options: {
@@ -25,6 +38,72 @@ export async function webSearch(
     return duckDuckGoSearch(query, maxResults);
 }
 
+/**
+ * Fetch DuckDuckGo's free Instant Answer API separately from ranked search.
+ * It is a useful first-pass overview/definition source, not an LLM and not a
+ * substitute for fetching authoritative pages for consequential claims.
+ */
+export async function duckDuckGoInstantAnswer(
+    query: string,
+    maxRelatedTopics: number = 5,
+): Promise<DuckDuckGoInstantAnswer> {
+    const normalizedQuery = query.trim().slice(0, 500);
+    if (!normalizedQuery) throw new Error("Query required");
+
+    const params = new URLSearchParams({
+        q: normalizedQuery,
+        format: "json",
+        no_html: "1",
+        no_redirect: "1",
+        skip_disambig: "1",
+    });
+    const response = await fetch(`https://api.duckduckgo.com/?${params.toString()}`, {
+        headers: {
+            ...DDG_HEADERS,
+            Accept: "application/json",
+        },
+        signal: AbortSignal.timeout(8_000),
+    });
+    if (!response.ok) {
+        throw new Error(`DuckDuckGo Instant Answer API returned HTTP ${response.status}`);
+    }
+
+    const body = await response.text();
+    if (!body.trim()) {
+        throw new Error("DuckDuckGo Instant Answer API returned an empty response");
+    }
+
+    let data: {
+        Answer?: string;
+        AnswerType?: string;
+        AbstractText?: string;
+        AbstractURL?: string;
+        AbstractSource?: string;
+        Definition?: string;
+        DefinitionURL?: string;
+        DefinitionSource?: string;
+        RelatedTopics?: DuckDuckGoRelatedTopic[];
+    };
+    try {
+        data = JSON.parse(body) as typeof data;
+    } catch {
+        throw new Error("DuckDuckGo Instant Answer API returned invalid JSON");
+    }
+
+    return {
+        query: normalizedQuery,
+        answer: cleanSearchText(data.Answer),
+        answerType: cleanSearchText(data.AnswerType),
+        abstractText: cleanSearchText(data.AbstractText, 2_000),
+        abstractUrl: publicHttpUrl(data.AbstractURL),
+        abstractSource: cleanSearchText(data.AbstractSource),
+        definition: cleanSearchText(data.Definition, 2_000),
+        definitionUrl: publicHttpUrl(data.DefinitionURL),
+        definitionSource: cleanSearchText(data.DefinitionSource),
+        relatedTopics: flattenDuckDuckGoTopics(data.RelatedTopics ?? [], maxRelatedTopics),
+    };
+}
+
 const DDG_HEADERS = {
     "User-Agent":
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -37,6 +116,54 @@ const DDG_HEADERS = {
 
 const DDG_COOKIES =
     "cf_clearance=; lmt=; __cf_bm=; exp=; dcl=; p=-1; _ga=GA1.2.; _gid=GA1.2.";
+
+type DuckDuckGoRelatedTopic = {
+    Text?: string;
+    FirstURL?: string;
+    Topics?: DuckDuckGoRelatedTopic[];
+};
+
+function cleanSearchText(value: unknown, maxLength = 500): string | undefined {
+    if (typeof value !== "string") return undefined;
+    const text = value.replace(/\s+/g, " ").trim().slice(0, maxLength);
+    return text || undefined;
+}
+
+function publicHttpUrl(value: unknown): string | undefined {
+    if (typeof value !== "string" || !value.trim()) return undefined;
+    try {
+        const url = new URL(value.trim());
+        return url.protocol === "http:" || url.protocol === "https:"
+            ? url.toString()
+            : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+function flattenDuckDuckGoTopics(
+    topics: DuckDuckGoRelatedTopic[],
+    maxResults: number,
+): SearchResult[] {
+    const results: SearchResult[] = [];
+    const visit = (items: DuckDuckGoRelatedTopic[]) => {
+        for (const item of items) {
+            if (results.length >= maxResults) return;
+            const url = publicHttpUrl(item.FirstURL);
+            const snippet = cleanSearchText(item.Text, 600);
+            if (url && snippet) {
+                results.push({
+                    title: snippet.slice(0, 120),
+                    url,
+                    snippet,
+                });
+            }
+            if (item.Topics) visit(item.Topics);
+        }
+    };
+    visit(topics);
+    return results;
+}
 
 export async function duckDuckGoSearch(
     query: string,

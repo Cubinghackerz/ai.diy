@@ -6,7 +6,12 @@
 import { tool, type Tool } from "ai";
 import { z } from "zod";
 import { ARTIFACT_MARKER, type ArtifactContentEncoding } from "~/lib/artifacts";
-import { webSearch, type SearchEngine } from "~/lib/search";
+import {
+    duckDuckGoInstantAnswer,
+    webSearch,
+    type DuckDuckGoInstantAnswer,
+    type SearchEngine,
+} from "~/lib/search";
 import { connectorSearch } from "~/lib/search/connectors";
 import type { ConnectorConfig } from "~/lib/types";
 import { assertPublicHttpUrl } from "~/lib/server/ssrf";
@@ -321,6 +326,43 @@ function connectorGuide(connectors: ConnectorConfig[]): string {
         .join("\n");
 }
 
+function formatDuckDuckGoInstantAnswer(answer: DuckDuckGoInstantAnswer): string {
+    const lines = [
+        "DuckDuckGo Instant Answer (free first-pass overview; verify material claims with web_search and read_url):",
+        `Query: ${answer.query}`,
+    ];
+    if (answer.answer) lines.push(`Answer: ${answer.answer}`);
+    if (answer.abstractText) {
+        lines.push(
+            `Abstract${answer.abstractSource ? ` (${answer.abstractSource})` : ""}: ${answer.abstractText}`,
+        );
+    }
+    if (answer.abstractUrl) lines.push(`Abstract URL: ${answer.abstractUrl}`);
+    if (answer.definition) {
+        lines.push(
+            `Definition${answer.definitionSource ? ` (${answer.definitionSource})` : ""}: ${answer.definition}`,
+        );
+    }
+    if (answer.definitionUrl) lines.push(`Definition URL: ${answer.definitionUrl}`);
+    if (answer.relatedTopics.length > 0) {
+        lines.push(
+            "Related topics:\n" +
+                answer.relatedTopics
+                    .map(
+                        (topic, index) =>
+                            `[${index + 1}] ${topic.title}\nURL: ${topic.url}\nSnippet: ${topic.snippet}`,
+                    )
+                    .join("\n\n"),
+        );
+    }
+    if (lines.length === 2) {
+        lines.push(
+            "No instant answer was available. Use web_search, third-party search, and read_url instead.",
+        );
+    }
+    return lines.join("\n").slice(0, 8_000);
+}
+
 function researchSkillGuide(input: {
     question: string;
     depth?: "quick" | "standard" | "deep";
@@ -338,16 +380,17 @@ Answer the question with live, verifiable evidence. Your training data, knowledg
 ## Before searching
 1. Define the answerable core: what must be true for the answer to be reliable.
 2. Split the question into 2-5 subquestions; each subquestion gets at least one focused query.
-3. Design queries per subquestion using exact phrases ("quoted term"), site restriction (site:docs.example.com), file type (filetype:pdf for primary documents), date terms (e.g. 2026) for freshness, and synonym variants when results are thin.
-4. Classify how fast the facts change:
+3. For definitions, entities, concepts, and broad factual overviews, call duckduckgo_instant_answer first. Treat its output as a fast discovery/overview layer, not as proof or a substitute for a retrieved primary page.
+4. Design queries per subquestion using exact phrases ("quoted term"), site restriction (site:docs.example.com), file type (filetype:pdf for primary documents), date terms (e.g. 2026) for freshness, and synonym variants when results are thin.
+5. Classify how fast the facts change:
    - Volatile (prices, releases, incidents, live status, schedules): use the newest sources and cross-check within the session.
    - Stable (documentation, APIs, history, specs): verify against the primary source and note its date.
    - Subjective or contested: sample multiple perspectives and report the range.
 
 ## Depth behavior
-- Quick: 1-3 focused queries; verify the direct answer with one authoritative source plus one independent check when the claim is consequential.
-- Standard: cover every subquestion; read the top pages with read_url; cross-check every claim that materially affects the answer with two independent sources.
-- Deep: exhaustive: multiple query families, site/filetype/date operators, primary-source reads for every consequential claim, and an explicit disagreement table with dates.
+- Quick: use duckduckgo_instant_answer when applicable, then 1-3 focused queries; verify the direct answer with one authoritative source plus one independent check when the claim is consequential.
+- Standard: use the Instant Answer overview when applicable, cover every subquestion, read the top pages with read_url, and cross-check every claim that materially affects the answer with two independent sources.
+- Deep: use all relevant discovery layers, including Instant Answer, traditional search, third-party providers, and primary-source reads; use multiple query families and an explicit disagreement table with dates.
 
 ## Evidence rules
 1. Prefer primary and official sources: official documentation, specifications, standards bodies, original research, direct datasets, maintained repositories, and primary reporting. Treat forums, blogs, and unknown domains as weak evidence.
@@ -430,6 +473,23 @@ export async function buildChatTools(settings: ToolSettings = {}) {
     const tools: Record<string, Tool> = {};
 
     if (enableSearch) {
+        tools.duckduckgo_instant_answer = tool({
+            description:
+                "Use DuckDuckGo's free Instant Answer API as the first-pass research tool for definitions, entities, concepts, and broad factual overviews. It is fast and useful but is not an LLM and is not proof by itself. For current, consequential, disputed, or source-sensitive claims, follow with web_search or a configured third-party provider and read_url/fetch_url to verify authoritative pages. This service is intended for non-commercial use; review current DuckDuckGo terms before commercial deployment.",
+            inputSchema: z.object({
+                query: z.string(),
+                maxRelatedTopics: z.number().int().min(0).max(8).optional(),
+            }),
+            execute: async ({ query, maxRelatedTopics }) => {
+                try {
+                    return formatDuckDuckGoInstantAnswer(
+                        await duckDuckGoInstantAnswer(query, maxRelatedTopics ?? 5),
+                    );
+                } catch (err) {
+                    return `DuckDuckGo Instant Answer unavailable: ${err instanceof Error ? err.message : "the service failed"}. Continue with web_search and read_url.`;
+                }
+            },
+        });
         tools.research_skill = tool({
             description:
                 "Callable research skill. Invoke before substantial factual, current, technical, or comparison research: it defines subquestions, a query strategy, source-quality and verification rules, and an output contract for live, source-verified research. Then run its planned queries with the search tool and read pages with read_url.",
