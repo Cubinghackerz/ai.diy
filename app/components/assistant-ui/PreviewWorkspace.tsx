@@ -26,6 +26,8 @@ import { ModelPicker } from "~/components/ui/ModelPicker";
 import { ProviderPicker } from "~/components/ui/ProviderPicker";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { runBrowserPython } from "~/lib/pyodide";
+import { artifactContentHash, inferArtifactMimeType } from "~/lib/artifacts";
+import { useCanvas } from "~/lib/canvas";
 import {
     buildLocalMemoryContext,
     hasLocalMemoryEntries,
@@ -921,6 +923,7 @@ const PreviewRunPanel: FC<{
     callbacksRef.current = { onComplete, onError };
     const sentRef = useRef(false);
     const { settings } = useSettings();
+    const { addArtifact } = useCanvas();
     const settingsRef = useRef(settings);
     settingsRef.current = settings;
     const memoryEnabled = settings.memoryEnabled !== false;
@@ -1009,7 +1012,27 @@ const PreviewRunPanel: FC<{
                           : Promise.resolve("Memory is disabled for this chat.")
                       : runBrowserPython(input.code ?? "");
             void task.then(
-                (output) => {
+                (result) => {
+                    const output =
+                        typeof result === "string" ? result : result.output;
+                    const pythonResult =
+                        typeof result === "string" ? null : result;
+                    if (pythonResult) {
+                        for (const artifact of pythonResult.artifacts) {
+                            addArtifact(
+                                {
+                                    kind: "file",
+                                    title: artifact.filename,
+                                    filename: artifact.filename,
+                                    content: artifact.content,
+                                    contentEncoding: artifact.contentEncoding,
+                                    mimeType: inferArtifactMimeType(artifact.filename),
+                                    sourceKey: `python:${artifact.filename}:${artifact.contentEncoding}:${artifact.content.length}:${artifactContentHash(artifact.content)}`,
+                                },
+                                { scopeId: run.id },
+                            );
+                        }
+                    }
                     const addToolOutput = chatRef.current
                         ?.addToolOutput as unknown as
                         | ((args: {

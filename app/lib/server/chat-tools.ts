@@ -375,6 +375,51 @@ Answer the question with live, verifiable evidence. Your training data, knowledg
 - Do not narrate searches or expose private reasoning.`;
 }
 
+function pythonFileCreationSkill(input: { task?: string }): string {
+    return `# Python File Creation & Execution Skill
+
+Task: ${input.task?.trim() || "Create, validate, and deliver a file with browser Python."}
+
+## Purpose
+Create real, downloadable files with browser-side Pyodide. Use this skill before non-trivial DOCX, XLSX, PPTX, PDF, image, archive, or data-file work.
+
+## Execution contract
+1. Call run_python with ordinary Python code. Listed libraries are loaded lazily when imported; never run pip, micropip, subprocess, or asyncio.run yourself.
+2. Top-level await is supported. For async work, use await directly rather than asyncio.run.
+3. Save each requested output in the current working directory using a clear filename such as report.docx, budget.xlsx, slides.pptx, or invoice.pdf. Do not write to a custom directory unless required.
+4. The browser automatically captures up to four newly created or changed files, each up to 2 MiB, into Canvas for the current browser session. Binary bytes are never persisted to browser storage.
+5. When run_python reports a created artifact, it is already downloadable in Canvas. Do not call create_file, generate_file, or manually Base64/hex encode the same file. Never hand-build a DOCX/XLSX/PPTX ZIP/XML package.
+6. Validate before finishing: reopen the file with the library when practical, check the target file exists and has non-zero size, and print a concise confirmation with filename and byte count.
+
+## Verified libraries
+- Word: from docx import Document (python-docx)
+- Excel: import openpyxl or import xlsxwriter
+- PowerPoint: from pptx import Presentation
+- PDF: from reportlab.pdfgen import canvas or from fpdf import FPDF
+- Images: from PIL import Image, ImageDraw
+- Charts: import matplotlib.pyplot as plt
+- Data: import pandas as pd, csv, json, zipfile
+
+## Standard workflow
+1. Infer the required format, filename, audience, and content structure from the request. Ask only if a missing detail changes the output materially.
+2. Use the format's real library and create semantic content: headings/tables/styles for documents, typed cells/formulas for spreadsheets, slides/layouts for presentations, and page structure for PDFs.
+3. Save once to the requested filename in the working directory.
+4. Verify with os.path.getsize and, where appropriate, reload or inspect the artifact.
+5. Let the automatic Canvas artifact capture deliver the file. Respond with the artifact name and a concise summary of what it contains.
+
+## Failure recovery
+- Import failure: rerun the same normal import; the browser loader installs supported packages lazily. Do not attempt manual package management.
+- File exceeds 2 MiB or more than four files are created: reduce/compress output, create only the requested deliverable, or explain that the user should download/export in smaller parts.
+- Python error: fix the actual traceback and rerun. Do not claim a file exists unless run_python reported it.
+- Missing Canvas artifact: confirm the file was saved in the current working directory and has non-zero bytes, then rerun only the creation step.
+
+## Delivery contract
+- Do not fabricate download links or previews.
+- State the exact captured filename and its purpose.
+- Clearly distinguish a verified generated file from an unverified claim.
+- Keep binary file bytes out of chat text and out of saved memory.`;
+}
+
 export async function buildChatTools(settings: ToolSettings = {}) {
     const enableSearch = settings.webSearchEnabled !== false;
     const enableCalc = settings.calculatorEnabled !== false;
@@ -545,13 +590,24 @@ export async function buildChatTools(settings: ToolSettings = {}) {
     if (enablePython) {
         tools.run_python = tool({
             description:
-                "Execute Python 3 in the browser with Pyodide and return stdout, stderr, or error logs. Every listed library auto-loads on first import; simply import it and never manage package installation yourself with micropip, pip, or subprocess. Top-level await is supported; do not use asyncio.run (Pyodide already runs inside an event loop), just write await at top level. Data/analysis: numpy, pandas, scipy, sympy, scikit-learn, networkx. Plotting: matplotlib. Parsing: BeautifulSoup, lxml, regex, python-dateutil, pyyaml. File creation: openpyxl and xlsxwriter (Excel), python-docx (Word), python-pptx (PowerPoint), reportlab and fpdf2 (PDF), pillow (images), jinja2 (templates), requests (HTTP), plus the csv, json, and zipfile standard libraries. Always use these real libraries instead of hand-rolling zip/XML files. For a binary file, read it back as bytes, Base64-encode it, and pass that exact string to create_file with contentEncoding set to base64 so the client delivers a valid download.",
+                "Execute Python 3 in the browser with Pyodide and return stdout, stderr, or error logs. Every listed library auto-loads on first import; simply import it and never manage package installation yourself with micropip, pip, or subprocess. Top-level await is supported; do not use asyncio.run (Pyodide already runs inside an event loop), just write await at top level. Data/analysis: numpy, pandas, scipy, sympy, scikit-learn, networkx. Plotting: matplotlib. Parsing: BeautifulSoup, lxml, regex, python-dateutil, pyyaml. File creation: openpyxl and xlsxwriter (Excel), python-docx (Word), python-pptx (PowerPoint), reportlab and fpdf2 (PDF), pillow (images), jinja2 (templates), requests (HTTP), plus the csv, json, and zipfile standard libraries. Always use these real libraries instead of hand-rolling zip/XML files. Save generated files in the current working directory; the browser captures up to four new files of 2 MiB each as session-only downloadable Canvas artifacts and never persists their binary data to browser storage. When a result reports created artifacts, do not call create_file or copy/Base64 their bytes again.",
             inputSchema: z.object({
                 code: z.string(),
                 description: z.string().optional(),
             }),
         });
         tools.run_code = tools.run_python;
+    }
+
+    if (enablePython && settings.skillsEnabled !== false) {
+        const pythonFileSkill = tool({
+            description:
+                "Callable Python file-creation and execution skill. Invoke before non-trivial DOCX, XLSX, PPTX, PDF, image, archive, or data-file work. It defines the verified Pyodide library, direct Canvas artifact-capture, validation, size-limit, and failure-recovery protocol.",
+            inputSchema: z.object({ task: z.string().optional() }),
+            execute: async (input) => pythonFileCreationSkill(input),
+        });
+        tools.python_file_creation_skill = pythonFileSkill;
+        tools.file_creation_skill = pythonFileSkill;
     }
 
     tools.get_current_time = tool({

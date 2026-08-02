@@ -21,6 +21,8 @@ import { createAttachmentAdapter } from "~/lib/attachments";
 import { getModelModalities } from "~/lib/model-modalities";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { runBrowserPython } from "~/lib/pyodide";
+import { artifactContentHash, inferArtifactMimeType } from "~/lib/artifacts";
+import { useCanvas } from "~/lib/canvas";
 import {
     buildLocalMemoryContext,
     hasLocalMemoryEntries,
@@ -53,6 +55,7 @@ export function AssistantRuntimeProvider({
     children: ReactNode;
 }) {
     const { settings } = useSettings();
+    const { addArtifact } = useCanvas();
     const settingsRef = useRef(settings);
     settingsRef.current = settings;
 
@@ -160,7 +163,32 @@ export function AssistantRuntimeProvider({
                           : Promise.resolve("Memory is disabled for this chat.")
                       : runBrowserPython(input.code ?? "");
             void task.then(
-                (output) => {
+                (result) => {
+                    const output =
+                        typeof result === "string" ? result : result.output;
+                    const pythonResult =
+                        typeof result === "string" ? null : result;
+                    if (pythonResult) {
+                        for (const artifact of pythonResult.artifacts) {
+                            const mimeType = inferArtifactMimeType(artifact.filename);
+                            const sourceKey = `python:${artifact.filename}:${artifact.contentEncoding}:${artifact.content.length}:${artifactContentHash(artifact.content)}`;
+                            // Python binary artifacts are session-only: saving
+                            // Base64 to IndexedDB can consume substantial
+                            // browser storage. Canvas still offers download.
+                            addArtifact(
+                                {
+                                    kind: "file",
+                                    title: artifact.filename,
+                                    filename: artifact.filename,
+                                    content: artifact.content,
+                                    contentEncoding: artifact.contentEncoding,
+                                    mimeType,
+                                    sourceKey,
+                                },
+                                { scopeId: threadId },
+                            );
+                        }
+                    }
                     const addToolOutput = chatRef.current
                         ?.addToolOutput as unknown as
                         | ((args: {

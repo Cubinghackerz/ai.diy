@@ -6,12 +6,27 @@ type PyodideRuntime = {
     runPythonAsync: (code: string) => Promise<unknown>;
 };
 
+export type BrowserPythonArtifact = {
+    filename: string;
+    content: string;
+    contentEncoding: "base64";
+};
+
+export type BrowserPythonResult = {
+    output: string;
+    artifacts: BrowserPythonArtifact[];
+};
+
 type PyodideWindow = Window & {
     loadPyodide?: (options: { indexURL: string }) => Promise<PyodideRuntime>;
 };
 
 const PYODIDE_VERSION = "0.26.4";
 const PYODIDE_BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
+// Captured Python files stay in the active Canvas session rather than being
+// written to IndexedDB. Keep their in-memory footprint deliberately bounded.
+const MAX_PYTHON_ARTIFACT_BYTES = 2 * 1024 * 1024;
+const MAX_PYTHON_ARTIFACTS = 4;
 
 // Pyodide loads these only when the user's code imports the matching module.
 // Keeping the map here makes common scientific, data, plotting, parsing,
@@ -122,9 +137,11 @@ function loadPyodide(): Promise<PyodideRuntime> {
     return pyodidePromise!;
 }
 
-export async function runBrowserPython(code: string): Promise<string> {
+export async function runBrowserPython(code: string): Promise<BrowserPythonResult> {
     const source = String(code ?? "").trim();
-    if (!source) return "Python error: no code provided.";
+    if (!source) {
+        return { output: "Python error: no code provided.", artifacts: [] };
+    }
 
     const pyodide = await loadPyodide();
     try {
@@ -156,20 +173,40 @@ export async function runBrowserPython(code: string): Promise<string> {
                 await installWithMicropip(pyodide, micropipPackage);
             } catch (error) {
                 const reason = error instanceof Error ? error.message : String(error);
-                return `Python error: The ${module} library could not be loaded automatically. Check the browser network connection and retry. ${reason.slice(0, 500)}`;
+                return {
+                    output: `Python error: The ${module} library could not be loaded automatically. Check the browser network connection and retry. ${reason.slice(0, 500)}`,
+                    artifacts: [],
+                };
             }
         }
     }
 
     const result = await pyodide.runPythonAsync(`
 import ast
+import base64
 import contextlib
 import io
 import json
+import os
 import traceback
 
 _prismium_stdout = io.StringIO()
 _prismium_stderr = io.StringIO()
+_prismium_working_directory = os.getcwd()
+
+def _prismium_file_snapshot():
+    snapshot = {}
+    try:
+        for filename in os.listdir(_prismium_working_directory):
+            path = os.path.join(_prismium_working_directory, filename)
+            if os.path.isfile(path):
+                stat = os.stat(path)
+                snapshot[filename] = (stat.st_size, stat.st_mtime)
+    except BaseException:
+        pass
+    return snapshot
+
+_prismium_before = _prismium_file_snapshot()
 try:
     _prismium_code = compile(
         ${JSON.stringify(source)},
@@ -198,6 +235,32 @@ except BaseException:
         "stderr": _prismium_stderr.getvalue(),
         "error": traceback.format_exc(),
     }
+
+_prismium_artifacts = []
+_prismium_skipped_files = []
+try:
+    for _prismium_filename, _prismium_state in _prismium_file_snapshot().items():
+        if _prismium_before.get(_prismium_filename) == _prismium_state:
+            continue
+        if len(_prismium_artifacts) >= ${MAX_PYTHON_ARTIFACTS}:
+            _prismium_skipped_files.append(_prismium_filename)
+            continue
+        _prismium_path = os.path.join(_prismium_working_directory, _prismium_filename)
+        if _prismium_state[0] > ${MAX_PYTHON_ARTIFACT_BYTES}:
+            _prismium_skipped_files.append(_prismium_filename)
+            continue
+        with open(_prismium_path, "rb") as _prismium_file:
+            _prismium_artifacts.append({
+                "filename": _prismium_filename,
+                "content": base64.b64encode(_prismium_file.read()).decode("ascii"),
+                "contentEncoding": "base64",
+            })
+except BaseException:
+    # A failed artifact capture must never hide normal Python stdout or errors.
+    pass
+
+_prismium_result["artifacts"] = _prismium_artifacts
+_prismium_result["skippedFiles"] = _prismium_skipped_files
 json.dumps(_prismium_result)
 `);
 
@@ -205,6 +268,8 @@ json.dumps(_prismium_result)
         stdout?: string;
         stderr?: string;
         error?: string | null;
+        artifacts?: unknown;
+        skippedFiles?: unknown;
     };
     const output = [
         parsed.stdout ? `stdout:\n${parsed.stdout.trim()}` : "",
@@ -215,5 +280,39 @@ json.dumps(_prismium_result)
         .join("\n\n")
         .trim();
 
-    return (output || "Python completed with no output.").slice(0, 64_000);
+    const artifacts = Array.isArray(parsed.artifacts)
+        ? parsed.artifacts
+              .filter((artifact): artifact is Record<string, unknown> =>
+                  Boolean(artifact && typeof artifact === "object"),
+              )
+              .map((artifact) => ({
+                  filename: String(artifact.filename ?? "").replace(/[\\/]/g, "_").trim(),
+                  content: String(artifact.content ?? ""),
+                  contentEncoding: artifact.contentEncoding === "base64" ? "base64" as const : null,
+              }))
+              .filter(
+                  (artifact): artifact is BrowserPythonArtifact =>
+                      Boolean(artifact.filename) &&
+                      artifact.contentEncoding === "base64" &&
+                      artifact.content.length > 0,
+              )
+              .slice(0, MAX_PYTHON_ARTIFACTS)
+        : [];
+    const skippedFiles = Array.isArray(parsed.skippedFiles)
+        ? parsed.skippedFiles.map((filename) => String(filename)).filter(Boolean).slice(0, MAX_PYTHON_ARTIFACTS)
+        : [];
+    const artifactSummary = artifacts.length
+        ? `Created downloadable artifact${artifacts.length === 1 ? "" : "s"}: ${artifacts.map((artifact) => artifact.filename).join(", ")}. They are available in Canvas for this browser session; download them to keep a copy. Do not recreate or Base64-copy them.`
+        : "";
+    const skippedSummary = skippedFiles.length
+        ? `Not exported from Python (limit: ${MAX_PYTHON_ARTIFACT_BYTES / (1024 * 1024)} MiB each): ${skippedFiles.join(", ")}.`
+        : "";
+
+    return {
+        output: [output || "Python completed with no output.", artifactSummary, skippedSummary]
+            .filter(Boolean)
+            .join("\n\n")
+            .slice(0, 64_000),
+        artifacts,
+    };
 }

@@ -7,6 +7,106 @@ export const ARTIFACT_MARKER = "__prismium_artifact";
 
 export type ArtifactContentEncoding = "base64" | "hex";
 
+/** Short deterministic key that avoids retaining a second copy of large content. */
+export function artifactContentHash(content: string): string {
+    let hash = 2166136261;
+    for (let index = 0; index < content.length; index += 1) {
+        hash ^= content.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(36);
+}
+
+export function inferArtifactMimeType(filename: string): string {
+    const extension = filename.split(".").pop()?.toLowerCase();
+    switch (extension) {
+        case "docx":
+            return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        case "xlsx":
+            return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        case "pptx":
+            return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+        case "pdf":
+            return "application/pdf";
+        case "csv":
+            return "text/csv;charset=utf-8";
+        case "json":
+            return "application/json";
+        case "svg":
+            return "image/svg+xml";
+        case "html":
+            return "text/html;charset=utf-8";
+        case "txt":
+        case "md":
+            return "text/plain;charset=utf-8";
+        case "png":
+            return "image/png";
+        case "jpg":
+        case "jpeg":
+            return "image/jpeg";
+        case "gif":
+            return "image/gif";
+        case "webp":
+            return "image/webp";
+        case "zip":
+            return "application/zip";
+        default:
+            return "application/octet-stream";
+    }
+}
+
+function reportArtifactDecodeFailure(
+    encoding: ArtifactContentEncoding,
+    reason: string,
+    content: string,
+) {
+    if (typeof console === "undefined") return;
+    const compact = content.trim();
+    console.warn("[artifact] binary payload could not be decoded", {
+        encoding,
+        reason,
+        length: compact.length,
+        modulo4: encoding === "base64" ? compact.replace(/\s+/g, "").length % 4 : undefined,
+        hasDataUrlPrefix: /^data:[^,]+,\s*/i.test(compact),
+        hasMarkdownFence: /^```/.test(compact) || /```$/.test(compact),
+        hasPythonBytesPrefix: /^b[\'\"]/.test(compact),
+        hasUrlSafeCharacters: /[-_]/.test(compact),
+    });
+}
+
+function normalizeEncodedContent(content: string, encoding: ArtifactContentEncoding): string {
+    let normalized = content.trim();
+
+    // Accept common formats models return when moving bytes between tools.
+    normalized = normalized
+        .replace(/^```(?:base64|hex)?\s*/i, "")
+        .replace(/\s*```$/i, "")
+        .trim();
+    if (/^data:[^,]+,/i.test(normalized)) {
+        normalized = normalized.slice(normalized.indexOf(",") + 1).trim();
+    }
+    normalized = normalized.replace(/^(?:base64|hex)\s*[:=]\s*/i, "");
+
+    const pythonBytes = normalized.match(/^b([\'\"])([\s\S]*)\1$/);
+    if (pythonBytes) normalized = pythonBytes[2];
+
+    const quoted = normalized.match(/^[\'\"]([\s\S]*)\1$/);
+    if (quoted) normalized = quoted[1];
+
+    normalized = normalized.replace(/\s+/g, "");
+    if (encoding === "hex") {
+        return normalized.replace(/^0x/i, "");
+    }
+
+    // Python's urlsafe_b64encode uses URL-safe characters; browsers' atob
+    // expects the standard alphabet. Add omitted padding when unambiguous.
+    normalized = normalized.replace(/-/g, "+").replace(/_/g, "/");
+    const remainder = normalized.length % 4;
+    if (remainder === 2) normalized += "==";
+    else if (remainder === 3) normalized += "=";
+    return normalized;
+}
+
 /** Decode binary artifact payloads without relying on Node-only Buffer APIs. */
 export function decodeArtifactContent(
     content: string,
@@ -14,9 +114,12 @@ export function decodeArtifactContent(
 ): ArrayBuffer | null {
     if (!encoding) return null;
 
+    const normalized = normalizeEncodedContent(content, encoding);
     if (encoding === "hex") {
-        const normalized = content.replace(/\s+/g, "");
-        if (!/^(?:[0-9a-f]{2})*$/i.test(normalized)) return null;
+        if (!/^(?:[0-9a-f]{2})*$/i.test(normalized)) {
+            reportArtifactDecodeFailure(encoding, "invalid-hex", content);
+            return null;
+        }
         const buffer = new ArrayBuffer(normalized.length / 2);
         const bytes = new Uint8Array(buffer);
         for (let index = 0; index < bytes.length; index += 1) {
@@ -26,8 +129,14 @@ export function decodeArtifactContent(
     }
 
     try {
-        const normalized = content.replace(/\s+/g, "");
-        if (typeof atob !== "function") return null;
+        if (typeof atob !== "function") {
+            reportArtifactDecodeFailure(encoding, "atob-unavailable", content);
+            return null;
+        }
+        if (!/^[A-Za-z0-9+/]*={0,2}$/.test(normalized) || normalized.length % 4 === 1) {
+            reportArtifactDecodeFailure(encoding, "invalid-base64-characters-or-padding", content);
+            return null;
+        }
         const binary = atob(normalized);
         const buffer = new ArrayBuffer(binary.length);
         const bytes = new Uint8Array(buffer);
@@ -36,6 +145,7 @@ export function decodeArtifactContent(
         }
         return buffer;
     } catch {
+        reportArtifactDecodeFailure(encoding, "invalid-base64", content);
         return null;
     }
 }
