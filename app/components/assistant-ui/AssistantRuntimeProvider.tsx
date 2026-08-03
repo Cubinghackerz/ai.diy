@@ -28,7 +28,7 @@ import {
     hasLocalMemoryEntries,
     readLocalMemory,
 } from "~/lib/memory";
-import { askUserInBrowser } from "~/lib/client-tools";
+import { useAskUser } from "~/components/assistant-ui/ask-user";
 import { forcedSkillStore } from "~/lib/skill-command";
 import { useSubagent } from "~/components/assistant-ui/subagents";
 import {
@@ -62,6 +62,7 @@ export function AssistantRuntimeProvider({
     const { settings } = useSettings();
     const { addArtifact } = useCanvas();
     const { runSubagent } = useSubagent();
+    const { ask: askUser } = useAskUser();
     const settingsRef = useRef(settings);
     settingsRef.current = settings;
     const projectInstructionsRef = useRef(projectInstructions ?? "");
@@ -167,11 +168,11 @@ export function AssistantRuntimeProvider({
             };
             const task =
                 toolCall.toolName === "ask_user"
-                    ? askUserInBrowser({
-                          question: input.question ?? "Please provide more information.",
-                          questionType: input.questionType,
-                          options: input.options,
-                      })
+                    ? askUser(
+                          input.question ?? "Please provide more information.",
+                          input.questionType ?? "short",
+                          input.options,
+                      )
                     : toolCall.toolName === "spawn_subagent"
                       ? runSubagent(toolCall.toolCallId, input.task ?? "")
                       : toolCall.toolName === "memory"

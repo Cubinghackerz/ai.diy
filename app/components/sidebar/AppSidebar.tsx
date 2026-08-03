@@ -10,6 +10,8 @@ import { ModelPicker } from "~/components/ui/ModelPicker";
 import { ProviderPicker } from "~/components/ui/ProviderPicker";
 import { haptic, hapticConfirm, hapticSelect } from "~/lib/haptics";
 import { testProviderKey } from "~/lib/key-test";
+import { probeModelCapabilities } from "~/lib/capability-probe";
+import type { ProbeReport } from "~/lib/server/capability-probe";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import { isLocalProvider, isProviderReady } from "~/lib/setup";
 import {
@@ -37,6 +39,8 @@ import {
     exportLocalBackup,
     getMemoryEntries,
     saveMemoryEntries,
+    searchThreadsAndMessages,
+    type ThreadSearchResult,
 } from "~/lib/db";
 import { cn } from "~/lib/utils";
 import { localProviderKey } from "~/lib/provider-credentials";
@@ -54,6 +58,7 @@ import {
     Globe,
     HardDrives,
     Key,
+    MagnifyingGlass,
     Moon,
     Plus,
     Pencil,
@@ -222,6 +227,33 @@ function ChatsPanel({
     const [movingId, setMovingId] = useState<string | null>(null);
     const { settings, updateSettings } = useSettings();
     const memoryEnabled = settings.memoryEnabled !== false;
+
+    const [searchQuery, setSearchQuery] = useState("");
+    const [searchResults, setSearchResults] = useState<
+        ThreadSearchResult[] | null
+    >(null);
+    const [searching, setSearching] = useState(false);
+    const searchSeq = useRef(0);
+    const searchActive = searchQuery.trim().length > 0;
+
+    useEffect(() => {
+        const q = searchQuery.trim();
+        const seq = ++searchSeq.current;
+        if (!q) {
+            setSearchResults(null);
+            setSearching(false);
+            return;
+        }
+        setSearching(true);
+        const handle = window.setTimeout(() => {
+            void searchThreadsAndMessages(q).then((results) => {
+                if (searchSeq.current !== seq) return;
+                setSearching(false);
+                setSearchResults(results);
+            });
+        }, 200);
+        return () => window.clearTimeout(handle);
+    }, [searchQuery]);
 
     const beginEditing = (thread: ThreadItem) => {
         cancelEditRef.current = false;
@@ -400,6 +432,50 @@ function ChatsPanel({
         </div>
     );
 
+    const renderSearchResult = (result: ThreadSearchResult) => {
+        const isActive = result.thread.id === activeThreadId;
+        return (
+            <div
+                key={`${result.matchedIn}:${result.thread.id}:${result.snippet}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                    hapticSelect();
+                    onSelectThread(result.thread.id);
+                }}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onSelectThread(result.thread.id);
+                    }
+                }}
+                className={cn(
+                    "flex cursor-pointer flex-col gap-0.5 rounded-lg px-2.5 py-2 text-xs outline-none transition-colors",
+                    isActive
+                        ? "bg-accent text-foreground"
+                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                )}
+            >
+                <span className="truncate font-medium text-foreground">
+                    {result.matchedIn === "title" ? (
+                        <Highlighted text={result.thread.title} query={searchQuery} />
+                    ) : (
+                        result.thread.title
+                    )}
+                </span>
+                {result.matchedIn === "message" ? (
+                    <span className="line-clamp-2 text-[10px] leading-relaxed">
+                        <Highlighted text={result.snippet} query={searchQuery} />
+                    </span>
+                ) : (
+                    <span className="text-[10px] text-muted-foreground/70">
+                        Title match
+                    </span>
+                )}
+            </div>
+        );
+    };
+
     const unassignedThreads = threads.filter((t) => !t.projectId);
 
     return (
@@ -446,7 +522,56 @@ function ChatsPanel({
                 </button>
             </div>
 
-            <div className="flex flex-col gap-1">
+            <div className="relative">
+                <MagnifyingGlass
+                    size={14}
+                    className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+                />
+                <Input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                            e.preventDefault();
+                            setSearchQuery("");
+                        }
+                    }}
+                    placeholder="Search chats and messages…"
+                    aria-label="Search chats and messages"
+                    className="h-8 rounded-lg pl-8 text-xs"
+                />
+            </div>
+
+            {searchActive ? (
+                <div className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between px-1 pb-1">
+                        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                            Results
+                        </span>
+                        <span className="text-[10px] text-muted-foreground/70">
+                            {searching
+                                ? "Searching…"
+                                : searchResults && searchResults.length > 0
+                                  ? `${searchResults.length} match${searchResults.length === 1 ? "" : "es"}`
+                                  : "No matches"}
+                        </span>
+                    </div>
+                    {searching ? (
+                        <p className="flex items-center gap-1.5 px-1 py-2 text-[11px] text-muted-foreground/70">
+                            <SpinnerGap size={12} className="animate-spin" />
+                            Searching chat history…
+                        </p>
+                    ) : searchResults && searchResults.length > 0 ? (
+                        searchResults.map(renderSearchResult)
+                    ) : (
+                        <p className="px-1 py-2 text-[11px] text-muted-foreground/70">
+                            No chats match “{searchQuery.trim()}”.
+                        </p>
+                    )}
+                </div>
+            ) : (
+                <>
+                    <div className="flex flex-col gap-1">
                 <div className="flex items-center justify-between px-1 pb-1">
                     <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                         Projects
@@ -721,7 +846,32 @@ function ChatsPanel({
                     )
                 )}
             </div>
+                </>
+            )}
         </div>
+    );
+}
+
+function Highlighted({ text, query }: { text: string; query: string }) {
+    const q = query.trim();
+    if (!q) return <>{text}</>;
+    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const parts = text.split(new RegExp(`(${escaped})`, "ig"));
+    return (
+        <>
+            {parts.map((part, index) =>
+                part.toLowerCase() === q.toLowerCase() ? (
+                    <mark
+                        key={index}
+                        className="rounded-sm bg-primary/20 px-0.5 text-foreground"
+                    >
+                        {part}
+                    </mark>
+                ) : (
+                    <span key={index}>{part}</span>
+                ),
+            )}
+        </>
     );
 }
 
@@ -1938,6 +2088,8 @@ function KeysSection() {
         resolvedBaseUrl?: string;
     } | null>(null);
     const [testing, setTesting] = useState(false);
+    const [probing, setProbing] = useState(false);
+    const [probeReport, setProbeReport] = useState<ProbeReport | null>(null);
     const [status, setStatus] = useState<{
         kind: "idle" | "ok" | "error";
         message?: string;
@@ -1965,6 +2117,8 @@ function KeysSection() {
         setManualModelId("");
         setDiscoveredModels([]);
         setTestResult(null);
+        setProbeReport(null);
+        setProbing(false);
         setStatus({ kind: "idle" });
     }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -2110,6 +2264,128 @@ function KeysSection() {
                 message: error instanceof Error ? error.message : "Invalid connection settings.",
             });
         }
+    };
+
+    const runProbe = useCallback(async () => {
+        haptic();
+        if (!draftUrl.trim()) {
+            setStatus({ kind: "error", message: "Enter the custom provider API root first." });
+            return;
+        }
+        const model = manualModelId.trim() || discoveredModels[0]?.id;
+        if (!model) {
+            setStatus({
+                kind: "error",
+                message: "Enter or discover a model ID before probing.",
+            });
+            return;
+        }
+        setProbing(true);
+        setProbeReport(null);
+        setStatus({ kind: "idle" });
+        let headers: Record<string, string> | undefined;
+        try {
+            headers = parseHeaders();
+        } catch (error) {
+            setProbing(false);
+            setStatus({
+                kind: "error",
+                message:
+                    error instanceof Error ? error.message : "Invalid custom headers.",
+            });
+            return;
+        }
+        try {
+            const result = await probeModelCapabilities({
+                provider: active,
+                apiKey:
+                    custom &&
+                    draftCompatible.authMode &&
+                    draftCompatible.authMode !== "bearer"
+                        ? ""
+                        : draftKey,
+                baseUrl: draftUrl,
+                model,
+                openAICompatible: { ...draftCompatible, headers },
+            });
+            if (!result.ok || !result.report) {
+                setStatus({
+                    kind: "error",
+                    message: result.error ?? "Capability probing failed.",
+                });
+                return;
+            }
+            const detected = Object.values(result.report.capabilities).filter(
+                (probe) => probe.capability === true,
+            ).length;
+            setProbeReport(result.report);
+            setStatus({
+                kind: "ok",
+                message: `Probed ${model} — ${detected} of ${Object.keys(result.report.capabilities).length} capabilities detected in ${result.report.latencyMs} ms.`,
+            });
+        } catch (error) {
+            setStatus({
+                kind: "error",
+                message:
+                    error instanceof Error
+                        ? error.message
+                        : "Capability probing failed.",
+            });
+        } finally {
+            setProbing(false);
+        }
+    }, [
+        active,
+        custom,
+        draftKey,
+        draftUrl,
+        draftCompatible.authMode,
+        draftCompatible.maxRetries,
+        draftCompatible.timeoutMs,
+        discoveredModels,
+        manualModelId,
+        parseHeaders,
+    ]);
+
+    const applyProbeOverrides = () => {
+        if (!probeReport) return;
+        const next: NonNullable<
+            typeof draftCompatible.capabilityOverrides
+        > = {};
+        for (const [key, probe] of Object.entries(probeReport.capabilities)) {
+            if (probe.capability === null) continue;
+            switch (key) {
+                case "tools":
+                    next.tools = probe.capability;
+                    break;
+                case "vision":
+                    next.vision = probe.capability;
+                    break;
+                case "structuredOutput":
+                    next.structuredOutput = probe.capability;
+                    break;
+                case "reasoning":
+                    next.reasoning = probe.capability;
+                    break;
+                case "embeddings":
+                    next.embeddings = probe.capability;
+                    break;
+                case "streaming":
+                    next.streaming = probe.capability;
+                    break;
+                default:
+                    break;
+            }
+        }
+        hapticSelect();
+        setDraftCompatible((current) => ({
+            ...current,
+            capabilityOverrides: { ...current.capabilityOverrides, ...next },
+        }));
+        setStatus({
+            kind: "ok",
+            message: "Probe results applied to capability overrides.",
+        });
     };
 
     return (
@@ -2393,6 +2669,109 @@ function KeysSection() {
                 </div>
             ) : null}
 
+            {custom ? (
+                <div className="flex flex-col gap-2 rounded-xl border border-border/70 p-2.5">
+                    <p className="text-[11px] font-medium">Capability probe</p>
+                    <p className="text-[10px] leading-relaxed text-muted-foreground">
+                        Runs bounded checks against the configured model:
+                        streaming, tools, structured output, vision, embeddings,
+                        Responses, and reasoning. Each run costs a tiny amount of
+                        tokens; results are best-effort, not authoritative.
+                    </p>
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={
+                            probing ||
+                            testing ||
+                            (!manualModelId.trim() && !discoveredModels.length)
+                        }
+                        onClick={runProbe}
+                        className="h-8 rounded-lg text-[11px]"
+                    >
+                        {probing ? (
+                            <>
+                                <SpinnerGap
+                                    className="animate-spin"
+                                    data-icon="inline-start"
+                                />
+                                Probing…
+                            </>
+                        ) : (
+                            "Probe model capabilities"
+                        )}
+                    </Button>
+                    {probeReport ? (
+                        <div className="flex flex-col gap-1 rounded-lg bg-muted/40 p-2">
+                            <p className="truncate font-mono text-[10px] text-muted-foreground">
+                                {probeReport.model} · {probeReport.latencyMs} ms
+                            </p>
+                            {([
+                                ["streaming", "Streaming"],
+                                ["tools", "Tool calling"],
+                                ["structuredOutput", "Structured output"],
+                                ["vision", "Vision"],
+                                ["embeddings", "Embeddings"],
+                                ["responses", "Responses API"],
+                                ["reasoning", "Reasoning"],
+                            ] as const).map(([key, label]) => {
+                                const probe = probeReport.capabilities[key];
+                                if (!probe) return null;
+                                return (
+                                    <div
+                                        key={key}
+                                        className="flex items-center gap-1.5 text-[10px]"
+                                        title={probe.error}
+                                    >
+                                        {probe.capability === true ? (
+                                            <CheckCircle
+                                                size={12}
+                                                weight="fill"
+                                                className="shrink-0 text-success"
+                                            />
+                                        ) : probe.capability === false ? (
+                                            <XCircle
+                                                size={12}
+                                                weight="fill"
+                                                className="shrink-0 text-destructive"
+                                            />
+                                        ) : (
+                                            <WarningCircle
+                                                size={12}
+                                                weight="fill"
+                                                className="shrink-0 text-warning"
+                                            />
+                                        )}
+                                        <span className="min-w-0 flex-1 truncate">
+                                            {label}
+                                        </span>
+                                        {probe.capability === null ? (
+                                            <span className="shrink-0 text-muted-foreground/70">
+                                                unknown
+                                            </span>
+                                        ) : probe.latencyMs ? (
+                                            <span className="shrink-0 text-muted-foreground/70">
+                                                {probe.latencyMs} ms
+                                            </span>
+                                        ) : null}
+                                    </div>
+                                );
+                            })}
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={applyProbeOverrides}
+                                className="mt-1 h-7 rounded-lg text-[10px]"
+                            >
+                                Apply to capability overrides
+                            </Button>
+                        </div>
+                    ) : null}
+                </div>
+            ) : null}
+
             <div className={cn("grid gap-2", custom ? "grid-cols-2" : "grid-cols-1")}>
                 <Button
                     type="button"
@@ -2432,7 +2811,7 @@ function KeysSection() {
                     <p className="font-medium text-success">Connection successful</p>
                     <p>{testResult.models.length} models found · {testResult.live ? "Live discovery" : "Fallback catalog"} · {testResult.latencyMs} ms</p>
                     <p className="truncate">Resolved endpoint: {testResult.resolvedBaseUrl || draftUrl || "default"}</p>
-                    <p>Streaming and tool support are selected by compatibility settings; they are not independently probed yet.</p>
+                    <p>Use the capability probe above to verify streaming, tools, vision, structured output, and more for the selected model.</p>
                 </div>
             ) : null}
 

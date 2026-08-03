@@ -68,6 +68,7 @@ export interface ProviderConfig {
             structuredOutput?: boolean;
             reasoning?: boolean;
             embeddings?: boolean;
+            streaming?: boolean;
             parallelTools?: boolean;
         };
     };

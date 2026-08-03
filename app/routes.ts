@@ -12,5 +12,6 @@ export default [
     route("api/models", "routes/api.models.ts"),
     route("api/search", "routes/api.search.ts"),
     route("api/connectors", "routes/api.connectors.ts"),
+    route("api/capabilities", "routes/api.capabilities.ts"),
     route("api/title", "routes/api.title.ts"),
 ] satisfies RouteConfig;

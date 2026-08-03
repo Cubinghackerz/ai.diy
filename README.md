@@ -12,7 +12,7 @@ ai.diy is built with React Router, assistant-ui, the Vercel AI SDK, Tailwind CSS
 This is a beta project. Features described as **available** are wired into the application. Features marked **planned** are intentionally not presented as working integrations.
 
 - Available: chat, provider setup, model discovery, local chat persistence, files, browser Python, search, connector-backed search, remote MCP, artifacts, local memory, voice dictation where the browser supports Web Speech, and multi-model Preview.
-- Coming soon: automatic Google Drive backup/restore, direct GitHub/Supabase/PostgreSQL/S3 adapters, encrypted browser-storage settings, in-app `ask_user` panels, and custom-provider capability probing.
+- Coming soon: automatic Google Drive backup/restore, direct GitHub/Supabase/PostgreSQL/S3 adapters, and encrypted browser-storage settings.
 
 ## Quick Start
 
@@ -91,7 +91,7 @@ The provider picker supports these built-in integrations:
 | LM Studio | `http://localhost:1234/v1` | Optional placeholder key |
 | Custom OpenAI-compatible | Configurable | Optional API key |
 
-The model picker requests a live model list where the provider exposes one. When discovery fails, it uses a small local fallback list so setup can continue. A live model list is discovery only: model capabilities are still inferred from app metadata and provider behavior, not verified with a per-model test suite.
+The model picker requests a live model list where the provider exposes one. When discovery fails, it uses a small local fallback list so setup can continue. A live model list is discovery only: model capabilities are still inferred from app metadata and provider behavior, not verified with a per-model test suite. Custom OpenAI-compatible endpoints can opt into the bounded per-model capability probe described below.
 
 ### OpenAI-Compatible Endpoints
 
@@ -108,10 +108,10 @@ Current behavior:
 - Streaming, messages, tool definitions, temperature, top-p, and output-token limits flow through the Vercel AI SDK's OpenAI-compatible provider path.
 - The Advanced section supports connection names, optional API keys, bearer/X-API-Key/custom-header/no-auth modes, custom headers, manual model IDs, timeout, retry limits, tool compatibility, and capability overrides.
 - Test and Save are separate. Test reports model count, live/fallback discovery, latency, and the resolved API root. Save can use a manually entered model ID when `/models` is unavailable.
+- The capability probe (custom provider advanced section) runs bounded per-model checks for streaming, tool calling, strict structured output, vision, embeddings, the Responses API, and reasoning, and can apply the results as capability overrides. Probes are best-effort, cost a tiny number of tokens, and are not authoritative.
 
 Still limited for custom endpoints:
 
-- Automated per-model checks for streaming, tools, strict structured output, vision, embeddings, reasoning, or Responses API support.
 - Pricing and context-window overrides.
 - A custom endpoint proxy mode separate from the normal application relay.
 
@@ -126,6 +126,7 @@ Do not label a custom model as vision-, tool-, embedding-, or structured-output-
 - Canvas artifacts for generated HTML, code, SVG, Markdown, text, CSV, and JSON files.
 - Generated artifacts persist by chat in IndexedDB and can be reopened from the artifact launcher.
 - Automatic first-message title generation with a safe slug fallback.
+- Sidebar search across persisted chat titles and message content, with highlighted snippets in the results.
 - Light, dark, and system themes.
 
 ### Tools
@@ -143,7 +144,7 @@ Tools available to a selected model depend on the settings toggles and provider 
 | Skills | Generates reusable `SKILL.md` documents and frontend design briefs |
 | Local time | Returns an ISO timestamp for an IANA timezone |
 | Memory | Bounded local memory is automatically attached to provider system instructions when entries exist; optional retrieval stays in the browser |
-| Ask user | Uses the browser's native prompt while an in-app panel is planned |
+| Ask user | Interactive in-app question card for single-choice, multi-select, and short-answer questions |
 | MCP | Loads tools from enabled remote HTTP or SSE MCP servers per chat request |
 
 DuckDuckGo Instant Answers are enabled by default with Web Search for fast definitions, entity lookups, and broad overviews. They are a discovery layer, not an LLM or a substitute for fetching authoritative sources. The free DuckDuckGo Instant Answer service is intended for non-commercial use; review DuckDuckGo's current terms before commercial deployment.
@@ -241,6 +242,7 @@ These routes are application-internal and expect the settings data supplied by t
 | `/api/title` | `POST` | Generates a short thread title |
 | `/api/search` | `POST` | Performs DuckDuckGo/Bing fallback or SearXNG retrieval |
 | `/api/connectors` | `POST` | Tests one direct search connector with a bounded query |
+| `/api/capabilities` | `POST` | Runs bounded per-model capability probes for a configured endpoint |
 
 Do not expose these endpoints as a multi-tenant credential proxy without authentication, rate limits, usage controls, and independent security review.
 

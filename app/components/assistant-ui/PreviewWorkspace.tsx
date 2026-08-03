@@ -33,7 +33,7 @@ import {
     hasLocalMemoryEntries,
     readLocalMemory,
 } from "~/lib/memory";
-import { askUserInBrowser } from "~/lib/client-tools";
+import { useAskUser } from "~/components/assistant-ui/ask-user";
 import {
     deletePreviewSession,
     loadPreviewSession,
@@ -926,6 +926,7 @@ const PreviewRunPanel: FC<{
     const sentRef = useRef(false);
     const { settings } = useSettings();
     const { addArtifact } = useCanvas();
+    const { ask: askUser } = useAskUser();
     const settingsRef = useRef(settings);
     settingsRef.current = settings;
     const memoryEnabled = settings.memoryEnabled !== false;
@@ -1003,11 +1004,11 @@ const PreviewRunPanel: FC<{
             };
             const task =
                 toolCall.toolName === "ask_user"
-                    ? askUserInBrowser({
-                          question: input.question ?? "Please provide more information.",
-                          questionType: input.questionType,
-                          options: input.options,
-                      })
+                    ? askUser(
+                          input.question ?? "Please provide more information.",
+                          input.questionType ?? "short",
+                          input.options,
+                      )
                     : toolCall.toolName === "memory"
                       ? settingsRef.current.memoryEnabled !== false
                           ? readLocalMemory(input.query)

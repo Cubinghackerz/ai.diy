@@ -88,6 +88,7 @@ export function useProviderModels(provider: ProviderId, enabled: boolean) {
                               ...(capabilityOverrides?.vision === undefined ? {} : { supportsVision: capabilityOverrides.vision }),
                               ...(capabilityOverrides?.structuredOutput === undefined ? {} : { supportsStructuredOutputs: capabilityOverrides.structuredOutput }),
                               ...(capabilityOverrides?.reasoning === undefined ? {} : { supportsReasoning: capabilityOverrides.reasoning }),
+                              ...(capabilityOverrides?.streaming === undefined ? {} : { supportsStreaming: capabilityOverrides.streaming }),
                           }),
                       )
                     : (DEFAULT_MODELS[provider] ?? []).map(enrichModelInfo);

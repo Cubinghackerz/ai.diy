@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { AskUserProvider } from "~/components/assistant-ui/ask-user";
 import { AssistantRuntimeProvider } from "~/components/assistant-ui/AssistantRuntimeProvider";
 import { ChatLifecycle } from "~/components/assistant-ui/ChatLifecycle";
 import { ChatErrorBanner } from "~/components/assistant-ui/ChatThreadSync";
@@ -25,7 +26,9 @@ import { cn } from "~/lib/utils";
 export default function Home() {
     return (
         <CanvasProvider>
-            <HomeInner />
+            <AskUserProvider>
+                <HomeInner />
+            </AskUserProvider>
             <ArtifactLauncher />
         </CanvasProvider>
     );

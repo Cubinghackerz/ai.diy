@@ -288,3 +288,80 @@ export async function deleteMessageFromDB(messageId: string): Promise<void> {
     if (!db) return;
     await db.delete("messages", messageId);
 }
+
+export type ThreadSearchResult = {
+    thread: ThreadData;
+    snippet: string;
+    matchedIn: "title" | "message";
+};
+
+function messageSnippet(content: string, query: string): string {
+    const lower = content.toLowerCase();
+    const index = lower.indexOf(query);
+    if (index === -1) return content.slice(0, 90);
+    const start = Math.max(0, index - 40);
+    const end = Math.min(content.length, index + query.length + 50);
+    const prefix = start > 0 ? "…" : "";
+    const suffix = end < content.length ? "…" : "";
+    return `${prefix}${content.slice(start, end)}${suffix}`;
+}
+
+/**
+ * Full-text search over persisted thread titles and message content.
+ * Case-insensitive, bounded per-thread and overall, sorted by thread recency.
+ */
+export async function searchThreadsAndMessages(
+    query: string,
+    opts?: { maxPerThread?: number; maxResults?: number },
+): Promise<ThreadSearchResult[]> {
+    const db = await getDB();
+    if (!db) return [];
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const maxPerThread = opts?.maxPerThread ?? 3;
+    const maxResults = opts?.maxResults ?? 40;
+
+    const [threads, allMessages] = await Promise.all([
+        db.getAll("threads"),
+        db.getAll("messages"),
+    ]);
+    const threadById = new Map(threads.map((t) => [t.id, t]));
+    const results: ThreadSearchResult[] = [];
+    const perThread = new Map<string, number>();
+
+    for (const thread of threads) {
+        if (thread.title.toLowerCase().includes(q)) {
+            results.push({
+                thread,
+                snippet: thread.title,
+                matchedIn: "title",
+            });
+            perThread.set(thread.id, 1);
+        }
+    }
+
+    if (results.length < maxResults) {
+        for (const message of allMessages) {
+            if (message.role === "tool") continue;
+            const content = message.content ?? "";
+            if (!content || !content.toLowerCase().includes(q)) continue;
+            const thread = threadById.get(message.threadId);
+            if (!thread) continue;
+            const count = perThread.get(thread.id) ?? 0;
+            if (count >= maxPerThread) continue;
+            perThread.set(thread.id, count + 1);
+            results.push({
+                thread,
+                snippet: messageSnippet(content, q),
+                matchedIn: "message",
+            });
+            if (results.length >= maxResults) break;
+        }
+    }
+
+    // Stable sort: thread recency desc, title matches stay before message
+    // matches within the same thread.
+    return results.sort(
+        (a, b) => b.thread.updatedAt - a.thread.updatedAt,
+    );
+}
