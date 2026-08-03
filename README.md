@@ -136,9 +136,9 @@ Do not label a custom model as vision-, tool-, embedding-, or structured-output-
 
 ### Model Icons
 
-- Providers and models show brand-colored letter logos in the provider picker, model pickers (trigger and dropdown), hover cards, and the Usage & cost model rows.
-- Logos are deterministic letter badges keyed by provider (OpenAI, Anthropic, Google/Gemini, Groq, DeepSeek, Bedrock, Azure, Vertex, OpenRouter/Gateway, Together, Mistral, Hugging Face, LM Studio, xAI, Ollama, custom) — no external logo requests, works offline.
-- For gateway/Together/Hugging Face models the qualifier prefix (e.g. `openai/`, `google/`) selects the brand, so `google/veo-3.1` shows the Google mark.
+- Providers and models show their real brand marks (bundled offline SVG paths from the Simple Icons corpus) in the provider picker, model pickers (trigger and dropdown), hover cards, and the Usage & cost model rows; providers without an icon fall back to brand-colored letter badges (Groq, Azure, Together, Mistral).
+- Logos are bundled fully offline — no external logo requests, works without network.
+- For gateway models the qualifier prefix (e.g. `openai/`, `google/`) selects the brand, so `google/veo-3.1` shows the Google mark.
 
 ### Video and Image Generation
 
@@ -201,6 +201,14 @@ Chats are never locked in. Settings -> Import & Export (or hover a chat in the s
 - **Export everything**: a ZIP bundle of one Markdown file per chat, plus the existing full JSON backup download in Cloud Storage.
 - **Import**: ChatGPT account export ZIP (`conversations.json`), Claude account export ZIP (`conversations.json`), ai.diy backup or per-chat JSON, ShareGPT/OpenAI JSONL chat files, and Markdown chat files. Format detection is automatic (ZIP/JSON/JSONL/Markdown), with a preview showing the detected source, chat/message counts, and any skipped content before importing.
 - Imports always create new chats with fresh ids; existing chats are never modified. Everything runs locally in the browser — files are never uploaded.
+
+### Cloud Storage Backup
+
+Settings -> Cloud Storage performs fully client-side chat backup to the storage provider of your choice, convenient for multi-device or off-site protection:
+
+- **S3-compatible** endpoints (AWS S3, Cloudflare R2, MinIO, Backblaze B2, Wasabi) using SigV4 signing via the Web Crypto API, and **WebDAV** (Nextcloud, ownCloud, Box, generic WebDAV). No server involvement.
+- Credentials are kept only in browser localStorage next to your provider API keys and are signed straight from the browser — never transmitted to any server other than the configured storage endpoint.
+- **Back up now**, **List backups**, and **Restore** (imports always as new chats). Automatic backups upload a debounced snapshot whenever chat content changes — each run keeps its own timestamped file.
 
 ### Multi-Model Preview
 

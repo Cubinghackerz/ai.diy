@@ -96,6 +96,23 @@ import {
 import { detectAndParseFile } from "~/lib/interop";
 import { importChats } from "~/lib/interop/importer";
 import type { ImportSummary } from "~/lib/interop/types";
+import type {
+    CloudBackupFile,
+    CloudStorageConfig,
+    S3StorageConfig,
+    WebDAVStorageConfig,
+} from "~/lib/cloud-storage/types";
+import {
+    backupKeyForNow,
+    cloudConfigComplete,
+} from "~/lib/cloud-storage/types";
+import {
+    cloudStorageError,
+    downloadBackup,
+    listCloudBackups,
+    testCloudConnection,
+    uploadBackup,
+} from "~/lib/cloud-storage";
 
 type SidebarPanel = "chats" | "settings";
 type SettingsSection =
@@ -144,6 +161,8 @@ export function AppSidebar({
     /** Called after an import writes new chats, so the list can refresh. */
     onImportComplete?: () => void;
 }) {
+    useCloudAutoBackup();
+
     return (
         <div className="flex h-full flex-col">
             <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-2">
@@ -1150,7 +1169,9 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
 
             {section === "connectors" && <ConnectorsSection />}
 
-            {section === "cloud" && <CloudStorageSection />}
+            {section === "cloud" && (
+                <CloudStorageSection onImportComplete={onImportComplete} />
+            )}
 
             {section === "data" && <DataInteropSection onImportComplete={onImportComplete} />}
 
@@ -1800,10 +1821,448 @@ function DataInteropSection({ onImportComplete }: { onImportComplete?: () => voi
     );
 }
 
-function CloudStorageSection() {
-    const [guideOpen, setGuideOpen] = useState(false);
+function useCloudAutoBackup() {
+    const { settings, updateSettings } = useSettings();
+    const busyRef = useRef(false);
+    const timerRef = useRef<number | null>(null);
 
-    const downloadBackup = async () => {
+    useEffect(() => {
+        const runBackup = async () => {
+            const cfg = settings.cloudStorage;
+            if (
+                !cfg.autoBackup ||
+                !cloudConfigComplete(cfg) ||
+                busyRef.current
+            ) {
+                return;
+            }
+            busyRef.current = true;
+            try {
+                const backup = await exportLocalBackup();
+                const key = backupKeyForNow(cfg);
+                await uploadBackup(cfg, key, JSON.stringify(backup));
+                updateSettings({
+                    cloudStorage: {
+                        ...cfg,
+                        lastBackupAt: new Date().toISOString(),
+                    },
+                });
+            } catch (err) {
+                console.error("[cloud:auto-backup]", err);
+            } finally {
+                busyRef.current = false;
+            }
+        };
+        const onChange = () => {
+            if (timerRef.current != null) window.clearTimeout(timerRef.current);
+            timerRef.current = window.setTimeout(() => void runBackup(), 30_000);
+        };
+        window.addEventListener("ai-diy:chats-changed", onChange);
+        return () => {
+            window.removeEventListener("ai-diy:chats-changed", onChange);
+            if (timerRef.current != null) window.clearTimeout(timerRef.current);
+        };
+    }, [settings.cloudStorage, updateSettings]);
+}
+
+function CloudStorageSection({
+    onImportComplete,
+}: {
+    onImportComplete?: () => void;
+}) {
+    const { settings, updateSettings } = useSettings();
+    const cfg = settings.cloudStorage;
+    const [status, setStatus] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [busy, setBusy] = useState(false);
+    const [backups, setBackups] = useState<CloudBackupFile[] | null>(null);
+
+    const patch = (patch: Partial<CloudStorageConfig>) =>
+        updateSettings({ cloudStorage: { ...cfg, ...patch } });
+    const patchS3 = (patch: Partial<S3StorageConfig>) =>
+        updateSettings({
+            cloudStorage: {
+                ...cfg,
+                s3: { ...cfg.s3, ...patch } as S3StorageConfig,
+            },
+        });
+    const patchWebDAV = (patch: Partial<WebDAVStorageConfig>) =>
+        updateSettings({
+            cloudStorage: {
+                ...cfg,
+                webdav: { ...cfg.webdav, ...patch } as WebDAVStorageConfig,
+            },
+        });
+
+    const run = async (fn: () => Promise<void>) => {
+        setBusy(true);
+        setError(null);
+        setStatus(null);
+        try {
+            await fn();
+        } catch (err) {
+            setError(cloudStorageError(err));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const testConnection = () =>
+        run(async () => {
+            await testCloudConnection(cfg);
+            setStatus("Connected to storage.");
+        });
+
+    const backupNow = () =>
+        run(async () => {
+            const backup = await exportLocalBackup();
+            const key = backupKeyForNow(cfg);
+            await uploadBackup(cfg, key, JSON.stringify(backup));
+            setStatus(`Backed up ${backup.threads.length} chats to ${key}.`);
+            patch({ lastBackupAt: new Date().toISOString() });
+        });
+
+    const restoreBackup = (key: string) =>
+        run(async () => {
+            const text = await downloadBackup(cfg, key);
+            const summary = await detectAndParseFile(
+                new File([text], key.split("/").pop() ?? "backup.json"),
+            );
+            if (summary.chats.length === 0) {
+                throw new Error("No importable chats found in this backup.");
+            }
+            const result = await importChats(summary);
+            setStatus(
+                `Restored ${result.chats} chat${
+                    result.chats === 1 ? "" : "s"
+                } with ${result.messages} messages.`,
+            );
+            onImportComplete?.();
+        });
+
+    const listBackups = () =>
+        run(async () => {
+            const items = await listCloudBackups(cfg);
+            setBackups(items);
+            setStatus(
+                items.length === 0
+                    ? "No backups found yet."
+                    : `${items.length} backup${items.length === 1 ? "" : "s"} found.`,
+            );
+        });
+
+    return (
+        <div className="flex flex-col gap-3">
+            <div>
+                <h3 className="text-xs font-semibold">
+                    Cloud storage{" "}
+                    <span className="text-[9px] uppercase tracking-wider text-primary">
+                        Beta
+                    </span>
+                </h3>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                    Back up and restore all chats from the storage provider of
+                    your choice. Credentials are stored only in this browser,
+                    never on a server — requests go directly from your device
+                    to your storage endpoint.
+                </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+                {(["none", "s3", "webdav"] as const).map((kind) => (
+                    <button
+                        key={kind}
+                        type="button"
+                        onClick={() => {
+                            hapticSelect();
+                            patch({ kind });
+                            setStatus(null);
+                            setError(null);
+                        }}
+                        className={cn(
+                            "rounded-lg border px-2.5 py-1 text-[11px] font-medium outline-none transition-colors",
+                            cfg.kind === kind
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border/70 text-muted-foreground hover:bg-muted/40",
+                        )}
+                    >
+                        {kind === "none"
+                            ? "Off"
+                            : kind === "s3"
+                              ? "S3-compatible"
+                              : "WebDAV"}
+                    </button>
+                ))}
+            </div>
+
+            {cfg.kind === "s3" ? (
+                <div className="flex flex-col gap-2">
+                    <label className="flex flex-col gap-1">
+                        <span className="text-[10px] text-muted-foreground">
+                            Endpoint
+                        </span>
+                        <Input
+                            value={cfg.s3?.endpoint ?? ""}
+                            onChange={(e) => patchS3({ endpoint: e.target.value })}
+                            placeholder="https://s3.us-east-1.amazonaws.com"
+                            className="h-8 text-xs"
+                        />
+                    </label>
+                    <div className="flex gap-2">
+                        <label className="flex min-w-0 flex-1 flex-col gap-1">
+                            <span className="text-[10px] text-muted-foreground">
+                                Region
+                            </span>
+                            <Input
+                                value={cfg.s3?.region ?? ""}
+                                onChange={(e) => patchS3({ region: e.target.value })}
+                                placeholder="us-east-1"
+                                className="h-8 text-xs"
+                            />
+                        </label>
+                        <label className="flex min-w-0 flex-1 flex-col gap-1">
+                            <span className="text-[10px] text-muted-foreground">
+                                Bucket
+                            </span>
+                            <Input
+                                value={cfg.s3?.bucket ?? ""}
+                                onChange={(e) => patchS3({ bucket: e.target.value })}
+                                placeholder="my-backups"
+                                className="h-8 text-xs"
+                            />
+                        </label>
+                    </div>
+                    <div className="flex gap-2">
+                        <label className="flex min-w-0 flex-1 flex-col gap-1">
+                            <span className="text-[10px] text-muted-foreground">
+                                Access key ID
+                            </span>
+                            <Input
+                                value={cfg.s3?.accessKeyId ?? ""}
+                                onChange={(e) => patchS3({ accessKeyId: e.target.value })}
+                                placeholder="AKIA…"
+                                autoComplete="off"
+                                className="h-8 text-xs"
+                            />
+                        </label>
+                        <label className="flex min-w-0 flex-1 flex-col gap-1">
+                            <span className="text-[10px] text-muted-foreground">
+                                Secret key
+                            </span>
+                            <Input
+                                type="password"
+                                value={cfg.s3?.secretAccessKey ?? ""}
+                                onChange={(e) => patchS3({ secretAccessKey: e.target.value })}
+                                placeholder="••••••••"
+                                autoComplete="new-password"
+                                className="h-8 text-xs"
+                            />
+                        </label>
+                    </div>
+                    <label className="flex flex-col gap-1">
+                        <span className="text-[10px] text-muted-foreground">
+                            Folder prefix (optional)
+                        </span>
+                        <Input
+                            value={cfg.s3?.prefix ?? ""}
+                            onChange={(e) => patchS3({ prefix: e.target.value })}
+                            placeholder="ai-diy"
+                            className="h-8 text-xs"
+                        />
+                    </label>
+                    <p className="text-[10px] leading-relaxed text-muted-foreground">
+                        Works with AWS S3, Cloudflare R2, MinIO, Backblaze B2,
+                        and Wasabi. R2 example:{" "}
+                        <code className="text-[9px]">
+                          https://&lt;accountid&gt;.r2.cloudflarestorage.com
+                        </code>
+                    </p>
+                </div>
+            ) : null}
+
+            {cfg.kind === "webdav" ? (
+                <div className="flex flex-col gap-2">
+                    <label className="flex flex-col gap-1">
+                        <span className="text-[10px] text-muted-foreground">
+                            Server URL
+                        </span>
+                        <Input
+                            value={cfg.webdav?.url ?? ""}
+                            onChange={(e) => patchWebDAV({ url: e.target.value })}
+                            placeholder="https://cloud.example.com/remote.php/dav/files/me"
+                            className="h-8 text-xs"
+                        />
+                    </label>
+                    <div className="flex gap-2">
+                        <label className="flex min-w-0 flex-1 flex-col gap-1">
+                            <span className="text-[10px] text-muted-foreground">
+                                Username
+                            </span>
+                            <Input
+                                value={cfg.webdav?.username ?? ""}
+                                onChange={(e) => patchWebDAV({ username: e.target.value })}
+                                autoComplete="off"
+                                className="h-8 text-xs"
+                            />
+                        </label>
+                        <label className="flex min-w-0 flex-1 flex-col gap-1">
+                            <span className="text-[10px] text-muted-foreground">
+                                Password
+                            </span>
+                            <Input
+                                type="password"
+                                value={cfg.webdav?.password ?? ""}
+                                onChange={(e) => patchWebDAV({ password: e.target.value })}
+                                autoComplete="new-password"
+                                className="h-8 text-xs"
+                            />
+                        </label>
+                    </div>
+                    <label className="flex flex-col gap-1">
+                        <span className="text-[10px] text-muted-foreground">
+                            Folder prefix (optional)
+                        </span>
+                        <Input
+                            value={cfg.webdav?.prefix ?? ""}
+                            onChange={(e) => patchWebDAV({ prefix: e.target.value })}
+                            placeholder="ai-diy"
+                            className="h-8 text-xs"
+                        />
+                    </label>
+                    <p className="text-[10px] leading-relaxed text-muted-foreground">
+                        Works with Nextcloud, ownCloud, Box, and any WebDAV
+                        server. Use an app password where available.
+                    </p>
+                </div>
+            ) : null}
+
+            {cfg.kind !== "none" ? (
+                <>
+                    <div className="flex flex-wrap gap-1.5">
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={busy || !cloudConfigComplete(cfg)}
+                            onClick={() => void testConnection()}
+                            className="rounded-xl"
+                        >
+                            {busy ? (
+                                <SpinnerGap size={12} className="animate-spin" />
+                            ) : null}
+                            Test connection
+                        </Button>
+                        <Button
+                            type="button"
+                            size="sm"
+                            disabled={busy || !cloudConfigComplete(cfg)}
+                            onClick={() => void backupNow()}
+                            className="rounded-xl"
+                        >
+                            Back up now
+                        </Button>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={busy || !cloudConfigComplete(cfg)}
+                            onClick={() => void listBackups()}
+                            className="rounded-xl"
+                        >
+                            List backups
+                        </Button>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 rounded-xl border border-border/70 p-2.5">
+                        <div>
+                            <div className="text-[11px] font-medium">
+                                Auto-backup
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                                Upload 30s after chat changes
+                            </div>
+                        </div>
+                        <Switch.Root
+                            checked={cfg.autoBackup}
+                            onCheckedChange={(v) => {
+                                hapticSelect();
+                                patch({ autoBackup: v });
+                            }}
+                            className="relative h-5 w-9 shrink-0 rounded-full bg-muted transition-colors outline-none data-[state=checked]:bg-primary"
+                        >
+                            <Switch.Thumb className="block size-4 translate-x-0.5 rounded-full bg-white transition-transform data-[state=checked]:translate-x-4" />
+                        </Switch.Root>
+                    </div>
+                </>
+            ) : null}
+
+            {backups && backups.length > 0 ? (
+                <div className="flex flex-col gap-1">
+                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Backups on storage
+                    </h4>
+                    {backups.slice(0, 5).map((backup) => (
+                        <div
+                            key={backup.key}
+                            className="flex items-center justify-between gap-2 rounded-lg border border-border/60 px-2.5 py-1.5 text-[11px]"
+                        >
+                            <div className="min-w-0">
+                                <div className="truncate font-medium">
+                                    {backup.key.split("/").pop()}
+                                </div>
+                                <div className="truncate text-[10px] text-muted-foreground">
+                                    {(backup.size / 1024).toFixed(1)} KiB
+                                    {backup.modifiedAt
+                                        ? ` · ${new Date(backup.modifiedAt).toLocaleString()}`
+                                        : ""}
+                                </div>
+                            </div>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={busy}
+                                onClick={() => void restoreBackup(backup.key)}
+                                className="shrink-0 rounded-lg px-2 py-1 text-[10px]"
+                            >
+                                Restore
+                            </Button>
+                        </div>
+                    ))}
+                </div>
+            ) : null}
+
+            {status ? (
+                <p className="text-[11px] text-primary">{status}</p>
+            ) : null}
+            {error ? (
+                <p className="flex items-start gap-1 text-[11px] leading-relaxed text-destructive">
+                    <WarningCircle size={13} className="mt-0.5 shrink-0" />
+                    {error}
+                </p>
+            ) : null}
+
+            <div className="rounded-xl border border-dashed border-border/70 p-3 text-[10px] leading-relaxed text-muted-foreground">
+                A backup contains all chats, messages, artifacts, memories, and
+                projects. It is uploaded as plain JSON — store it securely and
+                only use services you trust. Restores always import as new
+                chats.
+            </div>
+            <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void downloadLocalBackup()}
+                className="self-start rounded-xl"
+            >
+                Download local backup
+            </Button>
+        </div>
+    );
+}
+
+function downloadLocalBackup() {
+    void (async () => {
         const backup = await exportLocalBackup();
         const blob = new Blob([JSON.stringify(backup, null, 2)], {
             type: "application/json",
@@ -1814,59 +2273,7 @@ function CloudStorageSection() {
         anchor.download = `ai-diy-backup-${new Date().toISOString().slice(0, 10)}.json`;
         anchor.click();
         URL.revokeObjectURL(url);
-    };
-
-    return (
-        <div className="flex flex-col gap-3">
-            <div>
-                <h3 className="text-xs font-semibold">
-                    Cloud storage <span className="text-[9px] uppercase tracking-wider text-primary">Beta</span> <span className="text-[9px] uppercase tracking-wider text-muted-foreground">Coming soon</span>
-                </h3>
-                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                    Automatic cloud sync is coming soon. Download a complete local backup now; local IndexedDB remains the source of truth.
-                </p>
-            </div>
-            <div className="rounded-xl border border-dashed border-border/70 p-3 text-[11px] leading-relaxed text-muted-foreground">
-                A backup can contain chat content and generated artifacts. Store it securely and do not upload it to a service you do not trust.
-            </div>
-            <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => void downloadBackup()}
-                className="self-start rounded-xl"
-            >
-                Download local backup
-            </Button>
-            <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setGuideOpen((open) => !open)}
-                className="rounded-xl"
-            >
-                {guideOpen ? "Hide setup guide" : "View Google Drive setup"}
-            </Button>
-            {guideOpen ? (
-                <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-[11px] leading-relaxed text-muted-foreground">
-                    <p>
-                        Google Drive backup is not connected yet. The safe planned
-                        flow uses a user-supplied OAuth client ID, PKCE, and the
-                        restricted <code>drive.appdata</code> scope. No Drive key,
-                        refresh token, or chat data is accepted by this Beta panel.
-                    </p>
-                    <a
-                        href="https://developers.google.com/drive/api/quickstart/js"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-2 inline-block font-medium text-primary underline-offset-2 hover:underline"
-                    >
-                        Read Google&apos;s official setup guide ↗
-                    </a>
-                </div>
-            ) : null}
-        </div>
-    );
+    })();
 }
 
 function CustomSkillsSection() {

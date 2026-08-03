@@ -162,6 +162,8 @@ export function ChatThreadSync({
             void replaceThreadMessages(threadId, chat.messages, {
                 model: settings.chat.model,
                 provider: settings.chat.provider,
+            }).then(() => {
+                window.dispatchEvent(new Event("ai-diy:chats-changed"));
             });
             void indexChatMemories(chat.messages as UIMessage[]);
         }, 400);

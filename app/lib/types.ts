@@ -146,6 +146,7 @@ export interface AppSettings {
     mcpServers: McpServerConfig[];
     connectors: ConnectorConfig[];
     customSkills: CustomSkill[];
+    cloudStorage: import("./cloud-storage/types").CloudStorageConfig;
 }
 
 export interface McpServerConfig {
@@ -433,6 +434,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
     mcpServers: FREE_SEARCH_MCP_PRESETS,
     connectors: [],
     customSkills: [],
+    cloudStorage: {
+        kind: "none",
+        autoBackup: false,
+        lastBackupAt: null,
+    },
 };
 
 // ─── Default Models per Provider ─────────────────────────────────
