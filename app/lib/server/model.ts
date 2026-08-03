@@ -10,7 +10,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createXai } from "@ai-sdk/xai";
-import type { ImageModel } from "ai";
+import type { ImageModel, SpeechModel } from "ai";
 import { experimental_generateVideo } from "ai";
 import type { ProviderConfig, ProviderId } from "~/lib/types";
 import { parseProviderCredentials } from "~/lib/provider-credentials";
@@ -209,6 +209,58 @@ export function createImageModel(body: ModelRequest): ImageModel {
         default:
             throw new Error(
                 `${provider} does not expose an image-generation model through its SDK.`,
+            );
+    }
+}
+
+export function createSpeechModel(body: ModelRequest): SpeechModel {
+    const { provider, apiKey, baseUrl, model } = body;
+    const credentials = parseProviderCredentials(provider, apiKey);
+    const key = credentials.apiKey || apiKey;
+    const resolvedBaseUrl = normalizeProviderBaseUrl(provider, baseUrl);
+    const compatibleHeaders = body.openAICompatible?.headers;
+
+    switch (provider) {
+        case "openai":
+            return createOpenAI({
+                apiKey: key,
+                baseURL: resolvedBaseUrl,
+                headers: compatibleHeaders,
+            }).speech(model as never);
+        case "openrouter":
+        case "custom":
+            return createOpenAI({
+                apiKey: key,
+                baseURL: resolvedBaseUrl,
+                headers: compatibleHeaders,
+            }).speech(model as never);
+        case "gemini":
+            return createGoogleGenerativeAI({ apiKey: key }).speech(model as never);
+        case "vertex":
+            return createGoogleVertex({
+                apiKey: credentials.apiKey,
+                project: credentials.project,
+                location: credentials.location,
+                baseURL: resolvedBaseUrl || credentials.baseURL || undefined,
+            }).speech(model as never);
+        case "gateway":
+            return createGateway({ apiKey: key, baseURL: resolvedBaseUrl }).speech(
+                model as never,
+            );
+        case "mistral":
+            return createMistral({ apiKey: key, baseURL: resolvedBaseUrl }).speech(
+                model as never,
+            );
+        case "azure":
+            return createAzure({
+                apiKey: credentials.apiKey,
+                resourceName: credentials.resourceName,
+                apiVersion: credentials.apiVersion,
+                baseURL: resolvedBaseUrl || credentials.baseURL || undefined,
+            }).speech(model as never);
+        default:
+            throw new Error(
+                `${provider} does not expose a speech-generation model through its SDK.`,
             );
     }
 }

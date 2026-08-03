@@ -452,6 +452,9 @@ export const DEFAULT_MODELS: Record<ProviderId, ModelInfo[]> = {
         { id: "o3-mini", name: "o3-mini", provider: "openai", contextWindow: 200000, supportsTools: true, supportsReasoning: true },
         { id: "o4-mini", name: "o4-mini", provider: "openai", contextWindow: 200000, supportsTools: true, supportsReasoning: true },
         { id: "gpt-image-1", name: "GPT Image 1", provider: "openai", supportsImageGeneration: true },
+        { id: "tts-1", name: "TTS-1", provider: "openai", supportsAudio: true },
+        { id: "tts-1-hd", name: "TTS-1 HD", provider: "openai", supportsAudio: true },
+        { id: "gpt-4o-mini-tts", name: "GPT-4o Mini TTS", provider: "openai", supportsAudio: true },
     ],
     anthropic: [
         { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet", provider: "anthropic", contextWindow: 200000, supportsTools: true },

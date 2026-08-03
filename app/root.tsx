@@ -57,7 +57,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
     return (
-        <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
+        <div className="flex h-screen w-screen overflow-x-hidden overflow-y-auto bg-background text-foreground">
             <Outlet />
         </div>
     );

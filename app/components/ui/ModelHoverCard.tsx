@@ -9,6 +9,7 @@ import {
     Eye,
     ImageSquare,
     ListChecks,
+    SpeakerHigh,
     VideoCamera,
     Wrench,
 } from "@phosphor-icons/react";
@@ -34,7 +35,7 @@ export function ModelHoverCard({
         left = anchor.left - width - gap;
     }
     if (left < 8) left = 8;
-    const estimatedHeight = 220;
+    const estimatedHeight = 260;
     const top = Math.min(
         Math.max(8, anchor.top),
         Math.max(8, window.innerHeight - estimatedHeight - 8),
@@ -53,6 +54,11 @@ export function ModelHoverCard({
             label: "Image gen",
             icon: ImageSquare,
             active: model.supportsImageGeneration === true,
+        },
+        {
+            label: "Audio output",
+            icon: SpeakerHigh,
+            active: model.supportsAudio === true,
         },
         {
             label: "Video gen",

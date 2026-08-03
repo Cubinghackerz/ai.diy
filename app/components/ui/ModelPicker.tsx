@@ -17,6 +17,7 @@ import {
     Check,
     ImageSquare,
     MagnifyingGlass,
+    SpeakerHigh,
     SpinnerGap,
     VideoCamera,
 } from "@phosphor-icons/react";
@@ -53,6 +54,7 @@ function ModelBadges({
         : undefined;
     const image = model.supportsImageGeneration ?? entry?.imageOutput === true;
     const video = model.supportsVideo ?? entry?.videoOutput === true;
+    const audio = model.supportsAudio ?? entry?.audioOutput === true;
     return (
         <>
             {image ? (
@@ -69,6 +71,14 @@ function ModelBadges({
                     weight="duotone"
                     className="shrink-0 text-primary"
                     aria-label="Video generation model"
+                />
+            ) : null}
+            {audio ? (
+                <SpeakerHigh
+                    size={12}
+                    weight="duotone"
+                    className="shrink-0 text-primary"
+                    aria-label="Audio output model"
                 />
             ) : null}
         </>

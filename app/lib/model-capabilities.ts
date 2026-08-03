@@ -43,6 +43,21 @@ export function inferModelSupportsVideo(
     return false;
 }
 
+/** Does this model expose generated speech/audio rather than only audio input? */
+export function inferModelSupportsAudioOutput(
+    modelId: string,
+    provider?: ProviderId,
+): boolean {
+    const id = modelId.toLowerCase();
+    if (/(?:^|[/_:\-])(tts|speech|voice|audio-preview|realtime)(?:[/_.:\-]|$)/.test(id)) {
+        return true;
+    }
+    const known = provider
+        ? (DEFAULT_MODELS[provider] ?? []).find((model) => model.id === modelId)
+        : undefined;
+    return known?.supportsAudio === true;
+}
+
 /** Heuristic: does this model id look like a chat model with tool support? */
 export function inferModelSupportsTools(
     modelId: string,
@@ -122,7 +137,7 @@ export function enrichModelInfo(model: ModelInfo): ModelInfo {
             model.supportsStructuredOutputs ??
             (supportsTools && /gpt-|claude|gemini|qwen|mistral|llama/.test(id)),
         supportsAudio:
-            model.supportsAudio ?? /audio|realtime|gpt-4o/.test(id),
+            model.supportsAudio ?? inferModelSupportsAudioOutput(model.id, model.provider),
         supportsImageGeneration:
             model.supportsImageGeneration ??
             inferModelSupportsImageGeneration(model.id, model.provider),

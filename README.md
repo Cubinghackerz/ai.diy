@@ -11,8 +11,8 @@ ai.diy is built with React Router, assistant-ui, the Vercel AI SDK, Tailwind CSS
 
 This is a beta project. Features described as **available** are wired into the application. Features marked **planned** are intentionally not presented as working integrations.
 
-- Available: chat, provider setup, model discovery, local chat persistence, files, browser Python, search, connector-backed search, remote MCP, artifacts, local memory, voice dictation where the browser supports Web Speech, multi-model Preview, and import/export of chats (ChatGPT, Claude, ShareGPT, Markdown, ai.diy JSON).
-- Coming soon: automatic Google Drive backup/restore, direct GitHub/Supabase/PostgreSQL/S3 adapters, encrypted browser-storage settings, in-app `ask_user` panels, and custom-provider capability probing.
+- Available: landing page, chat, provider setup, model discovery, local chat persistence, files, browser Python, search, connector-backed search, remote MCP, artifacts, local memory, voice dictation where the browser supports Web Speech, multi-model Preview, import/export of chats (ChatGPT, Claude, ShareGPT, Markdown, ai.diy JSON), and client-side S3/WebDAV/Google Drive backup and restore.
+- Coming soon: direct GitHub/Supabase/PostgreSQL adapters, encrypted browser-storage settings, in-app `ask_user` panels, and custom-provider capability probing.
 
 ## Quick Start
 
@@ -29,7 +29,7 @@ npm install
 npm run build && npm start
 ```
 
-Open `http://localhost:5173`, complete the setup gate, select a provider and model, then send a message.
+Open `http://localhost:3000` for the landing page. Select **Open workspace** to reach the chat application at `/workspace`, then complete the setup gate, choose a provider and model, and send a message. To use port 5173 instead, run `PORT=5173 npm start` after the build.
 
 `npm run dev` is not recommended: the Vite/React development runtime has a known composer input regression that does not affect the compiled production build. Use `npm run build && npm start` for local testing, or `PORT=5173 npm start` if you need the app on the same port.
 
@@ -206,7 +206,8 @@ Chats are never locked in. Settings -> Import & Export (or hover a chat in the s
 
 Settings -> Cloud Storage performs fully client-side chat backup to the storage provider of your choice, convenient for multi-device or off-site protection:
 
-- **S3-compatible** endpoints (AWS S3, Cloudflare R2, MinIO, Backblaze B2, Wasabi) using SigV4 signing via the Web Crypto API, and **WebDAV** (Nextcloud, ownCloud, Box, generic WebDAV). No server involvement.
+- **S3-compatible** endpoints (AWS S3, Cloudflare R2, MinIO, Backblaze B2, Wasabi) using SigV4 signing via the Web Crypto API, **WebDAV** (Nextcloud, ownCloud, Box, generic WebDAV), and **Google Drive** using a pasted Google Cloud service-account JSON key. No server involvement.
+- Google Drive setup: enable the Drive API, create a service account and JSON key, paste the key in Settings -> Cloud Storage -> Google Drive, then share the backup folder with the key's `client_email` if it should be visible from a personal Google account. The private key stays in this browser; only a short-lived signed token assertion is sent to Google.
 - Credentials are kept only in browser localStorage next to your provider API keys and are signed straight from the browser — never transmitted to any server other than the configured storage endpoint.
 - **Back up now**, **List backups**, and **Restore** (imports always as new chats). Automatic backups upload a debounced snapshot whenever chat content changes — each run keeps its own timestamped file.
 

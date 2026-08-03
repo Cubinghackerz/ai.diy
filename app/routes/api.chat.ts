@@ -5,6 +5,7 @@ import {
     createUIMessageStream,
     createUIMessageStreamResponse,
     generateImage,
+    generateSpeech,
     experimental_generateVideo,
     stepCountIs,
     type UIMessage,
@@ -20,11 +21,13 @@ import type { ConnectorConfig, McpServerConfig, ProviderId } from "~/lib/types";
 import {
     createChatModel,
     createImageModel,
+    createSpeechModel,
     createVideoModel,
     shouldUseOpenAIResponses,
 } from "~/lib/server/model";
 import {
     inferModelSupportsImageGeneration,
+    inferModelSupportsAudioOutput,
     inferModelSupportsVideo,
 } from "~/lib/model-capabilities";
 import { imageRequestOptions } from "~/lib/image-generation";
@@ -170,6 +173,30 @@ async function generateVideoResponse(body: ChatRequestBody): Promise<Response> {
     return createUIMessageStreamResponse({ stream });
 }
 
+async function generateAudioResponse(body: ChatRequestBody): Promise<Response> {
+    const result = await generateSpeech({
+        model: createSpeechModel(body),
+        text: imagePrompt(body.messages),
+        outputFormat: "mp3",
+    });
+
+    const stream = createUIMessageStream({
+        execute({ writer }) {
+            writer.write({ type: "start" });
+            writer.write({
+                type: "file",
+                url: `data:${result.audio.mediaType};base64,${result.audio.base64}`,
+                mediaType: result.audio.mediaType,
+            });
+            writer.write({ type: "finish", finishReason: "stop" });
+        },
+        onError: (error) =>
+            error instanceof Error ? error.message : "Audio generation failed",
+    });
+
+    return createUIMessageStreamResponse({ stream });
+}
+
 export function loader({ request }: LoaderFunctionArgs) {
     const preflight = corsPreflight(request);
     if (preflight) return preflight;
@@ -234,6 +261,22 @@ export async function action({ request }: ActionFunctionArgs) {
                 { status: 400 },
             ),
         );
+    }
+
+    if (
+        body.subagentMode !== true &&
+        inferModelSupportsAudioOutput(body.model, body.provider)
+    ) {
+        try {
+            return withCors(request, await generateAudioResponse(body));
+        } catch (err) {
+            const message = publicChatError(err);
+            console.error("[api/chat:audio]", message);
+            return withCors(
+                request,
+                Response.json({ error: message }, { status: 500 }),
+            );
+        }
     }
 
     if (

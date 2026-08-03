@@ -99,6 +99,7 @@ import type { ImportSummary } from "~/lib/interop/types";
 import type {
     CloudBackupFile,
     CloudStorageConfig,
+    GoogleDriveStorageConfig,
     S3StorageConfig,
     WebDAVStorageConfig,
 } from "~/lib/cloud-storage/types";
@@ -1893,6 +1894,13 @@ function CloudStorageSection({
                 webdav: { ...cfg.webdav, ...patch } as WebDAVStorageConfig,
             },
         });
+    const patchGDrive = (patch: Partial<GoogleDriveStorageConfig>) =>
+        updateSettings({
+            cloudStorage: {
+                ...cfg,
+                gdrive: { ...cfg.gdrive, ...patch } as GoogleDriveStorageConfig,
+            },
+        });
 
     const run = async (fn: () => Promise<void>) => {
         setBusy(true);
@@ -1922,11 +1930,11 @@ function CloudStorageSection({
             patch({ lastBackupAt: new Date().toISOString() });
         });
 
-    const restoreBackup = (key: string) =>
+    const restoreBackup = (item: CloudBackupFile) =>
         run(async () => {
-            const text = await downloadBackup(cfg, key);
+            const text = await downloadBackup(cfg, item);
             const summary = await detectAndParseFile(
-                new File([text], key.split("/").pop() ?? "backup.json"),
+                new File([text], item.key.split("/").pop() ?? "backup.json"),
             );
             if (summary.chats.length === 0) {
                 throw new Error("No importable chats found in this backup.");
@@ -1969,7 +1977,7 @@ function CloudStorageSection({
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5">
-                {(["none", "s3", "webdav"] as const).map((kind) => (
+                {(["none", "s3", "webdav", "gdrive"] as const).map((kind) => (
                     <button
                         key={kind}
                         type="button"
@@ -1990,7 +1998,9 @@ function CloudStorageSection({
                             ? "Off"
                             : kind === "s3"
                               ? "S3-compatible"
-                              : "WebDAV"}
+                              : kind === "webdav"
+                                ? "WebDAV"
+                                : "Google Drive"}
                     </button>
                 ))}
             </div>
@@ -2136,6 +2146,50 @@ function CloudStorageSection({
                 </div>
             ) : null}
 
+            {cfg.kind === "gdrive" ? (
+                <div className="flex flex-col gap-2">
+                    <label className="flex flex-col gap-1">
+                        <span className="text-[10px] text-muted-foreground">
+                            Google Cloud service-account key (JSON)
+                        </span>
+                        <textarea
+                            value={cfg.gdrive?.keyJson ?? ""}
+                            onChange={(e) =>
+                                patchGDrive({ keyJson: e.target.value })
+                            }
+                            placeholder='{"type":"service_account","client_email":"…","private_key":"-----BEGIN PRIVATE KEY-----…"}'
+                            spellCheck={false}
+                            autoComplete="off"
+                            rows={5}
+                            style={{ resize: "vertical" }}
+                            className="w-full rounded-xl border border-input bg-background px-2.5 py-2 font-mono text-[10px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/60 focus-visible:ring-1 focus-visible:ring-ring"
+                        />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                        <span className="text-[10px] text-muted-foreground">
+                            Backup folder name (optional)
+                        </span>
+                        <Input
+                            value={cfg.gdrive?.prefix ?? ""}
+                            onChange={(e) =>
+                                patchGDrive({ prefix: e.target.value })
+                            }
+                            placeholder="ai-diy-backups"
+                            className="h-8 text-xs"
+                        />
+                    </label>
+                    <p className="text-[10px] leading-relaxed text-muted-foreground">
+                        Get a key in the Google Cloud console: IAM &amp; Admin →{" "}
+                        Service accounts → Keys → Add key (JSON). Enable the
+                        Google Drive API for the project. To sync with a
+                        personal account, create the folder there and share it
+                        with the service account&apos;s email. The key signs a
+                        short-lived token in your browser and is never sent to
+                        any server but Google&apos;s token endpoint.
+                    </p>
+                </div>
+            ) : null}
+
             {cfg.kind !== "none" ? (
                 <>
                     <div className="flex flex-wrap gap-1.5">
@@ -2222,7 +2276,7 @@ function CloudStorageSection({
                                 size="sm"
                                 variant="outline"
                                 disabled={busy}
-                                onClick={() => void restoreBackup(backup.key)}
+                                onClick={() => void restoreBackup(backup)}
                                 className="shrink-0 rounded-lg px-2 py-1 text-[10px]"
                             >
                                 Restore

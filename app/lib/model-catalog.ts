@@ -43,6 +43,7 @@ export interface ModelCatalogEntry {
     reasoning?: boolean;
     structuredOutput?: boolean;
     vision?: boolean;
+    audioOutput?: boolean;
     videoOutput?: boolean;
     imageOutput?: boolean;
     context?: number;
@@ -112,6 +113,7 @@ export function normalizeCatalog(raw: RawModelCatalog): ModelCatalog {
                     m.attachment === true ||
                     (Array.isArray(m.modalities?.input) &&
                         m.modalities.input.includes("image")),
+                audioOutput: outputModalities.includes("audio"),
                 videoOutput: outputModalities.includes("video"),
                 imageOutput: outputModalities.includes("image"),
                 context: m.limit?.context,
@@ -255,5 +257,7 @@ export function mergeCatalogInfo(
         supportsImageGeneration:
             model.supportsImageGeneration ??
             entry?.imageOutput === true,
+        supportsAudio:
+            model.supportsAudio ?? entry?.audioOutput === true,
     };
 }
