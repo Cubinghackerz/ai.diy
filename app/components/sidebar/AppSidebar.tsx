@@ -35,7 +35,9 @@ import {
 import {
     clearMemoryEntries,
     exportLocalBackup,
+    getAllThreads,
     getMemoryEntries,
+    getThreadMessages,
     saveMemoryEntries,
 } from "~/lib/db";
 import { cn } from "~/lib/utils";
@@ -47,6 +49,7 @@ import {
     Desktop,
     Brain,
     CloudArrowUp,
+    DownloadSimple,
     Flask,
     Folder,
     FolderPlus,
@@ -61,10 +64,23 @@ import {
     SpinnerGap,
     Sun,
     Trash,
+    UploadSimple,
     WarningCircle,
     XCircle,
 } from "@phosphor-icons/react";
 import * as Switch from "@radix-ui/react-switch";
+import {
+    chatMarkdownFilename,
+    chatToAiDiyJson,
+    chatToMarkdown,
+    downloadBlob,
+    downloadTextFile,
+    markdownBundleZip,
+    safeFilename,
+} from "~/lib/interop/exporters";
+import { detectAndParseFile } from "~/lib/interop";
+import { importChats } from "~/lib/interop/importer";
+import type { ImportSummary } from "~/lib/interop/types";
 
 type SidebarPanel = "chats" | "settings";
 type SettingsSection =
@@ -75,6 +91,7 @@ type SettingsSection =
     | "memory"
     | "connectors"
     | "cloud"
+    | "data"
     | "appearance";
 
 type ThreadItem = { id: string; title: string; projectId?: string | null };
@@ -93,6 +110,7 @@ export function AppSidebar({
     onDeleteProject,
     panel,
     onPanelChange,
+    onImportComplete,
 }: {
     threads: ThreadItem[];
     projects: Project[];
@@ -107,6 +125,8 @@ export function AppSidebar({
     onDeleteProject: (id: string) => void;
     panel: SidebarPanel;
     onPanelChange: (panel: SidebarPanel) => void;
+    /** Called after an import writes new chats, so the list can refresh. */
+    onImportComplete?: () => void;
 }) {
     return (
         <div className="flex h-full flex-col">
@@ -175,7 +195,7 @@ export function AppSidebar({
                         onDeleteProject={onDeleteProject}
                     />
                 ) : (
-                    <SettingsPanel />
+                    <SettingsPanel onImportComplete={onImportComplete} />
                 )}
             </div>
         </div>
@@ -220,6 +240,11 @@ function ChatsPanel({
     const [projectDraftInstructions, setProjectDraftInstructions] = useState("");
     const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
     const [movingId, setMovingId] = useState<string | null>(null);
+    const [exportMenu, setExportMenu] = useState<{
+        id: string;
+        x: number;
+        y: number;
+    } | null>(null);
     const { settings, updateSettings } = useSettings();
     const memoryEnabled = settings.memoryEnabled !== false;
 
@@ -269,6 +294,31 @@ function ChatsPanel({
         setCreatingProject(false);
         setNewProjectName("");
         setNewProjectInstructions("");
+    };
+
+    const openExportMenu = (event: React.MouseEvent<HTMLButtonElement>, threadId: string) => {
+        event.stopPropagation();
+        hapticSelect();
+        const rect = event.currentTarget.getBoundingClientRect();
+        setExportMenu({ id: threadId, x: rect.right, y: rect.bottom + 4 });
+    };
+
+    const downloadThreadChat = async (threadId: string, format: "markdown" | "json") => {
+        const list = await getAllThreads();
+        const thread = list.find((t) => t.id === threadId);
+        setExportMenu(null);
+        if (!thread) return;
+        const messages = await getThreadMessages(threadId);
+        const chat = { thread, messages };
+        if (format === "markdown") {
+            downloadTextFile(chatMarkdownFilename(chat), chatToMarkdown(chat), "text/markdown");
+        } else {
+            downloadBlob(
+                new Blob([chatToAiDiyJson(chat)], { type: "application/json" }),
+                `${safeFilename(thread.title)}.json`,
+            );
+        }
+        hapticConfirm();
     };
 
     const renderThreadRow = (thread: ThreadItem, isActive: boolean) => (
@@ -356,6 +406,15 @@ function ChatsPanel({
             )}
             {editingId !== thread.id && movingId !== thread.id ? (
                 <>
+                    <button
+                        type="button"
+                        onClick={(event) => openExportMenu(event, thread.id)}
+                        className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity outline-none hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
+                        title="Export chat"
+                        aria-label={`Export ${thread.title}`}
+                    >
+                        <DownloadSimple size={13} />
+                    </button>
                     <button
                         type="button"
                         onClick={(e) => {
@@ -721,11 +780,45 @@ function ChatsPanel({
                     )
                 )}
             </div>
+
+            {exportMenu ? (
+                <>
+                    <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setExportMenu(null)}
+                    />
+                    <div
+                        className="fixed z-50 flex min-w-44 flex-col gap-0.5 rounded-xl border border-border bg-popover p-1 shadow-lg"
+                        style={{
+                            left: Math.max(8, exportMenu.x - 184),
+                            top: Math.min(
+                                exportMenu.y,
+                                window.innerHeight - 88,
+                            ),
+                        }}
+                    >
+                        <button
+                            type="button"
+                            onClick={() => void downloadThreadChat(exportMenu.id, "markdown")}
+                            className="rounded-lg px-2.5 py-1.5 text-left text-xs outline-none hover:bg-accent hover:text-foreground"
+                        >
+                            Export Markdown (.md)
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => void downloadThreadChat(exportMenu.id, "json")}
+                            className="rounded-lg px-2.5 py-1.5 text-left text-xs outline-none hover:bg-accent hover:text-foreground"
+                        >
+                            Export ai.diy JSON
+                        </button>
+                    </div>
+                </>
+            ) : null}
         </div>
     );
 }
 
-function SettingsPanel() {
+function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) {
     const {
         settings,
         updateProvider,
@@ -754,6 +847,7 @@ function SettingsPanel() {
         { id: "memory", label: "Memory Beta", icon: Brain },
         { id: "connectors", label: "Connectors Beta", icon: HardDrives },
         { id: "cloud", label: "Cloud Storage Beta", icon: CloudArrowUp },
+        { id: "data", label: "Import & Export", icon: UploadSimple },
         { id: "appearance", label: "Theme", icon: Sun },
     ];
 
@@ -1040,6 +1134,8 @@ function SettingsPanel() {
             {section === "connectors" && <ConnectorsSection />}
 
             {section === "cloud" && <CloudStorageSection />}
+
+            {section === "data" && <DataInteropSection onImportComplete={onImportComplete} />}
 
             {section === "appearance" && (
                 <div className="grid grid-cols-3 gap-2">
@@ -1479,6 +1575,208 @@ function ConnectorHelp({
             >
                 {details.label} ↗
             </a>
+        </div>
+    );
+}
+
+function DataInteropSection({ onImportComplete }: { onImportComplete?: () => void }) {
+    const [preview, setPreview] = useState<ImportSummary | null>(null);
+    const [fileName, setFileName] = useState("");
+    const [status, setStatus] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [busy, setBusy] = useState(false);
+    const [dragActive, setDragActive] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+    const handleFile = async (file: File) => {
+        setError(null);
+        setStatus(null);
+        setPreview(null);
+        setFileName("");
+        setBusy(true);
+        try {
+            const result = await detectAndParseFile(file);
+            if (result.chats.length === 0) {
+                setError("No importable chats found in this file.");
+                return;
+            }
+            setPreview(result);
+            setFileName(file.name);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Import failed.");
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const runImport = async () => {
+        if (!preview || preview.chats.length === 0) return;
+        setBusy(true);
+        setError(null);
+        try {
+            const result = await importChats(preview);
+            setStatus(
+                `Imported ${result.chats} chat${result.chats === 1 ? "" : "s"} with ${result.messages} messages.`,
+            );
+            setPreview(null);
+            setFileName("");
+            onImportComplete?.();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Import failed.");
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const exportMarkdownBundle = async () => {
+        setError(null);
+        setStatus(null);
+        try {
+            const threads = await getAllThreads();
+            const chats = [];
+            for (const thread of threads) {
+                const messages = await getThreadMessages(thread.id);
+                chats.push({ thread, messages });
+            }
+            if (chats.length === 0) {
+                setStatus("No chats to export yet.");
+                return;
+            }
+            downloadBlob(
+                new Blob([markdownBundleZip(chats)], { type: "application/zip" }),
+                `ai-diy-chats-${new Date().toISOString().slice(0, 10)}.zip`,
+            );
+            setStatus(`Exported ${chats.length} chat${chats.length === 1 ? "" : "s"} as Markdown.`);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Export failed.");
+        }
+    };
+
+    const messageCount = preview
+        ? preview.chats.reduce((total, chat) => total + chat.messages.length, 0)
+        : 0;
+
+    return (
+        <div className="flex flex-col gap-3">
+            <div>
+                <h3 className="text-xs font-semibold">Import &amp; export</h3>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                    Bring chats in from ChatGPT, Claude, ShareGPT, or Markdown, and
+                    export your chats as Markdown or ai.diy JSON. Everything runs
+                    locally in this browser; nothing is uploaded.
+                </p>
+            </div>
+
+            <div
+                role="button"
+                tabIndex={0}
+                onClick={() => fileInputRef.current?.click()}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        fileInputRef.current?.click();
+                    }
+                }}
+                onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragActive(true);
+                }}
+                onDragLeave={() => setDragActive(false)}
+                onDrop={(e) => {
+                    e.preventDefault();
+                    setDragActive(false);
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) void handleFile(file);
+                }}
+                className={cn(
+                    "flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed px-3 py-5 text-center text-[11px] outline-none transition-colors",
+                    dragActive
+                        ? "border-primary/60 bg-primary/5 text-foreground"
+                        : "border-border/80 text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                )}
+            >
+                <UploadSimple size={18} />
+                <span>
+                    {busy ? "Analyzing file…" : "Drop a file here or click to choose"}
+                </span>
+                <span className="text-[10px] text-muted-foreground/80">
+                    ChatGPT/Claude ZIP, ai.diy JSON, ShareGPT JSONL, or Markdown
+                </span>
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".zip,.json,.jsonl,.md,application/json,text/markdown"
+                    className="hidden"
+                    onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void handleFile(file);
+                        e.target.value = "";
+                    }}
+                />
+            </div>
+
+            {preview ? (
+                <div className="flex flex-col gap-2 rounded-xl border border-primary/20 bg-primary/5 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                            <p className="truncate text-[11px] font-semibold text-foreground">
+                                {fileName}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">
+                                {preview.formatLabel} — {preview.chats.length} chat
+                                {preview.chats.length === 1 ? "" : "s"}, {messageCount} message
+                                {messageCount === 1 ? "" : "s"}
+                            </p>
+                        </div>
+                        <CheckCircle size={16} className="shrink-0 text-primary" />
+                    </div>
+                    {preview.notes.length > 0 ? (
+                        <ul className="list-inside list-disc text-[10px] text-muted-foreground">
+                            {preview.notes.slice(0, 4).map((note, index) => (
+                                <li key={index}>{note}</li>
+                            ))}
+                        </ul>
+                    ) : null}
+                    <p className="text-[10px] leading-relaxed text-muted-foreground">
+                        Imports create new chats; existing chats are never modified.
+                    </p>
+                    <Button
+                        type="button"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => void runImport()}
+                        className="self-start rounded-xl"
+                    >
+                        Import {preview.chats.length} chat{preview.chats.length === 1 ? "" : "s"}
+                    </Button>
+                </div>
+            ) : null}
+
+            {status ? (
+                <p className="text-[11px] text-primary">{status}</p>
+            ) : null}
+            {error ? (
+                <p className="flex items-start gap-1 text-[11px] leading-relaxed text-destructive">
+                    <WarningCircle size={13} className="mt-0.5 shrink-0" />
+                    {error}
+                </p>
+            ) : null}
+
+            <div className="rounded-xl border border-border/70 bg-muted/20 p-3 text-[10px] leading-relaxed text-muted-foreground">
+                <strong className="text-foreground">Exporting:</strong> hover a chat
+                in the list and use the download icon to export it as Markdown or
+                ai.diy JSON. The ai.diy JSON backup from Cloud Storage can also be
+                imported here to restore chats on another device or browser.
+            </div>
+            <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void exportMarkdownBundle()}
+                className="self-start rounded-xl"
+            >
+                Export all chats as Markdown (ZIP)
+            </Button>
         </div>
     );
 }

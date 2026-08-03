@@ -11,7 +11,7 @@ ai.diy is built with React Router, assistant-ui, the Vercel AI SDK, Tailwind CSS
 
 This is a beta project. Features described as **available** are wired into the application. Features marked **planned** are intentionally not presented as working integrations.
 
-- Available: chat, provider setup, model discovery, local chat persistence, files, browser Python, search, connector-backed search, remote MCP, artifacts, local memory, voice dictation where the browser supports Web Speech, and multi-model Preview.
+- Available: chat, provider setup, model discovery, local chat persistence, files, browser Python, search, connector-backed search, remote MCP, artifacts, local memory, voice dictation where the browser supports Web Speech, multi-model Preview, and import/export of chats (ChatGPT, Claude, ShareGPT, Markdown, ai.diy JSON).
 - Coming soon: automatic Google Drive backup/restore, direct GitHub/Supabase/PostgreSQL/S3 adapters, encrypted browser-storage settings, in-app `ask_user` panels, and custom-provider capability probing.
 
 ## Quick Start
@@ -140,7 +140,7 @@ Tools available to a selected model depend on the settings toggles and provider 
 | Browser Python | Runs Pyodide in the browser and returns output to the model |
 | Files | Creates downloadable artifacts through `generate_file` and Canvas files through `create_file` |
 | Research skill | Plans subquestions, live multi-query search, source-quality grading, cross-verification, confidence labeling, and citation-backed synthesis before current-information queries |
-| Skills | Generates reusable `SKILL.md` documents and frontend design briefs |
+| Skills | Generates reusable `SKILL.md` documents and frontend design briefs; the Word Document skill creates beautifully designed `.docx` reports, proposals, resumes, and briefs via python-docx |
 | Local time | Returns an ISO timestamp for an IANA timezone |
 | Memory | Bounded local memory is automatically attached to provider system instructions when entries exist; optional retrieval stays in the browser |
 | Ask user | Uses the browser's native prompt while an in-app panel is planned |
@@ -165,6 +165,15 @@ The composer displays Voice input only when the browser exposes the Web Speech R
 Chats, messages, artifacts, saved memory entries, and Preview sessions live in browser IndexedDB. The newest bounded historical memories are selected locally and automatically attached to provider system instructions, so provider tool-calling behavior is not required for memory to work. Saved memory is separate from active app preferences and the full archive is never injected automatically; the optional memory tool is available only when entries exist.
 
 Settings -> Memory (Beta) can import supported text/JSON memory exports and export the memory index. Settings -> Cloud storage (Beta, coming soon) can download a complete local JSON backup containing chats, artifacts, Preview sessions, and memories. This is a manual backup file today; automatic cloud upload and restore are not implemented.
+
+### Import & Export
+
+Chats are never locked in. Settings -> Import & Export (or hover a chat in the sidebar and use the download icon) provides:
+
+- **Export per chat**: Markdown (`.md`, frontmatter with title/model/provider, `## User` / `## Assistant` sections) or ai.diy JSON (lossless message content, timestamps, tool calls, and results).
+- **Export everything**: a ZIP bundle of one Markdown file per chat, plus the existing full JSON backup download in Cloud Storage.
+- **Import**: ChatGPT account export ZIP (`conversations.json`), Claude account export ZIP (`conversations.json`), ai.diy backup or per-chat JSON, ShareGPT/OpenAI JSONL chat files, and Markdown chat files. Format detection is automatic (ZIP/JSON/JSONL/Markdown), with a preview showing the detected source, chat/message counts, and any skipped content before importing.
+- Imports always create new chats with fresh ids; existing chats are never modified. Everything runs locally in the browser — files are never uploaded.
 
 ### Multi-Model Preview
 

@@ -38,6 +38,11 @@ export const BUILTIN_FORCED_SKILLS: ForcedSkill[] = [
             "You MUST activate and follow the python_file_creation_skill for this request before creating any file: call the python_file_creation_skill tool, then create the deliverable with browser Pyodide using the verified libraries, save it in the current working directory, validate it, and rely on direct Canvas artifact capture.",
     },
     {
+        name: "Word Document",
+        content:
+            "You MUST activate and follow the word_document_skill for this request before creating any document: call the word_document_skill tool, then produce the .docx deliverable with browser Pyodide (python-docx) following its design contract — cover page, typography, color, section layout, page numbers, tables — save it in the current working directory, validate it, and rely on direct Canvas artifact capture.",
+    },
+    {
         name: "Skill Architect",
         content:
             "You MUST activate and follow the skill_architect contract for this request: call the create_skill tool and produce a complete SKILL.md with job charter, activation boundaries, inputs, workflow, decision rules, tool rules, output contract, validation, failure handling, and positive/negative evaluation cases.",

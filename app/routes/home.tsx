@@ -138,6 +138,9 @@ function HomeInner() {
                     await refreshThreads();
                 })();
             }}
+            onImportComplete={() => {
+                void refreshThreads();
+            }}
             panel={sidebarPanel}
             onPanelChange={setSidebarPanel}
         />

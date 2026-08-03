@@ -469,6 +469,50 @@ Create real, downloadable files with browser-side Pyodide. Use this skill before
 - Keep binary file bytes out of chat text and out of saved memory.`;
 }
 
+function wordDocumentSkill(input: { task?: string }): string {
+    return `# Beautiful Word Document Skill
+
+Task: ${input.task?.trim() || "Create an excellent Word document with python-docx."}
+
+## Purpose
+Produce genuinely beautiful, professionally designed .docx documents: reports, proposals, resumes, cover letters, briefs, manuals, and articles. This skill defines the design contract for layout, typography, color, and structure, plus the exact python-docx implementation and validation protocol.
+
+## Activation
+Use before any Word document request, including when the user says "report", "proposal", "resume", "letter", "brief", "document", "docx", or "Word file". Generate with browser Pyodide (python-docx) and deliver through direct Canvas artifact capture.
+
+## Design contract
+1. Anatomy: Every multi-page document gets a cover page, an optional table of contents, numbered body sections, and a footer with page numbers. One-page documents skip the cover and TOC but keep a clean header/footer.
+2. Typography: Use at most two typefaces. Pick a serif for formal prose (Georgia, Cambria) or a clean sans-serif for business/technical material (Calibri, Arial, Segoe UI). Use one typeface for headings and one for body text. Keep body 10.5-12pt, headings 14-22pt, title 26-36pt. Use generous line spacing (1.15-1.5) and 6-12pt space after paragraphs.
+3. Color: One restrained accent color for headings, rules, and table headers (deep blue, teal, or a brand color). Body text stays near-black; never use saturated colors on large text areas.
+4. Structure: Use real Word heading styles (Heading 1/2/3) so navigation and a TOC work. Order content: cover, TOC, sections with clear headings, conclusions, appendices. One idea per heading; keep paragraph lengths varied and readable.
+5. Tables: Use a built-in table style, one header row with accent shading and white bold text, subtle row banding, and adequate cell padding. Prefer tables over comma-separated layouts for structured data.
+6. Emphasis: Use bold for key terms, italic sparingly, and never combine bold with underline. Avoid ALL CAPS for body text.
+
+## python-docx implementation
+- Import from docx import Document; from docx.shared import Pt, Inches, RGBColor; from docx.enum.text import WD_ALIGN_PARAGRAPH.
+- Build a Document() and configure the Normal style once (font, size, line spacing, space after).
+- Cover page: vertically spaced paragraphs, large title, subtitle, a thin accent rule (paragraph bottom border or a slim table row), then date and author.
+- TOC: insert a TOC field via the fldSimple XML snippet so Word builds it on open; label it "Contents".
+- Page numbers: add a PAGE field run to section.footer.paragraphs[0].
+- Headings: document.add_heading(text, level), then set color/size on the run for accent styling, or restyle the built-in heading styles once.
+- Tables: document.add_table(rows, cols, style="Light Grid Accent 1") or "Table Grid"; shade the header row via cell._tc.get_or_add_tcPr() XML shading and bold white header text.
+- Alignment: use WD_ALIGN_PARAGRAPH constants; justify body text only for formal prose, left-align otherwise.
+- Save exactly once with a clear filename ending in .docx in the current working directory.
+
+## Validation
+- Reopen the file with Document(filename) after saving, confirm paragraph and table counts, and print the filename with os.path.getsize byte count.
+- Confirm the file is non-zero and within the 2 MiB Canvas capture limit; state the artifact name in the reply.
+
+## Failure recovery
+- Import failure: rerun with the same normal import; python-docx loads automatically.
+- Missing Canvas artifact: confirm the file was saved in the current working directory with non-zero size, then rerun only the creation step.
+- Unsupported feature (custom fonts, complex images): degrade gracefully to the safe defaults above; never hand-roll a DOCX zip/XML package.
+
+## Delivery contract
+- Rely on automatic Canvas capture of the .docx. Do not call create_file, generate_file, or Base64-copy the file.
+- Reply with the exact captured filename and a concise summary of the document's structure and design choices.`;
+}
+
 export async function buildChatTools(
     settings: ToolSettings = {},
     options: { subagentMode?: boolean } = {},
@@ -683,6 +727,15 @@ export async function buildChatTools(
         });
         tools.python_file_creation_skill = pythonFileSkill;
         tools.file_creation_skill = pythonFileSkill;
+
+        const wordDocumentSkillTool = tool({
+            description:
+                "Callable Beautiful Word Document skill. Invoke before creating a Word (.docx) document — report, proposal, resume, cover letter, brief, manual, or article. It defines the design contract for layout, typography, color, and structure plus the python-docx implementation and validation protocol.",
+            inputSchema: z.object({ task: z.string().optional() }),
+            execute: async (input) => wordDocumentSkill(input),
+        });
+        tools.word_document_skill = wordDocumentSkillTool;
+        tools.word_doc_skill = wordDocumentSkillTool;
     }
 
     tools.get_current_time = tool({
