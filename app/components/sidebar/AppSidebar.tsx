@@ -35,9 +35,23 @@ import {
 import {
     clearMemoryEntries,
     exportLocalBackup,
+    getAllThreads,
     getMemoryEntries,
+    getThreadMessages,
     saveMemoryEntries,
 } from "~/lib/db";
+import {
+    aggregateUsage,
+    formatCost,
+    formatTokens,
+    usageFromStoredMessage,
+    type MessageUsageRecord,
+    type UsageAggregate,
+} from "~/lib/usage";
+import {
+    lookupInCatalog,
+    useModelCatalog,
+} from "~/lib/model-catalog-cache";
 import { cn } from "~/lib/utils";
 import { localProviderKey } from "~/lib/provider-credentials";
 import {
@@ -46,6 +60,8 @@ import {
     CheckCircle,
     Desktop,
     Brain,
+    ChartBar,
+    ArrowsClockwise,
     CloudArrowUp,
     Flask,
     Folder,
@@ -75,6 +91,7 @@ type SettingsSection =
     | "memory"
     | "connectors"
     | "cloud"
+    | "usage"
     | "appearance";
 
 type ThreadItem = { id: string; title: string; projectId?: string | null };
@@ -754,6 +771,7 @@ function SettingsPanel() {
         { id: "memory", label: "Memory Beta", icon: Brain },
         { id: "connectors", label: "Connectors Beta", icon: HardDrives },
         { id: "cloud", label: "Cloud Storage Beta", icon: CloudArrowUp },
+        { id: "usage", label: "Usage & cost", icon: ChartBar },
         { id: "appearance", label: "Theme", icon: Sun },
     ];
 
@@ -1040,6 +1058,8 @@ function SettingsPanel() {
             {section === "connectors" && <ConnectorsSection />}
 
             {section === "cloud" && <CloudStorageSection />}
+
+            {section === "usage" && <UsageSection />}
 
             {section === "appearance" && (
                 <div className="grid grid-cols-3 gap-2">
@@ -2488,6 +2508,203 @@ function ToolToggle({
             >
                 <Switch.Thumb className="block size-4 translate-x-0.5 rounded-full bg-white transition-transform data-[state=checked]:translate-x-4" />
             </Switch.Root>
+        </div>
+    );
+}
+
+function UsageSection() {
+    const catalog = useModelCatalog();
+    const [aggregate, setAggregate] = useState<UsageAggregate | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [loadGen, setLoadGen] = useState(0);
+
+    useEffect(() => {
+        let cancelled = false;
+        setLoading(true);
+        void (async () => {
+            const threads = await getAllThreads();
+            const threadMeta = new Map(
+                threads.map((thread) => [thread.id, { title: thread.title }]),
+            );
+            const records: MessageUsageRecord[] = [];
+            let assistantMessages = 0;
+            for (const thread of threads) {
+                const messages = await getThreadMessages(thread.id);
+                for (const message of messages) {
+                    if (message.role === "assistant") assistantMessages++;
+                    const record = usageFromStoredMessage(message);
+                    if (record) records.push(record);
+                }
+            }
+            const next = aggregateUsage(
+                records,
+                (model, provider) =>
+                    lookupInCatalog(
+                        catalog,
+                        (provider ?? "custom") as import("~/lib/types").ProviderId,
+                        model,
+                    ),
+                {
+                    threadMeta,
+                    assistantMessages,
+                    chatThreads: threads.length,
+                },
+            );
+            if (!cancelled) {
+                setAggregate(next);
+                setLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [catalog, loadGen]);
+
+    const coverage =
+        aggregate && aggregate.assistantMessages > 0
+            ? Math.round(
+                  (aggregate.messagesWithUsage / aggregate.assistantMessages) * 100,
+              )
+            : 0;
+
+    return (
+        <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+                <h3 className="text-xs font-semibold">Usage & cost</h3>
+                <button
+                    type="button"
+                    onClick={() => {
+                        hapticSelect();
+                        setLoadGen((g) => g + 1);
+                    }}
+                    className="inline-flex items-center gap-1 rounded-lg border border-border/70 px-2 py-1 text-[10px] font-medium text-muted-foreground outline-none hover:bg-accent"
+                >
+                    <ArrowsClockwise size={11} />
+                    Refresh
+                </button>
+            </div>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+                Real token usage reported by each provider is captured on every
+                assistant message and stored locally. Cost is estimated from
+                models.dev pricing — exact billing depends on your provider.
+            </p>
+
+            {loading ? (
+                <div className="flex items-center gap-2 py-6 text-xs text-muted-foreground">
+                    <SpinnerGap size={14} className="animate-spin" />
+                    Reading local messages…
+                </div>
+            ) : !aggregate || aggregate.messagesWithUsage === 0 ? (
+                <div className="rounded-xl border border-border/70 bg-muted/20 p-4 text-center text-[11px] text-muted-foreground">
+                    No usage data yet. Send a message and it will appear here —
+                    usage is recorded from now on; older chats have no usage
+                    data.
+                </div>
+            ) : (
+                <>
+                    <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-xl border border-border/70 p-2.5">
+                            <div className="text-[10px] text-muted-foreground">
+                                Total tokens
+                            </div>
+                            <div className="mt-0.5 text-sm font-semibold">
+                                {formatTokens(aggregate.totals.totalTokens)}
+                            </div>
+                        </div>
+                        <div className="rounded-xl border border-border/70 p-2.5">
+                            <div className="text-[10px] text-muted-foreground">
+                                Estimated cost
+                            </div>
+                            <div className="mt-0.5 text-sm font-semibold">
+                                {formatCost(aggregate.totalCost)}
+                            </div>
+                        </div>
+                        <div className="rounded-xl border border-border/70 p-2.5">
+                            <div className="text-[10px] text-muted-foreground">
+                                Input tokens
+                            </div>
+                            <div className="mt-0.5 text-sm font-semibold">
+                                {formatTokens(aggregate.totals.inputTokens)}
+                            </div>
+                        </div>
+                        <div className="rounded-xl border border-border/70 p-2.5">
+                            <div className="text-[10px] text-muted-foreground">
+                                Output tokens
+                            </div>
+                            <div className="mt-0.5 text-sm font-semibold">
+                                {formatTokens(aggregate.totals.outputTokens)}
+                            </div>
+                        </div>
+                    </div>
+
+                    {aggregate.totals.reasoningTokens > 0 ? (
+                        <div className="text-[10px] text-muted-foreground">
+                            Including{" "}
+                            {formatTokens(aggregate.totals.reasoningTokens)} reasoning
+                            tokens · {coverage}% of assistant messages have usage data
+                        </div>
+                    ) : (
+                        <div className="text-[10px] text-muted-foreground">
+                            {coverage}% of assistant messages have usage data
+                        </div>
+                    )}
+
+                    <div>
+                        <h4 className="text-[11px] font-semibold text-muted-foreground">
+                            By model
+                        </h4>
+                        <div className="mt-1 flex flex-col gap-1">
+                            {aggregate.byModel.map((row) => (
+                                <div
+                                    key={`${row.provider}/${row.model}`}
+                                    className="flex items-center justify-between gap-2 rounded-lg border border-border/60 px-2.5 py-1.5 text-[11px]"
+                                >
+                                    <div className="min-w-0">
+                                        <div className="truncate font-medium">
+                                            {row.model}
+                                        </div>
+                                        <div className="truncate text-[10px] text-muted-foreground">
+                                            {row.provider} ·{" "}
+                                            {formatTokens(row.usage.inputTokens)} in /{" "}
+                                            {formatTokens(row.usage.outputTokens)} out
+                                        </div>
+                                    </div>
+                                    <span className="shrink-0 text-[11px] font-medium">
+                                        {formatCost(row.cost)}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div>
+                        <h4 className="text-[11px] font-semibold text-muted-foreground">
+                            Top chats
+                        </h4>
+                        <div className="mt-1 flex flex-col gap-1">
+                            {aggregate.threads.slice(0, 8).map((row) => (
+                                <div
+                                    key={row.threadId}
+                                    className="flex items-center justify-between gap-2 rounded-lg border border-border/60 px-2.5 py-1.5 text-[11px]"
+                                >
+                                    <div className="min-w-0">
+                                        <div className="truncate font-medium">
+                                            {row.title}
+                                        </div>
+                                        <div className="truncate text-[10px] text-muted-foreground">
+                                            {row.model ?? "—"} ·{" "}
+                                            {formatTokens(row.usage.totalTokens)} tokens
+                                        </div>
+                                    </div>
+                                    <span className="shrink-0 text-[11px] font-medium">
+                                        {formatCost(row.cost)}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </>
+            )}
         </div>
     );
 }
