@@ -15,6 +15,7 @@ import {
   ReasoningText,
   ReasoningTrigger,
 } from "~/components/assistant-ui/reasoning";
+import { SubagentToolCard } from "~/components/assistant-ui/subagents";
 import { ToolFallback } from "~/components/assistant-ui/tool-fallback";
 import {
   ToolGroupContent,
@@ -531,8 +532,33 @@ const ComposerAction: FC = () => {
   );
 };
 
-const MessageError: FC = () => {
+/**
+ * Tool group that stays open while it contains subagent sessions, so the
+ * approve/run controls and live activity cards are visible without a click.
+ */
+const ThreadToolGroup: FC<
+  PropsWithChildren<{ group: ThreadGroupPart }>
+> = ({ group, children }) => {
+  const parts = useAuiState((s) => s.message.parts);
+  const hasSubagent = group.indices.some((index) => {
+    const part = parts[index];
+    return (
+      part?.type === "tool-call" &&
+      (part as { toolName?: string }).toolName === "spawn_subagent"
+    );
+  });
   return (
+    <ToolGroupRoot variant="ghost" defaultOpen={hasSubagent}>
+      <ToolGroupTrigger
+        count={group.indices.length}
+        active={group.status.type === "running"}
+      />
+      <ToolGroupContent>{children}</ToolGroupContent>
+    </ToolGroupRoot>
+  );
+};
+
+const MessageError: FC = () => {  return (
     <MessagePrimitive.Error>
       <ErrorPrimitive.Root className="aui-message-error-root border-destructive bg-destructive/10 text-destructive dark:bg-destructive/5 mt-2 rounded-md border p-3 text-sm dark:text-red-200">
         <ErrorPrimitive.Message className="aui-message-error-message line-clamp-2" />
@@ -578,13 +604,7 @@ const AssistantMessage: FC = () => {
                   return <ToolGroup group={part}>{children}</ToolGroup>;
                 }
                 return (
-                  <ToolGroupRoot variant="ghost">
-                    <ToolGroupTrigger
-                      count={part.indices.length}
-                      active={part.status.type === "running"}
-                    />
-                    <ToolGroupContent>{children}</ToolGroupContent>
-                  </ToolGroupRoot>
+                  <ThreadToolGroup group={part}>{children}</ThreadToolGroup>
                 );
               case "group-reasoning": {
                 if (ReasoningGroup) {
@@ -609,6 +629,11 @@ const AssistantMessage: FC = () => {
                 // second ReasoningRoot here creates nested reasoning panels.
                 return <MarkdownText />;
               case "tool-call":
+                // Subagent sessions render as interactive in-chat cards with
+                // approval controls and a live activity preview.
+                if (part.toolName === "spawn_subagent") {
+                  return <SubagentToolCard {...part} />;
+                }
                 return part.toolUI ?? <ToolFallbackComponent {...part} />;
               case "file":
                 return part.mimeType.startsWith("image/") ? (

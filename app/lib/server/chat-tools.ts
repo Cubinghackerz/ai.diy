@@ -847,7 +847,7 @@ export async function buildChatTools(
     if (settings.subagentsEnabled && !subagentMode) {
         tools.spawn_subagent = tool({
             description:
-                "Delegate a focused subtask to a subagent. The user must approve each subagent before it runs. A subagent uses the same tools as you (web search, Python, memory, etc.), runs without being prompted or interrupted, and returns only its final answer; you then synthesize its result into your reply. Use this for deep multi-step research, lengthy analysis, or parallelizable work that would otherwise take many sequential tool calls. Provide one complete, self-contained task string; the subagent has no conversation history.",
+                "Delegate a focused subtask to a subagent. The user must approve each subagent before it runs. A subagent uses the same tools as you (web search, Python, memory, etc.), runs without being prompted or interrupted, and returns only its final answer; you then synthesize its result into your reply. Use this for deep multi-step research, lengthy analysis, or parallelizable work that would otherwise take many sequential tool calls. You may spawn up to 3 subagents concurrently — for independent subtasks, issue multiple spawn_subagent calls in one step and wait for their results, then combine them. Provide one complete, self-contained task string per call; each subagent has no conversation history.",
             inputSchema: z.object({
                 task: z.string(),
             }),
