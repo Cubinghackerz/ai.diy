@@ -38,10 +38,15 @@ interface PrismiumDB extends DBSchema {
         value: MemoryEntry;
         indexes: { "by-updated": number; "by-source": string };
     };
+    modelCatalog: {
+        key: string;
+        value: { id: string; data: unknown; updatedAt: number };
+        indexes: { "by-updated": number };
+    };
 }
 
 const DB_NAME = "prismium-lite-db";
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 let dbPromise: Promise<IDBPDatabase<PrismiumDB>> | null = null;
 
@@ -84,6 +89,12 @@ function getDB() {
                         keyPath: "id",
                     });
                     projectStore.createIndex("by-updated", "updatedAt");
+                }
+                if (!db.objectStoreNames.contains("modelCatalog")) {
+                    const catalogStore = db.createObjectStore("modelCatalog", {
+                        keyPath: "id",
+                    });
+                    catalogStore.createIndex("by-updated", "updatedAt");
                 }
             },
         });
@@ -287,4 +298,25 @@ export async function deleteMessageFromDB(messageId: string): Promise<void> {
     const db = await getDB();
     if (!db) return;
     await db.delete("messages", messageId);
+}
+
+/** Cached models.dev catalog snapshot (keyed "catalog", single row). */
+export async function getModelCatalogCache(): Promise<{
+    data: unknown;
+    updatedAt: number;
+} | null> {
+    const db = await getDB();
+    if (!db) return null;
+    const row = await db.get("modelCatalog", "catalog");
+    return row ? { data: row.data, updatedAt: row.updatedAt } : null;
+}
+
+export async function saveModelCatalogCache(data: unknown): Promise<void> {
+    const db = await getDB();
+    if (!db) return;
+    await db.put("modelCatalog", {
+        id: "catalog",
+        data,
+        updatedAt: Date.now(),
+    });
 }

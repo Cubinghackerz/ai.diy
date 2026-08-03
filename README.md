@@ -128,6 +128,19 @@ Do not label a custom model as vision-, tool-, embedding-, or structured-output-
 - Automatic first-message title generation with a safe slug fallback.
 - Light, dark, and system themes.
 
+### Model Info Hover Cards
+
+- Hovering any model in the chat header picker or the settings model selector shows a card with the model's description, capability badges (tools, vision, reasoning, structured output, image generation), context window, and estimated pricing.
+- Descriptions, capabilities, context limits, and prices come from the open models.dev dataset, fetched at runtime and cached locally for 7 days, with a bundled snapshot of the built-in model catalog for offline use.
+- Prices are estimates per 1M tokens from models.dev; exact billing depends on your provider.
+
+### Local Usage and Cost Tracking
+
+- Every provider response reports real token usage, which is captured on the assistant message and stored locally — nothing leaves the browser.
+- Settings → **Usage & cost** shows real totals: input/output/reasoning tokens, estimated cost, breakdowns by model and provider, and the top chats by usage.
+- Cost is estimated from models.dev pricing and labeled as such; chats from before this feature record no usage data.
+
+
 ### Tools
 
 Tools available to a selected model depend on the settings toggles and provider support:

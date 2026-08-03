@@ -315,6 +315,17 @@ export async function action({ request }: ActionFunctionArgs) {
             result.toUIMessageStreamResponse({
                 sendReasoning: true,
                 onError: publicChatError,
+                // Attach real provider-reported usage plus the model/provider
+                // used for this request to the assistant message metadata so
+                // the client can persist and aggregate it (usage analytics).
+                messageMetadata: ({ part }) =>
+                    part.type === "finish"
+                        ? {
+                              usage: part.totalUsage,
+                              model: body.model,
+                              provider: body.provider,
+                          }
+                        : undefined,
             }),
         );
     } catch (err) {

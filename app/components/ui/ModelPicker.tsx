@@ -27,8 +27,32 @@ import {
     inferModelSupportsImageGeneration,
     inferModelSupportsTools,
 } from "~/lib/model-capabilities";
+import {
+    lookupInCatalog,
+    useModelCatalog,
+} from "~/lib/model-catalog-cache";
+import {
+    mergeCatalogInfo,
+    type MergedModelInfo,
+} from "~/lib/model-catalog";
+import { ModelHoverCard } from "~/components/ui/ModelHoverCard";
 import { cn } from "~/lib/utils";
 import { localProviderKey } from "~/lib/provider-credentials";
+
+function useHoveredModel() {
+    const catalog = useModelCatalog();
+    const [hovered, setHovered] = useState<{
+        model: ModelInfo;
+        rect: { top: number; bottom: number; left: number; right: number };
+    } | null>(null);
+    const merged: MergedModelInfo | null = hovered
+        ? mergeCatalogInfo(
+              hovered.model,
+              lookupInCatalog(catalog, hovered.model.provider, hovered.model.id),
+          )
+        : null;
+    return { hovered, setHovered, merged };
+}
 
 export function useProviderModels(provider: ProviderId, enabled: boolean) {
     const { settings } = useSettings();
@@ -137,6 +161,11 @@ export function SearchableModelSelect({
     const menuRef = useRef<HTMLDivElement>(null);
     const [menuStyle, setMenuStyle] = useState<React.CSSProperties | null>(null);
     const selected = models.find((model) => model.id === value);
+    const { hovered, setHovered, merged } = useHoveredModel();
+
+    useEffect(() => {
+        if (!open) setHovered(null);
+    }, [open, setHovered]);
 
     useEffect(() => {
         if (!open) return;
@@ -209,6 +238,20 @@ export function SearchableModelSelect({
                     hapticSelect();
                     setOpen((current) => !current);
                 }}
+                onMouseEnter={() => {
+                    if (!open && selected) {
+                        setHovered({
+                            model: selected,
+                            rect: triggerRef.current?.getBoundingClientRect() ?? {
+                                top: 0,
+                                bottom: 0,
+                                left: 0,
+                                right: 0,
+                            },
+                        });
+                    }
+                }}
+                onMouseLeave={() => setHovered(null)}
                 className="flex h-10 w-full items-center justify-between gap-3 rounded-xl border border-input bg-background px-3 text-left outline-none transition-colors hover:border-foreground/25 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
                 aria-haspopup="listbox"
                 aria-expanded={open}
@@ -245,7 +288,10 @@ export function SearchableModelSelect({
                                 autoFocus
                             />
                         </div>
-                        <Command.List className="overflow-y-auto p-1">
+                        <Command.List
+                            className="overflow-y-auto p-1"
+                            onMouseLeave={() => setHovered(null)}
+                        >
                             <Command.Empty className="px-3 py-6 text-center text-xs text-muted-foreground">
                                 No models match.
                             </Command.Empty>
@@ -257,6 +303,23 @@ export function SearchableModelSelect({
                                         hapticSelect();
                                         onChange(model.id);
                                         setOpen(false);
+                                        setHovered(null);
+                                    }}
+                                    onMouseEnter={(event) => {
+                                        setHovered({
+                                            model,
+                                            rect: (
+                                                event.currentTarget as HTMLElement
+                                            ).getBoundingClientRect(),
+                                        });
+                                    }}
+                                    onFocus={(event) => {
+                                        setHovered({
+                                            model,
+                                            rect: (
+                                                event.currentTarget as HTMLElement
+                                            ).getBoundingClientRect(),
+                                        });
                                     }}
                                     className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-xs outline-none aria-selected:bg-accent"
                                 >
@@ -293,6 +356,10 @@ export function SearchableModelSelect({
                     document.body,
                 )
                 : null}
+
+            {hovered && merged ? (
+                <ModelHoverCard anchor={hovered.rect} model={merged} />
+            ) : null}
         </div>
     );
 }
@@ -323,6 +390,7 @@ export function ModelPicker({
     const triggerRef = useRef<HTMLButtonElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
     const [menuStyle, setMenuStyle] = useState<React.CSSProperties | null>(null);
+    const { hovered, setHovered, merged } = useHoveredModel();
 
     const selected = useMemo(() => {
         const hit = models.find((m) => m.id === value);
@@ -357,7 +425,10 @@ export function ModelPicker({
     }, [models, value, provider]);
 
     useEffect(() => {
-        if (!open) return;
+        if (!open) {
+            setHovered(null);
+            return;
+        }
         const onDoc = (e: MouseEvent) => {
             const target = e.target as Node;
             if (
@@ -376,7 +447,7 @@ export function ModelPicker({
             document.removeEventListener("mousedown", onDoc);
             document.removeEventListener("keydown", onKey);
         };
-    }, [open]);
+    }, [open, setHovered]);
 
     useLayoutEffect(() => {
         if (!open) {
@@ -441,6 +512,20 @@ export function ModelPicker({
                     setOpen((v) => !v);
                     if (!open) void refresh();
                 }}
+                onMouseEnter={() => {
+                    if (!open && selected) {
+                        setHovered({
+                            model: selected,
+                            rect: triggerRef.current?.getBoundingClientRect() ?? {
+                                top: 0,
+                                bottom: 0,
+                                left: 0,
+                                right: 0,
+                            },
+                        });
+                    }
+                }}
+                onMouseLeave={() => setHovered(null)}
                 className={cn(
                     "flex max-w-full items-center gap-1.5 rounded-lg border border-border/70 bg-transparent font-medium outline-none transition-colors hover:border-border hover:bg-muted/40",
                     compact
@@ -487,7 +572,10 @@ export function ModelPicker({
                                 {error} — showing available list.
                             </p>
                         ) : null}
-                        <Command.List className="overflow-y-auto p-1">
+                        <Command.List
+                            className="overflow-y-auto p-1"
+                            onMouseLeave={() => setHovered(null)}
+                        >
                             <Command.Empty className="px-3 py-6 text-center text-xs text-muted-foreground">
                                  No models match.
                             </Command.Empty>
@@ -499,6 +587,23 @@ export function ModelPicker({
                                         hapticSelect();
                                         onChange(m.id);
                                         setOpen(false);
+                                        setHovered(null);
+                                    }}
+                                    onMouseEnter={(event) => {
+                                        setHovered({
+                                            model: m,
+                                            rect: (
+                                                event.currentTarget as HTMLElement
+                                            ).getBoundingClientRect(),
+                                        });
+                                    }}
+                                    onFocus={(event) => {
+                                        setHovered({
+                                            model: m,
+                                            rect: (
+                                                event.currentTarget as HTMLElement
+                                            ).getBoundingClientRect(),
+                                        });
                                     }}
                                     className={cn(
                                         "flex cursor-pointer flex-col gap-0.5 rounded-lg px-2.5 py-2 text-xs outline-none aria-selected:bg-accent",
@@ -529,6 +634,10 @@ export function ModelPicker({
                     document.body,
                 )
                 : null}
+
+            {hovered && merged ? (
+                <ModelHoverCard anchor={hovered.rect} model={merged} />
+            ) : null}
         </div>
     );
 }
