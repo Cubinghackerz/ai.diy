@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import { useGSAP } from "@gsap/react";
-import gsap from "gsap";
-import ScrollTrigger from "gsap/ScrollTrigger";
+import { cn } from "~/lib/utils";
+import { useSettings } from "~/lib/providers/SettingsProvider";
+import type { ProviderId } from "~/lib/types";
+import { ModelLogo } from "~/components/ui/ModelLogo";
 import {
     ArrowRight,
     ArrowUpRight,
@@ -16,12 +17,6 @@ import {
     PlugsConnected,
     Sun,
 } from "@phosphor-icons/react";
-import { cn } from "~/lib/utils";
-import { useSettings } from "~/lib/providers/SettingsProvider";
-import type { ProviderId } from "~/lib/types";
-import { ModelLogo } from "~/components/ui/ModelLogo";
-
-gsap.registerPlugin(ScrollTrigger);
 
 const ACCORDION_ITEMS = [
     {
@@ -238,45 +233,11 @@ function ProviderNetwork() {
 function LandingPage() {
     const page = useRef<HTMLDivElement>(null);
 
-    useGSAP(() => {
-        const reveal = gsap.utils.toArray<HTMLElement>("[data-landing-reveal]");
-        reveal.forEach((element) => {
-            gsap.fromTo(
-                element,
-                { y: 24 },
-                {
-                    y: 0,
-                    duration: 0.9,
-                    immediateRender: false,
-                    ease: "power3.out",
-                    scrollTrigger: {
-                        trigger: element,
-                        start: "top 86%",
-                        toggleActions: "play none none reverse",
-                    },
-                },
-            );
-        });
-
-        const stack = gsap.utils.toArray<HTMLElement>("[data-stack-card]");
-        gsap.fromTo(
-            stack,
-            { y: 36, scale: 0.98 },
-            {
-                y: 0,
-                scale: 1,
-                stagger: 0.15,
-                ease: "power2.out",
-                scrollTrigger: {
-                    trigger: "[data-stack]",
-                    start: "top 76%",
-                    end: "bottom 54%",
-                    scrub: 1,
-                },
-            },
+    useEffect(() => {
+        void import("../lib/landing-animations.client").then((m) =>
+            m.initLandingAnimations(page.current),
         );
-
-    }, { scope: page });
+    }, []);
 
     return (
         <div ref={page} className="landing-page w-full overflow-x-hidden bg-[color:var(--landing-paper)] text-[color:var(--landing-ink)]">
