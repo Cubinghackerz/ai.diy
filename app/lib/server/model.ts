@@ -11,6 +11,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createXai } from "@ai-sdk/xai";
 import type { ImageModel } from "ai";
+import { experimental_generateVideo } from "ai";
 import type { ProviderConfig, ProviderId } from "~/lib/types";
 import { parseProviderCredentials } from "~/lib/provider-credentials";
 import { modelSupportsReasoning } from "~/lib/reasoning";
@@ -208,6 +209,48 @@ export function createImageModel(body: ModelRequest): ImageModel {
         default:
             throw new Error(
                 `${provider} does not expose an image-generation model through its SDK.`,
+            );
+    }
+}
+
+type VideoModel = Parameters<typeof experimental_generateVideo>[0]["model"];
+
+export function createVideoModel(body: ModelRequest): VideoModel {
+    const { provider, apiKey, baseUrl, model } = body;
+    const credentials = parseProviderCredentials(provider, apiKey);
+    const key = credentials.apiKey || apiKey;
+    const resolvedBaseUrl = normalizeProviderBaseUrl(provider, baseUrl);
+
+    switch (provider) {
+        case "gemini":
+            return createGoogleGenerativeAI({ apiKey: key }).video(
+                model as never,
+            );
+        case "vertex":
+            return createGoogleVertex({
+                apiKey: credentials.apiKey,
+                project: credentials.project,
+                location: credentials.location,
+                baseURL: resolvedBaseUrl || credentials.baseURL || undefined,
+                ...(credentials.clientEmail && credentials.privateKey
+                    ? {
+                          googleAuthOptions: {
+                              credentials: {
+                                  client_email: credentials.clientEmail,
+                                  private_key: credentials.privateKey,
+                              },
+                          },
+                      }
+                    : {}),
+            }).video(model as never);
+        case "gateway":
+            return createGateway({
+                apiKey: key,
+                baseURL: resolvedBaseUrl,
+            }).video(model as never);
+        default:
+            throw new Error(
+                `${provider} does not expose a video-generation model through its SDK.`,
             );
     }
 }

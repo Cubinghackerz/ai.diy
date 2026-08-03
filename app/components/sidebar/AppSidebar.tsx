@@ -8,6 +8,7 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { ModelPicker } from "~/components/ui/ModelPicker";
 import { ProviderPicker } from "~/components/ui/ProviderPicker";
+import { ModelLogo } from "~/components/ui/ModelLogo";
 import { haptic, hapticConfirm, hapticSelect } from "~/lib/haptics";
 import { testProviderKey } from "~/lib/key-test";
 import { useSettings } from "~/lib/providers/SettingsProvider";
@@ -2956,8 +2957,15 @@ function UsageSection() {
                                     className="flex items-center justify-between gap-2 rounded-lg border border-border/60 px-2.5 py-1.5 text-[11px]"
                                 >
                                     <div className="min-w-0">
-                                        <div className="truncate font-medium">
-                                            {row.model}
+                                        <div className="flex items-center gap-1.5 truncate font-medium">
+                                            <ModelLogo
+                                                provider={row.provider}
+                                                modelId={row.model}
+                                                size={12}
+                                            />
+                                            <span className="truncate">
+                                                {row.model}
+                                            </span>
                                         </div>
                                         <div className="truncate text-[10px] text-muted-foreground">
                                             {row.provider} ·{" "}

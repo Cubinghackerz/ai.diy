@@ -15,6 +15,7 @@ import { CaretDown, MagnifyingGlass } from "@phosphor-icons/react";
 import { hapticSelect } from "~/lib/haptics";
 import { isLocalProvider } from "~/lib/setup";
 import { PROVIDER_DEFAULTS, type ProviderId } from "~/lib/types";
+import { ModelLogo } from "~/components/ui/ModelLogo";
 import { cn } from "~/lib/utils";
 
 const PROVIDER_IDS = Object.keys(PROVIDER_DEFAULTS) as ProviderId[];
@@ -140,6 +141,12 @@ export function ProviderPicker({
                 aria-expanded={open}
                 aria-label="Provider"
             >
+                {selected ? (
+                    <ModelLogo
+                        provider={selected.id}
+                        size={compact ? 14 : 16}
+                    />
+                ) : null}
                 <span className="truncate">{selected?.name || value}</span>
                 <CaretDown
                     size={12}
@@ -184,8 +191,14 @@ export function ProviderPicker({
                                         p.id === value && "bg-accent/70",
                                     )}
                                 >
-                                    <span className="font-medium text-foreground">
-                                        {p.name}
+                                    <span className="flex min-w-0 items-center gap-1.5">
+                                        <ModelLogo
+                                            provider={p.id}
+                                            size={14}
+                                        />
+                                        <span className="truncate font-medium text-foreground">
+                                            {p.name}
+                                        </span>
                                     </span>
                                     {p.local ? (
                                         <span className="text-[10px] text-muted-foreground">

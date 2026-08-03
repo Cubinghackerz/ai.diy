@@ -18,6 +18,7 @@ import {
     ImageSquare,
     MagnifyingGlass,
     SpinnerGap,
+    VideoCamera,
 } from "@phosphor-icons/react";
 import { hapticSelect } from "~/lib/haptics";
 import { useSettings } from "~/lib/providers/SettingsProvider";
@@ -36,8 +37,43 @@ import {
     type MergedModelInfo,
 } from "~/lib/model-catalog";
 import { ModelHoverCard } from "~/components/ui/ModelHoverCard";
+import { ModelLogo } from "~/components/ui/ModelLogo";
 import { cn } from "~/lib/utils";
 import { localProviderKey } from "~/lib/provider-credentials";
+
+function ModelBadges({
+    model,
+    catalog,
+}: {
+    model: ModelInfo;
+    catalog?: ReturnType<typeof useModelCatalog>;
+}) {
+    const entry = catalog
+        ? lookupInCatalog(catalog, model.provider, model.id)
+        : undefined;
+    const image = model.supportsImageGeneration ?? entry?.imageOutput === true;
+    const video = model.supportsVideo ?? entry?.videoOutput === true;
+    return (
+        <>
+            {image ? (
+                <ImageSquare
+                    size={12}
+                    weight="duotone"
+                    className="shrink-0 text-primary"
+                    aria-label="Image generation model"
+                />
+            ) : null}
+            {video ? (
+                <VideoCamera
+                    size={12}
+                    weight="duotone"
+                    className="shrink-0 text-primary"
+                    aria-label="Video generation model"
+                />
+            ) : null}
+        </>
+    );
+}
 
 function useHoveredModel() {
     const catalog = useModelCatalog();
@@ -162,6 +198,7 @@ export function SearchableModelSelect({
     const [menuStyle, setMenuStyle] = useState<React.CSSProperties | null>(null);
     const selected = models.find((model) => model.id === value);
     const { hovered, setHovered, merged } = useHoveredModel();
+    const catalog = useModelCatalog();
 
     useEffect(() => {
         if (!open) setHovered(null);
@@ -257,6 +294,13 @@ export function SearchableModelSelect({
                 aria-expanded={open}
                 aria-label="Choose model"
             >
+                {selected ? (
+                    <ModelLogo
+                        provider={selected.provider}
+                        modelId={selected.id}
+                        size={16}
+                    />
+                ) : null}
                 <span className="min-w-0 truncate text-sm font-medium">
                     {selected?.name || value || "Choose a model"}
                 </span>
@@ -325,15 +369,16 @@ export function SearchableModelSelect({
                                 >
                                     <span className="min-w-0">
                                         <span className="flex items-center gap-1.5 truncate font-medium">
+                                            <ModelLogo
+                                                provider={model.provider}
+                                                modelId={model.id}
+                                                size={14}
+                                            />
                                             {model.name || model.id}
-                                            {model.supportsImageGeneration ? (
-                                                <ImageSquare
-                                                    size={12}
-                                                    weight="duotone"
-                                                    className="shrink-0 text-primary"
-                                                    aria-label="Image generation model"
-                                                />
-                                            ) : null}
+                                            <ModelBadges
+                                                model={model}
+                                                catalog={catalog}
+                                            />
                                         </span>
                                         {model.name !== model.id ? (
                                             <span className="mt-0.5 block truncate font-mono text-[10px] text-muted-foreground">
@@ -391,6 +436,7 @@ export function ModelPicker({
     const menuRef = useRef<HTMLDivElement>(null);
     const [menuStyle, setMenuStyle] = useState<React.CSSProperties | null>(null);
     const { hovered, setHovered, merged } = useHoveredModel();
+    const catalog = useModelCatalog();
 
     const selected = useMemo(() => {
         const hit = models.find((m) => m.id === value);
@@ -535,6 +581,13 @@ export function ModelPicker({
                 aria-haspopup="listbox"
                 aria-expanded={open}
             >
+                {selected ? (
+                    <ModelLogo
+                        provider={selected.provider}
+                        modelId={selected.id}
+                        size={compact ? 14 : 16}
+                    />
+                ) : null}
                 <span className="truncate">
                     {selected?.name || value || "Select model"}
                 </span>
@@ -611,15 +664,13 @@ export function ModelPicker({
                                     )}
                                 >
                                     <span className="flex items-center gap-1.5 font-medium text-foreground">
+                                        <ModelLogo
+                                            provider={m.provider}
+                                            modelId={m.id}
+                                            size={14}
+                                        />
                                         {m.name}
-                                        {m.supportsImageGeneration ? (
-                                            <ImageSquare
-                                                size={12}
-                                                weight="duotone"
-                                                className="shrink-0 text-primary"
-                                                aria-label="Image generation model"
-                                            />
-                                        ) : null}
+                                        <ModelBadges model={m} catalog={catalog} />
                                     </span>
                                     {m.name !== m.id ? (
                                         <span className="font-mono text-[10px] text-muted-foreground">

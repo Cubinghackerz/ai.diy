@@ -86,6 +86,7 @@ export interface ModelInfo {
     supportsStructuredOutputs?: boolean;
     supportsAudio?: boolean;
     supportsImageGeneration?: boolean;
+    supportsVideo?: boolean;
 }
 
 /** Reasoning / thinking effort when the selected model supports it. */
@@ -462,6 +463,9 @@ export const DEFAULT_MODELS: Record<ProviderId, ModelInfo[]> = {
         { id: "gemini-3-pro-preview", name: "Gemini 3 Pro", provider: "gemini", contextWindow: 1048576, supportsTools: true, supportsReasoning: true },
         { id: "imagen-4.0-generate-001", name: "Imagen 4", provider: "gemini", supportsImageGeneration: true },
         { id: "gemini-2.5-flash-image", name: "Gemini 2.5 Flash Image", provider: "gemini", supportsImageGeneration: true },
+        { id: "veo-3.1-generate-preview", name: "Veo 3.1", provider: "gemini", supportsVideo: true },
+        { id: "veo-3.0-generate-001", name: "Veo 3.0", provider: "gemini", supportsVideo: true },
+        { id: "veo-2.0-generate-001", name: "Veo 2.0", provider: "gemini", supportsVideo: true },
     ],
     groq: [
         { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B", provider: "groq", contextWindow: 131072, supportsTools: true },
@@ -510,6 +514,11 @@ export const DEFAULT_MODELS: Record<ProviderId, ModelInfo[]> = {
         { id: "deepseek/deepseek-v4-pro", name: "DeepSeek V4 Pro", provider: "gateway", contextWindow: 1000000, maxTokens: 384000, supportsTools: true, supportsReasoning: true },
         { id: "xai/grok-4.5", name: "Grok 4.5", provider: "gateway", contextWindow: 500000, maxTokens: 500000, supportsTools: true, supportsVision: true, supportsReasoning: true },
         { id: "openai/gpt-image-1", name: "GPT Image 1", provider: "gateway", supportsImageGeneration: true },
+        { id: "google/veo-3.1-generate-001", name: "Veo 3.1", provider: "gateway", supportsVideo: true },
+        { id: "klingai/kling-v2.6-t2v", name: "Kling 2.6", provider: "gateway", supportsVideo: true },
+        { id: "bytedance/seedance-v2.0", name: "Seedance 2.0", provider: "gateway", supportsVideo: true },
+        { id: "alibaba/wan-v2.7-t2v", name: "Wan 2.7", provider: "gateway", supportsVideo: true },
+        { id: "xai/grok-imagine-video-1.5", name: "Grok Imagine Video 1.5", provider: "gateway", supportsVideo: true },
     ],
     togetherai: [
         { id: "moonshotai/Kimi-K3", name: "Kimi K3", provider: "togetherai", contextWindow: 1048576, maxTokens: 131072, supportsTools: true, supportsVision: true, supportsReasoning: true },

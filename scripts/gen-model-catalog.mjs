@@ -60,6 +60,8 @@ function entryLine(entry) {
         "reasoning",
         "structuredOutput",
         "vision",
+        "videoOutput",
+        "imageOutput",
     ]) {
         if (entry[key]) parts.push(`${key}: true`);
     }

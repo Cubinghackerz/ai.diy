@@ -5,6 +5,7 @@ import {
     createUIMessageStream,
     createUIMessageStreamResponse,
     generateImage,
+    experimental_generateVideo,
     stepCountIs,
     type UIMessage,
 } from "ai";
@@ -19,9 +20,13 @@ import type { ConnectorConfig, McpServerConfig, ProviderId } from "~/lib/types";
 import {
     createChatModel,
     createImageModel,
+    createVideoModel,
     shouldUseOpenAIResponses,
 } from "~/lib/server/model";
-import { inferModelSupportsImageGeneration } from "~/lib/model-capabilities";
+import {
+    inferModelSupportsImageGeneration,
+    inferModelSupportsVideo,
+} from "~/lib/model-capabilities";
 import { imageRequestOptions } from "~/lib/image-generation";
 import { providerNeedsKey } from "~/lib/provider-credentials";
 import { corsPreflight, withCors } from "~/lib/server/cors";
@@ -140,6 +145,31 @@ async function generateImageResponse(body: ChatRequestBody): Promise<Response> {
     return createUIMessageStreamResponse({ stream });
 }
 
+async function generateVideoResponse(body: ChatRequestBody): Promise<Response> {
+    const result = await experimental_generateVideo({
+        model: createVideoModel(body),
+        prompt: imagePrompt(body.messages),
+    });
+
+    const stream = createUIMessageStream({
+        execute({ writer }) {
+            writer.write({ type: "start" });
+            for (const video of result.videos) {
+                writer.write({
+                    type: "file",
+                    url: `data:${video.mediaType};base64,${video.base64}`,
+                    mediaType: video.mediaType,
+                });
+            }
+            writer.write({ type: "finish", finishReason: "stop" });
+        },
+        onError: (error) =>
+            error instanceof Error ? error.message : "Video generation failed",
+    });
+
+    return createUIMessageStreamResponse({ stream });
+}
+
 export function loader({ request }: LoaderFunctionArgs) {
     const preflight = corsPreflight(request);
     if (preflight) return preflight;
@@ -204,6 +234,22 @@ export async function action({ request }: ActionFunctionArgs) {
                 { status: 400 },
             ),
         );
+    }
+
+    if (
+        body.subagentMode !== true &&
+        inferModelSupportsVideo(body.model, body.provider)
+    ) {
+        try {
+            return withCors(request, await generateVideoResponse(body));
+        } catch (err) {
+            const message = publicChatError(err);
+            console.error("[api/chat:video]", message);
+            return withCors(
+                request,
+                Response.json({ error: message }, { status: 500 }),
+            );
+        }
     }
 
     if (

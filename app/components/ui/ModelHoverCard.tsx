@@ -9,6 +9,7 @@ import {
     Eye,
     ImageSquare,
     ListChecks,
+    VideoCamera,
     Wrench,
 } from "@phosphor-icons/react";
 import type { MergedModelInfo } from "~/lib/model-catalog";
@@ -16,6 +17,7 @@ import {
     formatContextWindow,
     formatPricePerMillion,
 } from "~/lib/model-catalog";
+import { ModelLogo } from "~/components/ui/ModelLogo";
 import { cn } from "~/lib/utils";
 
 export function ModelHoverCard({
@@ -52,6 +54,11 @@ export function ModelHoverCard({
             icon: ImageSquare,
             active: model.supportsImageGeneration === true,
         },
+        {
+            label: "Video gen",
+            icon: VideoCamera,
+            active: model.supportsVideo === true,
+        },
     ];
     const context = formatContextWindow(model.contextWindow);
     const price = formatPricePerMillion(model.catalogEntry?.cost);
@@ -72,9 +79,16 @@ export function ModelHoverCard({
             }}
             className="rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-xl shadow-black/20"
         >
-            <div className="flex items-baseline justify-between gap-2">
-                <span className="truncate text-xs font-semibold">
-                    {model.name || model.id}
+            <div className="flex items-center justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-1.5">
+                    <ModelLogo
+                        provider={model.provider}
+                        modelId={model.id}
+                        size={16}
+                    />
+                    <span className="truncate text-xs font-semibold">
+                        {model.name || model.id}
+                    </span>
                 </span>
                 {model.name !== model.id ? (
                     <span className="shrink-0 font-mono text-[9px] text-muted-foreground">

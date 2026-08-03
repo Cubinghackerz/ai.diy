@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 import {
     normalizeCatalog,
     catalogKey,
@@ -17,6 +20,7 @@ import {
 } from "../app/lib/usage.ts";
 
 let failures = 0;
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 function check(name, condition, detail = "") {
     if (condition) {
         console.log(`ok - ${name}`);
@@ -209,6 +213,49 @@ check("formatTokens K", formatTokens(12_300) === "12.3K");
 check("formatCost small", formatCost(0.0042) === "$0.0042");
 check("formatCost mid", formatCost(1.234) === "$1.23");
 check("formatCost unknown", formatCost(null) === "—");
+
+// ─── Video / image output detection (catalog-driven) ────────
+const videoRaw = {
+    google: {
+        models: {
+            "veo-3.1-generate-001": {
+                id: "veo-3.1-generate-001",
+                name: "Veo 3.1",
+                modalities: { input: ["text"], output: ["video"] },
+            },
+            "gemini-2.5-flash-image": {
+                id: "gemini-2.5-flash-image",
+                name: "Gemini 2.5 Flash Image",
+                modalities: { input: ["text", "image"], output: ["text", "image"] },
+            },
+        },
+    },
+};
+const videoCatalog = normalizeCatalog(videoRaw);
+check(
+    "video output flag",
+    lookupCatalogEntry(videoCatalog, "google", "veo-3.1-generate-001")
+        ?.videoOutput === true,
+);
+check(
+    "no video flag on chat model",
+    lookupCatalogEntry(videoCatalog, "google", "gemini-2.5-flash-image")
+        ?.videoOutput !== true,
+);
+check(
+    "image output flag",
+    lookupCatalogEntry(videoCatalog, "google", "gemini-2.5-flash-image")
+        ?.imageOutput === true,
+);
+const fallbackSource = readFileSync(
+    path.join(root, "app/lib/model-catalog-fallback.ts"),
+    "utf8",
+);
+check(
+    "fallback has video entries",
+    fallbackSource.includes('"google/veo-3.1-generate-preview"') &&
+        fallbackSource.includes("videoOutput: true"),
+);
 
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} checks FAILED.`);
 process.exit(failures === 0 ? 0 : 1);

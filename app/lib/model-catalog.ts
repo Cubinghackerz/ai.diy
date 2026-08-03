@@ -43,6 +43,8 @@ export interface ModelCatalogEntry {
     reasoning?: boolean;
     structuredOutput?: boolean;
     vision?: boolean;
+    videoOutput?: boolean;
+    imageOutput?: boolean;
     context?: number;
     maxOutput?: number;
     cost?: CatalogCost;
@@ -95,6 +97,9 @@ export function normalizeCatalog(raw: RawModelCatalog): ModelCatalog {
             if (!m?.id) continue;
             const qualified = m.id.includes("/") ? m.id : `${mdProvider}/${m.id}`;
             const last = m.id.split("/").pop()?.toLowerCase() ?? "";
+            const outputModalities = Array.isArray(m.modalities?.output)
+                ? m.modalities.output
+                : [];
             const entry: ModelCatalogEntry = {
                 id: qualified,
                 name: m.name || m.id,
@@ -107,6 +112,8 @@ export function normalizeCatalog(raw: RawModelCatalog): ModelCatalog {
                     m.attachment === true ||
                     (Array.isArray(m.modalities?.input) &&
                         m.modalities.input.includes("image")),
+                videoOutput: outputModalities.includes("video"),
+                imageOutput: outputModalities.includes("image"),
                 context: m.limit?.context,
                 maxOutput: m.limit?.output,
                 cost:
@@ -243,5 +250,10 @@ export function mergeCatalogInfo(
         maxTokens: model.maxTokens ?? entry?.maxOutput,
         description: entry?.description,
         catalogEntry: entry,
+        supportsVideo:
+            model.supportsVideo ?? entry?.videoOutput === true,
+        supportsImageGeneration:
+            model.supportsImageGeneration ??
+            entry?.imageOutput === true,
     };
 }

@@ -625,6 +625,32 @@ const AssistantMessage: FC = () => {
                       </figcaption>
                     ) : null}
                   </figure>
+                ) : part.mimeType.startsWith("video/") ? (
+                  <figure className="my-3 max-w-2xl overflow-hidden rounded-2xl border border-border/70 bg-muted/30 shadow-sm">
+                    <video
+                      src={part.data}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      className="block max-h-[min(70vh,42rem)] w-full"
+                    >
+                      Your browser does not support video playback.
+                    </video>
+                    {part.filename ? (
+                      <figcaption className="border-t border-border/60 px-3 py-2 text-[11px] text-muted-foreground">
+                        {part.filename}
+                      </figcaption>
+                    ) : null}
+                  </figure>
+                ) : part.mimeType.startsWith("audio/") ? (
+                  <audio
+                    src={part.data}
+                    controls
+                    preload="metadata"
+                    className="my-2 max-w-2xl"
+                  >
+                    Your browser does not support audio playback.
+                  </audio>
                 ) : (
                   <a
                     href={part.data}

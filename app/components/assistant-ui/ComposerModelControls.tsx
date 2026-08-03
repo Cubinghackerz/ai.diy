@@ -6,15 +6,20 @@ import { ModelPicker } from "~/components/ui/ModelPicker";
 import { ProviderPicker } from "~/components/ui/ProviderPicker";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import { isProviderReady } from "~/lib/setup";
-import { resolveModel } from "~/lib/model-capabilities";
+import { getModelCapabilities, resolveModel } from "~/lib/model-capabilities";
 import type { ProviderId } from "~/lib/types";
 import { type FC } from "react";
+import { VideoCamera } from "@phosphor-icons/react";
 import { ReasoningEffortSelector } from "~/components/assistant-ui/ReasoningEffortSelector";
 import { ImageModelControls } from "~/components/assistant-ui/ImageModelControls";
 
 export const ComposerModelControls: FC = () => {
     const { settings, updateChat } = useSettings();
     const providerReady = isProviderReady(settings);
+    const video = getModelCapabilities(
+        settings.chat.model,
+        settings.chat.provider,
+    ).video;
 
     return (
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 pe-2">
@@ -52,6 +57,15 @@ export const ComposerModelControls: FC = () => {
 
             <ReasoningEffortSelector />
             <ImageModelControls />
+            {video ? (
+                <span
+                    title="This model generates videos. Sending a message starts a video generation."
+                    className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-border/70 px-2 text-[11px] font-medium text-muted-foreground"
+                >
+                    <VideoCamera size={14} weight="duotone" className="text-primary" />
+                    <span className="hidden sm:inline">Video</span>
+                </span>
+            ) : null}
         </div>
     );
 };

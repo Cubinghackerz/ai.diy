@@ -130,9 +130,23 @@ Do not label a custom model as vision-, tool-, embedding-, or structured-output-
 
 ### Model Info Hover Cards
 
-- Hovering any model in the chat header picker or the settings model selector shows a card with the model's description, capability badges (tools, vision, reasoning, structured output, image generation), context window, and estimated pricing.
+- Hovering any model in the chat header picker or the settings model selector shows a card with the model's description, capability badges (tools, vision, reasoning, structured output, image and video generation), context window, and estimated pricing.
 - Descriptions, capabilities, context limits, and prices come from the open models.dev dataset, fetched at runtime and cached locally for 7 days, with a bundled snapshot of the built-in model catalog for offline use.
 - Prices are estimates per 1M tokens from models.dev; exact billing depends on your provider.
+
+### Model Icons
+
+- Providers and models show brand-colored letter logos in the provider picker, model pickers (trigger and dropdown), hover cards, and the Usage & cost model rows.
+- Logos are deterministic letter badges keyed by provider (OpenAI, Anthropic, Google/Gemini, Groq, DeepSeek, Bedrock, Azure, Vertex, OpenRouter/Gateway, Together, Mistral, Hugging Face, LM Studio, xAI, Ollama, custom) — no external logo requests, works offline.
+- For gateway/Together/Hugging Face models the qualifier prefix (e.g. `openai/`, `google/`) selects the brand, so `google/veo-3.1` shows the Google mark.
+
+### Video and Image Generation
+
+- Image-generation models (DALL·E, GPT Image, Imagen, FLUX, Grok Imagine, …) are auto-detected — sending a message runs an image generation and the result renders inline with a download caption.
+- Video-generation models (Veo 3.x, Kling, Seedance, Wan, Grok Imagine Video, …) are auto-detected from model id and the models.dev catalog; sending a message runs a video generation (supported on Gemini, Vertex, and Gateway providers) and the result renders as an inline playable video.
+- A **Video** chip appears in the composer when a video model is selected; video models carry a video-camera badge in pickers and hover cards.
+- Streaming responses that include audio/video/image file parts render inline rather than as raw download links.
+- Generated videos are stored locally with the chat (browser IndexedDB); very large files may hit browser storage quotas.
 
 ### Local Usage and Cost Tracking
 

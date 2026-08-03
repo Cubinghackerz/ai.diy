@@ -13,8 +13,35 @@ export type ModelCapabilities = {
     structuredOutputs: boolean;
     audio: boolean;
     imageGeneration: boolean;
+    video: boolean;
     streaming: boolean;
 };
+
+/** Does this model id look like a video-generation model? */
+export function inferModelSupportsVideo(
+    modelId: string,
+    provider?: ProviderId,
+): boolean {
+    const id = modelId.toLowerCase();
+    if (
+        /(?:^|[/:_-])(veo|kling|sora|runway|pixverse|seedance|wan[.\-_]|hailuo|hotshot|pika[.\-_]|minimax[.\-/]?h[0-9]|moviegen|video(?:[-_.]|$)|videogen)/.test(
+            id,
+        ) ||
+        /imagine[-_ ]?video|text[-_ ]?to[-_ ]?video|image[-_ ]?to[-_ ]?video|stable[-_ ]?video|gen-3|animate/.test(
+            id,
+        )
+    ) {
+        return true;
+    }
+    if (provider) {
+        const known = (DEFAULT_MODELS[provider] ?? []).find(
+            (m) => m.id === modelId,
+        );
+        if (known?.supportsVideo === true) return true;
+        if (known?.supportsVideo === false) return false;
+    }
+    return false;
+}
 
 /** Heuristic: does this model id look like a chat model with tool support? */
 export function inferModelSupportsTools(
@@ -99,6 +126,8 @@ export function enrichModelInfo(model: ModelInfo): ModelInfo {
         supportsImageGeneration:
             model.supportsImageGeneration ??
             inferModelSupportsImageGeneration(model.id, model.provider),
+        supportsVideo:
+            model.supportsVideo ?? inferModelSupportsVideo(model.id, model.provider),
         supportsStreaming: model.supportsStreaming ?? true,
     };
 }
@@ -153,6 +182,7 @@ export function getModelCapabilities(
         structuredOutputs: info.supportsStructuredOutputs === true,
         audio: info.supportsAudio === true,
         imageGeneration: info.supportsImageGeneration === true,
+        video: info.supportsVideo === true,
         streaming: info.supportsStreaming !== false,
     };
 }
