@@ -130,7 +130,6 @@ export interface AppSettings {
     /** Set true after the user finishes first-run key / model setup. */
     setupComplete: boolean;
     encryptionEnabled: boolean;
-    encryptionPassphrase: string | null;
     // Tool settings
     webSearchEnabled: boolean;
     webSearchEngine: "duckduckgo" | "searxng";
@@ -417,7 +416,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
     theme: "system",
     setupComplete: false,
     encryptionEnabled: false,
-    encryptionPassphrase: null,
     webSearchEnabled: true,
     webSearchEngine: "duckduckgo",
     searxngUrl: "",

@@ -11,8 +11,8 @@ ai.diy is built with React Router, assistant-ui, the Vercel AI SDK, Tailwind CSS
 
 This is a beta project. Features described as **available** are wired into the application. Features marked **planned** are intentionally not presented as working integrations.
 
-- Available: landing page, chat, provider setup, model discovery, local chat persistence, files, browser Python, search, connector-backed search, remote MCP, artifacts, local memory, voice dictation where the browser supports Web Speech, multi-model Preview, import/export of chats (ChatGPT, Claude, ShareGPT, Markdown, ai.diy JSON), and client-side S3/WebDAV/Google Drive backup and restore.
-- Coming soon: direct GitHub/Supabase/PostgreSQL adapters, encrypted browser-storage settings, in-app `ask_user` panels, and custom-provider capability probing.
+- Available: landing page, chat, provider setup, model discovery, local chat persistence, files, browser Python, search, connector-backed search, remote MCP, artifacts, local memory, voice dictation where the browser supports Web Speech, multi-model Preview, import/export of chats (ChatGPT, Claude, ShareGPT, Markdown, ai.diy JSON), client-side S3/WebDAV/Google Drive backup and restore, optional AES-GCM encrypted settings with a user passphrase, and local storage management with cleanup tools.
+- Coming soon: direct GitHub/Supabase/PostgreSQL adapters, in-app `ask_user` panels, and custom-provider capability probing.
 
 ## Quick Start
 
@@ -64,6 +64,8 @@ For a container to reach Ollama on the host, use a host-reachable base URL such 
 No provider API key is configured in server environment variables or persisted by the application server. The selected key is included in each browser-to-server chat or discovery request so the server can call the selected provider. Treat a hosted ai.diy instance as a service that can observe keys in transit, and only use deployments you trust.
 
 Settings, including provider keys, connector keys, and MCP headers, are persisted in browser localStorage. They are not encrypted at rest by the application today. Protect the browser profile and device, and do not use shared profiles for sensitive credentials.
+
+**Encryption (optional):** Users can enable AES-GCM encrypted settings in Settings → Encryption to store provider keys and app settings behind a passphrase-encrypted blob instead of plaintext. When enabled, you set a passphrase that encrypts/decrypts the settings on load; the passphrase itself is never stored. If the passphrase is lost, settings cannot be recovered and must be re-entered manually. If you lose your passphrase, you will need to clear browser data and reconfigure your providers from scratch.
 
 ## Available Features
 
@@ -147,6 +149,7 @@ Do not label a custom model as vision-, tool-, embedding-, or structured-output-
 - A **Video** chip appears in the composer when a video model is selected; video models carry a video-camera badge in pickers and hover cards.
 - Streaming responses that include audio/video/image file parts render inline rather than as raw download links.
 - Generated videos are stored locally with the chat (browser IndexedDB); very large files may hit browser storage quotas.
+- Note: image-generation models that are not explicitly marked as video-capable do not auto-generate video. Some providers may return video-capable model ids in generic response formats; the app relies on the models.dev catalog and provider metadata to determine capability. When in doubt, verify the model is listed as image-only before expecting video output.
 
 ### Local Usage and Cost Tracking
 
@@ -192,6 +195,23 @@ The composer displays Voice input only when the browser exposes the Web Speech R
 Chats, messages, artifacts, saved memory entries, and Preview sessions live in browser IndexedDB. The newest bounded historical memories are selected locally and automatically attached to provider system instructions, so provider tool-calling behavior is not required for memory to work. Saved memory is separate from active app preferences and the full archive is never injected automatically; the optional memory tool is available only when entries exist.
 
 Settings -> Memory (Beta) can import supported text/JSON memory exports and export the memory index. Settings -> Cloud storage (Beta, coming soon) can download a complete local JSON backup containing chats, artifacts, Preview sessions, and memories. This is a manual backup file today; automatic cloud upload and restore are not implemented.
+
+### Storage Management
+
+Settings -> Storage (Beta) provides visibility into and control over local browser storage usage:
+
+- **IndexedDB**: shows estimated usage from chat data, artifacts, Preview sessions, and memory. Provides a **Clear all artifacts** button that empties the chat database (deletes all chats, messages, files, and Preview sessions). This action cannot be undone.
+- **localStorage**: shows estimated usage from settings and preferences. Note that provider keys and other sensitive data are included in localStorage by default; enable optional encryption (see below) to store them behind a passphrase instead.
+- Warnings appear when usage approaches known browser storage quotas so you can proactively free space.
+
+### Encryption
+
+Settings -> Encryption (Beta) provides optional AES-GCM encryption for app settings stored in browser localStorage:
+
+- When enabled, you set a passphrase. Settings are encrypted with AES-256-GCM using a key derived via PBKDF2 (200,000 iterations) from the passphrase with a random salt. The passphrase is never stored — only a key-check verifier is persisted to confirm the passphrase on subsequent loads.
+- On app load with encryption enabled, a lock screen appears. Enter your passphrase to decrypt settings. The passphrase is kept in memory only during the session and is cleared on page reload or browser tab close.
+- If you lose your passphrase, your settings cannot be recovered automatically. You will need to clear browser data and re-enter your provider keys and preferences from scratch.
+- You can disable encryption at any time from Settings; doing so decrypts and stores settings back in plaintext.
 
 ### Import & Export
 

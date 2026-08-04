@@ -50,7 +50,7 @@ const DB_VERSION = 6;
 
 let dbPromise: Promise<IDBPDatabase<PrismiumDB>> | null = null;
 
-function getDB() {
+export function getDB() {
     if (typeof window === "undefined") return null;
     if (!dbPromise) {
         dbPromise = openDB<PrismiumDB>(DB_NAME, DB_VERSION, {
@@ -157,6 +157,12 @@ export async function deleteArtifactsForScope(scopeId: string): Promise<void> {
         cursor = await cursor.continue();
     }
     await tx.done;
+}
+
+export async function deleteAllArtifacts(): Promise<void> {
+    const db = await getDB();
+    if (!db) return;
+    await db.clear("artifacts");
 }
 
 export async function loadPreviewSession<T>(id: string): Promise<T | null> {
@@ -319,4 +325,88 @@ export async function saveModelCatalogCache(data: unknown): Promise<void> {
         data,
         updatedAt: Date.now(),
     });
+}
+
+/** Estimate the byte size of a value via structural serialization. */
+function estimateSize(value: unknown): number {
+    try {
+        return new Blob([JSON.stringify(value)]).size;
+    } catch {
+        return 0;
+    }
+}
+
+/** Estimate total IndexedDB usage broken down by object store. */
+export interface DbStoreUsage {
+    store: string;
+    count: number;
+    bytes: number;
+}
+
+export interface DbUsageSummary {
+    stores: DbStoreUsage[];
+    totalBytes: number;
+    totalCount: number;
+}
+
+export async function estimateDbUsage(): Promise<DbUsageSummary> {
+    const db = await getDB();
+    if (!db) {
+        return { stores: [], totalBytes: 0, totalCount: 0 };
+    }
+
+    const storeNames = [
+        "threads",
+        "messages",
+        "artifacts",
+        "previewSessions",
+        "memories",
+        "projects",
+        "modelCatalog",
+    ] as const;
+
+    const stores: DbStoreUsage[] = [];
+    let totalBytes = 0;
+    let totalCount = 0;
+
+    for (const storeName of storeNames) {
+        if (!db.objectStoreNames.contains(storeName)) continue;
+        const values = await db.getAll(storeName);
+        const bytes = values.reduce((sum, v) => sum + estimateSize(v), 0);
+        stores.push({
+            store: storeName,
+            count: values.length,
+            bytes,
+        });
+        totalBytes += bytes;
+        totalCount += values.length;
+    }
+
+    return { stores, totalBytes, totalCount };
+}
+
+/** Estimate localStorage usage (our own keys only). */
+export interface LocalStorageUsage {
+    key: string;
+    bytes: number;
+}
+
+export function estimateLocalStorageUsage(): LocalStorageUsage[] {
+    if (typeof window === "undefined") return [];
+    const results: LocalStorageUsage[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key?.startsWith("prismium-lite:")) continue;
+        const value = localStorage.getItem(key) ?? "";
+        results.push({ key, bytes: new Blob([value]).size });
+    }
+    return results;
+}
+
+/** Format bytes into a human-readable string. */
+export function formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KiB`;
+    if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MiB`;
+    return `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
 }

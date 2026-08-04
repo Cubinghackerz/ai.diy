@@ -14,6 +14,7 @@ import { CanvasPanel } from "~/components/canvas/CanvasPanel";
 import { ArtifactLauncher } from "~/components/canvas/ArtifactLauncher";
 import { AppSidebar } from "~/components/sidebar/AppSidebar";
 import { SetupGate, useNeedsSetup } from "~/components/setup/SetupGate";
+import { UnlockGate } from "~/components/setup/UnlockGate";
 import { CanvasProvider } from "~/lib/canvas";
 import { haptic, hapticSelect } from "~/lib/haptics";
 import { useSettings } from "~/lib/providers/SettingsProvider";
@@ -32,7 +33,7 @@ export default function Home() {
 }
 
 function HomeInner() {
-    const { loaded, settings } = useSettings();
+    const { loaded, locked, settings } = useSettings();
     const {
         threads,
         activeThreadId,
@@ -102,6 +103,10 @@ function HomeInner() {
                 Loading…
             </div>
         );
+    }
+
+    if (locked) {
+        return <UnlockGate />;
     }
 
     if (needsSetup) {

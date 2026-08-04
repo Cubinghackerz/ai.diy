@@ -40,6 +40,13 @@ import {
     getMemoryEntries,
     getThreadMessages,
     saveMemoryEntries,
+    estimateDbUsage,
+    estimateLocalStorageUsage,
+    formatBytes,
+    deleteThreadFromDB,
+    deleteAllArtifacts,
+    getDB,
+    type DbUsageSummary,
 } from "~/lib/db";
 import {
     aggregateUsage,
@@ -76,6 +83,8 @@ import {
     Plus,
     Pencil,
     Plug,
+    Shield,
+    ShieldCheck,
     SpinnerGap,
     Sun,
     Trash,
@@ -126,6 +135,8 @@ type SettingsSection =
     | "cloud"
     | "data"
     | "usage"
+    | "encryption"
+    | "storage"
     | "appearance";
 
 type ThreadItem = { id: string; title: string; projectId?: string | null };
@@ -885,6 +896,8 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
         { id: "cloud", label: "Cloud Storage Beta", icon: CloudArrowUp },
         { id: "data", label: "Import & Export", icon: UploadSimple },
         { id: "usage", label: "Usage & cost", icon: ChartBar },
+        { id: "encryption", label: "Encryption", icon: Shield },
+        { id: "storage", label: "Storage", icon: HardDrives },
         { id: "appearance", label: "Theme", icon: Sun },
     ];
 
@@ -1177,6 +1190,10 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
             {section === "data" && <DataInteropSection onImportComplete={onImportComplete} />}
 
             {section === "usage" && <UsageSection />}
+
+            {section === "encryption" && <EncryptionSettingsSection />}
+
+            {section === "storage" && <StorageSettingsSection />}
 
             {section === "appearance" && (
                 <div className="grid grid-cols-3 gap-2">
@@ -3468,8 +3485,511 @@ function UsageSection() {
                             ))}
                         </div>
                     </div>
+                    </>
+            )}
+        </div>
+    );
+}
+
+function EncryptionSettingsSection() {
+    const {
+        settings,
+        enableEncryption,
+        disableEncryption,
+    } = useSettings();
+    const [showPass, setShowPass] = useState(false);
+    const [newPassphrase, setNewPassphrase] = useState("");
+    const [confirmPassphrase, setConfirmPassphrase] = useState("");
+    const [status, setStatus] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [busy, setBusy] = useState(false);
+
+    const isEnabled = settings.encryptionEnabled;
+
+    const handleEnable = async () => {
+        if (!newPassphrase.trim()) {
+            setError("Enter a passphrase.");
+            return;
+        }
+        if (newPassphrase !== confirmPassphrase) {
+            setError("Passphrases do not match.");
+            return;
+        }
+        if (newPassphrase.length < 8) {
+            setError("Passphrase must be at least 8 characters.");
+            return;
+        }
+        setBusy(true);
+        setError(null);
+        setStatus(null);
+        try {
+            const ok = await enableEncryption(newPassphrase);
+            if (ok) {
+                setStatus("Encryption enabled. Your settings are now AES-GCM encrypted.");
+                setNewPassphrase("");
+                setConfirmPassphrase("");
+            } else {
+                setError("Failed to enable encryption.");
+            }
+        } catch (err) {
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : "Failed to enable encryption.",
+            );
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const handleDisable = async () => {
+        if (
+            !confirm(
+                "Disabling encryption will store your API keys and settings as plaintext in localStorage. Continue?",
+            )
+        ) {
+            return;
+        }
+        setBusy(true);
+        setError(null);
+        setStatus(null);
+        try {
+            await disableEncryption();
+            setStatus("Encryption disabled. Settings are now stored as plaintext.");
+        } catch (err) {
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : "Failed to disable encryption.",
+            );
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1">
+                <h3 className="text-xs font-semibold">Encryption</h3>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                    {isEnabled
+                        ? "Settings are encrypted with AES-GCM in your browser. The passphrase is never stored or sent to any server."
+                        : "Encrypt your API keys, provider settings, and preferences so they are stored as ciphertext in localStorage. You must re-enter your passphrase on every fresh load."}
+                </p>
+            </div>
+
+            {isEnabled ? (
+                <div className="flex flex-col gap-3">
+                    <div className="flex items-center gap-2 rounded-xl border border-success/20 bg-success/5 p-2.5 text-xs text-success">
+                        <ShieldCheck size={14} />
+                        Encryption is active. Settings are protected.
+                    </div>
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={busy}
+                        onClick={handleDisable}
+                        className="self-start rounded-xl"
+                    >
+                        Disable encryption
+                    </Button>
+                </div>
+            ) : (
+                <div className="flex flex-col gap-2.5 rounded-xl border border-border/70 p-2.5">
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                        Choose a strong passphrase. If you forget it, you can
+                        reset encryption from here — but this permanently
+                        removes your old encrypted settings.
+                    </p>
+                    <div className="relative">
+                        <Input
+                            type={showPass ? "text" : "password"}
+                            value={newPassphrase}
+                            onChange={(e) => setNewPassphrase(e.target.value)}
+                            placeholder="New passphrase"
+                            className="h-9 rounded-xl pr-10 font-mono text-xs"
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setShowPass((v) => !v)}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground"
+                            aria-label={showPass ? "Hide" : "Show"}
+                        >
+                            <Key size={14} />
+                        </button>
+                    </div>
+                    <Input
+                        type={showPass ? "text" : "password"}
+                        value={confirmPassphrase}
+                        onChange={(e) => setConfirmPassphrase(e.target.value)}
+                        placeholder="Confirm passphrase"
+                        className="h-9 rounded-xl font-mono text-xs"
+                    />
+                    <Button
+                        type="button"
+                        size="sm"
+                        disabled={busy || !newPassphrase.trim()}
+                        onClick={() => void handleEnable()}
+                        className="rounded-xl"
+                    >
+                        {busy ? "Encrypting…" : "Enable encryption"}
+                    </Button>
+                </div>
+            )}
+
+            {error ? (
+                <p className="flex items-start gap-1 text-[11px] text-destructive">
+                    <XCircle size={13} className="mt-0.5 shrink-0" />
+                    {error}
+                </p>
+            ) : null}
+            {status ? (
+                <p className="flex items-start gap-1 text-[11px] text-success">
+                    <CheckCircle size={13} className="mt-0.5 shrink-0" />
+                    {status}
+                </p>
+            ) : null}
+        </div>
+    );
+}
+
+function StorageSettingsSection() {
+    const [dbUsage, setDbUsage] = useState<DbUsageSummary | null>(null);
+    const [localUsage, setLocalUsage] = useState<
+        ReturnType<typeof estimateLocalStorageUsage>
+    >([]);
+    const [loading, setLoading] = useState(false);
+    const [status, setStatus] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [clearing, setClearing] = useState<string | null>(null);
+
+    const refreshUsage = useCallback(async () => {
+        setLoading(true);
+        try {
+            const db = await estimateDbUsage();
+            setDbUsage(db);
+            setLocalUsage(estimateLocalStorageUsage());
+        } catch (err) {
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : "Failed to estimate storage usage.",
+            );
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        void refreshUsage();
+    }, [refreshUsage]);
+
+    const totalBytes =
+        (dbUsage?.totalBytes ?? 0) +
+        localUsage.reduce((s, u) => s + u.bytes, 0);
+
+    const handleClearChats = async () => {
+        if (
+            !confirm(
+                "Delete ALL chat threads and their messages? This cannot be undone.",
+            )
+        )
+            return;
+        setClearing("chats");
+        setError(null);
+        setStatus(null);
+        try {
+            const threads = await getAllThreads();
+            for (const thread of threads) {
+                await deleteThreadFromDB(thread.id);
+            }
+            setStatus(`Cleared ${threads.length} chat threads.`);
+            await refreshUsage();
+        } catch (err) {
+            setError(
+                err instanceof Error ? err.message : "Failed to clear chats.",
+            );
+        } finally {
+            setClearing(null);
+        }
+    };
+
+    const handleClearArtifacts = async () => {
+        if (
+            !confirm("Delete ALL canvas artifacts? This cannot be undone.")
+        )
+            return;
+        setClearing("artifacts");
+        setError(null);
+        setStatus(null);
+        try {
+            await deleteAllArtifacts();
+            setStatus("Cleared all canvas artifacts.");
+            await refreshUsage();
+        } catch (err) {
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : "Failed to clear artifacts.",
+            );
+        } finally {
+            setClearing(null);
+        }
+    };
+
+    const handleClearMemory = async () => {
+        if (
+            !confirm("Delete ALL saved memories? This cannot be undone.")
+        )
+            return;
+        setClearing("memory");
+        setError(null);
+        setStatus(null);
+        try {
+            await clearMemoryEntries();
+            setStatus("Local memory cleared.");
+            await refreshUsage();
+        } catch (err) {
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : "Failed to clear memory.",
+            );
+        } finally {
+            setClearing(null);
+        }
+    };
+
+    const handleClearCatalog = async () => {
+        setClearing("catalog");
+        setError(null);
+        setStatus(null);
+        try {
+            const db = await getDB();
+            if (db) {
+                await db.clear("modelCatalog");
+            }
+            setStatus("Model catalog cache cleared.");
+            await refreshUsage();
+        } catch (err) {
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : "Failed to clear catalog.",
+            );
+        } finally {
+            setClearing(null);
+        }
+    };
+
+    const totalItems = dbUsage?.totalCount ?? 0;
+    const storeNames = dbUsage?.stores ?? [];
+    const quotaWarning =
+        totalBytes > 4.5 * 1024 ** 3
+            ? "Your local storage is approaching browser limits. Consider clearing unused data."
+            : null;
+
+    return (
+        <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1">
+                <h3 className="text-xs font-semibold">Storage</h3>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                    ai.diy stores all chats, messages, artifacts, memories, and
+                    the model catalog locally in your browser. This is entirely
+                    offline — nothing is uploaded except when you explicitly use
+                    cloud backup.
+                </p>
+            </div>
+
+            {loading ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <SpinnerGap size={14} className="animate-spin" />
+                    Scanning local storage…
+                </div>
+            ) : null}
+
+            {!loading && (
+                <>
+                    <div className="rounded-xl border border-border/70 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-medium">
+                                Total local usage
+                            </span>
+                            <span className="text-xs font-semibold">
+                                {formatBytes(totalBytes)}
+                            </span>
+                        </div>
+                        {totalItems > 0 && (
+                            <p className="mt-1 text-[10px] text-muted-foreground">
+                                {totalItems} record{totalItems === 1 ? "" : "s"} across IndexedDB and localStorage
+                            </p>
+                        )}
+                    </div>
+
+                    {quotaWarning ? (
+                        <div className="flex items-start gap-2 rounded-xl border border-warning/20 bg-warning/5 p-2.5 text-xs text-warning">
+                            <WarningCircle size={14} className="mt-0.5 shrink-0" />
+                            {quotaWarning}
+                        </div>
+                    ) : null}
+
+                    {storeNames.length > 0 && (
+                        <div className="flex flex-col gap-1.5">
+                            <h4 className="text-[11px] font-semibold text-muted-foreground">
+                                IndexedDB stores
+                            </h4>
+                            {storeNames.map((s) => (
+                                <div
+                                    key={s.store}
+                                    className="flex items-center justify-between gap-2 rounded-lg border border-border/60 px-2.5 py-1.5"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <HardDrives size={12} />
+                                        <span className="text-xs">
+                                            {s.store}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-3 text-xs">
+                                        <span className="text-muted-foreground">
+                                            {s.count}
+                                        </span>
+                                        <span className="w-20 text-right font-medium">
+                                            {formatBytes(s.bytes)}
+                                        </span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {localUsage.length > 0 && (
+                        <div className="flex flex-col gap-1.5">
+                            <h4 className="text-[11px] font-semibold text-muted-foreground">
+                                Browser storage keys
+                            </h4>
+                            {localUsage.map((u) => (
+                                <div
+                                    key={u.key}
+                                    className="flex items-center justify-between gap-2 rounded-lg border border-border/60 px-2.5 py-1.5"
+                                >
+                                    <span className="truncate text-xs">
+                                        {u.key}
+                                    </span>
+                                    <span className="text-xs font-medium">
+                                        {formatBytes(u.bytes)}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    <div className="flex flex-col gap-1.5">
+                        <h4 className="text-[11px] font-semibold text-muted-foreground">
+                            Quick clear
+                        </h4>
+                        <div className="flex flex-col gap-1.5">
+                            <button
+                                type="button"
+                                onClick={() => void handleClearCatalog()}
+                                disabled={clearing === "catalog"}
+                                className="flex items-center justify-between rounded-lg border border-border/60 px-2.5 py-2 text-left text-xs outline-none hover:bg-accent"
+                            >
+                                <span>Clear model catalog cache</span>
+                                {clearing === "catalog" ? (
+                                    <SpinnerGap
+                                        size={12}
+                                        className="animate-spin text-muted-foreground"
+                                    />
+                                ) : (
+                                    <Trash size={12} className="text-muted-foreground" />
+                                )}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void handleClearArtifacts()}
+                                disabled={clearing === "artifacts"}
+                                className="flex items-center justify-between rounded-lg border border-border/60 px-2.5 py-2 text-left text-xs outline-none hover:bg-accent"
+                            >
+                                <span>Clear all canvas artifacts</span>
+                                {clearing === "artifacts" ? (
+                                    <SpinnerGap
+                                        size={12}
+                                        className="animate-spin text-muted-foreground"
+                                    />
+                                ) : (
+                                    <Trash
+                                        size={12}
+                                        className="text-muted-foreground"
+                                    />
+                                )}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void handleClearMemory()}
+                                disabled={clearing === "memory"}
+                                className="flex items-center justify-between rounded-lg border border-border/60 px-2.5 py-2 text-left text-xs outline-none hover:bg-accent"
+                            >
+                                <span>Clear saved memories</span>
+                                {clearing === "memory" ? (
+                                    <SpinnerGap
+                                        size={12}
+                                        className="animate-spin text-muted-foreground"
+                                    />
+                                ) : (
+                                    <Trash
+                                        size={12}
+                                        className="text-muted-foreground"
+                                    />
+                                )}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleClearChats}
+                                disabled={clearing === "chats"}
+                                className="flex items-center justify-between rounded-lg border border-destructive/20 px-2.5 py-2 text-left text-xs outline-none hover:bg-destructive/5"
+                            >
+                                <span>Delete all chat history</span>
+                                {clearing === "chats" ? (
+                                    <SpinnerGap
+                                        size={12}
+                                        className="animate-spin text-destructive"
+                                    />
+                                ) : (
+                                    <Trash
+                                        size={12}
+                                        className="text-destructive"
+                                    />
+                                )}
+                            </button>
+                        </div>
+                    </div>
+
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void refreshUsage()}
+                        className="self-start rounded-xl"
+                    >
+                        <ArrowsClockwise size={12} />
+                        Refresh
+                    </Button>
                 </>
             )}
+
+            {status ? (
+                <p className="flex items-start gap-1 text-[11px] text-success">
+                    <CheckCircle size={13} className="mt-0.5 shrink-0" />
+                    {status}
+                </p>
+            ) : null}
+            {error ? (
+                <p className="flex items-start gap-1 text-[11px] text-destructive">
+                    <XCircle size={13} className="mt-0.5 shrink-0" />
+                    {error}
+                </p>
+            ) : null}
         </div>
     );
 }

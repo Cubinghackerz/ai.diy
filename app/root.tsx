@@ -8,7 +8,7 @@ import { SettingsProvider } from "~/lib/providers/SettingsProvider";
 import { TooltipProvider } from "~/components/ui/tooltip";
 import "~/styles/app.css";
 
-const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem('prismium-lite:settings');var theme=t?JSON.parse(t).theme:'system';if(theme==='dark'||(theme==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){}})();`;
+const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem('prismium-lite:settings-meta');var theme=t?JSON.parse(t).theme:'system';if(theme==='dark'||(theme==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){}})();`;
 
 export const meta: MetaFunction = () => [
     { name: "color-scheme", content: "dark light" },
