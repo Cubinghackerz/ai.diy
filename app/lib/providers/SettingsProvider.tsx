@@ -100,6 +100,8 @@ function mergeSettings(parsed: Partial<AppSettings>): AppSettings {
         },
         connectors: parsed.connectors ?? [],
         customSkills: parsed.customSkills ?? [],
+        customPrompts: parsed.customPrompts ?? [],
+        customAgents: parsed.customAgents ?? [],
         cloudStorage: {
             ...DEFAULT_SETTINGS.cloudStorage,
             ...parsed.cloudStorage,

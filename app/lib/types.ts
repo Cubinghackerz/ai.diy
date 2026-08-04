@@ -140,11 +140,17 @@ export interface AppSettings {
     skillsEnabled: boolean;
     /** Beta: let the model delegate subtasks to user-approved subagents. */
     subagentsEnabled: boolean;
+    /** Experimental: enable the local browser embedding engine. */
+    embeddingsEnabled: boolean;
     preview: PreviewSettings;
     // MCP settings
     mcpServers: McpServerConfig[];
     connectors: ConnectorConfig[];
     customSkills: CustomSkill[];
+    /** User-created prompt templates (shown alongside built-ins in the slash menu). */
+    customPrompts: PromptTemplate[];
+    /** User-created agents (shown alongside built-ins in the slash menu). */
+    customAgents: Agent[];
     cloudStorage: import("./cloud-storage/types").CloudStorageConfig;
 }
 
@@ -424,6 +430,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     memoryEnabled: true,
     skillsEnabled: true,
     subagentsEnabled: false,
+    embeddingsEnabled: false,
     preview: {
         enabled: false,
         primaryModels: [],
@@ -432,6 +439,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     mcpServers: FREE_SEARCH_MCP_PRESETS,
     connectors: [],
     customSkills: [],
+    customPrompts: [],
+    customAgents: [],
     cloudStorage: {
         kind: "none",
         autoBackup: false,
@@ -608,6 +617,27 @@ export const PREBUILT_AGENTS: Agent[] = [
         avatar: "✍️",
         systemPrompt: "You are a master copywriter and technical communicator. Craft clear, persuasive, and beautifully formatted content tailored to the audience.",
     },
+    {
+        id: "english-editor",
+        name: "English Editor & Proofreader",
+        description: "Polishes writing for clarity, grammar, and style without changing meaning",
+        avatar: "📝",
+        systemPrompt: "You are a meticulous English editor and proofreader. Improve clarity, grammar, punctuation, and style while preserving the author's voice and meaning exactly. When asked to edit, return the corrected text with a short list of the most important changes and why. Never invent or add facts.",
+    },
+    {
+        id: "math-tutor",
+        name: "Patient Math Tutor",
+        description: "Explains math concepts step by step and checks understanding",
+        avatar: "🧮",
+        systemPrompt: "You are a patient math tutor. Explain concepts step by step, always ask what level the learner is at, use concrete examples, verify each step before moving on, and never skip the reasoning. Encourage the learner to work problems themselves rather than only watching.",
+    },
+    {
+        id: "product-manager",
+        name: "Product Manager",
+        description: "Turns ideas into requirements, specs, and prioritized plans",
+        avatar: "🎯",
+        systemPrompt: "You are an experienced product manager. Help shape ideas into clear problem statements, user stories, acceptance criteria, and prioritized roadmaps. Push back on vague requirements, ask clarifying questions, and prefer concrete, testable outcomes.",
+    },
 ];
 
 // ─── Prebuilt Prompt Templates ───────────────────────────────────
@@ -626,9 +656,75 @@ export const PREBUILT_PROMPTS: PromptTemplate[] = [
         content: "Refactor the following code to make it more readable, efficient, and follow TypeScript best practices:\n\n```\n{{code}}\n```",
     },
     {
+        id: "code-review",
+        title: "Review Code for Bugs",
+        category: "Coding",
+        content: "Act as a senior code reviewer. Review the code below for bugs, security issues, performance problems, and edge cases. List each issue with severity and a concrete fix.\n\n```\n{{code}}\n```",
+    },
+    {
+        id: "write-tests",
+        title: "Write Unit Tests",
+        category: "Coding",
+        content: "Write comprehensive unit tests for the code below. Cover happy paths, error cases, and edge cases. Use the existing test framework and conventions.\n\n```\n{{code}}\n```",
+    },
+    {
         id: "summarize-url",
         title: "Summarize Web Page",
         category: "Research",
         content: "Fetch the content from {{url}} and provide a 5-bullet executive summary with key takeaways.",
+    },
+    {
+        id: "pros-cons",
+        title: "Pros and Cons Analysis",
+        category: "Thinking",
+        content: "Analyze the pros and cons of {{topic}}. Structure the response with clear arguments for and against, then give a balanced recommendation.",
+    },
+    {
+        id: "brainstorm",
+        title: "Brainstorm Ideas",
+        category: "Thinking",
+        content: "Brainstorm {{count}} creative ideas for {{topic}}. For each idea, give a one-line description and note what makes it distinctive.",
+    },
+    {
+        id: "first-principles",
+        title: "First-Principles Thinking",
+        category: "Thinking",
+        content: "Break down {{problem}} from first principles. Question every assumption, decompose the problem into fundamentals, and reason from there to a solution.",
+    },
+    {
+        id: "explain-simply",
+        title: "Explain Simply",
+        category: "Learning",
+        content: "Explain {{topic}} as if I were a smart 12-year-old with no prior knowledge. Use analogies, avoid jargon, and end with one sentence that captures the essence.",
+    },
+    {
+        id: "study-guide",
+        title: "Create a Study Guide",
+        category: "Learning",
+        content: "Create a concise study guide for {{topic}}. Include key concepts, definitions, common misconceptions, and 5 practice questions with answers.",
+    },
+    {
+        id: "blog-draft",
+        title: "Draft a Blog Post",
+        category: "Writing",
+        content: "Write a blog post about {{topic}} for {{audience}}. Use a hook opening, clear section headings, concrete examples, and a memorable conclusion. Keep it around {{words}} words.",
+    },
+    {
+        id: "rewrite-tone",
+        title: "Rewrite for Tone",
+        category: "Writing",
+        content: "Rewrite the text below to be {{tone}} while preserving all factual content and meaning:\n\n{{text}}",
+    },
+    {
+        id: "summarize-meeting",
+        title: "Summarize Meeting Notes",
+        category: "Productivity",
+        content: "Turn these meeting notes into a clean summary with decisions made, action items with owners, and open questions:\n\n{{notes}}",
+    },
+    {
+        id: "email-draft",
+        title: "Draft an Email",
+        category: "Productivity",
+        content: "Draft a professional email about {{topic}} to {{recipient}}. Keep it concise, warm, and action-oriented, with a clear subject line.",
     },
 ];

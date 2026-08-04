@@ -29,6 +29,7 @@ import {
     readLocalMemory,
 } from "~/lib/memory";
 import { askUserInBrowser } from "~/lib/client-tools";
+import { findActiveAgent } from "~/lib/agents";
 import { forcedSkillStore } from "~/lib/skill-command";
 import { useSubagent } from "~/components/assistant-ui/subagents";
 import {
@@ -93,6 +94,7 @@ export function AssistantRuntimeProvider({
                         memoryEnabled && (await hasLocalMemoryEntries());
                     const forcedSkill = forcedSkillStore.current;
                     forcedSkillStore.current = null;
+                    const activeAgent = findActiveAgent(s);
                     return {
                         body: {
                             // Keep assistant-ui forwarded context (tools/system/etc).
@@ -114,6 +116,9 @@ export function AssistantRuntimeProvider({
                             openAICompatible: providerConfig?.openAICompatible,
                              systemPrompt: s.chat.systemPrompt,
                              projectInstructions: projectInstructionsRef.current || undefined,
+                             agent: activeAgent
+                                 ? { name: activeAgent.name, content: activeAgent.systemPrompt }
+                                 : undefined,
                             temperature: s.chat.temperature,
                             maxTokens: s.chat.maxTokens,
                             topP: s.chat.topP,

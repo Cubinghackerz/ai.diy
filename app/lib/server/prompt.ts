@@ -68,6 +68,7 @@ export function buildChatSystemPrompt(
     activeSkill?: { name: string; content: string },
     role: "main" | "subagent" = "main",
     projectInstructions?: string,
+    agent?: { name: string; content: string },
 ): string {
     const now = new Date();
     const dateLine = `Current date and time: ${now.toISOString()} (UTC). Today's date: ${now.toLocaleDateString("en-US", {
@@ -94,6 +95,9 @@ export function buildChatSystemPrompt(
     const project = projectInstructions?.trim()
         ? `\n\nProject instructions for this conversation:\n---\n${projectInstructions.trim().slice(0, 16_000)}\n---\nApply these instructions to chats in this project while following the current user request and higher-priority system rules.`
         : "";
+    const agentBlock = agent?.content?.trim()
+        ? `\n\nActive agent: ${agent.name}\n---\n${agent.content.trim().slice(0, 16_000)}\n---\nAct in the role defined above for this conversation. The agent defines the approach and tone; the current user request and higher-priority system rules still take precedence.`
+        : "";
     const subagent = role === "subagent" ? SUBAGENT_PROMPT : "";
-    return `${dateLine}\n\n${body}${project}${TOOL_EFFICIENCY_PROMPT}${memory}${skill}${subagent}`;
+    return `${dateLine}\n\n${body}${project}${agentBlock}${TOOL_EFFICIENCY_PROMPT}${memory}${skill}${subagent}`;
 }

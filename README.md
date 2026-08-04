@@ -235,6 +235,10 @@ Settings -> Cloud Storage performs fully client-side chat backup to the storage 
 
 Settings -> Experimental enables a workspace that runs one to three model configurations in parallel. After primary runs finish, an optional fusion model can synthesize their outputs. Preview tabs retain their own messages, artifacts, tool calls, and upload compatibility handling in IndexedDB.
 
+### Local Embeddings Beta
+
+Settings -> Experimental -> Local embeddings (Beta) enables the Phase A browser embedding foundation. The first local check downloads a quantized MiniLM model, caches it in the browser, and stores generated vectors in IndexedDB. Text and vectors remain local; this feature does not send content or provider keys to ai.diy. Disable the toggle to release the in-memory model while retaining the browser cache.
+
 ## Integrations
 
 ### Search Connectors

@@ -7,6 +7,13 @@ import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { ThreadData, MessageData, MemoryEntry, Project } from "~/lib/types";
 import type { Artifact } from "~/lib/canvas";
 
+export interface EmbeddingCacheEntry {
+    key: string;
+    text: string;
+    vector: Float32Array;
+    createdAt: number;
+}
+
 interface PrismiumDB extends DBSchema {
     threads: {
         key: string;
@@ -43,10 +50,16 @@ interface PrismiumDB extends DBSchema {
         value: { id: string; data: unknown; updatedAt: number };
         indexes: { "by-updated": number };
     };
+    embeddings: {
+        key: string;
+        value: EmbeddingCacheEntry;
+        indexes: { "by-created": number };
+    };
 }
 
 const DB_NAME = "prismium-lite-db";
-const DB_VERSION = 6;
+const DB_VERSION = 7;
+const MAX_EMBEDDING_CACHE_ENTRIES = 5000;
 
 let dbPromise: Promise<IDBPDatabase<PrismiumDB>> | null = null;
 
@@ -95,6 +108,12 @@ export function getDB() {
                         keyPath: "id",
                     });
                     catalogStore.createIndex("by-updated", "updatedAt");
+                }
+                if (!db.objectStoreNames.contains("embeddings")) {
+                    const embeddingStore = db.createObjectStore("embeddings", {
+                        keyPath: "key",
+                    });
+                    embeddingStore.createIndex("by-created", "createdAt");
                 }
             },
         });
@@ -363,6 +382,7 @@ export async function estimateDbUsage(): Promise<DbUsageSummary> {
         "memories",
         "projects",
         "modelCatalog",
+        "embeddings",
     ] as const;
 
     const stores: DbStoreUsage[] = [];
@@ -383,6 +403,39 @@ export async function estimateDbUsage(): Promise<DbUsageSummary> {
     }
 
     return { stores, totalBytes, totalCount };
+}
+
+export async function getEmbeddingCacheEntry(
+    key: string,
+): Promise<EmbeddingCacheEntry | null> {
+    const db = await getDB();
+    if (!db) return null;
+    return (await db.get("embeddings", key)) ?? null;
+}
+
+export async function saveEmbeddingCacheEntry(entry: EmbeddingCacheEntry): Promise<void> {
+    const db = await getDB();
+    if (!db) return;
+    const tx = db.transaction("embeddings", "readwrite");
+    await tx.store.put(entry);
+    while ((await tx.store.count()) > MAX_EMBEDDING_CACHE_ENTRIES) {
+        const oldest = await tx.store.index("by-created").openCursor();
+        if (!oldest) break;
+        await oldest.delete();
+    }
+    await tx.done;
+}
+
+export async function countEmbeddingCacheEntries(): Promise<number> {
+    const db = await getDB();
+    if (!db) return 0;
+    return db.count("embeddings");
+}
+
+export async function clearEmbeddingCacheEntries(): Promise<void> {
+    const db = await getDB();
+    if (!db) return;
+    await db.clear("embeddings");
 }
 
 /** Estimate localStorage usage (our own keys only). */

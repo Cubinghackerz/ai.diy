@@ -43,6 +43,7 @@ import {
 import {
     ArrowDownIcon,
     ArrowUpIcon,
+    BotIcon,
     CheckIcon,
     ChevronLeftIcon,
     ChevronRightIcon,
@@ -51,6 +52,7 @@ import {
     MicIcon,
     MoreHorizontalIcon,
     PencilIcon,
+    QuoteIcon,
     RefreshCwIcon,
     SparklesIcon,
     SquareIcon,
@@ -73,6 +75,13 @@ import {
     forcedSkillStore,
     type ForcedSkill,
 } from "~/lib/skill-command";
+import {
+    allAgents,
+    allPrompts,
+    findActiveAgent,
+    renderPromptTemplate,
+} from "~/lib/agents";
+import type { Agent, PromptTemplate } from "~/lib/types";
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 
@@ -283,10 +292,15 @@ const useComposerDraft = () => {
   return ctx;
 };
 
+type SlashItem =
+    | { kind: "skill"; skill: ForcedSkill }
+    | { kind: "prompt"; prompt: PromptTemplate }
+    | { kind: "agent"; agent: Agent };
+
 const ComposerInput: FC = () => {
   const { value, setText, send, isRunning, appliedSkill, setAppliedSkill } =
     useComposerDraft();
-  const { settings } = useSettings();
+  const { settings, updateChat } = useSettings();
   const disabled = useAuiState(
     (s) => s.thread.isDisabled || Boolean(s.composer.dictation?.inputDisabled),
   );
@@ -294,19 +308,44 @@ const ComposerInput: FC = () => {
   const [highlighted, setHighlighted] = useState(0);
 
   const commandActive = value.startsWith("/");
+  const query = commandActive ? value.slice(1).trim().toLowerCase() : "";
 
-  const skills = useMemo(() => {
-    if (!commandActive) return [];
-    const query = value.slice(1).trim().toLowerCase();
-    const custom = settings.customSkills
-      .filter((skill) => skill.enabled)
-      .map((skill) => ({ name: skill.name, content: skill.content }));
-    const all = [...custom, ...BUILTIN_FORCED_SKILLS];
-    const matches = query
-      ? all.filter((skill) => skill.name.toLowerCase().includes(query))
-      : all;
-    return matches.slice(0, 8);
-  }, [commandActive, settings.customSkills, value]);
+  const sectionData = useMemo(() => {
+    if (!commandActive) return { skills: [], prompts: [], agents: [] };
+    const matches = <T,>(list: T[], nameOf: (item: T) => string): T[] =>
+      query
+        ? list.filter((item) => nameOf(item).toLowerCase().includes(query))
+        : list;
+    const skills: SlashItem[] = matches(
+      [
+        ...settings.customSkills
+          .filter((skill) => skill.enabled)
+          .map((skill) => ({ name: skill.name, content: skill.content })),
+        ...BUILTIN_FORCED_SKILLS,
+      ],
+      (skill) => skill.name,
+    )
+      .slice(0, 6)
+      .map((skill) => ({ kind: "skill", skill }));
+    const prompts: SlashItem[] = matches(
+      allPrompts(settings),
+      (prompt) => `${prompt.title} ${prompt.category}`,
+    )
+      .slice(0, 6)
+      .map((prompt) => ({ kind: "prompt", prompt }));
+    const agents: SlashItem[] = matches(
+      allAgents(settings),
+      (agent) => `${agent.name} ${agent.description}`,
+    )
+      .slice(0, 6)
+      .map((agent) => ({ kind: "agent", agent }));
+    return { skills, prompts, agents };
+  }, [commandActive, query, settings]);
+
+  const flat: SlashItem[] = useMemo(
+    () => [...sectionData.skills, ...sectionData.prompts, ...sectionData.agents],
+    [sectionData],
+  );
 
   useEffect(() => {
     setMenuOpen(commandActive);
@@ -316,39 +355,140 @@ const ComposerInput: FC = () => {
     setHighlighted(0);
   }, [value]);
 
-  const applySkill = (skill: ForcedSkill) => {
-    forcedSkillStore.current = skill;
-    setAppliedSkill(skill);
-    setText("");
+  const applyItem = (item: SlashItem) => {
+    if (item.kind === "skill") {
+      forcedSkillStore.current = item.skill;
+      setAppliedSkill(item.skill);
+      setText("");
+    } else if (item.kind === "prompt") {
+      setText(renderPromptTemplate(item.prompt.content));
+    } else {
+      updateChat({ activeAgentId: item.agent.id });
+      setText("");
+    }
     setMenuOpen(false);
   };
 
+  const renderRow = (item: SlashItem, index: number) => {
+    const selected = highlighted === index;
+    const rowClass = `flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs outline-none ${
+      selected ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+    }`;
+    if (item.kind === "skill") {
+      return (
+        <button
+          key={`skill-${item.skill.name}`}
+          type="button"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            applyItem(item);
+          }}
+          onMouseEnter={() => setHighlighted(index)}
+          className={rowClass}
+        >
+          <SparklesIcon size={12} className="shrink-0 text-primary" />
+          <span className="truncate font-medium">{item.skill.name}</span>
+        </button>
+      );
+    }
+    if (item.kind === "prompt") {
+      return (
+        <button
+          key={`prompt-${item.prompt.id}`}
+          type="button"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            applyItem(item);
+          }}
+          onMouseEnter={() => setHighlighted(index)}
+          className={rowClass}
+        >
+          <QuoteIcon size={12} className="shrink-0 text-primary" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-medium">
+              {item.prompt.title}
+            </span>
+            {item.prompt.category ? (
+              <span className="block truncate text-[10px] opacity-70">
+                {item.prompt.category}
+              </span>
+            ) : null}
+          </span>
+        </button>
+      );
+    }
+    const active = settings.chat.activeAgentId === item.agent.id;
+    return (
+      <button
+        key={`agent-${item.agent.id}`}
+        type="button"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          applyItem(item);
+        }}
+        onMouseEnter={() => setHighlighted(index)}
+        className={rowClass}
+      >
+        <BotIcon size={12} className={`shrink-0 ${active ? "text-primary" : "text-muted-foreground"}`} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-medium">
+            {item.agent.name}
+            {active ? (
+              <span className="ml-1.5 rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+                Active
+              </span>
+            ) : null}
+          </span>
+          {item.agent.description ? (
+            <span className="block truncate text-[10px] opacity-70">
+              {item.agent.description}
+            </span>
+          ) : null}
+        </span>
+      </button>
+    );
+  };
+
+  const activeAgent = findActiveAgent(settings);
+
   return (
     <div className="relative">
-      {menuOpen && skills.length > 0 ? (
-        <div className="absolute bottom-full left-0 right-0 z-30 mb-1 max-h-56 overflow-y-auto rounded-xl border border-border bg-popover p-1 shadow-lg">
+      {menuOpen && flat.length > 0 ? (
+        <div className="absolute bottom-full left-0 right-0 z-30 mb-1 max-h-72 overflow-y-auto rounded-xl border border-border bg-popover p-1 shadow-lg">
           <p className="px-2 pb-1 pt-0.5 text-[10px] font-medium text-muted-foreground">
-            Force a skill — the AI must use it
+            Skills, prompts & agents — Tab to insert, Enter to apply
           </p>
-          {skills.map((skill, index) => (
-            <button
-              key={skill.name}
-              type="button"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                applySkill(skill);
-              }}
-              onMouseEnter={() => setHighlighted(index)}
-              className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs outline-none ${
-                highlighted === index
-                  ? "bg-accent text-foreground"
-                  : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-              }`}
-            >
-              <SparklesIcon size={12} className="shrink-0 text-primary" />
-              <span className="truncate font-medium">{skill.name}</span>
-            </button>
-          ))}
+          {sectionData.skills.length > 0 ? (
+            <>
+              <p className="px-2 pb-0.5 pt-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/70">
+                Skills — forced next message
+              </p>
+              {sectionData.skills.map((item, i) => renderRow(item, i))}
+            </>
+          ) : null}
+          {sectionData.prompts.length > 0 ? (
+            <>
+              <p className="px-2 pb-0.5 pt-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/70">
+                Prompts — insert template
+              </p>
+              {sectionData.prompts.map((item, i) =>
+                renderRow(item, sectionData.skills.length + i),
+              )}
+            </>
+          ) : null}
+          {sectionData.agents.length > 0 ? (
+            <>
+              <p className="px-2 pb-0.5 pt-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/70">
+                Agents — set chat persona
+              </p>
+              {sectionData.agents.map((item, i) =>
+                renderRow(
+                  item,
+                  sectionData.skills.length + sectionData.prompts.length + i,
+                ),
+              )}
+            </>
+          ) : null}
         </div>
       ) : null}
       <TextareaAutosize
@@ -357,7 +497,7 @@ const ComposerInput: FC = () => {
         maxRows={8}
         value={value}
         disabled={disabled}
-        placeholder="Send a message...  (type / to force a skill)"
+        placeholder="Send a message...  (type / for skills, prompts & agents)"
         className="aui-composer-input caret-foreground placeholder:text-muted-foreground/70 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none ring-0 shadow-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
         autoFocus
         enterKeyHint="send"
@@ -365,20 +505,20 @@ const ComposerInput: FC = () => {
         onChange={(e) => setText(e.target.value)}
         onBlur={() => setMenuOpen(false)}
         onKeyDown={(e) => {
-          if (menuOpen && skills.length > 0) {
+          if (menuOpen && flat.length > 0) {
             if (e.key === "ArrowDown") {
               e.preventDefault();
-              setHighlighted((h) => (h + 1) % skills.length);
+              setHighlighted((h) => (h + 1) % flat.length);
               return;
             }
             if (e.key === "ArrowUp") {
               e.preventDefault();
-              setHighlighted((h) => (h - 1 + skills.length) % skills.length);
+              setHighlighted((h) => (h - 1 + flat.length) % flat.length);
               return;
             }
             if (e.key === "Enter") {
               e.preventDefault();
-              applySkill(skills[highlighted]);
+              applyItem(flat[highlighted]);
               return;
             }
             if (e.key === "Escape") {
@@ -393,24 +533,41 @@ const ComposerInput: FC = () => {
           send();
         }}
       />
-      {appliedSkill ? (
-        <div className="flex items-center gap-1.5 px-1 pt-1">
-          <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-            <SparklesIcon size={10} />
-            <span className="truncate">Skill: {appliedSkill.name}</span>
-            <button
-              type="button"
-              aria-label="Clear forced skill"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                forcedSkillStore.current = null;
-                setAppliedSkill(null);
-              }}
-              className="ml-0.5 rounded-full p-0.5 outline-none hover:bg-primary/20"
-            >
-              <XIcon size={10} />
-            </button>
-          </span>
+      {appliedSkill || activeAgent ? (
+        <div className="flex flex-wrap items-center gap-1.5 px-1 pt-1">
+          {appliedSkill ? (
+            <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+              <SparklesIcon size={10} />
+              <span className="truncate">Skill: {appliedSkill.name}</span>
+              <button
+                type="button"
+                aria-label="Clear forced skill"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  forcedSkillStore.current = null;
+                  setAppliedSkill(null);
+                }}
+                className="ml-0.5 rounded-full p-0.5 outline-none hover:bg-primary/20"
+              >
+                <XIcon size={10} />
+              </button>
+            </span>
+          ) : null}
+          {activeAgent ? (
+            <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-border/70 bg-muted/60 px-2 py-0.5 text-[10px] font-medium text-foreground">
+              <BotIcon size={10} />
+              <span className="truncate">Agent: {activeAgent.name}</span>
+              <button
+                type="button"
+                aria-label="Clear active agent"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => updateChat({ activeAgentId: null })}
+                className="ml-0.5 rounded-full p-0.5 text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
+              >
+                <XIcon size={10} />
+              </button>
+            </span>
+          ) : null}
         </div>
       ) : null}
     </div>

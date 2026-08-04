@@ -31,6 +31,7 @@
         "@assistant-ui/store": "^0.3.2",
         "@base-ui/react": "^1.6.0",
         "@gsap/react": "^2.1.2",
+        "@huggingface/transformers": "^4.2.0",
         "@modelcontextprotocol/client": "^2.0.0",
         "@modelcontextprotocol/core": "^2.0.0",
         "@phosphor-icons/react": "^2.1.10",

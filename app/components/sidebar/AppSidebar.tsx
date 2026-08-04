@@ -18,6 +18,7 @@ import {
     FREE_SEARCH_MCP_PRESETS,
     PROJECT_COLORS,
     PROVIDER_DEFAULTS,
+    type Agent,
     type CustomSkill,
     type McpServerConfig,
     type ConnectorConfig,
@@ -25,8 +26,17 @@ import {
     type ModelInfo,
     type Project,
     type PreviewModelConfig,
+    type PromptTemplate,
     type ProviderId,
 } from "~/lib/types";
+import {
+    allAgents,
+    allPrompts,
+    findActiveAgent,
+    isBuiltinAgent,
+    isBuiltinPrompt,
+    renderPromptTemplate,
+} from "~/lib/agents";
 import { resolveModel } from "~/lib/model-capabilities";
 import { getReasoningEffortOptions } from "~/lib/reasoning";
 import {
@@ -49,6 +59,17 @@ import {
     type DbUsageSummary,
 } from "~/lib/db";
 import {
+    clearEmbeddingCache,
+    cosineSimilarity,
+    embedTexts,
+    EMBEDDING_MODEL_SIZE,
+    getEmbeddingCacheCount,
+    getEmbeddingStatus,
+    loadEmbeddingModel,
+    releaseEmbeddingModel,
+    subscribeEmbeddingStatus,
+} from "~/lib/embeddings";
+import {
     aggregateUsage,
     formatCost,
     formatTokens,
@@ -66,8 +87,11 @@ import {
     CaretRight,
     ChatCircleDots,
     CheckCircle,
+    Copy,
     Desktop,
     Brain,
+    BookOpen,
+    Robot,
     ChartBar,
     ArrowsClockwise,
     CloudArrowUp,
@@ -128,6 +152,8 @@ type SidebarPanel = "chats" | "settings";
 type SettingsSection =
     | "keys"
     | "tools"
+    | "prompts"
+    | "agents"
     | "mcp"
     | "experimental"
     | "memory"
@@ -886,9 +912,11 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
         id: SettingsSection;
         label: string;
         icon: typeof Key;
-    }[] = [
+    }[    ] = [
         { id: "keys", label: "API Keys", icon: Key },
         { id: "tools", label: "Tools", icon: Globe },
+        { id: "prompts", label: "Prompts", icon: BookOpen },
+        { id: "agents", label: "Agents", icon: Robot },
         { id: "mcp", label: "MCP Beta", icon: Plug },
         { id: "experimental", label: "Experimental", icon: Flask },
         { id: "memory", label: "Memory Beta", icon: Brain },
@@ -1074,6 +1102,10 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
                 </div>
             )}
 
+            {section === "prompts" && <PromptsSection />}
+
+            {section === "agents" && <AgentsSection />}
+
             {section === "mcp" && (
                 <div className="flex flex-col gap-3">
                     <p className="text-[11px] leading-relaxed text-muted-foreground">
@@ -1174,6 +1206,7 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
 
             {section === "experimental" && (
                 <div className="flex flex-col gap-3">
+                    <EmbeddingsSettingsSection />
                     <SubagentsSettingsSection />
                     <PreviewSettingsSection />
                 </div>
@@ -2465,6 +2498,856 @@ function CustomSkillsSection() {
                 <Plus size={13} />
                 Add skill
             </Button>
+        </div>
+    );
+}
+
+function parsePromptsImport(payload: unknown): PromptTemplate[] {
+    const list = Array.isArray(payload) ? payload : [payload];
+    const out: PromptTemplate[] = [];
+    for (const item of list) {
+        if (!item || typeof item !== "object") continue;
+        const record = item as Record<string, unknown>;
+        const title = typeof record.title === "string" ? record.title.trim() : "";
+        const content =
+            typeof record.content === "string" ? record.content.trim() : "";
+        if (!title || !content) continue;
+        out.push({
+            id: `prompt_${Date.now()}_${out.length}`,
+            title: title.slice(0, 120),
+            category:
+                typeof record.category === "string"
+                    ? record.category.trim().slice(0, 60)
+                    : "",
+            content,
+        });
+    }
+    return out;
+}
+
+function parseAgentsImport(payload: unknown): Agent[] {
+    const list = Array.isArray(payload) ? payload : [payload];
+    const out: Agent[] = [];
+    for (const item of list) {
+        if (!item || typeof item !== "object") continue;
+        const record = item as Record<string, unknown>;
+        const name = typeof record.name === "string" ? record.name.trim() : "";
+        const systemPrompt =
+            (typeof record.systemPrompt === "string"
+                ? record.systemPrompt.trim()
+                : "") ||
+            (typeof record.prompt === "string" ? record.prompt.trim() : "");
+        if (!name || !systemPrompt) continue;
+        out.push({
+            id: `agent_${Date.now()}_${out.length}`,
+            name: name.slice(0, 120),
+            description:
+                typeof record.description === "string"
+                    ? record.description.trim().slice(0, 300)
+                    : "",
+            avatar:
+                typeof record.avatar === "string" && record.avatar.trim()
+                    ? record.avatar.trim().slice(0, 4)
+                    : "🤖",
+            systemPrompt,
+            ...(typeof record.defaultProvider === "string"
+                ? { defaultProvider: record.defaultProvider as ProviderId }
+                : {}),
+            ...(typeof record.defaultModel === "string"
+                ? { defaultModel: record.defaultModel }
+                : {}),
+        });
+    }
+    return out;
+}
+
+function PromptsSection() {
+    const { settings, updateSettings } = useSettings();
+    const [name, setName] = useState("");
+    const [category, setCategory] = useState("");
+    const [content, setContent] = useState("");
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [status, setStatus] = useState<string | null>(null);
+    const fileRef = useRef<HTMLInputElement | null>(null);
+
+    const flashStatus = (message: string) => {
+        setStatus(message);
+        window.setTimeout(() => {
+            setStatus((current) => (current === message ? null : current));
+        }, 3000);
+    };
+
+    const resetForm = () => {
+        setName("");
+        setCategory("");
+        setContent("");
+        setEditingId(null);
+    };
+
+    const startEdit = (prompt: PromptTemplate) => {
+        setEditingId(prompt.id);
+        setName(prompt.title);
+        setCategory(prompt.category ?? "");
+        setContent(prompt.content);
+    };
+
+    const save = () => {
+        const trimmedName = name.trim();
+        const trimmedContent = content.trim();
+        if (!trimmedName || !trimmedContent) return;
+        if (editingId) {
+            updateSettings({
+                customPrompts: settings.customPrompts.map((prompt) =>
+                    prompt.id === editingId
+                        ? {
+                              ...prompt,
+                              title: trimmedName,
+                              category: category.trim(),
+                              content: trimmedContent,
+                          }
+                        : prompt,
+                ),
+            });
+        } else {
+            updateSettings({
+                customPrompts: [
+                    ...settings.customPrompts,
+                    {
+                        id: `prompt_${Date.now()}`,
+                        title: trimmedName,
+                        category: category.trim(),
+                        content: trimmedContent,
+                    },
+                ],
+            });
+        }
+        resetForm();
+        hapticConfirm();
+    };
+
+    const removePrompt = (id: string) => {
+        if (editingId === id) resetForm();
+        updateSettings({
+            customPrompts: settings.customPrompts.filter((prompt) => prompt.id !== id),
+        });
+    };
+
+    const copyPrompt = (prompt: PromptTemplate) => {
+        void navigator.clipboard?.writeText(
+            renderPromptTemplate(prompt.content),
+        ).then(
+            () =>
+                flashStatus(
+                    `Copied "${prompt.title}" — fill any {{placeholders}} before sending.`,
+                ),
+            () => flashStatus("Copy to clipboard failed."),
+        );
+    };
+
+    const importPrompts = async (file: File) => {
+        try {
+            const parsed = parsePromptsImport(
+                JSON.parse(await file.text()) as unknown,
+            );
+            if (parsed.length === 0) {
+                flashStatus("No usable prompts found in that file.");
+                return;
+            }
+            updateSettings({
+                customPrompts: [...settings.customPrompts, ...parsed],
+            });
+            flashStatus(`Imported ${parsed.length} prompt${parsed.length === 1 ? "" : "s"}.`);
+        } catch {
+            flashStatus("Could not read that file — expected a JSON array of prompts.");
+        }
+    };
+
+    const prompts = allPrompts(settings);
+
+    return (
+        <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-2">
+                <label className="text-[11px] font-medium text-muted-foreground">
+                    Prompt templates
+                </label>
+                <span className="text-[10px] text-muted-foreground">
+                    Type / in the composer to insert one
+                </span>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+                {prompts.map((prompt) => {
+                    const builtin = isBuiltinPrompt(prompt);
+                    return (
+                            <div
+                                key={prompt.id}
+                                className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-background px-2 py-1.5"
+                            >
+                                <div className="min-w-0">
+                                    <div className="truncate text-xs font-medium">
+                                        {prompt.title}
+                                    </div>
+                                    <div className="truncate text-[10px] text-muted-foreground">
+                                        {prompt.category || "Uncategorized"}
+                                        {builtin ? " · Built-in" : ""}
+                                    </div>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => copyPrompt(prompt)}
+                                        className="rounded-md p-1 text-muted-foreground outline-none hover:text-foreground"
+                                        aria-label={`Copy ${prompt.title}`}
+                                        title="Copy to clipboard"
+                                    >
+                                        <Copy size={13} />
+                                    </button>
+                                    {!builtin ? (
+                                        <>
+                                            <button
+                                                type="button"
+                                                onClick={() => startEdit(prompt)}
+                                                className="rounded-md p-1 text-muted-foreground outline-none hover:text-foreground"
+                                                aria-label={`Edit ${prompt.title}`}
+                                                title="Edit"
+                                            >
+                                                <Pencil size={13} />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => removePrompt(prompt.id)}
+                                                className="rounded-md p-1 text-muted-foreground outline-none hover:text-destructive"
+                                                aria-label={`Delete ${prompt.title}`}
+                                                title="Delete"
+                                            >
+                                                <Trash size={13} />
+                                            </button>
+                                        </>
+                                    ) : null}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+
+            <div className="flex flex-col gap-1.5 rounded-xl border border-border/70 p-2.5">
+                <div className="flex items-center justify-between gap-2">
+                    <label className="text-[11px] font-medium text-muted-foreground">
+                        {editingId ? "Edit prompt" : "New prompt"}
+                    </label>
+                    <div className="flex shrink-0 gap-1">
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 rounded-lg px-2 text-[11px]"
+                            onClick={() => fileRef.current?.click()}
+                        >
+                            <UploadSimple size={12} />
+                            Import
+                        </Button>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 rounded-lg px-2 text-[11px]"
+                            disabled={settings.customPrompts.length === 0}
+                            onClick={() =>
+                                downloadTextFile(
+                                    "ai-diy-prompts.json",
+                                    JSON.stringify(settings.customPrompts, null, 2),
+                                    "application/json",
+                                )
+                            }
+                        >
+                            <DownloadSimple size={12} />
+                            Export
+                        </Button>
+                    </div>
+                </div>
+                <input
+                    ref={fileRef}
+                    type="file"
+                    accept="application/json,.json"
+                    className="hidden"
+                    onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void importPrompts(file);
+                        e.target.value = "";
+                    }}
+                />
+                <Input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Prompt title"
+                    className="h-8 rounded-lg text-xs"
+                />
+                <Input
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    placeholder="Category (optional)"
+                    className="h-8 rounded-lg text-xs"
+                />
+                <textarea
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    placeholder="Template text — use {{variable}} placeholders, e.g. {{code}}"
+                    rows={4}
+                    className="h-auto w-full resize-none rounded-lg border border-border bg-background px-2 py-1.5 text-xs outline-none placeholder:text-muted-foreground"
+                />
+                <div className="flex gap-1.5">
+                    <Button
+                        type="button"
+                        size="sm"
+                        disabled={!name.trim() || !content.trim()}
+                        onClick={save}
+                        className="flex-1 rounded-lg"
+                    >
+                        <Plus size={13} />
+                        {editingId ? "Save changes" : "Add prompt"}
+                    </Button>
+                    {editingId ? (
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={resetForm}
+                            className="rounded-lg"
+                        >
+                            Cancel
+                        </Button>
+                    ) : null}
+                </div>
+            </div>
+
+            {status ? (
+                <p className="text-[10px] leading-relaxed text-muted-foreground">
+                    {status}
+                </p>
+            ) : null}
+        </div>
+    );
+}
+
+function AgentsSection() {
+    const { settings, updateChat, updateSettings } = useSettings();
+    const [name, setName] = useState("");
+    const [description, setDescription] = useState("");
+    const [systemPrompt, setSystemPrompt] = useState("");
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [status, setStatus] = useState<string | null>(null);
+    const fileRef = useRef<HTMLInputElement | null>(null);
+
+    const flashStatus = (message: string) => {
+        setStatus(message);
+        window.setTimeout(() => {
+            setStatus((current) => (current === message ? null : current));
+        }, 3000);
+    };
+
+    const resetForm = () => {
+        setName("");
+        setDescription("");
+        setSystemPrompt("");
+        setEditingId(null);
+    };
+
+    const startEdit = (agent: Agent) => {
+        setEditingId(agent.id);
+        setName(agent.name);
+        setDescription(agent.description);
+        setSystemPrompt(agent.systemPrompt);
+    };
+
+    const save = () => {
+        const trimmedName = name.trim();
+        const trimmedPrompt = systemPrompt.trim();
+        if (!trimmedName || !trimmedPrompt) return;
+        if (editingId) {
+            updateSettings({
+                customAgents: settings.customAgents.map((agent) =>
+                    agent.id === editingId
+                        ? {
+                              ...agent,
+                              name: trimmedName,
+                              description: description.trim(),
+                              systemPrompt: trimmedPrompt,
+                          }
+                        : agent,
+                ),
+            });
+        } else {
+            updateSettings({
+                customAgents: [
+                    ...settings.customAgents,
+                    {
+                        id: `agent_${Date.now()}`,
+                        name: trimmedName,
+                        description: description.trim(),
+                        avatar: "🤖",
+                        systemPrompt: trimmedPrompt,
+                    },
+                ],
+            });
+        }
+        resetForm();
+        hapticConfirm();
+    };
+
+    const removeAgent = (id: string) => {
+        if (editingId === id) resetForm();
+        if (settings.chat.activeAgentId === id) {
+            updateChat({ activeAgentId: null });
+        }
+        updateSettings({
+            customAgents: settings.customAgents.filter((agent) => agent.id !== id),
+        });
+    };
+
+    const toggleAgent = (agent: Agent) => {
+        if (settings.chat.activeAgentId === agent.id) {
+            updateChat({ activeAgentId: null });
+        } else {
+            updateChat({ activeAgentId: agent.id });
+        }
+        hapticSelect();
+    };
+
+    const importAgents = async (file: File) => {
+        try {
+            const parsed = parseAgentsImport(
+                JSON.parse(await file.text()) as unknown,
+            );
+            if (parsed.length === 0) {
+                flashStatus("No usable agents found in that file.");
+                return;
+            }
+            updateSettings({
+                customAgents: [...settings.customAgents, ...parsed],
+            });
+            flashStatus(`Imported ${parsed.length} agent${parsed.length === 1 ? "" : "s"}.`);
+        } catch {
+            flashStatus("Could not read that file — expected a JSON array of agents.");
+        }
+    };
+
+    const agents = allAgents(settings);
+    const activeAgent = findActiveAgent(settings);
+
+    return (
+        <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-2">
+                <label className="text-[11px] font-medium text-muted-foreground">
+                    Chat agents
+                </label>
+                <span className="text-[10px] text-muted-foreground">
+                    Type / in the composer to switch
+                </span>
+            </div>
+
+            {activeAgent ? (
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2">
+                    <div className="min-w-0">
+                        <div className="truncate text-xs font-semibold text-foreground">
+                            {activeAgent.avatar} {activeAgent.name}
+                        </div>
+                        {activeAgent.description ? (
+                            <div className="truncate text-[10px] text-muted-foreground">
+                                {activeAgent.description}
+                            </div>
+                        ) : null}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            updateChat({ activeAgentId: null });
+                            hapticSelect();
+                        }}
+                        className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground outline-none hover:bg-background hover:text-foreground"
+                    >
+                        Stop using
+                    </button>
+                </div>
+            ) : (
+                <p className="text-[10px] leading-relaxed text-muted-foreground">
+                    An active agent's instructions are appended to every chat
+                    request in this workspace until you switch or stop it.
+                </p>
+            )}
+
+            <div className="flex flex-col gap-1.5">
+                {agents.map((agent) => {
+                    const builtin = isBuiltinAgent(agent);
+                    const active = settings.chat.activeAgentId === agent.id;
+                    return (
+                            <div
+                                key={agent.id}
+                                className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-background px-2 py-1.5"
+                            >
+                                <div className="flex min-w-0 items-center gap-2">
+                                    <span className="shrink-0 text-sm">
+                                        {agent.avatar}
+                                    </span>
+                                    <div className="min-w-0">
+                                        <div className="truncate text-xs font-medium">
+                                            {agent.name}
+                                            {active ? (
+                                                <span className="ml-1.5 rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+                                                    Active
+                                                </span>
+                                            ) : null}
+                                        </div>
+                                        {agent.description ? (
+                                            <div className="truncate text-[10px] text-muted-foreground">
+                                                {agent.description}
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleAgent(agent)}
+                                        className={cn(
+                                            "rounded-md px-1.5 py-0.5 text-[10px] font-medium outline-none",
+                                            active
+                                                ? "bg-primary/15 text-primary"
+                                                : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground",
+                                        )}
+                                    >
+                                        {active ? "Active" : "Use"}
+                                    </button>
+                                    {!builtin ? (
+                                        <>
+                                            <button
+                                                type="button"
+                                                onClick={() => startEdit(agent)}
+                                                className="rounded-md p-1 text-muted-foreground outline-none hover:text-foreground"
+                                                aria-label={`Edit ${agent.name}`}
+                                                title="Edit"
+                                            >
+                                                <Pencil size={13} />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => removeAgent(agent.id)}
+                                                className="rounded-md p-1 text-muted-foreground outline-none hover:text-destructive"
+                                                aria-label={`Delete ${agent.name}`}
+                                                title="Delete"
+                                            >
+                                                <Trash size={13} />
+                                            </button>
+                                        </>
+                                    ) : null}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+
+            <div className="flex flex-col gap-1.5 rounded-xl border border-border/70 p-2.5">
+                <div className="flex items-center justify-between gap-2">
+                    <label className="text-[11px] font-medium text-muted-foreground">
+                        {editingId ? "Edit agent" : "New agent"}
+                    </label>
+                    <div className="flex shrink-0 gap-1">
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 rounded-lg px-2 text-[11px]"
+                            onClick={() => fileRef.current?.click()}
+                        >
+                            <UploadSimple size={12} />
+                            Import
+                        </Button>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 rounded-lg px-2 text-[11px]"
+                            disabled={settings.customAgents.length === 0}
+                            onClick={() =>
+                                downloadTextFile(
+                                    "ai-diy-agents.json",
+                                    JSON.stringify(settings.customAgents, null, 2),
+                                    "application/json",
+                                )
+                            }
+                        >
+                            <DownloadSimple size={12} />
+                            Export
+                        </Button>
+                    </div>
+                </div>
+                <input
+                    ref={fileRef}
+                    type="file"
+                    accept="application/json,.json"
+                    className="hidden"
+                    onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void importAgents(file);
+                        e.target.value = "";
+                    }}
+                />
+                <Input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Agent name"
+                    className="h-8 rounded-lg text-xs"
+                />
+                <Input
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Short description (optional)"
+                    className="h-8 rounded-lg text-xs"
+                />
+                <textarea
+                    value={systemPrompt}
+                    onChange={(e) => setSystemPrompt(e.target.value)}
+                    placeholder="System prompt defining the agent's role, tone, and approach"
+                    rows={5}
+                    className="h-auto w-full resize-none rounded-lg border border-border bg-background px-2 py-1.5 text-xs outline-none placeholder:text-muted-foreground"
+                />
+                <div className="flex gap-1.5">
+                    <Button
+                        type="button"
+                        size="sm"
+                        disabled={!name.trim() || !systemPrompt.trim()}
+                        onClick={save}
+                        className="flex-1 rounded-lg"
+                    >
+                        <Plus size={13} />
+                        {editingId ? "Save changes" : "Add agent"}
+                    </Button>
+                    {editingId ? (
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={resetForm}
+                            className="rounded-lg"
+                        >
+                            Cancel
+                        </Button>
+                    ) : null}
+                </div>
+            </div>
+
+            {status ? (
+                <p className="text-[10px] leading-relaxed text-muted-foreground">
+                    {status}
+                </p>
+            ) : null}
+        </div>
+    );
+}
+
+function EmbeddingsSettingsSection() {
+    const { settings, updateSettings } = useSettings();
+    const [status, setStatus] = useState(getEmbeddingStatus());
+    const [cacheCount, setCacheCount] = useState<number | null>(null);
+    const [testText, setTestText] = useState("Find notes about offline AI conversations.");
+    const [testResult, setTestResult] = useState<{
+        dimensions: number;
+        related: number;
+        unrelated: number;
+    } | null>(null);
+    const [testError, setTestError] = useState<string | null>(null);
+    const [testing, setTesting] = useState(false);
+
+    useEffect(() => {
+        setStatus(getEmbeddingStatus());
+        return subscribeEmbeddingStatus(setStatus);
+    }, []);
+
+    useEffect(() => {
+        if (!settings.embeddingsEnabled) {
+            setCacheCount(null);
+            return;
+        }
+        let active = true;
+        void getEmbeddingCacheCount().then((count) => {
+            if (active) setCacheCount(count);
+        });
+        return () => {
+            active = false;
+        };
+    }, [settings.embeddingsEnabled]);
+
+    const handleLoad = async () => {
+        setTestError(null);
+        try {
+            if (getEmbeddingStatus().state === "ready") await releaseEmbeddingModel();
+            await loadEmbeddingModel();
+        } catch (error) {
+            setTestError(error instanceof Error ? error.message : "Could not load the model.");
+        }
+    };
+
+    const handleToggle = (enabled: boolean) => {
+        updateSettings({ embeddingsEnabled: enabled });
+        if (!enabled) void releaseEmbeddingModel();
+    };
+
+    const handleClearCache = async () => {
+        setTestError(null);
+        try {
+            await clearEmbeddingCache();
+            setCacheCount(0);
+            setTestResult(null);
+        } catch (error) {
+            setTestError(error instanceof Error ? error.message : "Could not clear vectors.");
+        }
+    };
+
+    const handleTest = async () => {
+        setTesting(true);
+        setTestError(null);
+        setTestResult(null);
+        try {
+            const [query, related, unrelated] = await embedTexts([
+                testText,
+                "Search my local AI chat notes",
+                "A recipe for banana bread",
+            ]);
+            setTestResult({
+                dimensions: query.length,
+                related: cosineSimilarity(query, related),
+                unrelated: cosineSimilarity(query, unrelated),
+            });
+            setCacheCount(await getEmbeddingCacheCount());
+        } catch (error) {
+            setTestError(error instanceof Error ? error.message : "Could not create an embedding.");
+        } finally {
+            setTesting(false);
+        }
+    };
+
+    const statusLabel =
+        status.state === "loading"
+            ? `Downloading model ${status.progress}%`
+            : status.state === "ready"
+              ? `Ready${status.dimensions ? ` · ${status.dimensions} dimensions` : ""}`
+              : status.state === "error"
+                ? "Model failed to load"
+                : "Not loaded yet";
+
+    return (
+        <div className="flex flex-col gap-2.5">
+            <ToolToggle
+                title="Local embeddings (Beta)"
+                description="Generate private semantic vectors in this browser for upcoming RAG and search features."
+                checked={settings.embeddingsEnabled}
+                onChange={handleToggle}
+            />
+
+            {settings.embeddingsEnabled ? (
+                <div className="flex flex-col gap-3 rounded-xl border border-border/80 bg-background/50 p-3">
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                        The first load downloads {" "}
+                        <span className="font-medium text-foreground">{EMBEDDING_MODEL_SIZE}</span> from
+                        Hugging Face and caches it locally. The browser runtime is cached
+                        separately. Text and vectors stay in this browser; no provider key or
+                        chat request is involved.
+                    </p>
+
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                            <div className="text-xs font-semibold">Embedding model</div>
+                            <div className="truncate text-[10px] text-muted-foreground">
+                                {statusLabel}
+                            </div>
+                        </div>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="shrink-0 rounded-lg px-2 text-[11px]"
+                            disabled={status.state === "loading" || testing}
+                            onClick={() => void handleLoad()}
+                        >
+                            {status.state === "loading" ? (
+                                <SpinnerGap size={13} className="animate-spin" />
+                            ) : (
+                                <ArrowsClockwise size={13} />
+                            )}
+                            {status.state === "ready" ? "Reload" : "Load model"}
+                        </Button>
+                    </div>
+
+                    {status.state === "loading" ? (
+                        <div className="h-1 overflow-hidden rounded-full bg-muted" aria-label="Model download progress">
+                            <div
+                                className="h-full rounded-full bg-primary transition-[width] duration-200"
+                                style={{ width: `${status.progress}%` }}
+                            />
+                        </div>
+                    ) : null}
+
+                    {status.error ? (
+                        <p className="text-[10px] leading-relaxed text-destructive">{status.error}</p>
+                    ) : null}
+
+                    <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-2.5">
+                        <div>
+                            <div className="text-xs font-semibold">Vector cache</div>
+                            <div className="text-[10px] text-muted-foreground">
+                                {cacheCount === null ? "Checking local storage..." : `${cacheCount} cached vector${cacheCount === 1 ? "" : "s"}`}
+                            </div>
+                        </div>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="shrink-0 rounded-lg px-2 text-[11px]"
+                            disabled={!cacheCount}
+                            onClick={() => void handleClearCache()}
+                        >
+                            Clear vectors
+                        </Button>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5 border-t border-border/60 pt-2.5">
+                        <div className="text-xs font-semibold">Embedding check</div>
+                        <p className="text-[10px] leading-relaxed text-muted-foreground">
+                            Run a local comparison to confirm the model and vector cache are working.
+                        </p>
+                        <textarea
+                            value={testText}
+                            onChange={(event) => setTestText(event.target.value)}
+                            rows={2}
+                            placeholder="Enter a sentence to compare..."
+                            className="h-auto w-full resize-none rounded-lg border border-border bg-background px-2 py-1.5 text-xs outline-none placeholder:text-muted-foreground"
+                        />
+                        <Button
+                            type="button"
+                            size="sm"
+                            className="rounded-lg"
+                            disabled={testing || !testText.trim()}
+                            onClick={() => void handleTest()}
+                        >
+                            {testing ? <SpinnerGap size={13} className="animate-spin" /> : null}
+                            {testing ? "Checking locally..." : "Run local check"}
+                        </Button>
+                        {testResult ? (
+                            <div className="rounded-lg bg-muted/60 px-2.5 py-2 text-[10px] leading-relaxed text-muted-foreground">
+                                <div className="font-medium text-foreground">
+                                    {testResult.dimensions}-dimension vector created
+                                </div>
+                                <div>
+                                    Related note similarity: {testResult.related.toFixed(2)} ·
+                                    {" "}unrelated recipe similarity: {testResult.unrelated.toFixed(2)}
+                                </div>
+                            </div>
+                        ) : null}
+                        {testError ? (
+                            <p className="text-[10px] leading-relaxed text-destructive">{testError}</p>
+                        ) : null}
+                    </div>
+                </div>
+            ) : null}
         </div>
     );
 }

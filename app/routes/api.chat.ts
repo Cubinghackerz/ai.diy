@@ -66,6 +66,8 @@ interface ChatRequestBody {
     };
     memoryContext?: string;
     customSkill?: { name: string; content: string };
+    /** Active agent persona whose instructions apply for this conversation. */
+    agent?: { name: string; content: string };
     /** When true the request runs as a delegated subagent (no ask_user/spawn_subagent). */
     subagentMode?: boolean;
     openAICompatible?: {
@@ -380,6 +382,7 @@ export async function action({ request }: ActionFunctionArgs) {
                 body.customSkill,
                 body.subagentMode === true ? "subagent" : "main",
                 body.projectInstructions,
+                body.agent,
             ),
             ...(anthropicThinkingOn
                 ? { temperature: 1 }
