@@ -768,7 +768,10 @@ export async function buildChatTools(
             description:
                 "Search documents the user added to local knowledge (private on-device RAG). Use when the answer may live in an indexed document — notes, specs, references, or pasted files — especially for follow-ups on those documents. Pass a natural-language question or topic; returns the most relevant passages with their document names. All content stays in the browser.",
             inputSchema: z.object({
-                query: z.string().describe("The question or topic to look up in the user's local documents"),
+                query: z
+                    .string()
+                    .optional()
+                    .describe("The question or topic to look up in the user's local documents — always provide this"),
                 limit: z.number().int().min(1).max(10).optional(),
             }),
         });

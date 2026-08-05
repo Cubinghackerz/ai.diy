@@ -211,8 +211,12 @@ export async function searchKnowledgeTool(
     limit?: number,
 ): Promise<string> {
     try {
+        const text = query?.trim() ?? "";
+        if (!text) {
+            return "No search query was provided. Re-run knowledge_search with a specific natural-language question or topic about the user's documents.";
+        }
         const results = await searchKnowledge(
-            query,
+            text,
             Math.min(Math.max(limit ?? MAX_RETRIEVED_CHUNKS, 1), 10),
         );
         if (results.length === 0) {
