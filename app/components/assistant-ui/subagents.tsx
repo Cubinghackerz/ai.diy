@@ -41,6 +41,7 @@ import {
     hasLocalMemoryEntries,
     readLocalMemory,
 } from "~/lib/memory";
+import { hasKnowledgeChunks, searchKnowledgeTool } from "~/lib/knowledge";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { runBrowserPython } from "~/lib/pyodide";
 import { useSettings } from "~/lib/providers/SettingsProvider";
@@ -444,6 +445,10 @@ function SubagentRun({
                                 connectors: s.connectors,
                                 memoryAvailable:
                                     memoryEnabled && (await hasLocalMemoryEntries()),
+                                knowledgeAvailable:
+                                    s.knowledgeEnabled &&
+                                    s.embeddingsEnabled &&
+                                    (await hasKnowledgeChunks()),
                                 subagentsEnabled: false,
                             },
                             subagentMode: true,
@@ -459,9 +464,13 @@ function SubagentRun({
         transport,
         onToolCall: ({ toolCall }) => {
             if (
-                !["run_python", "run_code", "memory", "ask_user"].includes(
-                    toolCall.toolName,
-                )
+                ![
+                    "run_python",
+                    "run_code",
+                    "memory",
+                    "knowledge_search",
+                    "ask_user",
+                ].includes(toolCall.toolName)
             ) {
                 return;
             }
@@ -469,6 +478,7 @@ function SubagentRun({
             const input = toolCall.input as {
                 code?: string;
                 query?: string;
+                limit?: number;
             };
             const taskPromise =
                 toolCall.toolName === "ask_user"
@@ -479,7 +489,9 @@ function SubagentRun({
                       ? settingsRef.current.memoryEnabled !== false
                           ? readLocalMemory(input.query)
                           : Promise.resolve("Memory is disabled for this subagent.")
-                      : runBrowserPython(input.code ?? "");
+                      : toolCall.toolName === "knowledge_search"
+                        ? searchKnowledgeTool(input.query ?? "", input.limit)
+                        : runBrowserPython(input.code ?? "");
             void taskPromise.then(
                 (result) => {
                     const output =
