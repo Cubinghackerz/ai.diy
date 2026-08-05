@@ -29,6 +29,7 @@ import {
     readLocalMemory,
 } from "~/lib/memory";
 import { buildKnowledgeContext, hasKnowledgeChunks, searchKnowledgeTool } from "~/lib/knowledge";
+import { getEmbeddingStatus } from "~/lib/embeddings";
 import { askUserInBrowser } from "~/lib/client-tools";
 import { findActiveAgent } from "~/lib/agents";
 import { forcedSkillStore } from "~/lib/skill-command";
@@ -96,23 +97,40 @@ export function AssistantRuntimeProvider({
                     let knowledgeContext = "";
                     let knowledgeAvailable = false;
                     if (s.knowledgeEnabled && s.embeddingsEnabled) {
-                        knowledgeAvailable = await hasKnowledgeChunks();
-                        if (knowledgeAvailable) {
-                            const lastUser = [...options.messages]
-                                .reverse()
-                                .find((message) => message.role === "user");
-                            const query =
-                                lastUser?.parts
-                                    .filter((part) => part.type === "text")
-                                    .map((part) => part.text)
-                                    .join(" ")
-                                    .trim() ?? "";
-                            if (query) {
-                                try {
-                                    knowledgeContext = await buildKnowledgeContext(query);
-                                } catch {
-                                    // Retrieval is an enhancement; a failed local
-                                    // search must never break normal chat.
+                        // Only attempt retrieval if the embedding model is already
+                        // loaded and cached. Loading the model during chat send
+                        // can block the request for many seconds (ONNX download).
+                        const embReady = getEmbeddingStatus().state === "ready";
+                        if (embReady) {
+                            try {
+                                knowledgeAvailable = await hasKnowledgeChunks();
+                            } catch {
+                                // IndexedDB check must never block chat.
+                            }
+                            if (knowledgeAvailable) {
+                                const lastUser = [...options.messages]
+                                    .reverse()
+                                    .find((message) => message.role === "user");
+                                const query =
+                                    lastUser?.parts
+                                        .filter((part) => part.type === "text")
+                                        .map((part) => part.text)
+                                        .join(" ")
+                                        .trim() ?? "";
+                                if (query) {
+                                    try {
+                                        // Wrap with a 3s timeout so retrieval
+                                        // never blocks the chat request itself.
+                                        knowledgeContext = await Promise.race([
+                                            buildKnowledgeContext(query),
+                                            new Promise<string>((resolve) =>
+                                                setTimeout(() => resolve(""), 3000),
+                                            ),
+                                        ]);
+                                    } catch {
+                                        // Retrieval is an enhancement; a failed
+                                        // local search must never break chat.
+                                    }
                                 }
                             }
                         }
@@ -289,7 +307,16 @@ export function AssistantRuntimeProvider({
             return true;
         },
         onError: (err) => {
-            console.error("[chat]", err);
+            const isAbort =
+                err instanceof Error &&
+                (err.name === "AbortError" ||
+                    err.message?.toLowerCase().includes("abort") ||
+                    err.message?.toLowerCase().includes("aborted"));
+            if (isAbort) {
+                chat.clearError();
+            } else {
+                console.error("[chat]", err);
+            }
         },
     });
     chatRef.current = chat;

@@ -37,9 +37,10 @@ import {
   ThreadPrimitive,
   type ToolCallMessagePartComponent,
   unstable_useComposerInput,
-  useAui,
-  useAuiState,
+   useAui,
+   useAuiState,
 } from "@assistant-ui/react";
+import { useMessageError } from "@assistant-ui/core/react";
 import {
     ArrowDownIcon,
     ArrowUpIcon,
@@ -689,14 +690,29 @@ const ComposerAction: FC = () => {
 };
 
 const MessageError: FC = () => {
+  const error = useMessageError();
+  if (!error) return null;
+
+  const isAbort =
+    typeof error === "string" &&
+    (error.toLowerCase().includes("abort") ||
+      error.toLowerCase().includes("aborted") ||
+      error.toLowerCase().includes("cancelled"));
+
   return (
     <MessagePrimitive.Error>
-      <ErrorPrimitive.Root className="aui-message-error-root border-destructive bg-destructive/10 text-destructive dark:bg-destructive/5 mt-2 rounded-md border p-3 text-sm dark:text-red-200">
-        <ErrorPrimitive.Message className="aui-message-error-message line-clamp-2" />
-      </ErrorPrimitive.Root>
+      {isAbort ? (
+        <span className="aui-message-error-aborted text-muted-foreground mt-2 text-sm">
+          Response stopped.
+        </span>
+      ) : (
+        <ErrorPrimitive.Root className="aui-message-error-root border-destructive bg-destructive/10 text-destructive dark:bg-destructive/5 mt-2 rounded-md border p-3 text-sm dark:text-red-200">
+          <ErrorPrimitive.Message className="aui-message-error-message line-clamp-2" />
+        </ErrorPrimitive.Root>
+      )}
     </MessagePrimitive.Error>
   );
-};
+ };
 
 const AssistantMessage: FC = () => {
   const {

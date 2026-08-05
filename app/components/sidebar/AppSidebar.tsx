@@ -3502,15 +3502,25 @@ function EmbeddingsSettingsSection() {
     };
 
     const handleTest = async () => {
+        const currentStatus = getEmbeddingStatus();
+        if (currentStatus.state !== "ready") {
+            setTestError("Load the embedding model first to run a local check.");
+            return;
+        }
         setTesting(true);
         setTestError(null);
         setTestResult(null);
         try {
-            const [query, related, unrelated] = await embedTexts([
-                testText,
-                "Search my local AI chat notes",
-                "A recipe for banana bread",
-            ]);
+            const [query, related, unrelated] = (await Promise.race([
+                embedTexts([
+                    testText,
+                    "Search my local AI chat notes",
+                    "A recipe for banana bread",
+                ]),
+                new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error("Embedding check timed out.")), 15000),
+                ),
+            ])) as [number[], number[], number[]];
             setTestResult({
                 dimensions: query.length,
                 related: cosineSimilarity(query, related),

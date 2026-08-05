@@ -42,6 +42,7 @@ import {
     readLocalMemory,
 } from "~/lib/memory";
 import { hasKnowledgeChunks, searchKnowledgeTool } from "~/lib/knowledge";
+import { getEmbeddingStatus } from "~/lib/embeddings";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { runBrowserPython } from "~/lib/pyodide";
 import { useSettings } from "~/lib/providers/SettingsProvider";
@@ -448,7 +449,8 @@ function SubagentRun({
                                 knowledgeAvailable:
                                     s.knowledgeEnabled &&
                                     s.embeddingsEnabled &&
-                                    (await hasKnowledgeChunks()),
+                                    getEmbeddingStatus().state === "ready" &&
+                                    (await hasKnowledgeChunks().catch(() => false)),
                                 subagentsEnabled: false,
                             },
                             subagentMode: true,
