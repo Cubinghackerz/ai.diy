@@ -27,6 +27,8 @@ export type ToolSettings = {
     skillsEnabled?: boolean;
     connectors?: ConnectorConfig[];
     memoryAvailable?: boolean;
+    /** True when local knowledge is enabled and at least one document is indexed. */
+    knowledgeAvailable?: boolean;
     subagentsEnabled?: boolean;
 };
 
@@ -757,6 +759,17 @@ export async function buildChatTools(
                 "Read relevant user-approved local memory, including pasted or imported entries, from the browser. Use only when the needed personal context is not already visible; send a narrow keyword query and never infer, invent, or request credentials or secrets.",
             inputSchema: z.object({
                 query: z.string().optional(),
+            }),
+        });
+    }
+
+    if (settings.knowledgeAvailable) {
+        tools.knowledge_search = tool({
+            description:
+                "Search documents the user added to local knowledge (private on-device RAG). Use when the answer may live in an indexed document — notes, specs, references, or pasted files — especially for follow-ups on those documents. Pass a natural-language question or topic; returns the most relevant passages with their document names. All content stays in the browser.",
+            inputSchema: z.object({
+                query: z.string().describe("The question or topic to look up in the user's local documents"),
+                limit: z.number().int().min(1).max(10).optional(),
             }),
         });
     }

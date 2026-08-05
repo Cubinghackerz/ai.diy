@@ -57,6 +57,7 @@ interface ChatRequestBody {
         skillsEnabled?: boolean;
         connectors?: ConnectorConfig[];
         memoryAvailable?: boolean;
+        knowledgeAvailable?: boolean;
         subagentsEnabled?: boolean;
     };
     mcpServers?: McpServerConfig[];

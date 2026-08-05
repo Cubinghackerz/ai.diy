@@ -191,3 +191,42 @@ export async function buildKnowledgeContext(
         return "";
     }
 }
+
+/** True when at least one document is indexed and searchable. */
+export async function hasKnowledgeChunks(): Promise<boolean> {
+    try {
+        return (await countKnowledgeChunks()) > 0;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Tool-facing executor for the `knowledge_search` tool. Always returns a
+ * string the model can read directly, so failures degrade to a clear message
+ * instead of a tool error.
+ */
+export async function searchKnowledgeTool(
+    query: string,
+    limit?: number,
+): Promise<string> {
+    try {
+        const results = await searchKnowledge(
+            query,
+            Math.min(Math.max(limit ?? MAX_RETRIEVED_CHUNKS, 1), 10),
+        );
+        if (results.length === 0) {
+            return "No indexed knowledge matched that query. If the document is not indexed yet, ask the user to add it in Settings → Knowledge, or answer from other sources.";
+        }
+        return results
+            .map(
+                (result, index) =>
+                    `[${index + 1}] From: ${result.docName} (similarity ${result.score.toFixed(2)})\n${result.text}`,
+            )
+            .join("\n\n")
+            .slice(0, MAX_CONTEXT_CHARS);
+    } catch (error) {
+        console.warn("[knowledge_search]", error);
+        return "Local knowledge search is unavailable right now. It requires the browser embedding model, which failed to load in this session.";
+    }
+}

@@ -244,9 +244,10 @@ Settings -> Experimental -> Local embeddings (Beta) enables the browser embeddin
 Settings -> Knowledge Beta provides fully on-device retrieval over documents you add. Documents are split into overlapping chunks (~1 KB with overlap), embedded locally with the MiniLM model, and stored in IndexedDB (capped at 4,000 chunks total / 250 per document).
 
 - **Attach to chats**: when enabled, each chat message embeds the latest user message in the browser and injects the most relevant passages (up to 6 chunks) into the system prompt as quoted, user-supplied context. Everything runs locally — no document content, query, or vector leaves the browser.
+- **On-demand search**: when at least one document is indexed, the model also gets a `knowledge_search` tool so it can pull additional passages on its own (e.g. follow-ups on an indexed document). The tool executes in the browser and degrades to a clear message if it cannot run.
 - **Manage documents**: paste text or upload a file (`.md`, `.txt`, `.csv`, `.json`, source files) to index it in place; list, delete, or clear all indexed documents.
 - **Search test**: run a semantic query and inspect the top matches with similarity scores.
-- The first index or retrieval downloads the ~30 MB model once and caches it. Retrieval fails open — if the model cannot load, chat proceeds normally without knowledge context.
+- The first index or retrieval downloads the ~30 MB model once and caches it. Retrieval and the `knowledge_search` tool fail open — if the model cannot load, chat proceeds normally without knowledge context.
 
 ## Integrations
 

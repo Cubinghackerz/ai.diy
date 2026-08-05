@@ -28,7 +28,7 @@ import {
     hasLocalMemoryEntries,
     readLocalMemory,
 } from "~/lib/memory";
-import { buildKnowledgeContext } from "~/lib/knowledge";
+import { buildKnowledgeContext, hasKnowledgeChunks, searchKnowledgeTool } from "~/lib/knowledge";
 import { askUserInBrowser } from "~/lib/client-tools";
 import { findActiveAgent } from "~/lib/agents";
 import { forcedSkillStore } from "~/lib/skill-command";
@@ -94,22 +94,26 @@ export function AssistantRuntimeProvider({
                     const memoryAvailable =
                         memoryEnabled && (await hasLocalMemoryEntries());
                     let knowledgeContext = "";
+                    let knowledgeAvailable = false;
                     if (s.knowledgeEnabled && s.embeddingsEnabled) {
-                        const lastUser = [...options.messages]
-                            .reverse()
-                            .find((message) => message.role === "user");
-                        const query =
-                            lastUser?.parts
-                                .filter((part) => part.type === "text")
-                                .map((part) => part.text)
-                                .join(" ")
-                                .trim() ?? "";
-                        if (query) {
-                            try {
-                                knowledgeContext = await buildKnowledgeContext(query);
-                            } catch {
-                                // Retrieval is an enhancement; a failed local
-                                // search must never break normal chat.
+                        knowledgeAvailable = await hasKnowledgeChunks();
+                        if (knowledgeAvailable) {
+                            const lastUser = [...options.messages]
+                                .reverse()
+                                .find((message) => message.role === "user");
+                            const query =
+                                lastUser?.parts
+                                    .filter((part) => part.type === "text")
+                                    .map((part) => part.text)
+                                    .join(" ")
+                                    .trim() ?? "";
+                            if (query) {
+                                try {
+                                    knowledgeContext = await buildKnowledgeContext(query);
+                                } catch {
+                                    // Retrieval is an enhancement; a failed local
+                                    // search must never break normal chat.
+                                }
                             }
                         }
                     }
@@ -157,6 +161,7 @@ export function AssistantRuntimeProvider({
                                 skillsEnabled: s.skillsEnabled,
                                 connectors: s.connectors,
                                 memoryAvailable,
+                                knowledgeAvailable,
                                 subagentsEnabled: s.subagentsEnabled,
                             },
                             mcpServers: s.mcpServers.filter((m) => m.enabled),
@@ -181,6 +186,7 @@ export function AssistantRuntimeProvider({
                 "run_code",
                 "ask_user",
                 "memory",
+                "knowledge_search",
                 "spawn_subagent",
             ].includes(toolCall.toolName)) return;
             pendingClientCalls.current += 1;
@@ -190,6 +196,7 @@ export function AssistantRuntimeProvider({
                 questionType?: "single" | "multiple" | "short";
                 options?: string[];
                 query?: string;
+                limit?: number;
                 task?: string;
             };
             const task =
@@ -205,7 +212,9 @@ export function AssistantRuntimeProvider({
                         ? settingsRef.current.memoryEnabled !== false
                             ? readLocalMemory(input.query)
                             : Promise.resolve("Memory is disabled for this chat.")
-                        : runBrowserPython(input.code ?? "");
+                        : toolCall.toolName === "knowledge_search"
+                          ? searchKnowledgeTool(input.query ?? "", input.limit)
+                          : runBrowserPython(input.code ?? "");
             void task.then(
                 (result) => {
                     const output =
