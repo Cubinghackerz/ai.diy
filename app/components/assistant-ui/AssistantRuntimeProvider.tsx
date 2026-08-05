@@ -28,6 +28,7 @@ import {
     hasLocalMemoryEntries,
     readLocalMemory,
 } from "~/lib/memory";
+import { buildKnowledgeContext } from "~/lib/knowledge";
 import { askUserInBrowser } from "~/lib/client-tools";
 import { findActiveAgent } from "~/lib/agents";
 import { forcedSkillStore } from "~/lib/skill-command";
@@ -92,6 +93,26 @@ export function AssistantRuntimeProvider({
                         : "";
                     const memoryAvailable =
                         memoryEnabled && (await hasLocalMemoryEntries());
+                    let knowledgeContext = "";
+                    if (s.knowledgeEnabled && s.embeddingsEnabled) {
+                        const lastUser = [...options.messages]
+                            .reverse()
+                            .find((message) => message.role === "user");
+                        const query =
+                            lastUser?.parts
+                                .filter((part) => part.type === "text")
+                                .map((part) => part.text)
+                                .join(" ")
+                                .trim() ?? "";
+                        if (query) {
+                            try {
+                                knowledgeContext = await buildKnowledgeContext(query);
+                            } catch {
+                                // Retrieval is an enhancement; a failed local
+                                // search must never break normal chat.
+                            }
+                        }
+                    }
                     const forcedSkill = forcedSkillStore.current;
                     forcedSkillStore.current = null;
                     const activeAgent = findActiveAgent(s);
@@ -140,6 +161,7 @@ export function AssistantRuntimeProvider({
                             },
                             mcpServers: s.mcpServers.filter((m) => m.enabled),
                             memoryContext,
+                            ...(knowledgeContext ? { knowledgeContext } : {}),
                             ...(forcedSkill ? { customSkill: forcedSkill } : {}),
                         },
                     };

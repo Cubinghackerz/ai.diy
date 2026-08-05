@@ -11,7 +11,7 @@ ai.diy is built with React Router, assistant-ui, the Vercel AI SDK, Tailwind CSS
 
 This is a beta project. Features described as **available** are wired into the application. Features marked **planned** are intentionally not presented as working integrations.
 
-- Available: landing page, chat, provider setup, model discovery, local chat persistence, files, browser Python, search, connector-backed search, remote MCP, artifacts, local memory, voice dictation where the browser supports Web Speech, multi-model Preview, import/export of chats (ChatGPT, Claude, ShareGPT, Markdown, ai.diy JSON), client-side S3/WebDAV/Google Drive backup and restore, optional AES-GCM encrypted settings with a user passphrase, and local storage management with cleanup tools.
+- Available: landing page, chat, provider setup, model discovery, local chat persistence, files, browser Python, search, connector-backed search, remote MCP, artifacts, local memory, on-device knowledge search, voice dictation where the browser supports Web Speech, multi-model Preview, import/export of chats (ChatGPT, Claude, ShareGPT, Markdown, ai.diy JSON), client-side S3/WebDAV/Google Drive backup and restore, optional AES-GCM encrypted settings with a user passphrase, and local storage management with cleanup tools.
 - Coming soon: direct GitHub/Supabase/PostgreSQL adapters, in-app `ask_user` panels, and custom-provider capability probing.
 
 ## Quick Start
@@ -237,7 +237,16 @@ Settings -> Experimental enables a workspace that runs one to three model config
 
 ### Local Embeddings Beta
 
-Settings -> Experimental -> Local embeddings (Beta) enables the Phase A browser embedding foundation. The first local check downloads a quantized MiniLM model, caches it in the browser, and stores generated vectors in IndexedDB. Text and vectors remain local; this feature does not send content or provider keys to ai.diy. Disable the toggle to release the in-memory model while retaining the browser cache.
+Settings -> Experimental -> Local embeddings (Beta) enables the browser embedding engine. The first local check downloads a quantized MiniLM model, caches it in the browser, and stores generated vectors in IndexedDB. Text and vectors remain local; this feature does not send content or provider keys to ai.diy. Disable the toggle to release the in-memory model while retaining the browser cache.
+
+### Knowledge Beta (local RAG)
+
+Settings -> Knowledge Beta provides fully on-device retrieval over documents you add. Documents are split into overlapping chunks (~1 KB with overlap), embedded locally with the MiniLM model, and stored in IndexedDB (capped at 4,000 chunks total / 250 per document).
+
+- **Attach to chats**: when enabled, each chat message embeds the latest user message in the browser and injects the most relevant passages (up to 6 chunks) into the system prompt as quoted, user-supplied context. Everything runs locally — no document content, query, or vector leaves the browser.
+- **Manage documents**: paste text or upload a file (`.md`, `.txt`, `.csv`, `.json`, source files) to index it in place; list, delete, or clear all indexed documents.
+- **Search test**: run a semantic query and inspect the top matches with similarity scores.
+- The first index or retrieval downloads the ~30 MB model once and caches it. Retrieval fails open — if the model cannot load, chat proceeds normally without knowledge context.
 
 ## Integrations
 

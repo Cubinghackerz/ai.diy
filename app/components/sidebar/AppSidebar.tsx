@@ -56,7 +56,11 @@ import {
     deleteThreadFromDB,
     deleteAllArtifacts,
     getDB,
+    getKnowledgeDocuments,
+    deleteKnowledgeDocument,
+    clearAllKnowledge,
     type DbUsageSummary,
+    type KnowledgeDocumentEntry,
 } from "~/lib/db";
 import {
     clearEmbeddingCache,
@@ -69,6 +73,12 @@ import {
     releaseEmbeddingModel,
     subscribeEmbeddingStatus,
 } from "~/lib/embeddings";
+import {
+    indexKnowledgeText,
+    searchKnowledge,
+    MAX_DOCUMENT_CHARS,
+    type KnowledgeSearchResult,
+} from "~/lib/knowledge";
 import {
     aggregateUsage,
     formatCost,
@@ -95,7 +105,9 @@ import {
     ChartBar,
     ArrowsClockwise,
     CloudArrowUp,
+    Database,
     DownloadSimple,
+    FilePlus,
     Flask,
     Folder,
     FolderPlus,
@@ -103,6 +115,7 @@ import {
     Globe,
     HardDrives,
     Key,
+    MagnifyingGlass,
     Moon,
     Plus,
     Pencil,
@@ -157,6 +170,7 @@ type SettingsSection =
     | "mcp"
     | "experimental"
     | "memory"
+    | "knowledge"
     | "connectors"
     | "cloud"
     | "data"
@@ -920,6 +934,7 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
         { id: "mcp", label: "MCP Beta", icon: Plug },
         { id: "experimental", label: "Experimental", icon: Flask },
         { id: "memory", label: "Memory Beta", icon: Brain },
+        { id: "knowledge", label: "Knowledge Beta", icon: Database },
         { id: "connectors", label: "Connectors Beta", icon: HardDrives },
         { id: "cloud", label: "Cloud Storage Beta", icon: CloudArrowUp },
         { id: "data", label: "Import & Export", icon: UploadSimple },
@@ -1214,6 +1229,8 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
 
             {section === "memory" && <MemorySettingsSection />}
 
+            {section === "knowledge" && <KnowledgeSettingsSection />}
+
             {section === "connectors" && <ConnectorsSection />}
 
             {section === "cloud" && (
@@ -1411,6 +1428,288 @@ function MemorySettingsSection() {
                 </div>
             </div>
             {status ? <p className="text-[11px] text-primary">{status}</p> : null}
+        </div>
+    );
+}
+
+function KnowledgeSettingsSection() {
+    const { settings, updateSettings } = useSettings();
+    const [docs, setDocs] = useState<KnowledgeDocumentEntry[]>([]);
+    const [name, setName] = useState("");
+    const [content, setContent] = useState("");
+    const [searchQuery, setSearchQuery] = useState("");
+    const [searchResults, setSearchResults] = useState<KnowledgeSearchResult[] | null>(null);
+    const [searching, setSearching] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const [indexProgress, setIndexProgress] = useState<{
+        done: number;
+        total: number;
+    } | null>(null);
+    const [status, setStatus] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const embeddingsEnabled = settings.embeddingsEnabled === true;
+
+    const refresh = useCallback(async () => {
+        try {
+            const list = await getKnowledgeDocuments();
+            setDocs(list);
+        } catch {
+            // Storage failures are surfaced by individual actions.
+        }
+    }, []);
+
+    useEffect(() => {
+        void refresh();
+    }, [refresh]);
+
+    const addDocument = async (docName: string, text: string) => {
+        const trimmedName = docName.trim();
+        if (!trimmedName || !text.trim()) return;
+        setBusy(true);
+        setError(null);
+        setStatus(null);
+        try {
+            const doc = await indexKnowledgeText(trimmedName, text, (done, total) =>
+                setIndexProgress({ done, total }),
+            );
+            setStatus(`"${doc.name}" indexed with ${doc.chunkCount} chunk${doc.chunkCount === 1 ? "" : "s"}.`);
+            setName("");
+            setContent("");
+            setSearchResults(null);
+            await refresh();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Could not index the document.");
+        } finally {
+            setBusy(false);
+            setIndexProgress(null);
+        }
+    };
+
+    const importFile = async (file: File) => {
+        if (file.size > MAX_DOCUMENT_CHARS) {
+            setError("That file is larger than the supported 1 MB of text.");
+            return;
+        }
+        await addDocument(file.name, await file.text());
+    };
+
+    const removeDoc = async (docId: string) => {
+        await deleteKnowledgeDocument(docId);
+        setSearchResults(null);
+        setStatus("Document removed from local knowledge.");
+        await refresh();
+    };
+
+    const runSearch = async () => {
+        const query = searchQuery.trim();
+        if (!query) return;
+        setSearching(true);
+        setError(null);
+        try {
+            setSearchResults(await searchKnowledge(query));
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Could not search local knowledge.");
+        } finally {
+            setSearching(false);
+        }
+    };
+
+    const clearAll = async () => {
+        await clearAllKnowledge();
+        setDocs([]);
+        setSearchResults(null);
+        setStatus("All local knowledge cleared.");
+    };
+
+    return (
+        <div className="flex flex-col gap-3">
+            <ToolToggle
+                title="Attach knowledge to chats"
+                description={
+                    embeddingsEnabled
+                        ? "Relevant passages from your indexed documents are injected into the system prompt for each message."
+                        : "Indexed documents exist locally. Enable Local embeddings in Experimental to attach them to chats."
+                }
+                checked={settings.knowledgeEnabled}
+                onChange={(value) => updateSettings({ knowledgeEnabled: value })}
+            />
+            {!embeddingsEnabled ? (
+                <p className="flex items-start gap-1.5 rounded-xl border border-warning/30 bg-warning/5 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+                    <WarningCircle size={13} className="mt-0.5 shrink-0 text-warning" />
+                    Document indexing and retrieval need the local embedding model.
+                    Enable Settings → Experimental → Local embeddings (Beta) first.
+                </p>
+            ) : null}
+
+            <div className="rounded-xl border border-border/70 bg-muted/20 p-3 text-[11px] leading-relaxed text-muted-foreground">
+                <strong className="text-foreground">Private, on-device RAG:</strong>{" "}
+                documents you add are split into chunks, embedded with the local
+                MiniLM model, and stored only in this browser. The first message
+                that retrieves them downloads the ~30 MB model once and caches it.
+            </div>
+
+            <div className="flex flex-col gap-2">
+                <label className="flex flex-col gap-1">
+                    <span className="text-[10px] font-medium text-muted-foreground">
+                        Document name
+                    </span>
+                    <Input
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="e.g. Project notes"
+                        className="h-8 text-xs"
+                    />
+                </label>
+                <label className="flex flex-col gap-1">
+                    <span className="text-[10px] font-medium text-muted-foreground">
+                        Content
+                    </span>
+                    <textarea
+                        value={content}
+                        onChange={(e) => setContent(e.target.value)}
+                        placeholder="Paste a document, notes, spec, or reference material…"
+                        rows={4}
+                        className="w-full resize-y rounded-xl border border-border bg-background px-3 py-2 text-xs outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
+                        aria-label="Knowledge document content"
+                    />
+                </label>
+                <div className="flex flex-wrap gap-2">
+                    <Button
+                        type="button"
+                        size="sm"
+                        disabled={busy || !name.trim() || !content.trim() || !embeddingsEnabled}
+                        onClick={() => void addDocument(name, content)}
+                        className="rounded-xl"
+                    >
+                        <FilePlus size={13} />
+                        Index document
+                    </Button>
+                    <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-xl border border-border px-3 text-xs font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50">
+                        <UploadSimple size={13} />
+                        Upload file
+                        <input
+                            type="file"
+                            accept=".md,.markdown,.txt,.csv,.json,.ts,.tsx,.js,.jsx,.py,.css,.html,.xml,.yaml,.yml,text/plain,text/markdown,application/json"
+                            className="sr-only"
+                            disabled={busy || !embeddingsEnabled}
+                            onChange={(event) => {
+                                const file = event.target.files?.[0];
+                                if (file) void importFile(file);
+                                event.currentTarget.value = "";
+                            }}
+                        />
+                    </label>
+                </div>
+                {indexProgress ? (
+                    <p className="text-[11px] text-primary">
+                        Indexing chunk {indexProgress.done}/{indexProgress.total}…
+                    </p>
+                ) : null}
+            </div>
+
+            {docs.length > 0 ? (
+                <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between">
+                        <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            Indexed documents ({docs.length})
+                        </h4>
+                        <button
+                            type="button"
+                            onClick={() => void clearAll()}
+                            className="rounded-md px-1.5 py-0.5 text-[10px] text-muted-foreground outline-none hover:text-destructive"
+                        >
+                            Clear all
+                        </button>
+                    </div>
+                    {docs.map((doc) => (
+                        <div
+                            key={doc.id}
+                            className="flex items-center justify-between gap-2 rounded-lg border border-border/60 px-2.5 py-1.5 text-[11px]"
+                        >
+                            <div className="min-w-0">
+                                <div className="truncate font-medium">{doc.name}</div>
+                                <div className="truncate text-[10px] text-muted-foreground">
+                                    {doc.chunkCount} chunk{doc.chunkCount === 1 ? "" : "s"} ·{" "}
+                                    {doc.size.toLocaleString()} chars
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => void removeDoc(doc.id)}
+                                className="rounded-md p-1 text-muted-foreground outline-none hover:text-destructive"
+                                aria-label={`Remove ${doc.name}`}
+                            >
+                                <Trash size={14} />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                !busy && (
+                    <p className="text-[10px] leading-relaxed text-muted-foreground">
+                        No indexed documents yet. Add text or a file to start semantic search.
+                    </p>
+                )
+            )}
+
+            <div className="flex flex-col gap-1.5 border-t border-border/60 pt-2.5">
+                <div className="text-xs font-semibold">Search local knowledge</div>
+                <div className="flex gap-2">
+                    <Input
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="What are you looking for?"
+                        className="h-8 text-xs"
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") void runSearch();
+                        }}
+                    />
+                    <Button
+                        type="button"
+                        size="sm"
+                        className="shrink-0 rounded-lg"
+                        disabled={searching || !searchQuery.trim() || !docs.length}
+                        onClick={() => void runSearch()}
+                    >
+                        {searching ? (
+                            <SpinnerGap size={13} className="animate-spin" />
+                        ) : (
+                            <MagnifyingGlass size={13} />
+                        )}
+                        Search
+                    </Button>
+                </div>
+                {searchResults !== null ? (
+                    <div className="flex flex-col gap-2">
+                        {searchResults.length === 0 ? (
+                            <p className="text-[10px] text-muted-foreground">
+                                No relevant passages found for that query.
+                            </p>
+                        ) : (
+                            searchResults.map((result, index) => (
+                                <div
+                                    key={`${result.docId}:${index}`}
+                                    className="rounded-lg bg-muted/60 px-2.5 py-2 text-[10px] leading-relaxed text-muted-foreground"
+                                >
+                                    <div className="font-medium text-foreground">
+                                        {result.docName} ·{" "}
+                                        {result.score.toFixed(2)} similarity
+                                    </div>
+                                    <div className="mt-0.5 line-clamp-3">{result.text}</div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                ) : null}
+            </div>
+
+            {status ? <p className="text-[11px] text-primary">{status}</p> : null}
+            {error ? (
+                <p className="flex items-start gap-1 text-[11px] leading-relaxed text-destructive">
+                    <WarningCircle size={13} className="mt-0.5 shrink-0" />
+                    {error}
+                </p>
+            ) : null}
         </div>
     );
 }
@@ -3238,7 +3537,7 @@ function EmbeddingsSettingsSection() {
         <div className="flex flex-col gap-2.5">
             <ToolToggle
                 title="Local embeddings (Beta)"
-                description="Generate private semantic vectors in this browser for upcoming RAG and search features."
+                description="Generate private semantic vectors in this browser to power Knowledge (on-device RAG) and semantic search."
                 checked={settings.embeddingsEnabled}
                 onChange={handleToggle}
             />

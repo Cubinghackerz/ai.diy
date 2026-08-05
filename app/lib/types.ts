@@ -142,6 +142,8 @@ export interface AppSettings {
     subagentsEnabled: boolean;
     /** Experimental: enable the local browser embedding engine. */
     embeddingsEnabled: boolean;
+    /** Beta: auto-attach semantically retrieved local documents to chat prompts. */
+    knowledgeEnabled: boolean;
     preview: PreviewSettings;
     // MCP settings
     mcpServers: McpServerConfig[];
@@ -206,14 +208,6 @@ export interface PromptTemplate {
     title: string;
     content: string;
     category: string;
-}
-
-export interface KnowledgeDocument {
-    id: string;
-    name: string;
-    content: string;
-    size: number;
-    createdAt: number;
 }
 
 export interface MemoryEntry {
@@ -431,6 +425,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     skillsEnabled: true,
     subagentsEnabled: false,
     embeddingsEnabled: false,
+    knowledgeEnabled: false,
     preview: {
         enabled: false,
         primaryModels: [],

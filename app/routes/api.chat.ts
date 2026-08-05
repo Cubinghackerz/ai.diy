@@ -65,6 +65,8 @@ interface ChatRequestBody {
         count?: number;
     };
     memoryContext?: string;
+    /** Auto-retrieved local knowledge injected into the system prompt. */
+    knowledgeContext?: string;
     customSkill?: { name: string; content: string };
     /** Active agent persona whose instructions apply for this conversation. */
     agent?: { name: string; content: string };
@@ -382,6 +384,7 @@ export async function action({ request }: ActionFunctionArgs) {
                 body.customSkill,
                 body.subagentMode === true ? "subagent" : "main",
                 body.projectInstructions,
+                body.knowledgeContext,
                 body.agent,
             ),
             ...(anthropicThinkingOn

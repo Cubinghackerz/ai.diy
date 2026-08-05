@@ -14,6 +14,29 @@ export interface EmbeddingCacheEntry {
     createdAt: number;
 }
 
+/** A user-added document stored for local semantic retrieval. */
+export interface KnowledgeDocumentEntry {
+    id: string;
+    name: string;
+    content: string;
+    size: number;
+    createdAt: number;
+    chunkCount: number;
+    status: "indexed" | "error";
+    error?: string;
+}
+
+/** A single vectorized chunk of a knowledge document. */
+export interface KnowledgeChunk {
+    /** `${docId}:${index}` */
+    key: string;
+    docId: string;
+    index: number;
+    text: string;
+    vector: Float32Array;
+    createdAt: number;
+}
+
 interface PrismiumDB extends DBSchema {
     threads: {
         key: string;
@@ -55,10 +78,19 @@ interface PrismiumDB extends DBSchema {
         value: EmbeddingCacheEntry;
         indexes: { "by-created": number };
     };
+    knowledgeDocs: {
+        key: string;
+        value: KnowledgeDocumentEntry;
+    };
+    knowledgeChunks: {
+        key: string;
+        value: KnowledgeChunk;
+        indexes: { "by-doc": string };
+    };
 }
 
 const DB_NAME = "prismium-lite-db";
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 const MAX_EMBEDDING_CACHE_ENTRIES = 5000;
 
 let dbPromise: Promise<IDBPDatabase<PrismiumDB>> | null = null;
@@ -114,6 +146,15 @@ export function getDB() {
                         keyPath: "key",
                     });
                     embeddingStore.createIndex("by-created", "createdAt");
+                }
+                if (!db.objectStoreNames.contains("knowledgeDocs")) {
+                    db.createObjectStore("knowledgeDocs", { keyPath: "id" });
+                }
+                if (!db.objectStoreNames.contains("knowledgeChunks")) {
+                    const chunkStore = db.createObjectStore("knowledgeChunks", {
+                        keyPath: "key",
+                    });
+                    chunkStore.createIndex("by-doc", "docId");
                 }
             },
         });
@@ -383,6 +424,8 @@ export async function estimateDbUsage(): Promise<DbUsageSummary> {
         "projects",
         "modelCatalog",
         "embeddings",
+        "knowledgeDocs",
+        "knowledgeChunks",
     ] as const;
 
     const stores: DbStoreUsage[] = [];
@@ -436,6 +479,75 @@ export async function clearEmbeddingCacheEntries(): Promise<void> {
     const db = await getDB();
     if (!db) return;
     await db.clear("embeddings");
+}
+
+export async function getKnowledgeDocuments(): Promise<KnowledgeDocumentEntry[]> {
+    const db = await getDB();
+    if (!db) return [];
+    return (await db.getAll("knowledgeDocs")).sort((a, b) => b.createdAt - a.createdAt);
+}
+
+export async function getKnowledgeDocument(
+    docId: string,
+): Promise<KnowledgeDocumentEntry | null> {
+    const db = await getDB();
+    if (!db) return null;
+    return (await db.get("knowledgeDocs", docId)) ?? null;
+}
+
+export async function saveKnowledgeDocument(doc: KnowledgeDocumentEntry): Promise<void> {
+    const db = await getDB();
+    if (!db) return;
+    await db.put("knowledgeDocs", doc);
+}
+
+export async function getKnowledgeChunks(docId: string): Promise<KnowledgeChunk[]> {
+    const db = await getDB();
+    if (!db) return [];
+    const chunks = await db.getAllFromIndex("knowledgeChunks", "by-doc", docId);
+    return chunks.sort((a, b) => a.index - b.index);
+}
+
+export async function getAllKnowledgeChunks(): Promise<KnowledgeChunk[]> {
+    const db = await getDB();
+    if (!db) return [];
+    return db.getAll("knowledgeChunks");
+}
+
+export async function saveKnowledgeChunks(chunks: KnowledgeChunk[]): Promise<void> {
+    const db = await getDB();
+    if (!chunks.length) return;
+    if (!db) return;
+    const tx = db.transaction("knowledgeChunks", "readwrite");
+    for (const chunk of chunks) await tx.store.put(chunk);
+    await tx.done;
+}
+
+export async function countKnowledgeChunks(): Promise<number> {
+    const db = await getDB();
+    if (!db) return 0;
+    return db.count("knowledgeChunks");
+}
+
+export async function deleteKnowledgeDocument(docId: string): Promise<void> {
+    const db = await getDB();
+    if (!db) return;
+    await db.delete("knowledgeDocs", docId);
+    const tx = db.transaction("knowledgeChunks", "readwrite");
+    const index = tx.store.index("by-doc");
+    let cursor = await index.openCursor(docId);
+    while (cursor) {
+        await cursor.delete();
+        cursor = await cursor.continue();
+    }
+    await tx.done;
+}
+
+export async function clearAllKnowledge(): Promise<void> {
+    const db = await getDB();
+    if (!db) return;
+    await db.clear("knowledgeDocs");
+    await db.clear("knowledgeChunks");
 }
 
 /** Estimate localStorage usage (our own keys only). */
