@@ -46,6 +46,8 @@ import { getEmbeddingStatus } from "~/lib/embeddings";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { runBrowserPython } from "~/lib/pyodide";
 import { useSettings } from "~/lib/providers/SettingsProvider";
+import { localChatFetch } from "~/lib/client-chat";
+import { runCalculatorInBrowser, runFetchUrlInBrowser, runWebSearchInBrowser } from "~/lib/client-tools";
 
 export type SubagentSessionStatus =
     | "awaiting-approval"
@@ -396,9 +398,9 @@ function SubagentRun({
     const transport = useMemo(
         () =>
             new AssistantChatTransport({
-                api: "/api/chat",
+                api: "local://chat",
                 fetch: async (input, init) => {
-                    const response = await globalThis.fetch(input, init);
+                    const response = await localChatFetch(input, init);
                     if (!response.ok) {
                         throw new Error(
                             await parseChatError(response, "Subagent run failed"),
@@ -472,6 +474,10 @@ function SubagentRun({
                     "memory",
                     "knowledge_search",
                     "ask_user",
+                    "web_search",
+                    "fetch_url",
+                    "read_url",
+                    "calculator",
                 ].includes(toolCall.toolName)
             ) {
                 return;
@@ -481,6 +487,9 @@ function SubagentRun({
                 code?: string;
                 query?: string;
                 limit?: number;
+                expression?: string;
+                url?: string;
+                maxResults?: number;
             };
             const taskPromise =
                 toolCall.toolName === "ask_user"
@@ -493,7 +502,19 @@ function SubagentRun({
                           : Promise.resolve("Memory is disabled for this subagent.")
                       : toolCall.toolName === "knowledge_search"
                         ? searchKnowledgeTool(input.query ?? "", input.limit)
-                        : runBrowserPython(input.code ?? "");
+                        : toolCall.toolName === "web_search"
+                          ? runWebSearchInBrowser(
+                                input.query ?? "",
+                                Number(input.maxResults ?? 5),
+                                settingsRef.current.connectors,
+                                settingsRef.current.webSearchEngine,
+                                settingsRef.current.searxngUrl,
+                            )
+                          : toolCall.toolName === "fetch_url" || toolCall.toolName === "read_url"
+                            ? runFetchUrlInBrowser({ url: String(input.url ?? "") })
+                            : toolCall.toolName === "calculator"
+                              ? runCalculatorInBrowser({ expression: String(input.expression ?? "") })
+                              : runBrowserPython(input.code ?? "");
             void taskPromise.then(
                 (result) => {
                     const output =

@@ -30,10 +30,11 @@ import {
 } from "~/lib/memory";
 import { buildKnowledgeContext, hasKnowledgeChunks, searchKnowledgeTool } from "~/lib/knowledge";
 import { getEmbeddingStatus } from "~/lib/embeddings";
-import { askUserInBrowser } from "~/lib/client-tools";
+import { askUserInBrowser, runCalculatorInBrowser, runFetchUrlInBrowser, runWebSearchInBrowser } from "~/lib/client-tools";
 import { findActiveAgent } from "~/lib/agents";
 import { forcedSkillStore } from "~/lib/skill-command";
 import { useSubagent } from "~/components/assistant-ui/subagents";
+import { localChatFetch } from "~/lib/client-chat";
 import {
     createWebSpeechDictationAdapter,
     isWebSpeechDictationSupported,
@@ -73,9 +74,9 @@ export function AssistantRuntimeProvider({
     const transport = useMemo(
         () =>
             new AssistantChatTransport({
-                api: "/api/chat",
+                api: "local://chat",
                 fetch: async (input, init) => {
-                    const res = await globalThis.fetch(input, init);
+                    const res = await localChatFetch(input, init);
                     if (!res.ok) {
                         throw new Error(await parseChatError(res));
                     }
@@ -206,6 +207,10 @@ export function AssistantRuntimeProvider({
                 "memory",
                 "knowledge_search",
                 "spawn_subagent",
+                "web_search",
+                "fetch_url",
+                "read_url",
+                "calculator",
             ].includes(toolCall.toolName)) return;
             pendingClientCalls.current += 1;
             const input = toolCall.input as {
@@ -216,6 +221,9 @@ export function AssistantRuntimeProvider({
                 query?: string;
                 limit?: number;
                 task?: string;
+                expression?: string;
+                url?: string;
+                maxResults?: number;
             };
             const task =
                 toolCall.toolName === "ask_user"
@@ -232,7 +240,19 @@ export function AssistantRuntimeProvider({
                             : Promise.resolve("Memory is disabled for this chat.")
                         : toolCall.toolName === "knowledge_search"
                           ? searchKnowledgeTool(input.query ?? "", input.limit)
-                          : runBrowserPython(input.code ?? "");
+                          : toolCall.toolName === "web_search"
+                            ? runWebSearchInBrowser(
+                                  input.query ?? "",
+                                  Number(input.maxResults ?? 5),
+                                  settingsRef.current.connectors,
+                                  settingsRef.current.webSearchEngine,
+                                  settingsRef.current.searxngUrl,
+                              )
+                            : toolCall.toolName === "fetch_url" || toolCall.toolName === "read_url"
+                              ? runFetchUrlInBrowser({ url: String(input.url ?? "") })
+                              : toolCall.toolName === "calculator"
+                                ? runCalculatorInBrowser({ expression: String(input.expression ?? "") })
+                                : runBrowserPython(input.code ?? "");
             void task.then(
                 (result) => {
                     const output =

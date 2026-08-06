@@ -20,13 +20,13 @@ One workspace where every useful model fits the work: 17 providers including loc
 
 ## Operating Context
 
-Self-hosted on a standard Node.js server or Docker. Chat, settings, history, artifacts, memory, and Preview sessions run in the browser using localStorage and IndexedDB. Dictation and Python execution run client-side (Web Speech, Pyodide). A Node server relays LLM requests, model discovery, web search, and URL fetching; provider keys are stored in the browser and sent per-request for relay. Expected: `npm run build && npm start`, landing page at `/`, workspace at `/workspace`.
+Self-hosted on a standard Node.js server or Docker (or static hosting for the UI). Chat, settings, history, artifacts, memory, web search, model discovery, and Preview sessions run in the browser using localStorage and IndexedDB with direct calls to providers/connectors. Dictation and Python execution run client-side (Web Speech, Pyodide). The server only hosts/serves the UI. Provider keys stay in the browser and are sent directly to the chosen endpoint. Expected: `npm run build && npm start`, landing page at `/`, workspace at `/workspace`.
 
 ## Capabilities and Constraints
 
 - Available: chat, provider setup, model discovery, local chat persistence, files, browser Python, web search, connector-backed search, remote MCP, artifacts, local memory, on-device knowledge search, voice dictation, multi-model Preview, chat import/export (ChatGPT, Claude, ShareGPT, Markdown, ai.diy JSON), client-side S3/WebDAV/Google Drive backups, optional AES-GCM encrypted settings, local storage management.
 - Coming soon: direct GitHub/Supabase/PostgreSQL adapters, in-app ask_user panels, custom-provider capability probing.
-- BYOK trust boundary: no provider key is configured in server env or persisted by the server; a hosted instance can observe keys in transit, so treat deployments as trusted only. Settings persisted in localStorage, not encrypted at rest by default; optional passphrase-encrypted blob (passphrase never stored).
+- BYOK trust boundary: no provider key is configured in server env or persisted by the app; keys are sent directly from the browser to the provider/connector. A hosted instance never sees keys. Settings persisted in localStorage, not encrypted at rest by default; optional passphrase-encrypted blob (passphrase never stored).
 
 ## Brand Commitments
 

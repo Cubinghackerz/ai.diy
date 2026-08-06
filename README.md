@@ -56,12 +56,12 @@ For a container to reach Ollama on the host, use a host-reachable base URL such 
 | --- | --- |
 | Chat UI, settings, history, artifacts, memory, Preview sessions | Browser, using localStorage and IndexedDB |
 | Dictation and Python execution | Browser, using Web Speech and Pyodide |
-| LLM request relay, model discovery, web search, URL fetching, remote MCP | Node server |
-| Provider API keys | Stored in the user's browser and sent with individual requests to the Node server for provider relay |
+| LLM requests, model discovery, connector tests, memory, knowledge, and Python | Browser, with provider and connector requests sent directly from the browser |
+| Provider API keys | Stored in the user's browser and sent directly to the configured provider; ai.diy does not relay them |
 
 ### BYOK Trust Boundary
 
-No provider API key is configured in server environment variables or persisted by the application server. The selected key is included in each browser-to-server chat or discovery request so the server can call the selected provider. Treat a hosted ai.diy instance as a service that can observe keys in transit, and only use deployments you trust.
+No provider API key is configured in server environment variables or persisted by the application. The selected key is sent directly from the browser to the configured provider endpoint. Provider CORS policy, browser extensions, and network policy still apply.
 
 Settings, including provider keys, connector keys, and MCP headers, are persisted in browser localStorage. They are not encrypted at rest by the application today. Protect the browser profile and device, and do not use shared profiles for sensitive credentials.
 
@@ -260,7 +260,7 @@ Tavily, Brave Search, Exa, and Parallel have direct BYOK search adapters. In Set
 3. A successful test enables that connector.
 4. Select it as the active web-search engine in Settings -> Tools.
 
-Only one direct search connector is active at a time. Connector keys are stored in browser localStorage and relayed only for the current server request.
+Only one direct search connector is active at a time. Connector keys are stored in browser localStorage and sent directly to the selected connector.
 
 GitHub, Supabase, PostgreSQL, and S3 do not have direct adapters. Use an appropriately permission-scoped Remote MCP server for those integrations. Do not place database superuser/service-role credentials in this app.
 
@@ -275,7 +275,7 @@ Settings -> MCP Beta supports remote Streamable HTTP and SSE MCP servers.
 
 Two free hosted web-search MCP servers are bundled by default and enabled on first run: Parallel Search MCP (`https://search.parallel.ai/mcp`, tools `web_search`/`web_fetch`) and Firecrawl Keyless (`https://mcp.firecrawl.dev/v2/mcp`, tools `firecrawl_search`/`firecrawl_scrape`/`firecrawl_parse`). No API keys are required; the model is instructed to prefer these over the built-in DuckDuckGo search. Existing installations can add them with one click from the MCP Beta panel.
 
-Remote MCP servers are contacted by the Node server for each chat request and are closed when that response finishes. Redirects are rejected. Browser-controlled Stdio MCP execution is disabled because it would permit arbitrary host command execution. MCP OAuth authorization flows and connection pooling are not implemented.
+Remote MCP servers are contacted from the browser when their CORS policy permits it. Browser-controlled Stdio MCP execution is disabled because it would permit arbitrary host command execution. MCP OAuth authorization flows and connection pooling are not implemented.
 
 ### Cloud Storage
 
@@ -283,7 +283,7 @@ The Cloud storage section is Beta and marked coming soon. It currently provides 
 
 ## Security and Network Controls
 
-- LLM API keys are not stored by the Node server, but are proxied in transit for each provider request.
+- LLM API keys are not stored or proxied by ai.diy; they are sent directly from the browser to the configured provider.
 - `fetch_url` rejects local, private IPv4, metadata, and `.local` targets.
 - User-configured provider roots, SearXNG URLs, and remote MCP URLs require HTTP(S), reject credentials embedded in URLs, and reject private/network-local targets in production by default.
 - Set `ALLOW_PRIVATE_PROVIDER_URLS=true` only on a trusted self-hosted deployment when you intentionally need Ollama, LM Studio, a private SearXNG instance, or private remote MCP targets in production.
@@ -295,33 +295,18 @@ The Cloud storage section is Beta and marked coming soon. It currently provides 
 
 ## Environment Variables
 
-No LLM provider key is required in the server environment. Optional configuration:
+LLM calls, model listing, and web search run directly from the browser to the chosen provider or service. No LLM provider keys are configured or used by the server. Optional:
 
 ```bash
-# Extra browser origins allowed to call /api/*. Same-origin needs no setting.
-CORS_ORIGINS=https://app.example.com,https://beta.example.com
-
 # Trusted self-hosted deployments only. Allows private/localhost configured URLs in production.
 ALLOW_PRIVATE_PROVIDER_URLS=true
 
 NODE_ENV=production
 ```
 
-`CORS_ORIGINS` does not accept wildcards. Keep the browser and API same-origin unless there is a specific need to separate them.
+## Static deployment
 
-## HTTP API
-
-These routes are application-internal and expect the settings data supplied by the browser:
-
-| Route | Method | Purpose |
-| --- | --- | --- |
-| `/api/chat` | `POST` | Streams a provider response, tools, images, and enabled remote MCP tools |
-| `/api/models` | `POST` | Attempts model discovery for a selected provider/root/key |
-| `/api/title` | `POST` | Generates a short thread title |
-| `/api/search` | `POST` | Performs DuckDuckGo/Bing fallback or SearXNG retrieval |
-| `/api/connectors` | `POST` | Tests one direct search connector with a bounded query |
-
-Do not expose these endpoints as a multi-tenant credential proxy without authentication, rate limits, usage controls, and independent security review.
+The Vercel build is static-only and writes `build/client`. It does not deploy the legacy Node API route modules or consume Vercel Fluid Function CPU. Chat and discovery use the browser transport and direct provider requests instead.
 
 ## Deployment
 
@@ -329,13 +314,13 @@ Self-hosting with Node or Docker is the default deployment model. See [DEPLOYMEN
 
 ### Vercel Preview Only
 
-This repository's Vercel usage is for temporary Preview testing, not a production dependency. Deploy a non-`main` branch without `--prod`:
+This repository's Vercel usage is a static preview deployment. Deploy a non-`main` branch without `--prod`:
 
 ```bash
 npx vercel
 ```
 
-Do not attach a production domain or use `npx vercel --prod` for this beta workspace.
+The Vercel project serves the static browser app. Self-host with Node or Docker when you need server-side adapters for providers that require signing or server-only credentials.
 
 ## Development
 

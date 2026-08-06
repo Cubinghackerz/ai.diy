@@ -93,6 +93,7 @@ import {
 } from "~/lib/model-catalog-cache";
 import { cn } from "~/lib/utils";
 import { localProviderKey } from "~/lib/provider-credentials";
+import { connectorSearch } from "~/lib/search/connectors";
 import {
     CaretRight,
     ChatCircleDots,
@@ -1847,15 +1848,11 @@ function ConnectorsSection() {
     const testConnector = async (connector: ConnectorConfig) => {
         setStatus((current) => ({ ...current, [connector.kind]: "Testing…" }));
         try {
-            const response = await fetch("/api/connectors", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "test", connector }),
-            });
-            const data = (await response.json()) as { ok?: boolean; error?: string };
+            const results = await connectorSearch(connector, "ai.diy", 1);
+            const data = { ok: results.length > 0 };
             setStatus((current) => ({
                 ...current,
-                [connector.kind]: data.ok ? "Connected" : data.error || "Test failed",
+                [connector.kind]: data.ok ? "Connected" : "No results returned",
             }));
             if (data.ok) saveConnector({ ...connector, enabled: true }, true);
         } catch (error) {

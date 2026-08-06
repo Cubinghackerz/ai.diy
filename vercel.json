@@ -1,7 +1,8 @@
 {
-  "buildCommand": "npm run build",
+  "buildCommand": "VERCEL=1 npm run build",
   "installCommand": "npm install",
   "devCommand": "npm run dev",
+  "outputDirectory": "build/client",
   "headers": [
     {
       "source": "/",

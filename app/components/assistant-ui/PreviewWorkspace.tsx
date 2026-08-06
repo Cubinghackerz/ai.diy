@@ -33,13 +33,14 @@ import {
     hasLocalMemoryEntries,
     readLocalMemory,
 } from "~/lib/memory";
-import { askUserInBrowser } from "~/lib/client-tools";
+import { askUserInBrowser, runCalculatorInBrowser, runFetchUrlInBrowser, runWebSearchInBrowser } from "~/lib/client-tools";
 import {
     deletePreviewSession,
     loadPreviewSession,
     savePreviewSession,
 } from "~/lib/db";
 import { useSettings } from "~/lib/providers/SettingsProvider";
+import { localChatFetch } from "~/lib/client-chat";
 import { isProviderReady } from "~/lib/setup";
 import { getReasoningEffortOptions } from "~/lib/reasoning";
 import { resolveModel } from "~/lib/model-capabilities";
@@ -937,9 +938,9 @@ const PreviewRunPanel: FC<{
     const transport = useMemo(
         () =>
             new AssistantChatTransport({
-                api: "/api/chat",
+                api: "local://chat",
                 fetch: async (input, init) => {
-                    const response = await globalThis.fetch(input, init);
+                    const response = await localChatFetch(input, init);
                     if (!response.ok) {
                         throw new Error(
                             await parseChatError(response, "Preview run failed"),
@@ -992,6 +993,10 @@ const PreviewRunPanel: FC<{
                 "run_code",
                 "ask_user",
                 "memory",
+                "web_search",
+                "fetch_url",
+                "read_url",
+                "calculator",
             ].includes(toolCall.toolName)) return;
             pendingClientCalls.current += 1;
             const input = toolCall.input as {
@@ -1000,6 +1005,9 @@ const PreviewRunPanel: FC<{
                 questionType?: "single" | "multiple" | "short";
                 options?: string[];
                 query?: string;
+                expression?: string;
+                url?: string;
+                maxResults?: number;
             };
             const task =
                 toolCall.toolName === "ask_user"
@@ -1012,7 +1020,19 @@ const PreviewRunPanel: FC<{
                       ? settingsRef.current.memoryEnabled !== false
                           ? readLocalMemory(input.query)
                           : Promise.resolve("Memory is disabled for this chat.")
-                      : runBrowserPython(input.code ?? "");
+                      : toolCall.toolName === "web_search"
+                        ? runWebSearchInBrowser(
+                              input.query ?? "",
+                              Number(input.maxResults ?? 5),
+                              settingsRef.current.connectors,
+                              settingsRef.current.webSearchEngine,
+                              settingsRef.current.searxngUrl,
+                            )
+                        : toolCall.toolName === "fetch_url" || toolCall.toolName === "read_url"
+                          ? runFetchUrlInBrowser({ url: String(input.url ?? "") })
+                          : toolCall.toolName === "calculator"
+                            ? runCalculatorInBrowser({ expression: String(input.expression ?? "") })
+                            : runBrowserPython(input.code ?? "");
             void task.then(
                 (result) => {
                     const output =

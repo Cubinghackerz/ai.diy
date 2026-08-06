@@ -4,8 +4,8 @@
  * Factory for getting the appropriate provider adapter for each ProviderId.
  * Providers that expose an OpenAI-compatible models endpoint reuse
  * OpenAIProvider; the rest use native adapters. Chat streaming itself is
- * handled by the AI SDK route (app/lib/server/model.ts) — these adapters only
- * power live model discovery in /api/models.
+ * handled by the browser transport; these adapters power direct chat and live
+ * model discovery without an ai.diy server relay.
  */
 
 import type { LLMProvider } from "./types";

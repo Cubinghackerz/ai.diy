@@ -53,30 +53,26 @@ Copy `.env.example` — no secrets required. Optional:
 
 | Feature | Works |
 |---------|-------|
-| Cloud providers (OpenAI, Anthropic, …) | Works with user's BYOK key |
-| Ollama / localhost custom proxy | Only when the server can reach them (same network / Docker) |
+| Cloud providers (OpenAI, Anthropic, …) | Works with user's BYOK key (direct from browser) |
+| Ollama / localhost custom proxy | Only when the *browser* can reach them (same network, public HTTPS, or localhost for local users) |
 | Python `run_python` tool | Runs in each user's browser through Pyodide |
-| Web search, calculator, fetch URL, canvas | Works |
+| Web search, calculator, fetch URL, canvas | Works (web search + calc fully; fetch_url limited by browser CORS) |
 | Chat history | Stored in **user's browser** (IndexedDB) |
 
-### Cross-origin (separate frontend / API domains)
+### Browser-direct architecture (no API proxy)
 
-The app is same-origin by default: the browser calls `/api/*` on the same host that renders the UI, so no CORS setup is needed.
+Chat, model discovery, web search (DDG + connectors), and fetch_url run directly from the browser to the provider or service using the user's key. The Node server only serves the UI (static or SSR). No server-side proxy of LLM requests or keys exists.
 
-If you serve the frontend and API from different origins, set `CORS_ORIGINS` to the comma-separated list of allowed frontend origins. Requests from any other origin are rejected (wildcards are not supported):
-
-```bash
-CORS_ORIGINS=https://app.example.com,https://beta.example.com npm start
-```
+CORS configuration for `/api/*` is not used. Provider and connector endpoints must accept requests from the browser (standard for public cloud providers; self-hosted like Ollama/SearXNG still require the browser to reach them).
 
 ## Privacy
 
 - API keys and chat history stay in the **user's browser** (localStorage + IndexedDB).
-- Keys are sent to **your** server only to proxy requests to the user's chosen provider — they are not stored server-side.
+- Keys are sent directly from the browser to the user's chosen provider or connector — ai.diy never relays or stores them.
 - Do not log request bodies in production.
 
 ## Security notes for public deployments
 
-- `fetch_url` blocks private/local network URLs (SSRF guard).
-- Consider adding rate limiting on `/api/chat` for public instances.
+- `fetch_url` (client-side) is subject to browser CORS and cannot access private networks.
+- For full server-side guards (SSRF on fetch_url, etc.) use a self-hosted deployment that adds its own protections if exposing public access.
 - Users should treat shared public demos like any BYOK client: only use keys they trust the instance with.

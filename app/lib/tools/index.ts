@@ -2,8 +2,9 @@
  * Built-in Tools — Web search, calculator, fetch URL
  * 
  * These tools are available to all chat models. The tool schemas are sent
- * to the LLM, and when the LLM calls a tool, the server executes it and
- * feeds the result back in a multi-turn loop.
+ * to the LLM, and when the LLM calls a tool, it is executed in the current
+ * environment (browser in static deployments, Node server in self-hosted)
+ * and the result fed back in a multi-turn loop.
  */
 
 import type { LLMTool } from "~/lib/llm/types";
@@ -74,7 +75,7 @@ export const FETCH_URL_TOOL: LLMTool = {
     },
 };
 
-// ─── Tool Executors (run on server) ──────────────────────────────
+// ─── Tool Executors (run in browser for static deploys or on server) ──────────────────────────────
 
 export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
     web_search: {

@@ -41,6 +41,7 @@ import { ModelHoverCard } from "~/components/ui/ModelHoverCard";
 import { ModelLogo } from "~/components/ui/ModelLogo";
 import { cn } from "~/lib/utils";
 import { localProviderKey } from "~/lib/provider-credentials";
+import { listClientModels } from "~/lib/client-chat";
 
 function ModelBadges({
     model,
@@ -126,53 +127,28 @@ export function useProviderModels(provider: ProviderId, enabled: boolean) {
         setLoading(true);
         setError(null);
         try {
-            const res = await fetch("/api/models", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
+            const live = await listClientModels(
+                provider,
+                provider === "custom" && authMode && authMode !== "bearer"
+                    ? ""
+                    : apiKey || localProviderKey(provider),
+                baseUrl || undefined,
+                compatibleHeaders,
+                timeoutMs,
+                maxRetries,
+                authMode,
+            );
+            const next = live.length > 0
+                ? live.map((m) => enrichModelInfo({
+                    ...m,
                     provider,
-                    apiKey:
-                        provider === "custom" &&
-                        settings.providers[provider]?.openAICompatible?.authMode &&
-                        settings.providers[provider].openAICompatible.authMode !== "bearer"
-                            ? ""
-                            : apiKey || localProviderKey(provider),
-                    baseUrl: baseUrl || undefined,
-                    headers: compatibleHeaders,
-                    timeoutMs,
-                    maxRetries,
-                    authMode,
-                }),
-            });
-            const data = (await res.json()) as {
-                models?: ModelInfo[];
-                error?: string;
-            };
-            const raw =
-                data.models && data.models.length > 0
-                    ? data.models.map((m) =>
-                        enrichModelInfo({
-                              ...m,
-                              id: m.id,
-                              name: m.name || m.id,
-                              provider,
-                              ...(capabilityOverrides?.tools === undefined ? {} : { supportsTools: capabilityOverrides.tools }),
-                              ...(capabilityOverrides?.vision === undefined ? {} : { supportsVision: capabilityOverrides.vision }),
-                              ...(capabilityOverrides?.structuredOutput === undefined ? {} : { supportsStructuredOutputs: capabilityOverrides.structuredOutput }),
-                              ...(capabilityOverrides?.reasoning === undefined ? {} : { supportsReasoning: capabilityOverrides.reasoning }),
-                          }),
-                      )
-                    : (DEFAULT_MODELS[provider] ?? []).map(enrichModelInfo);
-            const next = raw;
+                    ...(capabilityOverrides?.tools === undefined ? {} : { supportsTools: capabilityOverrides.tools }),
+                    ...(capabilityOverrides?.vision === undefined ? {} : { supportsVision: capabilityOverrides.vision }),
+                    ...(capabilityOverrides?.structuredOutput === undefined ? {} : { supportsStructuredOutputs: capabilityOverrides.structuredOutput }),
+                    ...(capabilityOverrides?.reasoning === undefined ? {} : { supportsReasoning: capabilityOverrides.reasoning }),
+                }))
+                : (DEFAULT_MODELS[provider] ?? []).map(enrichModelInfo);
             setModels(next);
-            if (!res.ok || data.error) {
-                setError(
-                    data.error || `Failed to load models (HTTP ${res.status})`,
-                );
-                setModels(
-                    (DEFAULT_MODELS[provider] ?? []).map(enrichModelInfo),
-                );
-            }
         } catch (err) {
             setModels(
                 (DEFAULT_MODELS[provider] ?? []).map(enrichModelInfo),

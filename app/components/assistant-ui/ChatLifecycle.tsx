@@ -8,8 +8,6 @@
 
 import { useAui, useAuiState } from "@assistant-ui/react";
 import { useEffect, useRef } from "react";
-import { useSettings } from "~/lib/providers/SettingsProvider";
-import { localProviderKey } from "~/lib/provider-credentials";
 
 function fallbackTitle(message: string): string {
     const cleaned = message.replace(/\s+/g, " ").trim();
@@ -27,7 +25,6 @@ export function ChatLifecycle({
     onTitleChange: (threadId: string, title: string) => void;
 }) {
     const aui = useAui();
-    const { settings } = useSettings();
     const messageCount = useAuiState((s) => s.thread.messages.length);
     const isRunning = useAuiState((s) => s.thread.isRunning);
     const titledForThread = useRef<string | null>(null);
@@ -66,51 +63,16 @@ export function ChatLifecycle({
         if (!text) return;
 
         pendingTitle.current = true;
-        const provider = settings.chat.provider;
-        const providerConfig = settings.providers[provider];
-        const apiKey =
-            providerConfig?.apiKey || localProviderKey(provider);
         const titleThreadId = threadId;
-
-        void (async () => {
-            try {
-                const res = await fetch("/api/title", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        message: text,
-                        model: settings.chat.model,
-                        provider,
-                        apiKey,
-                        baseUrl: providerConfig?.baseUrl || undefined,
-                    }),
-                });
-                const data = (await res.json()) as {
-                    title?: string;
-                };
-                const title = data.title?.trim() || fallbackTitle(text);
-                if (title && titleThreadId === threadId) {
-                    onTitleChange(titleThreadId, title);
-                    titledForThread.current = titleThreadId;
-                }
-            } catch {
-                if (titleThreadId === threadId) {
-                    onTitleChange(titleThreadId, fallbackTitle(text));
-                    titledForThread.current = titleThreadId;
-                }
-            } finally {
-                pendingTitle.current = false;
-            }
-        })();
+        onTitleChange(titleThreadId, fallbackTitle(text));
+        titledForThread.current = titleThreadId;
+        pendingTitle.current = false;
     }, [
         aui,
         threadId,
         threadTitle,
         messageCount,
         isRunning,
-        settings.chat.model,
-        settings.chat.provider,
-        settings.providers,
         onTitleChange,
     ]);
 

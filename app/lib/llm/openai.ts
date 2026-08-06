@@ -21,6 +21,7 @@ export class OpenAIProvider implements LLMProvider {
         const client = new OpenAI({
             apiKey: request.apiKey || undefined,
             baseURL: request.baseUrl,
+            dangerouslyAllowBrowser: true,
         });
 
         const messages = request.systemPrompt
@@ -114,6 +115,7 @@ export class OpenAIProvider implements LLMProvider {
                 apiKey: apiKey || "custom",
                 baseURL: baseUrl,
                 defaultHeaders: headers,
+                dangerouslyAllowBrowser: true,
                 fetch: createCompatibleFetch(timeoutMs, maxRetries, {
                     stripAuthorization:
                         authMode === "api-key-header" ||

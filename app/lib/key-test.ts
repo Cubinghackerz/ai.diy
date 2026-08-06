@@ -8,6 +8,7 @@ import { DEFAULT_MODELS, type ModelInfo, type ProviderId } from "~/lib/types";
 import { isLocalProvider } from "~/lib/setup";
 import { enrichModelInfo } from "~/lib/model-capabilities";
 import { localProviderKey } from "~/lib/provider-credentials";
+import { listClientModels } from "~/lib/client-chat";
 
 export type KeyTestResult = {
     ok: boolean;
@@ -52,7 +53,7 @@ export function looksLikeApiKey(provider: ProviderId, key: string): boolean {
 }
 
 /**
- * Live test: POST /api/models with the exact key + endpoint the user configured.
+ * Live test: call the provider directly with the exact key + endpoint the user configured.
  * On success, returns provider model list so the UI can unlock model selection.
  * Soft format checks never count as a pass.
  */
@@ -82,47 +83,16 @@ export async function testProviderKey(options: {
 
     const startedAt = performance.now();
     try {
-        const res = await fetch("/api/models", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                provider,
-                    apiKey:
-                        provider === "custom"
-                            ? key
-                            : key || localProviderKey(provider),
-                    baseUrl: baseUrl || undefined,
-                    headers,
-                    timeoutMs,
-                    maxRetries,
-                    authMode,
-            }),
-        });
-        const data = (await res.json()) as {
-            models?: ModelInfo[];
-            error?: string;
-            live?: boolean;
-            resolvedBaseUrl?: string;
-        };
-
-        if (!res.ok || data.error) {
-            return {
-                ok: false,
-                models: [],
-                error:
-                    data.error ||
-                    `Provider rejected the key (HTTP ${res.status}).`,
-                live: data.live,
-                latencyMs: Math.round(performance.now() - startedAt),
-                resolvedBaseUrl: data.resolvedBaseUrl,
-            };
-        }
-
-        const models = (
-            data.models && data.models.length > 0
-                ? data.models
-                : (DEFAULT_MODELS[provider] ?? [])
-        ).map((m) =>
+        const live = await listClientModels(
+            provider,
+            provider === "custom" ? key : key || localProviderKey(provider),
+            baseUrl,
+            headers,
+            timeoutMs,
+            maxRetries,
+            authMode,
+        );
+        const models = (live.length > 0 ? live : (DEFAULT_MODELS[provider] ?? [])).map((m) =>
             enrichModelInfo({
                 ...m,
                 id: m.id,
@@ -142,9 +112,9 @@ export async function testProviderKey(options: {
         return {
             ok: true,
             models,
-            live: data.live,
+            live: live.length > 0,
             latencyMs: Math.round(performance.now() - startedAt),
-            resolvedBaseUrl: data.resolvedBaseUrl,
+            resolvedBaseUrl: baseUrl,
         };
     } catch (err) {
         return {
