@@ -1,5 +1,25 @@
 {
   "buildCommand": "npm run build",
   "installCommand": "npm install",
-  "devCommand": "npm run dev"
+  "devCommand": "npm run dev",
+  "headers": [
+    {
+      "source": "/",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, s-maxage=600, stale-while-revalidate=86400"
+        }
+      ]
+    },
+    {
+      "source": "/workspace",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, s-maxage=600, stale-while-revalidate=86400"
+        }
+      ]
+    }
+  ]
 }

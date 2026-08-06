@@ -111,10 +111,12 @@ export function useProviderModels(provider: ProviderId, enabled: boolean) {
     const apiKey = settings.providers[provider]?.apiKey || "";
     const baseUrl = settings.providers[provider]?.baseUrl;
     const compatibleHeaders = settings.providers[provider]?.openAICompatible?.headers;
+    const compatibleHeadersKey = JSON.stringify(compatibleHeaders ?? {});
     const timeoutMs = settings.providers[provider]?.openAICompatible?.timeoutMs;
     const maxRetries = settings.providers[provider]?.openAICompatible?.maxRetries;
     const authMode = settings.providers[provider]?.openAICompatible?.authMode;
     const capabilityOverrides = settings.providers[provider]?.openAICompatible?.capabilityOverrides;
+    const capabilityOverridesKey = JSON.stringify(capabilityOverrides ?? {});
 
     const refresh = useCallback(async () => {
         if (!enabled) {
@@ -181,7 +183,17 @@ export function useProviderModels(provider: ProviderId, enabled: boolean) {
         } finally {
             setLoading(false);
         }
-    }, [enabled, provider, apiKey, baseUrl, compatibleHeaders, timeoutMs, maxRetries, authMode, capabilityOverrides]);
+    }, [
+        enabled,
+        provider,
+        apiKey,
+        baseUrl,
+        compatibleHeadersKey,
+        timeoutMs,
+        maxRetries,
+        authMode,
+        capabilityOverridesKey,
+    ]);
 
     useEffect(() => {
         void refresh();
