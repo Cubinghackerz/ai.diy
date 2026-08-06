@@ -80,11 +80,11 @@ function ThemeToggle() {
 
 function HeroDiagram() {
     return (
-        <div data-hero-diagram className="group relative overflow-hidden rounded-[1.6rem] border border-[color:var(--landing-hairline)] bg-[color:var(--landing-panel)] p-6 text-[color:var(--landing-paper)] sm:p-8">
+        <div data-hero-diagram className="group relative overflow-hidden rounded-[1.6rem] border border-[color:var(--landing-hairline)] bg-[color:var(--landing-panel)] p-6 text-[color:var(--landing-panel-ink)] shadow-[0_18px_55px_-35px_var(--landing-shadow)] sm:p-8">
             <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 size-72 rounded-full bg-[color:var(--landing-accent)]/25 blur-[90px] transition-transform duration-1000" />
             <div className="relative z-10 flex flex-col items-center gap-10">
-                <p className="font-[family-name:var(--landing-mono)] text-[11px] lowercase tracking-[0.14em] text-[color:var(--landing-ink-dim)]">
-                    your context, one line of thought
+                <p className="text-sm font-medium tracking-[-0.01em] text-[color:var(--landing-panel-dim)]">
+                    One workspace. Every useful model.
                 </p>
 
                 <div className="relative flex items-center justify-center">
@@ -95,14 +95,16 @@ function HeroDiagram() {
                             </marker>
                         </defs>
 
-                        <path d="M90 300 L250 190" stroke="var(--diagram-ink)" strokeWidth="1.5" markerEnd="url(#arrow)" data-line data-order="1" />
-                        <path d="M310 190 L470 150" stroke="var(--diagram-ink)" strokeWidth="1.5" markerEnd="url(#arrow)" data-line data-order="2" />
-                        <path d="M310 190 L470 300" stroke="var(--diagram-ink)" strokeWidth="1.5" markerEnd="url(#arrow)" data-line data-order="3" />
+                        <path d="M142 182 L226 190" stroke="var(--diagram-ink)" strokeWidth="1.5" markerEnd="url(#arrow)" data-line data-order="1" />
+                        <path d="M334 160 L445 125" stroke="var(--diagram-ink)" strokeWidth="1.5" markerEnd="url(#arrow)" data-line data-order="2" />
+                        <path d="M334 220 L445 270" stroke="var(--diagram-ink)" strokeWidth="1.5" markerEnd="url(#arrow)" data-line data-order="3" />
 
                         <g data-node>
-                            <rect x="66" y="118" width="48" height="64" rx="8" fill="var(--diagram-soft)" stroke="var(--diagram-ink)" strokeWidth="1.5" />
-                            <circle cx="90" cy="142" r="10" fill="var(--diagram-ink)" />
-                            <line x1="78" y1="164" x2="102" y2="164" stroke="var(--diagram-ink)" strokeWidth="3" strokeLinecap="round" />
+                            <rect x="42" y="150" width="100" height="64" rx="10" fill="var(--diagram-soft)" stroke="var(--diagram-ink)" strokeWidth="1.5" />
+                            <circle cx="64" cy="174" r="9" fill="var(--diagram-ink)" />
+                            <line x1="84" y1="171" x2="121" y2="171" stroke="var(--diagram-ink)" strokeWidth="3" strokeLinecap="round" />
+                            <line x1="84" y1="186" x2="111" y2="186" stroke="var(--diagram-ink)" strokeWidth="3" strokeLinecap="round" />
+                            <text x="92" y="246" textAnchor="middle" fill="var(--diagram-ink)" fontSize="11" fontFamily="var(--landing-sans)">Your context</text>
                         </g>
 
                         <g data-node>
@@ -114,8 +116,8 @@ function HeroDiagram() {
 
                         <g data-node>
                             <circle cx="470" cy="150" r="22" fill="var(--diagram-soft)" stroke="var(--diagram-ink)" strokeWidth="1.5" />
-                            <text x="470" y="155" textAnchor="middle" fill="var(--diagram-ink)" fontSize="10" fontWeight="700" fontFamily="var(--landing-mono)">
-                                oa
+                            <text x="470" y="155" textAnchor="middle" fill="var(--diagram-ink)" fontSize="10" fontWeight="700" fontFamily="var(--landing-sans)">
+                                AI
                             </text>
                             <text x="470" y="196" textAnchor="middle" fill="var(--diagram-ink)" fontSize="11" fontFamily="var(--landing-sans)" opacity="0.8">
                                 OpenAI
@@ -124,8 +126,8 @@ function HeroDiagram() {
 
                         <g data-node>
                             <circle cx="470" cy="300" r="22" fill="var(--diagram-soft)" stroke="var(--diagram-ink)" strokeWidth="1.5" />
-                            <text x="470" y="305" textAnchor="middle" fill="var(--diagram-ink)" fontSize="10" fontWeight="700" fontFamily="var(--landing-mono)">
-                                ol
+                            <text x="470" y="305" textAnchor="middle" fill="var(--diagram-ink)" fontSize="10" fontWeight="700" fontFamily="var(--landing-sans)">
+                                LM
                             </text>
                             <text x="470" y="348" textAnchor="middle" fill="var(--diagram-ink)" fontSize="11" fontFamily="var(--landing-sans)" opacity="0.8">
                                 Ollama
@@ -134,20 +136,12 @@ function HeroDiagram() {
                     </svg>
                 </div>
 
-                <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4">
-                    {[
-                        { id: "openai", label: "OpenAI" },
-                        { id: "anthropic", label: "Anthropic" },
-                        { id: "gemini", label: "Google" },
-                        { id: "ollama", label: "Ollama" },
-                    ].map((p) => (
-                        <div key={p.id} className="flex items-center gap-2 rounded-lg border border-[color:var(--landing-hairline)] bg-[color:var(--landing-paper)]/8 px-2 py-2">
-                            <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-[color:var(--landing-paper)]">
-                                <ModelLogo provider={p.id} size={14} />
-                            </span>
-                            <span className="truncate text-[11px] font-medium text-[color:var(--landing-ink)]">{p.label}</span>
-                        </div>
-                    ))}
+                <div className="flex w-full items-center justify-between border-t border-[color:var(--landing-panel-hairline)] pt-4 text-xs text-[color:var(--landing-panel-dim)]">
+                    <span>Your context</span>
+                    <ArrowRight size={14} />
+                    <span>ai.diy workspace</span>
+                    <ArrowRight size={14} />
+                    <span>Any model or local endpoint</span>
                 </div>
             </div>
         </div>
@@ -201,7 +195,7 @@ function ProofSection() {
                         <h3 className="mt-5 text-xl font-medium tracking-[-0.02em]">Artifacts that stay attached.</h3>
                         <p className="mt-2 text-sm leading-relaxed text-[color:var(--landing-ink-dim)]">Turn a thought into code, a file, or a working surface without breaking the thread.</p>
                     </div>
-                    <div data-reveal-text className="md:pt-24" style={{ textAlign: "left" }}>
+                    <div data-reveal-text className="md:pt-24">
                         <Lock size={26} weight="bold" className="text-[color:var(--landing-accent)]" />
                         <h3 className="mt-5 text-xl font-medium tracking-[-0.02em]">Private by posture.</h3>
                         <p className="mt-2 text-sm leading-relaxed text-[color:var(--landing-ink-dim)]">BYOK, local-first storage, and direct connections make the boundary visible.</p>
@@ -369,16 +363,20 @@ function LandingPage() {
 
     return (
         <div ref={page} className="landing-page relative w-full overflow-x-hidden bg-[color:var(--landing-paper)] text-[color:var(--landing-ink)]">
-            <div aria-hidden="true" dangerouslySetInnerHTML={{ __html: "<!--LANDING-CONTRACT: editorial technical-modernist landing for devs-self-hosters · THESIS: one calm workspace surface where local-first privacy and real work meet; it refuses the AI-hero default of dark-mesh-plus-gradient · OWN-WORLD: neutral paper ground, near-black ink, one committed sky-blue accent carone-line; hairline discipline instead of card borders; author-drawn diagram-in-progress; mono only for code/data · STORY: visitor understands the local-first workspace at a glance, believes privacy is posture not claim, and opens the workspace · FIRST VIEWPORT: editorial headline left with smooth blur-mask reveal, diagram-of-mechanism right, primary action top-right · FORM: committed replacement world, seed 7b063ac5 replaced; FORM-ID editorial-modernist · FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md-->" }} />
+            <div aria-hidden="true" dangerouslySetInnerHTML={{ __html: "<!--LANDING-CONTRACT: editorial technical-modernist landing for devs-self-hosters · THESIS: one calm workspace surface where local-first privacy and real work meet; it refuses the AI-hero default of dark-mesh-plus-gradient · OWN-WORLD: neutral paper ground, near-black ink, one committed sky-blue accent with clean one-line connections; hairline discipline instead of card borders; author-drawn diagram-in-progress; mono only for code/data · STORY: visitor understands the local-first workspace at a glance, believes privacy is posture not claim, and opens the workspace · FIRST VIEWPORT: editorial headline left with smooth blur-mask reveal, diagram-of-mechanism right, primary action left · FORM: committed replacement world, seed 7b063ac5 replaced; FORM-ID editorial-modernist · FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md-->" }} />
             <style>{`
                 .landing-page {
                     --landing-paper: #f4f4f2;
                     --landing-surface: #ececea;
                     --landing-ink: #111110;
-                    --landing-ink-dim: rgba(17, 17, 16, 0.66);
-                    --landing-hairline: rgba(17, 17, 16, 0.14);
-                    --landing-accent: #0a84c4;
-                    --landing-panel: #131312;
+                    --landing-ink-dim: rgba(17, 17, 16, 0.72);
+                    --landing-hairline: rgba(17, 17, 16, 0.18);
+                    --landing-accent: #0879b5;
+                    --landing-panel: #e7edf2;
+                    --landing-panel-ink: #111110;
+                    --landing-panel-dim: rgba(17, 17, 16, 0.64);
+                    --landing-panel-hairline: rgba(17, 17, 16, 0.14);
+                    --landing-shadow: rgba(31, 52, 70, 0.24);
                     --landing-mono: "Space Mono", ui-monospace, monospace;
                     --landing-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
                     --diagram-ink: #111110;
@@ -390,10 +388,14 @@ function LandingPage() {
                     --landing-paper: #101012;
                     --landing-surface: #151518;
                     --landing-ink: #f0f0ee;
-                    --landing-ink-dim: rgba(240, 240, 238, 0.66);
-                    --landing-hairline: rgba(240, 240, 238, 0.16);
+                    --landing-ink-dim: rgba(240, 240, 238, 0.72);
+                    --landing-hairline: rgba(240, 240, 238, 0.18);
                     --landing-accent: #5bb4e8;
                     --landing-panel: #0c0c0e;
+                    --landing-panel-ink: #f0f0ee;
+                    --landing-panel-dim: rgba(240, 240, 238, 0.68);
+                    --landing-panel-hairline: rgba(240, 240, 238, 0.16);
+                    --landing-shadow: rgba(0, 0, 0, 0.45);
                     --diagram-ink: #f0f0ee;
                     --diagram-soft: #101012;
                 }
@@ -419,9 +421,8 @@ function LandingPage() {
             `}</style>
 
             <nav className="mx-auto flex h-16 w-full max-w-[90rem] items-center justify-between px-5 sm:px-8 lg:px-12">
-                <Link to="/" className="flex items-center gap-2.5 text-[15px] font-semibold tracking-[-0.02em]">
-                    <img src="/ai-diy.png" alt="ai.diy" className="size-7 rounded-md object-cover" />
-                    ai.diy
+                <Link to="/" aria-label="ai.diy home" className="flex items-center">
+                    <img src="/ai-diy.png" alt="ai.diy" className="h-8 w-24 object-contain" />
                 </Link>
                 <div className="hidden items-center gap-8 text-sm font-medium text-[color:var(--landing-ink-dim)] md:flex">
                     <a href="#proof" className="transition-colors hover:text-[color:var(--landing-ink)]">Why it works</a>
@@ -430,12 +431,8 @@ function LandingPage() {
                 </div>
                 <div className="flex items-center gap-2.5">
                     <ThemeToggle />
-                    <Link
-                        to="/workspace"
-                        className="group inline-flex items-center gap-2 rounded-full bg-[color:var(--landing-ink)] px-4 py-2.5 text-[13px] font-semibold text-[color:var(--landing-paper)] transition-transform duration-300 hover:scale-[1.03] active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[color:var(--landing-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--landing-paper)]"
-                    >
-                        Open workspace
-                        <ArrowUpRight className="transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" size={14} />
+                    <Link to="/workspace" className="hidden text-sm font-semibold text-[color:var(--landing-ink)] transition-colors hover:text-[color:var(--landing-accent)] sm:inline-flex">
+                        Workspace
                     </Link>
                 </div>
             </nav>
