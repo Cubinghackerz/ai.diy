@@ -681,8 +681,8 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                             src="/workspace-demo.gif"
                             alt="ai.diy workspace demo: streaming chat, reasoning, and Canvas artifacts"
                             className="block h-auto w-full"
-                            width={1100}
-                            height={665}
+                            width={1786}
+                            height={1080}
                             loading="lazy"
                             decoding="async"
                         />
