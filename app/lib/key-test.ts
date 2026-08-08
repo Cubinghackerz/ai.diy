@@ -8,6 +8,7 @@ import { DEFAULT_MODELS, type ModelInfo, type ProviderId } from "~/lib/types";
 import { isLocalProvider } from "~/lib/setup";
 import { enrichModelInfo } from "~/lib/model-capabilities";
 import { localProviderKey } from "~/lib/provider-credentials";
+import { formatProviderError } from "~/lib/provider-errors";
 
 export type KeyTestResult = {
     ok: boolean;
@@ -69,14 +70,24 @@ export async function testProviderKey(options: {
     const key = apiKey.trim();
 
     if (!isLocalProvider(provider) && !key) {
-        return { ok: false, models: [], error: "Enter an API key to test." };
+        return {
+            ok: false,
+            models: [],
+            error: formatProviderError("API key required", {
+                provider,
+                context: "setup",
+            }),
+        };
     }
 
     if (!isLocalProvider(provider) && !looksLikeApiKey(provider, key)) {
         return {
             ok: false,
             models: [],
-            error: "Key format looks off for this provider. Check and try again.",
+            error: formatProviderError(
+                "Invalid API key format for this provider",
+                { provider, context: "setup" },
+            ),
         };
     }
 
@@ -111,7 +122,10 @@ export async function testProviderKey(options: {
                 models: [],
                 error:
                     data.error ||
-                    `Provider rejected the key (HTTP ${res.status}).`,
+                    formatProviderError(
+                        `Provider rejected the key (HTTP ${res.status})`,
+                        { provider, status: res.status, context: "setup" },
+                    ),
                 live: data.live,
                 latencyMs: Math.round(performance.now() - startedAt),
                 resolvedBaseUrl: data.resolvedBaseUrl,
@@ -150,10 +164,10 @@ export async function testProviderKey(options: {
         return {
             ok: false,
             models: [],
-            error:
-                err instanceof Error
-                    ? err.message
-                    : "Network error while testing the key.",
+            error: formatProviderError(
+                err instanceof Error ? err : "Network error while testing the key",
+                { provider, context: "setup" },
+            ),
         };
     }
 }

@@ -1,0 +1,205 @@
+{
+  "version": 1,
+  "skills": [
+    {
+      "id": "api-documentation",
+      "name": "API Documentation",
+      "version": "1.0.0",
+      "description": "Generate and improve API documentation from code, OpenAPI/Swagger specs, and examples—covering endpoints, auth, errors, and usage. Use when documenting or clarifying HTTP/RPC APIs.",
+      "category": "developer",
+      "path": "developer/api-documentation/SKILL.md",
+      "popular": false,
+      "tools": ["fetch_url", "run_python", "create_file", "generate_file", "ask_user", "memory"]
+    },
+    {
+      "id": "code-review",
+      "name": "Code Review",
+      "version": "1.0.0",
+      "description": "Structured code review for correctness, security, maintainability, and test gaps. Use when reviewing diffs, PRs, patches, or asking whether code is safe to merge.",
+      "category": "developer",
+      "path": "developer/code-review/SKILL.md",
+      "popular": true,
+      "tools": ["fetch_url", "run_python", "create_file", "ask_user"]
+    },
+    {
+      "id": "github-repository-analysis",
+      "name": "GitHub Repository Analysis",
+      "version": "1.0.0",
+      "description": "Analyze GitHub repositories for structure, stack, health signals, docs quality, and contribution entry points. Use when onboarding to a repo, evaluating a project, or mapping architecture from GitHub.",
+      "category": "developer",
+      "path": "developer/github-repository-analysis/SKILL.md",
+      "popular": true,
+      "tools": ["web_search", "fetch_url", "run_python", "memory", "ask_user"]
+    },
+    {
+      "id": "log-analysis",
+      "name": "Log Analysis",
+      "version": "1.0.0",
+      "description": "Parse and analyze application, system, and access logs to find errors, patterns, anomalies, and actionable signals. Use when debugging from log dumps or correlating events across services.",
+      "category": "devops",
+      "path": "devops/log-analysis/SKILL.md",
+      "popular": false,
+      "tools": ["run_python", "calculator", "create_file", "ask_user", "memory"]
+    },
+    {
+      "id": "root-cause-analysis",
+      "name": "Root Cause Analysis",
+      "version": "1.0.0",
+      "description": "Systematic root-cause analysis for outages, defects, and process failures using timelines, hypothesis testing, and 5-Whys / fault-tree discipline. Use when diagnosing why something broke—not only what failed.",
+      "category": "devops",
+      "path": "devops/root-cause-analysis/SKILL.md",
+      "popular": false,
+      "tools": ["run_python", "calculator", "create_file", "ask_user", "memory", "fetch_url"]
+    },
+    {
+      "id": "incident-investigator",
+      "name": "Incident Investigator",
+      "version": "1.0.0",
+      "description": "Structured security and reliability incident investigation—timeline construction, hypothesis testing, blast-radius assessment, and containment recommendations. Use during or after incidents with logs, alerts, and changelogs.",
+      "category": "security",
+      "path": "security/incident-investigator/SKILL.md",
+      "popular": true,
+      "tools": ["run_python", "fetch_url", "memory", "ask_user", "create_file", "calculator"]
+    },
+    {
+      "id": "security-audit",
+      "name": "Security Audit",
+      "version": "1.0.0",
+      "description": "Defensive security review of applications, configs, and architecture for vulnerabilities and control gaps. Use for threat-oriented audits, secure design checks, and remediation prioritization—not exploit development.",
+      "category": "security",
+      "path": "security/security-audit/SKILL.md",
+      "popular": false,
+      "tools": ["fetch_url", "run_python", "create_file", "ask_user", "memory"]
+    },
+    {
+      "id": "competitor-research",
+      "name": "Competitor Research",
+      "version": "1.0.0",
+      "description": "Structured competitor and market landscape analysis covering products, pricing signals, positioning, and differentiation. Use for competitive briefs, win/loss prep, and market scans.",
+      "category": "business",
+      "path": "business/competitor-research/SKILL.md",
+      "popular": false,
+      "tools": ["web_search", "fetch_url", "generate_file", "memory", "ask_user"]
+    },
+    {
+      "id": "meeting-analysis",
+      "name": "Meeting Analysis",
+      "version": "1.0.0",
+      "description": "Turn meeting transcripts or notes into structured summaries—decisions, action items, owners, deadlines, and open questions. Use after meetings or on call transcripts.",
+      "category": "business",
+      "path": "business/meeting-analysis/SKILL.md",
+      "popular": false,
+      "tools": ["run_python", "create_file", "generate_file", "ask_user", "memory"]
+    },
+    {
+      "id": "customer-feedback-analysis",
+      "name": "Customer Feedback Analysis",
+      "version": "1.0.0",
+      "description": "Analyze customer feedback from reviews, surveys, support tickets, and interviews to extract themes, sentiment, and prioritized insights. Use for voice-of-customer synthesis and product insight briefs.",
+      "category": "business",
+      "path": "business/customer-feedback-analysis/SKILL.md",
+      "popular": false,
+      "tools": ["run_python", "calculator", "generate_file", "create_file", "ask_user", "memory"]
+    },
+    {
+      "id": "decision-analysis",
+      "name": "Decision Analysis",
+      "version": "1.0.0",
+      "description": "Structure decisions with options, criteria, trade-offs, risks, and a clear recommendation. Use for product, ops, hiring, vendor, and strategy choices when the user needs a decision frame—not just research.",
+      "category": "business",
+      "path": "business/decision-analysis/SKILL.md",
+      "popular": false,
+      "tools": ["ask_user", "memory", "generate_file", "create_file", "calculator", "web_search", "fetch_url"]
+    },
+    {
+      "id": "web-research",
+      "name": "Web Research",
+      "version": "1.0.0",
+      "description": "Fast, focused web research with source fetching and concise briefs. Use for timely lookups, product/docs questions, and lightweight surveys—not multi-day investigations.",
+      "category": "research",
+      "path": "research/web-research/SKILL.md",
+      "popular": false,
+      "tools": ["web_search", "fetch_url", "memory", "ask_user"]
+    },
+    {
+      "id": "deep-research",
+      "name": "Deep Research",
+      "version": "1.0.0",
+      "description": "Multi-source investigative research with citation tracking, claim triangulation, and structured synthesis. Use for open-ended questions needing depth, evidence, and confidence scoring.",
+      "category": "research",
+      "path": "research/deep-research/SKILL.md",
+      "popular": true,
+      "tools": ["web_search", "fetch_url", "memory", "generate_file", "ask_user"]
+    },
+    {
+      "id": "fact-checker",
+      "name": "Fact Checker",
+      "version": "1.0.0",
+      "description": "Verify specific claims against primary sources with clear verdicts, citations, and confidence. Use when auditing statements, articles, marketing copy, or model outputs for factual accuracy.",
+      "category": "research",
+      "path": "research/fact-checker/SKILL.md",
+      "popular": false,
+      "tools": ["web_search", "fetch_url", "memory", "ask_user", "calculator"]
+    },
+    {
+      "id": "sql-analyst",
+      "name": "SQL Analyst",
+      "version": "1.0.0",
+      "description": "Write, explain, and validate SQL for analytics—joins, window functions, metrics definitions, and query critique. Use when the user needs SQL queries, warehouse logic, or metric debugging.",
+      "category": "data",
+      "path": "data/sql-analyst/SKILL.md",
+      "popular": false,
+      "tools": ["run_python", "calculator", "create_file", "ask_user", "memory"]
+    },
+    {
+      "id": "data-analysis",
+      "name": "Data Analysis",
+      "version": "1.0.0",
+      "description": "Exploratory and confirmatory analysis of tabular datasets—profiling, cleaning, stats, visualizations, and clear findings. Use for CSV/Excel/JSON data questions and metrics.",
+      "category": "data",
+      "path": "data/data-analysis/SKILL.md",
+      "popular": false,
+      "tools": ["run_python", "calculator", "generate_file", "create_file", "ask_user", "memory"]
+    },
+    {
+      "id": "pdf-analysis",
+      "name": "PDF Analysis",
+      "version": "1.0.0",
+      "description": "Extract, structure, and analyze content from PDF documents including text, tables, and metadata. Use when the user uploads or references PDFs for summarization, Q&A, or data extraction.",
+      "category": "data",
+      "path": "data/pdf-analysis/SKILL.md",
+      "popular": true,
+      "tools": ["run_python", "generate_file", "create_file", "ask_user", "memory"]
+    },
+    {
+      "id": "document-comparison",
+      "name": "Document Comparison",
+      "version": "1.0.0",
+      "description": "Compare two or more documents to find additions, deletions, semantic changes, and conflicts. Use for contract redlines, policy diffs, proposal versions, and spec drift.",
+      "category": "general",
+      "path": "general/document-comparison/SKILL.md",
+      "popular": false,
+      "tools": ["run_python", "create_file", "generate_file", "ask_user", "memory"]
+    },
+    {
+      "id": "summarizer",
+      "name": "Summarizer",
+      "version": "1.0.0",
+      "description": "Compress long text into accurate, audience-tuned summaries with controllable length and emphasis. Use for articles, threads, docs, reports, and transcripts when the goal is distillation—not deep analysis.",
+      "category": "general",
+      "path": "general/summarizer/SKILL.md",
+      "popular": false,
+      "tools": ["run_python", "create_file", "generate_file", "ask_user", "memory"]
+    },
+    {
+      "id": "general-task-solver",
+      "name": "General Task Solver",
+      "version": "1.0.0",
+      "description": "Meta skill that understands a user goal, selects the best specialist skill(s) by name, executes them in order, verifies outputs, and synthesizes a final answer. Use as the default router for open-ended or multi-step requests.",
+      "category": "general",
+      "path": "general/general-task-solver/SKILL.md",
+      "popular": true,
+      "tools": ["ask_user", "memory", "web_search", "fetch_url", "run_python", "calculator", "generate_file", "create_file"]
+    }
+  ]
+}

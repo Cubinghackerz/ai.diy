@@ -135,6 +135,7 @@ export function AssistantRuntimeProvider({
                             },
                             mcpServers: s.mcpServers.filter((m) => m.enabled),
                             memoryContext,
+                            agentMode: s.agentModeEnabled === true,
                             ...(forcedSkills.length ? { customSkills: forcedSkills } : {}),
                         },
                     };

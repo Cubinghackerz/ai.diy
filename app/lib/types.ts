@@ -141,6 +141,11 @@ export interface AppSettings {
     skillsEnabled: boolean;
     /** Beta: let the model delegate subtasks to user-approved subagents. */
     subagentsEnabled: boolean;
+    /**
+     * Agent Mode: plan → select installed skills/tools → execute → verify.
+     * Uses General Task Solver routing when available.
+     */
+    agentModeEnabled: boolean;
     preview: PreviewSettings;
     // MCP settings
     mcpServers: McpServerConfig[];
@@ -426,6 +431,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     memoryEnabled: true,
     skillsEnabled: true,
     subagentsEnabled: false,
+    agentModeEnabled: false,
     preview: {
         enabled: false,
         primaryModels: [],

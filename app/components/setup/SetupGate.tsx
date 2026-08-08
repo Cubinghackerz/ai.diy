@@ -285,9 +285,9 @@ export function SetupGate() {
                     </Button>
 
                     {error ? (
-                        <p className="flex items-start gap-1.5 text-xs text-destructive">
+                        <p className="flex items-start gap-1.5 whitespace-pre-wrap text-xs text-destructive">
                             <XCircle size={14} className="mt-0.5 shrink-0" />
-                            {error}
+                            <span>{error}</span>
                         </p>
                     ) : null}
 

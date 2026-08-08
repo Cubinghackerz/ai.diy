@@ -79,6 +79,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                     },
                     connectors: parsed.connectors ?? [],
                     customSkills: parsed.customSkills ?? [],
+                    agentModeEnabled: parsed.agentModeEnabled ?? false,
+                    subagentsEnabled: parsed.subagentsEnabled ?? false,
                 });
             }
         } catch {

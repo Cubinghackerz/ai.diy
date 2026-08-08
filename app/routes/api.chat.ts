@@ -34,6 +34,11 @@ import { imageRequestOptions } from "~/lib/image-generation";
 import { providerNeedsKey } from "~/lib/provider-credentials";
 import { corsPreflight, withCors } from "~/lib/server/cors";
 import { normalizeProviderBaseUrl } from "~/lib/server/provider-url";
+import {
+    formatProviderError,
+    httpStatusForProviderError,
+    classifyProviderError,
+} from "~/lib/provider-errors";
 
 interface ChatRequestBody {
     messages: UIMessage[];
@@ -68,6 +73,8 @@ interface ChatRequestBody {
     customSkills?: { name: string; content: string }[];
     /** When true the request runs as a delegated subagent (no ask_user/spawn_subagent). */
     subagentMode?: boolean;
+    /** Agent Mode: plan → skills/tools → verify → synthesize. */
+    agentMode?: boolean;
     openAICompatible?: {
         apiMode: "auto" | "chat" | "responses";
         reasoningWithTools: "auto" | "none" | "allow";
@@ -97,24 +104,8 @@ function imagePrompt(messages: UIMessage[]): string {
     );
 }
 
-function publicChatError(error: unknown): string {
-    const message = error instanceof Error ? error.message : "";
-    if (/only http\(s\)|valid http\(s\)|credentials must not be embedded|private.*not allowed/i.test(message)) {
-        return message;
-    }
-    if (/invalid|unauthorized|forbidden|api key|authentication/i.test(message)) {
-        return "Provider authentication failed. Check the API key and permissions.";
-    }
-    if (/model.*not found|not found.*model/i.test(message)) {
-        return "The selected model was not found by this provider.";
-    }
-    if (/rate limit|\b429\b/i.test(message)) {
-        return "The provider rate limit was reached. Wait and try again.";
-    }
-    if (/timeout|timed out|network|fetch failed|econn/i.test(message)) {
-        return "Could not reach the provider. Check the API root and network connection.";
-    }
-    return "Provider request failed. Check the selected model and provider compatibility.";
+function publicChatError(error: unknown, provider?: string): string {
+    return formatProviderError(error, { provider, context: "chat" });
 }
 
 async function generateImageResponse(
@@ -240,26 +231,45 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     if (providerNeedsKey(body.provider) && !body.apiKey) {
+        const payload = {
+            error: formatProviderError("API key required", {
+                provider: body.provider,
+                context: "chat",
+            }),
+        };
         return withCors(
             request,
-            Response.json(
-                { error: "API key required — add yours in Settings." },
-                { status: 400 },
-            ),
+            Response.json(payload, { status: 400 }),
         );
     }
 
     if (!body.model) {
         return withCors(
             request,
-            Response.json({ error: "Model required." }, { status: 400 }),
+            Response.json(
+                {
+                    error: formatProviderError("Model required", {
+                        provider: body.provider,
+                        context: "chat",
+                    }),
+                },
+                { status: 400 },
+            ),
         );
     }
 
     if (!Array.isArray(body.messages)) {
         return withCors(
             request,
-            Response.json({ error: "Messages required." }, { status: 400 }),
+            Response.json(
+                {
+                    error: formatProviderError("Messages required", {
+                        provider: body.provider,
+                        context: "chat",
+                    }),
+                },
+                { status: 400 },
+            ),
         );
     }
 
@@ -269,7 +279,12 @@ export async function action({ request }: ActionFunctionArgs) {
         return withCors(
             request,
             Response.json(
-                { error: err instanceof Error ? err.message : "Invalid provider URL" },
+                {
+                    error: formatProviderError(err, {
+                        provider: body.provider,
+                        context: "chat",
+                    }),
+                },
                 { status: 400 },
             ),
         );
@@ -282,11 +297,15 @@ export async function action({ request }: ActionFunctionArgs) {
         try {
             return withCors(request, await generateAudioResponse(body, request.signal));
         } catch (err) {
-            const message = publicChatError(err);
-            console.error("[api/chat:audio]", message);
+            const message = publicChatError(err, body.provider);
+            const kind = classifyProviderError(err, {
+                provider: body.provider,
+                context: "chat",
+            }).kind;
+            console.error("[api/chat:audio]", message.split("\n")[0]);
             return withCors(
                 request,
-                Response.json({ error: message }, { status: 500 }),
+                Response.json({ error: message }, { status: httpStatusForProviderError(kind) }),
             );
         }
     }
@@ -298,11 +317,15 @@ export async function action({ request }: ActionFunctionArgs) {
         try {
             return withCors(request, await generateVideoResponse(body, request.signal));
         } catch (err) {
-            const message = publicChatError(err);
-            console.error("[api/chat:video]", message);
+            const message = publicChatError(err, body.provider);
+            const kind = classifyProviderError(err, {
+                provider: body.provider,
+                context: "chat",
+            }).kind;
+            console.error("[api/chat:video]", message.split("\n")[0]);
             return withCors(
                 request,
-                Response.json({ error: message }, { status: 500 }),
+                Response.json({ error: message }, { status: httpStatusForProviderError(kind) }),
             );
         }
     }
@@ -314,11 +337,15 @@ export async function action({ request }: ActionFunctionArgs) {
         try {
             return withCors(request, await generateImageResponse(body, request.signal));
         } catch (err) {
-            const message = publicChatError(err);
-            console.error("[api/chat:image]", message);
+            const message = publicChatError(err, body.provider);
+            const kind = classifyProviderError(err, {
+                provider: body.provider,
+                context: "chat",
+            }).kind;
+            console.error("[api/chat:image]", message.split("\n")[0]);
             return withCors(
                 request,
-                Response.json({ error: message }, { status: 500 }),
+                Response.json({ error: message }, { status: httpStatusForProviderError(kind) }),
             );
         }
     }
@@ -403,6 +430,7 @@ export async function action({ request }: ActionFunctionArgs) {
                 body.customSkills,
                 body.subagentMode === true ? "subagent" : "main",
                 body.projectInstructions,
+                body.agentMode === true,
             ),
             ...(anthropicThinkingOn
                 ? { temperature: 1 }
@@ -429,7 +457,7 @@ export async function action({ request }: ActionFunctionArgs) {
             request,
             result.toUIMessageStreamResponse({
                 sendReasoning: true,
-                onError: publicChatError,
+                onError: (error) => publicChatError(error, body.provider),
                 // Attach real provider-reported usage plus the model/provider
                 // used for this request to the assistant message metadata so
                 // the client can persist and aggregate it (usage analytics).
@@ -445,11 +473,18 @@ export async function action({ request }: ActionFunctionArgs) {
         );
     } catch (err) {
         await closeLoadedMcp();
-        const errorMsg = publicChatError(err);
-        console.error("[api/chat]", errorMsg);
+        const errorMsg = publicChatError(err, body.provider);
+        const kind = classifyProviderError(err, {
+            provider: body.provider,
+            context: "chat",
+        }).kind;
+        console.error("[api/chat]", errorMsg.split("\n")[0]);
         return withCors(
             request,
-            Response.json({ error: errorMsg }, { status: 500 }),
+            Response.json(
+                { error: errorMsg },
+                { status: httpStatusForProviderError(kind) },
+            ),
         );
     }
 }

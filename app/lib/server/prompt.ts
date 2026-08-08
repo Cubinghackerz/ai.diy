@@ -62,12 +62,25 @@ You are operating as a delegated subagent.
 - Return a single concise final answer with the key findings, sources, or files. Do not add pleasantries, apologies, or follow-up questions.
 `;
 
+const AGENT_MODE_PROMPT = `
+
+Agent Mode is ON for this request.
+Follow this loop on every non-trivial task:
+1. Plan — restate the goal, success criteria, and constraints in brief bullets.
+2. Select — choose the smallest set of installed skills and tools (prefer General Task Solver routing when the task spans domains).
+3. Execute — apply skill workflows; bound tool calls; reuse prior results.
+4. Verify — check claims, tool failures, and skill validation checklists; recover once on failure.
+5. Synthesize — one coherent final answer with sources only when retrieved.
+Do not skip verification for high-stakes recommendations. Prefer installed skill contracts over ad-hoc improvisation.
+`;
+
 export function buildChatSystemPrompt(
     custom?: string,
     memoryContext?: string,
     activeSkills?: { name: string; content: string }[],
     role: "main" | "subagent" = "main",
     projectInstructions?: string,
+    agentMode?: boolean,
 ): string {
     const now = new Date();
     const dateLine = `Current date and time: ${now.toISOString()} (UTC). Today's date: ${now.toLocaleDateString("en-US", {
@@ -101,5 +114,7 @@ export function buildChatSystemPrompt(
         ? `\n\nProject instructions for this conversation:\n---\n${projectInstructions.trim().slice(0, 16_000)}\n---\nApply these instructions to chats in this project while following the current user request and higher-priority system rules.`
         : "";
     const subagent = role === "subagent" ? SUBAGENT_PROMPT : "";
-    return `${dateLine}\n\n${body}${project}${TOOL_EFFICIENCY_PROMPT}${memory}${skill}${subagent}`;
+    const agent =
+        role === "main" && agentMode === true ? AGENT_MODE_PROMPT : "";
+    return `${dateLine}\n\n${body}${project}${TOOL_EFFICIENCY_PROMPT}${agent}${memory}${skill}${subagent}`;
 }

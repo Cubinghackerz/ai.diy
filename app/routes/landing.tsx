@@ -599,9 +599,16 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                     ai.diy
                 </Link>
                 <div className="hidden items-center gap-7 text-xs text-[color:var(--landing-ink-dim)] md:flex">
-                    <a href="#proof" className="transition-colors hover:text-[color:var(--landing-ink)]">Why it works</a>
-                    <a href="#motion" className="transition-colors hover:text-[color:var(--landing-ink)]">Inside the workspace</a>
-                    <a href="#connect" className="transition-colors hover:text-[color:var(--landing-ink)]">Connect</a>
+                    <a href="#demo" className="transition-colors hover:text-[color:var(--landing-ink)]">Demo</a>
+                    <a href="#deploy" className="transition-colors hover:text-[color:var(--landing-ink)]">Deploy</a>
+                    <a
+                        href="https://github.com/Cubinghackerz/ai.diy"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="transition-colors hover:text-[color:var(--landing-ink)]"
+                    >
+                        GitHub
+                    </a>
                 </div>
                 <div className="flex items-center gap-2">
                     <ThemeToggle />
@@ -640,29 +647,87 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                     <div className="hero-signal-dot hero-signal-dot-a pointer-events-none absolute z-0" aria-hidden="true" />
                     <div className="hero-signal-dot hero-signal-dot-b pointer-events-none absolute z-0" aria-hidden="true" />
                     <div data-landing-reveal className="relative z-10">
-                        <p className="max-w-xl text-[clamp(3rem,6vw,6rem)] font-semibold leading-[0.95] tracking-[-0.04em]">
-                            Think clearly.
-                            <br />
-                            Build openly.
+                        <p className="max-w-xl text-[clamp(2.4rem,5.4vw,4.6rem)] font-semibold leading-[0.98] tracking-[-0.04em]">
+                            ai.diy
+                            <span className="mt-3 block text-[0.72em] font-semibold leading-[1.05] tracking-[-0.03em] text-[color:var(--landing-ink)]">
+                                The open-source AI workspace you own.
+                            </span>
                         </p>
                         <p className="mt-8 max-w-lg text-base leading-relaxed text-[color:var(--landing-ink-dim)] sm:text-lg">
-                            A local-first AI workspace for people who want the model to meet the moment, not the other way around.
+                            Local-first, bring-your-own-key chat with tools, skills, and browser-owned history. No server-side LLM credentials.
                         </p>
                         <div className="mt-9 flex flex-wrap items-center gap-3">
-                            <Link
-                                to="/workspace"
+                            <a
+                                href="#demo"
                                 className="group inline-flex items-center gap-2 rounded-full bg-[color:var(--landing-accent)] px-5 py-3 text-sm font-semibold text-[color:var(--landing-accent-ink)] transition-transform duration-300 hover:scale-[1.03] focus-visible:ring-2 focus-visible:ring-[color:var(--landing-accent)]"
                             >
-                                Start in the workspace
+                                Demo
                                 <ArrowRight className="transition-transform duration-300 group-hover:translate-x-1" size={16} />
-                            </Link>
-                            <a href="#search" className="inline-flex items-center gap-2 rounded-full border border-[color:var(--landing-hairline)] px-5 py-3 text-sm font-semibold text-[color:var(--landing-ink-dim)] transition-colors hover:border-[color:var(--landing-ink-dim)]/60 hover:text-[color:var(--landing-ink)]">
-                                Explore free search
+                            </a>
+                            <a
+                                href="#deploy"
+                                className="inline-flex items-center gap-2 rounded-full border border-[color:var(--landing-hairline)] px-5 py-3 text-sm font-semibold text-[color:var(--landing-ink-dim)] transition-colors hover:border-[color:var(--landing-ink-dim)]/60 hover:text-[color:var(--landing-ink)]"
+                            >
+                                Deploy
+                            </a>
+                            <a
+                                href="https://github.com/Cubinghackerz/ai.diy"
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-2 rounded-full border border-[color:var(--landing-hairline)] px-5 py-3 text-sm font-semibold text-[color:var(--landing-ink-dim)] transition-colors hover:border-[color:var(--landing-ink-dim)]/60 hover:text-[color:var(--landing-ink)]"
+                            >
+                                GitHub
                             </a>
                         </div>
                     </div>
                     <div data-landing-reveal className="relative z-10">
                         <WorkspacePanel />
+                    </div>
+                </section>
+
+                <section id="demo" className="landing-section-lazy mx-auto w-full max-w-[90rem] px-5 py-24 sm:px-8 md:py-32 lg:px-12">
+                    <div data-landing-reveal className="mb-8 max-w-2xl">
+                        <p className="text-3xl font-semibold leading-tight tracking-[-0.03em] sm:text-5xl">See the workspace.</p>
+                        <p className="mt-4 text-base leading-relaxed text-[color:var(--landing-ink-dim)]">
+                            Streaming chat, model switching, and tools in one local-first surface.
+                        </p>
+                    </div>
+                    <div data-landing-reveal className="overflow-hidden rounded-[1.25rem] border border-[color:var(--landing-hairline)] bg-[color:var(--landing-panel)] shadow-[0_24px_80px_-48px_rgba(11,5,34,0.85)]">
+                        <img
+                            src="/workspace-demo.png"
+                            alt="ai.diy workspace showing chat, model picker, and tools"
+                            className="block h-auto w-full"
+                            width={1600}
+                            height={900}
+                            loading="lazy"
+                        />
+                    </div>
+                    <div className="mt-6 flex flex-wrap gap-3">
+                        <Link
+                            to="/workspace"
+                            className="inline-flex items-center gap-2 rounded-full bg-[color:var(--landing-ink)] px-5 py-3 text-sm font-semibold text-[color:var(--landing-bench)]"
+                        >
+                            Open workspace
+                            <ArrowRight size={16} />
+                        </Link>
+                    </div>
+                </section>
+
+                <section id="deploy" className="landing-section-lazy border-y border-[color:var(--landing-hairline)] px-5 py-24 sm:px-8 md:py-32 lg:px-12">
+                    <div data-landing-reveal className="mx-auto grid w-full max-w-[90rem] gap-10 lg:grid-cols-2 lg:items-center">
+                        <div>
+                            <p className="text-3xl font-semibold leading-tight tracking-[-0.03em] sm:text-5xl">Deploy in one command.</p>
+                            <p className="mt-5 max-w-lg text-base leading-relaxed text-[color:var(--landing-ink-dim)]">
+                                Node, Docker Compose, or a Vercel preview. Keys stay in the browser.
+                            </p>
+                        </div>
+                        <pre className="overflow-x-auto rounded-[1.15rem] border border-[color:var(--landing-hairline)] bg-[color:var(--landing-panel)] p-5 font-mono text-xs leading-relaxed text-[color:var(--landing-ink)] sm:text-sm">
+{`npm install
+npm run build && npm start
+
+# or
+docker compose up --build`}
+                        </pre>
                     </div>
                 </section>
 

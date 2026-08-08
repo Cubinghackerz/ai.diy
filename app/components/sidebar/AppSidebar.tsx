@@ -80,9 +80,18 @@ import {
     Sun,
     Trash,
     UploadSimple,
+    MagnifyingGlass,
+    Star,
     WarningCircle,
     XCircle,
 } from "@phosphor-icons/react";
+import {
+    installBundledSkill,
+    isSkillInstalled,
+    searchBundledSkills,
+    uninstallBundledSkill,
+} from "~/lib/skills/catalog";
+import type { PortableSkill } from "~/lib/skills/format";
 import * as Switch from "@radix-ui/react-switch";
 import {
     chatMarkdownFilename,
@@ -2334,6 +2343,9 @@ function CustomSkillsSection() {
     const { settings, updateSettings } = useSettings();
     const [name, setName] = useState("");
     const [content, setContent] = useState("");
+    const [query, setQuery] = useState("");
+    const catalog = searchBundledSkills(query);
+    const popular = catalog.filter((skill) => skill.popular);
 
     const addSkill = () => {
         const trimmedName = name.trim();
@@ -2368,85 +2380,189 @@ function CustomSkillsSection() {
         });
     };
 
+    const toggleInstall = (skill: PortableSkill) => {
+        const installed = isSkillInstalled(skill.name, settings.customSkills);
+        updateSettings({
+            customSkills: installed
+                ? uninstallBundledSkill(skill.name, settings.customSkills)
+                : installBundledSkill(skill.name, settings.customSkills),
+        });
+        hapticConfirm();
+    };
+
     return (
-        <div className="flex flex-col gap-2 rounded-xl border border-border/70 p-2.5">
-            <div className="flex items-center justify-between gap-2">
-                <label className="text-[11px] font-medium text-muted-foreground">
-                    Custom skills
-                </label>
-                <span className="text-[10px] text-muted-foreground">
-                    Type / in the composer to force one
-                </span>
-            </div>
-            {settings.customSkills.length > 0 ? (
-                <div className="flex flex-col gap-1.5">
-                    {settings.customSkills.map((skill) => (
-                        <div
-                            key={skill.id}
-                            className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-background px-2 py-1.5"
-                        >
-                            <span className="min-w-0 truncate text-xs font-medium">
-                                {skill.name}
-                            </span>
-                            <div className="flex shrink-0 items-center gap-1">
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        patchSkill(skill.id, {
-                                            enabled: !skill.enabled,
-                                        })
-                                    }
-                                    className={cn(
-                                        "rounded-md px-1.5 py-0.5 text-[10px] font-medium outline-none",
-                                        skill.enabled
-                                            ? "bg-primary/15 text-primary"
-                                            : "bg-muted text-muted-foreground",
-                                    )}
-                                >
-                                    {skill.enabled ? "On" : "Off"}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => removeSkill(skill.id)}
-                                    className="rounded-md p-1 text-muted-foreground outline-none hover:text-destructive"
-                                    aria-label={`Remove ${skill.name}`}
-                                >
-                                    <Trash size={13} />
-                                </button>
-                            </div>
-                        </div>
-                    ))}
+        <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2 rounded-xl border border-border/70 p-2.5">
+                <div className="flex items-center justify-between gap-2">
+                    <label className="text-[11px] font-medium text-muted-foreground">
+                        Skill catalog
+                    </label>
+                    <span className="text-[10px] text-muted-foreground">
+                        Install → available via /
+                    </span>
                 </div>
-            ) : (
-                <p className="text-[10px] text-muted-foreground">
-                    No custom skills yet. Add one below; built-in skills
-                    (Research, Ultimate Frontend UI, …) are always available in
-                    the slash menu.
+                <div className="relative">
+                    <MagnifyingGlass
+                        size={13}
+                        className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <Input
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="Search skills…"
+                        className="h-8 rounded-lg pl-7 text-xs"
+                    />
+                </div>
+                {!query.trim() && popular.length > 0 ? (
+                    <div className="flex flex-col gap-1">
+                        <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                            <Star size={11} weight="fill" className="text-amber-500" />
+                            Popular
+                        </p>
+                        {popular.map((skill) => (
+                            <SkillCatalogRow
+                                key={skill.name}
+                                skill={skill}
+                                installed={isSkillInstalled(
+                                    skill.name,
+                                    settings.customSkills,
+                                )}
+                                onToggle={() => toggleInstall(skill)}
+                            />
+                        ))}
+                    </div>
+                ) : null}
+                <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
+                    {(query.trim() ? catalog : catalog.filter((sk) => !sk.popular)).map(
+                        (skill) => (
+                            <SkillCatalogRow
+                                key={skill.name}
+                                skill={skill}
+                                installed={isSkillInstalled(
+                                    skill.name,
+                                    settings.customSkills,
+                                )}
+                                onToggle={() => toggleInstall(skill)}
+                            />
+                        ),
+                    )}
+                </div>
+            </div>
+
+            <div className="flex flex-col gap-2 rounded-xl border border-border/70 p-2.5">
+                <div className="flex items-center justify-between gap-2">
+                    <label className="text-[11px] font-medium text-muted-foreground">
+                        Installed & custom skills
+                    </label>
+                    <span className="text-[10px] text-muted-foreground">
+                        Type / in the composer to force one
+                    </span>
+                </div>
+                {settings.customSkills.length > 0 ? (
+                    <div className="flex flex-col gap-1.5">
+                        {settings.customSkills.map((skill) => (
+                            <div
+                                key={skill.id}
+                                className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-background px-2 py-1.5"
+                            >
+                                <div className="min-w-0">
+                                    <span className="block truncate text-xs font-medium">
+                                        {skill.name}
+                                    </span>
+                                    {skill.description ? (
+                                        <span className="block truncate text-[10px] text-muted-foreground">
+                                            {skill.description}
+                                        </span>
+                                    ) : null}
+                                </div>
+                                <div className="flex shrink-0 items-center gap-1">
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            patchSkill(skill.id, {
+                                                enabled: !skill.enabled,
+                                            })
+                                        }
+                                        className={cn(
+                                            "rounded-md px-1.5 py-0.5 text-[10px] font-medium outline-none",
+                                            skill.enabled
+                                                ? "bg-primary/15 text-primary"
+                                                : "bg-muted text-muted-foreground",
+                                        )}
+                                    >
+                                        {skill.enabled ? "On" : "Off"}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => removeSkill(skill.id)}
+                                        className="rounded-md p-1 text-muted-foreground outline-none hover:text-destructive"
+                                        aria-label={`Remove ${skill.name}`}
+                                    >
+                                        <Trash size={13} />
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <p className="text-[11px] text-muted-foreground">
+                        No skills installed yet. Install from the catalog above.
+                    </p>
+                )}
+                <Input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Custom skill name"
+                    className="h-8 rounded-lg text-xs"
+                />
+                <textarea
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    placeholder="Instructions the model must follow…"
+                    rows={3}
+                    className="h-auto w-full resize-none rounded-lg border border-border bg-background px-2 py-1.5 text-xs outline-none placeholder:text-muted-foreground"
+                />
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={!name.trim() || !content.trim()}
+                    onClick={addSkill}
+                    className="rounded-lg"
+                >
+                    <Plus size={13} />
+                    Add skill
+                </Button>
+            </div>
+        </div>
+    );
+}
+
+function SkillCatalogRow({
+    skill,
+    installed,
+    onToggle,
+}: {
+    skill: PortableSkill;
+    installed: boolean;
+    onToggle: () => void;
+}) {
+    return (
+        <div className="flex items-start justify-between gap-2 rounded-lg border border-border/60 bg-background px-2 py-1.5">
+            <div className="min-w-0">
+                <p className="truncate text-xs font-medium">{skill.title}</p>
+                <p className="line-clamp-2 text-[10px] leading-snug text-muted-foreground">
+                    {skill.description}
                 </p>
-            )}
-            <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Skill name"
-                className="h-8 rounded-lg text-xs"
-            />
-            <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="Instructions the AI must follow when this skill is forced"
-                rows={3}
-                className="h-auto w-full resize-none rounded-lg border border-border bg-background px-2 py-1.5 text-xs outline-none placeholder:text-muted-foreground"
-            />
+            </div>
             <Button
                 type="button"
                 size="sm"
-                variant="outline"
-                disabled={!name.trim() || !content.trim()}
-                onClick={addSkill}
-                className="rounded-lg"
+                variant={installed ? "secondary" : "outline"}
+                className="h-7 shrink-0 rounded-md px-2 text-[10px]"
+                onClick={onToggle}
             >
-                <Plus size={13} />
-                Add skill
+                {installed ? "Installed" : "Install"}
             </Button>
         </div>
     );
@@ -2456,6 +2572,21 @@ function SubagentsSettingsSection() {
     const { settings, updateSettings } = useSettings();
     return (
         <div className="flex flex-col gap-3">
+            <ToolToggle
+                title="Agent Mode"
+                description="Plan with skills and tools, then verify before the final answer. Uses General Task Solver routing when installed."
+                checked={settings.agentModeEnabled}
+                onChange={(enabled) => updateSettings({ agentModeEnabled: enabled })}
+            />
+            {settings.agentModeEnabled ? (
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    The model will plan, select installed skills, execute tools,
+                    verify results, and synthesize. Install{" "}
+                    <span className="font-medium">General Task Solver</span> from
+                    Skills for best multi-domain routing. Subagents remain optional
+                    below for nested approved runs.
+                </p>
+            ) : null}
             <ToolToggle
                 title="Subagents"
                 description="Let the AI delegate subtasks to subagents. Every subagent requires your approval, runs in a watchable popup, and can use the same tools as the main chat."
