@@ -12,7 +12,7 @@ import {
 } from "ai";
 import { buildChatTools } from "~/lib/server/chat-tools";
 import { closeMcpClients, loadMcpTools } from "~/lib/server/mcp-tools";
-import { buildChatSystemPrompt } from "~/lib/server/prompt";
+import { buildChatSystemPromptParts } from "~/lib/server/prompt";
 import {
     buildReasoningProviderOptions,
     type ReasoningEffort,
@@ -39,6 +39,12 @@ import {
     httpStatusForProviderError,
     classifyProviderError,
 } from "~/lib/provider-errors";
+import {
+    normalizeTokenMode,
+    providerSupportsExplicitCache,
+    tokenModePolicy,
+    type TokenMode,
+} from "~/lib/token-mode";
 
 interface ChatRequestBody {
     messages: UIMessage[];
@@ -63,6 +69,7 @@ interface ChatRequestBody {
         connectors?: ConnectorConfig[];
         memoryAvailable?: boolean;
         subagentsEnabled?: boolean;
+        tokenMode?: TokenMode;
     };
     mcpServers?: McpServerConfig[];
     imageSettings?: {
@@ -376,6 +383,18 @@ export async function action({ request }: ActionFunctionArgs) {
                 ? {}
                 : { ...builtIn, ...mcpTools };
 
+        const mode = normalizeTokenMode(body.toolSettings?.tokenMode);
+        const policy = tokenModePolicy(mode);
+        const promptParts = buildChatSystemPromptParts(
+            body.system || body.systemPrompt || undefined,
+            body.memoryContext,
+            body.customSkills,
+            body.subagentMode === true ? "subagent" : "main",
+            body.projectInstructions,
+            body.agentMode === true,
+            mode,
+        );
+
         const modelMessages = await convertToModelMessages(body.messages);
         const effort = body.reasoningEffort ?? "medium";
         const providerOptions = buildReasoningProviderOptions(
@@ -420,18 +439,70 @@ export async function action({ request }: ActionFunctionArgs) {
             }
         }
 
+        // Prompt-caching mode: stable prefix first (explicit cache_control on
+        // Anthropic-family providers). OpenAI-style automatic prefix caches
+        // also benefit because the large static block leads the prompt.
+        const useExplicitCache =
+            policy.promptCaching &&
+            providerSupportsExplicitCache(body.provider);
+        const cachedMessages = policy.promptCaching
+            ? [
+                  {
+                      role: "system" as const,
+                      content: promptParts.stable,
+                      ...(useExplicitCache
+                          ? {
+                                providerOptions: {
+                                    anthropic: {
+                                        cacheControl: {
+                                            type: "ephemeral" as const,
+                                        },
+                                    },
+                                },
+                            }
+                          : {}),
+                  },
+                  ...(promptParts.volatile.trim()
+                      ? [
+                            {
+                                role: "system" as const,
+                                content: promptParts.volatile,
+                            },
+                        ]
+                      : []),
+                  ...modelMessages,
+              ]
+            : modelMessages;
+
+        // Mark the last built-in tool so Anthropic can cache tool schemas too.
+        let cachedTools = tools;
+        if (useExplicitCache && toolsEnabled) {
+            const names = Object.keys(tools);
+            const last = names[names.length - 1];
+            if (last) {
+                cachedTools = {
+                    ...tools,
+                    [last]: {
+                        ...tools[last],
+                        providerOptions: {
+                            ...(tools[last] as { providerOptions?: object })
+                                .providerOptions,
+                            anthropic: {
+                                cacheControl: { type: "ephemeral" as const },
+                            },
+                        },
+                    },
+                };
+            }
+        }
+
         const result = streamText({
             model: modelInstance,
             abortSignal: request.signal,
-            messages: modelMessages,
-            system: buildChatSystemPrompt(
-                body.system || body.systemPrompt || undefined,
-                body.memoryContext,
-                body.customSkills,
-                body.subagentMode === true ? "subagent" : "main",
-                body.projectInstructions,
-                body.agentMode === true,
-            ),
+            messages: cachedMessages,
+            ...(policy.promptCaching
+                ? {}
+                : { system: promptParts.full }),
             ...(anthropicThinkingOn
                 ? { temperature: 1 }
                 : {
@@ -439,11 +510,8 @@ export async function action({ request }: ActionFunctionArgs) {
                       topP: body.topP ?? 1,
                   }),
             maxOutputTokens,
-            tools: Object.keys(tools).length > 0 ? tools : undefined,
-            // Five steps is too easy to exhaust with repeated searches or a
-            // tool call followed by a correction. Keep a finite guard while
-            // leaving room for substantial multi-tool work to finish.
-            stopWhen: stepCountIs(20),
+            tools: Object.keys(cachedTools).length > 0 ? cachedTools : undefined,
+            stopWhen: stepCountIs(policy.maxSteps),
             ...(safeProviderOptions ? { providerOptions: safeProviderOptions } : {}),
             onFinish: async () => {
                 await closeLoadedMcp();

@@ -15,6 +15,11 @@ import {
 import { connectorSearch } from "~/lib/search/connectors";
 import type { ConnectorConfig } from "~/lib/types";
 import { assertPublicHttpUrl } from "~/lib/server/ssrf";
+import {
+    normalizeTokenMode,
+    tokenModePolicy,
+    type TokenMode,
+} from "~/lib/token-mode";
 
 export { ARTIFACT_MARKER };
 
@@ -28,6 +33,7 @@ export type ToolSettings = {
     connectors?: ConnectorConfig[];
     memoryAvailable?: boolean;
     subagentsEnabled?: boolean;
+    tokenMode?: TokenMode;
 };
 
 function evaluateMath(expression: string): string {
@@ -518,12 +524,17 @@ export async function buildChatTools(
     options: { subagentMode?: boolean; suppressWebSearch?: boolean } = {},
 ) {
     const subagentMode = options.subagentMode === true;
-    const enableResearch = settings.webSearchEnabled !== false;
-    const enableSearch = enableResearch && options.suppressWebSearch !== true;
+    const policy = tokenModePolicy(normalizeTokenMode(settings.tokenMode));
+    const enableResearch =
+        settings.webSearchEnabled !== false && policy.researchSkill;
+    const enableSearch =
+        settings.webSearchEnabled !== false && options.suppressWebSearch !== true;
     const enableCalc = settings.calculatorEnabled !== false;
     // Python is a client-side tool. The browser executes it in Pyodide and
     // sends the result back before the model continues.
     const enablePython = settings.pythonEnabled !== false;
+    const enableSkillSuite =
+        settings.skillsEnabled !== false && policy.skillSuite;
 
     const tools: Record<string, Tool> = {};
 
@@ -541,10 +552,11 @@ export async function buildChatTools(
         });
     }
 
-    if (enableSearch) {
+    if (enableSearch && policy.instantAnswer) {
         tools.duckduckgo_instant_answer = tool({
-            description:
-                "Use DuckDuckGo's free Instant Answer API as a compact first-pass overview for definitions, entities, concepts, and broad factual questions. Use it once when applicable, not for current proof; verify only material claims with a focused web search and relevant page fetch. This service is intended for non-commercial use; review current DuckDuckGo terms before commercial deployment.",
+            description: policy.compactToolDescriptions
+                ? "DuckDuckGo Instant Answer overview for definitions/entities. Verify material claims with search/fetch. Non-commercial use."
+                : "Use DuckDuckGo's free Instant Answer API as a compact first-pass overview for definitions, entities, concepts, and broad factual questions. Use it once when applicable, not for current proof; verify only material claims with a focused web search and relevant page fetch. This service is intended for non-commercial use; review current DuckDuckGo terms before commercial deployment.",
             needsApproval: false,
             inputSchema: z.object({
                 query: z.string(),
@@ -562,7 +574,10 @@ export async function buildChatTools(
         });
     }
 
-    if (settings.connectors?.some((connector) => connector.enabled)) {
+    if (
+        policy.connectorsMeta &&
+        settings.connectors?.some((connector) => connector.enabled)
+    ) {
         tools.connector_guide = tool({
             description:
                 "Read the enabled connector/integration capability guide before using connected tools. Use it to understand available actions and permission boundaries.",
@@ -712,8 +727,9 @@ export async function buildChatTools(
 
     if (enablePython) {
         tools.run_python = tool({
-            description:
-                "Execute Python 3 in the browser with Pyodide and return stdout, stderr, or error logs. Every listed library auto-loads on first import; simply import it and never manage package installation yourself with micropip, pip, or subprocess. Top-level await is supported; do not use asyncio.run (Pyodide already runs inside an event loop), just write await at top level. Data/analysis: numpy, pandas, scipy, sympy, scikit-learn, networkx. Plotting: matplotlib. Parsing: BeautifulSoup, lxml, regex, python-dateutil, pyyaml. File creation: openpyxl and xlsxwriter (Excel), python-docx (Word), python-pptx (PowerPoint), reportlab and fpdf2 (PDF), pillow (images), jinja2 (templates), requests (HTTP), plus the csv, json, and zipfile standard libraries. Always use these real libraries instead of hand-rolling zip/XML files. Save generated files in the current working directory; the browser captures up to four new files of 2 MiB each as session-only downloadable Canvas artifacts and never persists their binary data to browser storage. When a result reports created artifacts, do not call create_file or copy/Base64 their bytes again.",
+            description: policy.compactToolDescriptions
+                ? "Run Python in browser Pyodide. Libraries auto-import (numpy, pandas, matplotlib, openpyxl, python-docx, etc.). Save files in cwd for Canvas capture; do not re-upload binary artifacts via create_file."
+                : "Execute Python 3 in the browser with Pyodide and return stdout, stderr, or error logs. Every listed library auto-loads on first import; simply import it and never manage package installation yourself with micropip, pip, or subprocess. Top-level await is supported; do not use asyncio.run (Pyodide already runs inside an event loop), just write await at top level. Data/analysis: numpy, pandas, scipy, sympy, scikit-learn, networkx. Plotting: matplotlib. Parsing: BeautifulSoup, lxml, regex, python-dateutil, pyyaml. File creation: openpyxl and xlsxwriter (Excel), python-docx (Word), python-pptx (PowerPoint), reportlab and fpdf2 (PDF), pillow (images), jinja2 (templates), requests (HTTP), plus the csv, json, and zipfile standard libraries. Always use these real libraries instead of hand-rolling zip/XML files. Save generated files in the current working directory; the browser captures up to four new files of 2 MiB each as session-only downloadable Canvas artifacts and never persists their binary data to browser storage. When a result reports created artifacts, do not call create_file or copy/Base64 their bytes again.",
             inputSchema: z.object({
                 code: z.string(),
                 description: z.string().optional(),
@@ -722,7 +738,7 @@ export async function buildChatTools(
         tools.run_code = tools.run_python;
     }
 
-    if (enablePython && settings.skillsEnabled !== false) {
+    if (enablePython && enableSkillSuite) {
         const pythonFileSkill = tool({
             description:
                 "Callable Python file-creation and execution skill. Invoke before non-trivial DOCX, XLSX, PPTX, PDF, image, archive, or data-file work. It defines the verified Pyodide library, direct Canvas artifact-capture, validation, size-limit, and failure-recovery protocol.",
@@ -765,20 +781,22 @@ export async function buildChatTools(
         });
     }
 
-    tools.list_connections = tool({
-        description: "List enabled integrations and their capability categories without exposing credentials.",
-        inputSchema: z.object({}),
-        execute: async () =>
-            JSON.stringify(
-                (settings.connectors ?? [])
-                    .filter((connector) => connector.enabled)
-                    .map((connector) => ({
-                        name: connector.name,
-                        kind: connector.kind,
-                        capabilities: connector.kind === "remote-mcp" ? ["discovered tools"] : ["configured connector"],
-                    })),
-            ),
-    });
+    if (policy.connectorsMeta) {
+        tools.list_connections = tool({
+            description: "List enabled integrations and their capability categories without exposing credentials.",
+            inputSchema: z.object({}),
+            execute: async () =>
+                JSON.stringify(
+                    (settings.connectors ?? [])
+                        .filter((connector) => connector.enabled)
+                        .map((connector) => ({
+                            name: connector.name,
+                            kind: connector.kind,
+                            capabilities: connector.kind === "remote-mcp" ? ["discovered tools"] : ["configured connector"],
+                        })),
+                ),
+        });
+    }
 
     if (!subagentMode) {
         tools.ask_user = tool({
@@ -791,7 +809,7 @@ export async function buildChatTools(
         });
     }
 
-    if (settings.skillsEnabled !== false) {
+    if (enableSkillSuite) {
         const skillArchitectInput = z.object({
             name: z.string(),
             description: z.string().optional(),
@@ -864,8 +882,9 @@ export async function buildChatTools(
     }
 
     tools.create_file = tool({
-        description:
-            "Create a document, code file, SVG, interactive HTML preview, or downloadable binary file in the Canvas panel. For binary bytes produced by run_python, pass the exact Base64 or hex string with contentEncoding set to base64 or hex; the client decodes it before download. Always use this tool for a file the user asked to download and cite the resulting file.",
+        description: policy.compactToolDescriptions
+            ? "Create a Canvas file (text/code/HTML/SVG or base64/hex binary). Cite the filename in the reply."
+            : "Create a document, code file, SVG, interactive HTML preview, or downloadable binary file in the Canvas panel. For binary bytes produced by run_python, pass the exact Base64 or hex string with contentEncoding set to base64 or hex; the client decodes it before download. Always use this tool for a file the user asked to download and cite the resulting file.",
         inputSchema: z.object({
             filename: z.string(),
             title: z.string(),
@@ -878,28 +897,31 @@ export async function buildChatTools(
             artifactPayload({ title, filename, content, kind, mimeType, contentEncoding }),
     });
 
-    tools.generate_file = tool({
-        description:
-            "Generate a downloadable text/data/code file from content and cite it in the response. Use this for CSV, JSON, Markdown, TXT, SVG, HTML, or source code when the user asks for a file. Do not call this for an image or binary file already created by run_python; do not Base64-encode and duplicate a Python-created file. For data-heavy text files, use run_python first, then pass the resulting text here.",
-        inputSchema: z.object({
-            filename: z.string(),
-            title: z.string(),
-            content: z.string(),
-            kind: z.string(),
-            mimeType: z.string().optional(),
-            contentEncoding: z.enum(["base64", "hex"]).optional(),
-        }),
-        execute: async ({ title, filename, content, kind, mimeType, contentEncoding }) => {
-            if (
-                mimeType?.startsWith("image/") ||
-                /^(image|binary|blob)/i.test(kind) ||
-                /\.(png|jpe?g|gif|webp|bmp|ico|pdf|zip)$/i.test(filename)
-            ) {
-                return "No duplicate artifact was generated. The binary/image file was already created by run_python; do not Base64-encode it again unless the user explicitly asks for a separate downloadable copy.";
-            }
-            return artifactPayload({ title, filename, content, kind, mimeType, contentEncoding });
-        },
-    });
+    if (policy.generateFile) {
+        tools.generate_file = tool({
+            description: policy.compactToolDescriptions
+                ? "Generate a downloadable text/data/code file and cite it. Do not duplicate run_python binary artifacts."
+                : "Generate a downloadable text/data/code file from content and cite it in the response. Use this for CSV, JSON, Markdown, TXT, SVG, HTML, or source code when the user asks for a file. Do not call this for an image or binary file already created by run_python; do not Base64-encode and duplicate a Python-created file. For data-heavy text files, use run_python first, then pass the resulting text here.",
+            inputSchema: z.object({
+                filename: z.string(),
+                title: z.string(),
+                content: z.string(),
+                kind: z.string(),
+                mimeType: z.string().optional(),
+                contentEncoding: z.enum(["base64", "hex"]).optional(),
+            }),
+            execute: async ({ title, filename, content, kind, mimeType, contentEncoding }) => {
+                if (
+                    mimeType?.startsWith("image/") ||
+                    /^(image|binary|blob)/i.test(kind) ||
+                    /\.(png|jpe?g|gif|webp|bmp|ico|pdf|zip)$/i.test(filename)
+                ) {
+                    return "No duplicate artifact was generated. The binary/image file was already created by run_python; do not Base64-encode it again unless the user explicitly asks for a separate downloadable copy.";
+                }
+                return artifactPayload({ title, filename, content, kind, mimeType, contentEncoding });
+            },
+        });
+    }
 
     if (settings.subagentsEnabled && !subagentMode) {
         tools.spawn_subagent = tool({

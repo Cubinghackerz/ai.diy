@@ -964,6 +964,42 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
 
             {section === "tools" && (
                 <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-2 rounded-xl border border-border/70 p-2.5">
+                        <label
+                            htmlFor="token-mode"
+                            className="text-[11px] font-medium text-muted-foreground"
+                        >
+                            Token mode
+                        </label>
+                        <select
+                            id="token-mode"
+                            value={settings.tokenMode ?? "balanced"}
+                            onChange={(e) =>
+                                updateSettings({
+                                    tokenMode: e.target.value as
+                                        | "efficient"
+                                        | "balanced"
+                                        | "caching"
+                                        | "full",
+                                })
+                            }
+                            className="h-8 w-full rounded-lg border border-border bg-background px-2 text-xs outline-none"
+                        >
+                            <option value="efficient">Token efficiency</option>
+                            <option value="balanced">Balanced (default)</option>
+                            <option value="caching">Prompt caching</option>
+                            <option value="full">Full suite</option>
+                        </select>
+                        <p className="text-[10px] leading-relaxed text-muted-foreground">
+                            {(settings.tokenMode ?? "balanced") === "efficient"
+                                ? "Shortest prompt and core tools only. Best for everyday Q&A."
+                                : (settings.tokenMode ?? "balanced") === "caching"
+                                  ? "Balanced tools with a stable cacheable prompt prefix. Lowers repeat input cost on Anthropic/OpenAI caches."
+                                  : (settings.tokenMode ?? "balanced") === "full"
+                                    ? "Maximum tool catalog, skill suite, and step budget (previous default)."
+                                    : "Lean prompt with search, Python, files, and MCP. Omits heavy skill-suite tools."}
+                        </p>
+                    </div>
                     {(() => {
                         const activeSearchConnector = settings.connectors.find(
                             (connector) =>

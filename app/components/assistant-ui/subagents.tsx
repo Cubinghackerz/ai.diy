@@ -445,6 +445,7 @@ function SubagentRun({
                                 memoryAvailable:
                                     memoryEnabled && (await hasLocalMemoryEntries()),
                                 subagentsEnabled: false,
+                                tokenMode: s.tokenMode ?? "balanced",
                             },
                             subagentMode: true,
                         },

@@ -73,6 +73,7 @@ type ResolvedConfig = PreviewModelConfig & {
         skillsEnabled: boolean;
         subagentsEnabled: boolean;
         connectors: import("~/lib/types").ConnectorConfig[];
+        tokenMode?: import("~/lib/token-mode").TokenMode;
     };
     mcpServers: Array<{
         id: string;
@@ -224,6 +225,7 @@ export const PreviewWorkspace: FC = () => {
                 skillsEnabled: settings.skillsEnabled,
                 subagentsEnabled: settings.subagentsEnabled,
                 connectors: settings.connectors,
+                tokenMode: settings.tokenMode ?? "balanced",
             },
             mcpServers: settings.mcpServers.filter((server) => server.enabled),
         };
