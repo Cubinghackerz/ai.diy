@@ -34,6 +34,8 @@ export type ToolSettings = {
     memoryAvailable?: boolean;
     subagentsEnabled?: boolean;
     tokenMode?: TokenMode;
+    /** Tool ids that must be registered this turn even outside full-suite mode. */
+    forceToolNames?: string[];
 };
 
 function evaluateMath(expression: string): string {
@@ -382,45 +384,52 @@ Depth: ${input.depth || "standard"}
 Known context (treat as unverified until confirmed): ${input.context?.trim() || "none provided"}
 
 ## Mission
-Answer the question with live, verifiable evidence. Your training data, knowledge cutoff, and saved local memory are not evidence. Every material claim must trace to a source you actually retrieved in this session.
+Answer the question with live, verifiable evidence retrieved in this session. Your training data, knowledge cutoff, parametric memory, and saved local memory are not evidence. Do not lean on what you "already know", especially for time-sensitive topics, new releases, version numbers, pricing, changelogs, APIs, docs that change, incidents, or anything that may have moved since training.
+
+## Training-data ban (mandatory)
+1. Never treat model memory as current fact. If you recall a version, date, price, release name, API shape, or product status, treat that recall as a hypothesis only and verify it with a live retrieval before stating it.
+2. Time-sensitive or release topics (news, launches, updates, "latest", "new", "announced", GA/beta, changelogs, model cards, pricing pages, security advisories): search and read first; do not answer from training data even if you feel confident.
+3. Do not fill gaps with remembered details. If a page is thin or missing, say what could not be verified. Prefer "not found in retrieved sources" over inventing from memory.
+4. When Instant Answer or a search snippet matches your prior knowledge, still fetch the primary page before asserting numbers, dates, or release claims.
+5. If live tools fail or return nothing usable, report the gap. Do not silently fall back to training data as if it were researched.
 
 ## Before searching
 1. Define the answerable core: what must be true for the answer to be reliable.
 2. Split the question into only the necessary subquestions, normally 1-3; each subquestion gets at most one focused query unless the result fails or sources conflict.
 3. For definitions, entities, concepts, and broad factual overviews, call duckduckgo_instant_answer first. Treat its output as a fast discovery/overview layer, not as proof or a substitute for a retrieved primary page.
-4. Design queries per subquestion using exact phrases ("quoted term"), site restriction (site:docs.example.com), file type (filetype:pdf for primary documents), date terms (e.g. 2026) for freshness, and synonym variants when results are thin.
+4. Design queries per subquestion using exact phrases ("quoted term"), site restriction (site:docs.example.com), file type (filetype:pdf for primary documents), date terms (e.g. 2026) for freshness, and synonym variants when results are thin. For releases and "what's new" questions, include year/month terms and official vendor domains.
 5. Classify how fast the facts change:
-   - Volatile (prices, releases, incidents, live status, schedules): use the newest sources and cross-check within the session.
-   - Stable (documentation, APIs, history, specs): verify against the primary source and note its date.
-   - Subjective or contested: sample multiple perspectives and report the range.
+   - Volatile (prices, releases, incidents, live status, schedules, model/API capability tables): newest official sources only; cross-check within the session; never use training recall as the answer.
+   - Stable (documentation, APIs, history, specs): still verify against the primary source and note its date; do not quote remembered docs.
+   - Subjective or contested: sample multiple perspectives and report the range from retrieved sources.
 
 ## Depth behavior
-- Quick: use duckduckgo_instant_answer when applicable, then 1-2 focused queries; verify the direct answer with one authoritative source plus one independent check when the claim is consequential.
+- Quick: use duckduckgo_instant_answer when applicable, then 1-2 focused queries; verify the direct answer with one authoritative source plus one independent check when the claim is consequential. For release/time-sensitive asks, always fetch at least one primary/official page.
 - Standard: use the Instant Answer overview when applicable, cover every necessary subquestion, read only the most relevant pages with read_url, and cross-check claims that materially affect the answer.
 - Deep: use all relevant discovery layers, including Instant Answer, traditional search, third-party providers, and primary-source reads; use multiple query families only when needed to resolve uncertainty.
 
 ## Token-efficient stopping
 - Start with quick depth unless the user asks for a deep review.
 - Use no more than 3 search results per focused query by default and read only pages that can change the answer.
-- Never repeat an equivalent query or fetch the same URL twice. Stop when the answer is supported, or state the unresolved gap.
+- Never repeat an equivalent query or fetch the same URL twice. Stop when the answer is supported by retrieved evidence, or state the unresolved gap without inventing from memory.
 
 ## Evidence rules
 1. Prefer primary and official sources: official documentation, specifications, standards bodies, original research, direct datasets, maintained repositories, and primary reporting. Treat forums, blogs, and unknown domains as weak evidence.
 2. A search snippet is a lead, not evidence. Read the page with read_url before quoting numbers, dates, or claims; extract the exact sentence and the stable source URL.
 3. Check each source's date: is it the newest relevant document, and does it claim to be current?
-4. Consequential claims (safety, financial, legal, medical, identity, versions, API behavior) require two independent credible sources, or one primary source you verified directly.
-5. If sources disagree, report the disagreement explicitly with dates and source types; never silently average them or pick the one that fits.
+4. Consequential claims (safety, financial, legal, medical, identity, versions, releases, API behavior) require two independent credible sources, or one primary source you verified directly in this session.
+5. If sources disagree, report the disagreement explicitly with dates and source types; never silently average them, pick the one that fits, or resolve the conflict from training data.
 
 ## Anti-hallucination
 - Cite only URLs that actually appeared in tool results. Never construct or guess URLs.
 - Never invent quotes, numbers, dates, authors, or sources. If you could not read the page, say so.
-- Distinguish "stated by source X" from "verified fact".
+- Distinguish "stated by source X (retrieved)" from "prior model belief (unverified)".
 - If a search returns nothing usable, change the query or state that the answer could not be verified. Do not fall back to training data or memory.
 
 ## Synthesis
-1. Answer the exact question first, in 1-3 sentences.
+1. Answer the exact question first, in 1-3 sentences, grounded only in retrieved evidence.
 2. Support the answer with key findings; each finding cites a source and, when useful, its date.
-3. Label confidence per claim: High (primary source or two independent credible sources), Medium (single reputable source), Low (unverified or conflicting).
+3. Label confidence per claim: High (primary source or two independent credible sources retrieved this session), Medium (single reputable retrieved source), Low (unverified, conflicting, or only weakly sourced). Anything from training data alone is Low / unverified and should not be presented as researched fact.
 4. State remaining gaps or what would change the answer.
 
 ## Output contract
@@ -525,8 +534,19 @@ export async function buildChatTools(
 ) {
     const subagentMode = options.subagentMode === true;
     const policy = tokenModePolicy(normalizeTokenMode(settings.tokenMode));
+    const forcedTools = new Set(
+        (settings.forceToolNames ?? []).filter((name) => typeof name === "string"),
+    );
+    const forceResearch = forcedTools.has("research_skill");
+    const forceSkillSuite =
+        forcedTools.has("ultimate_frontend_ui") ||
+        forcedTools.has("frontend_design_skill") ||
+        forcedTools.has("create_skill") ||
+        forcedTools.has("python_file_creation_skill") ||
+        forcedTools.has("word_document_skill");
     const enableResearch =
-        settings.webSearchEnabled !== false && policy.researchSkill;
+        settings.webSearchEnabled !== false &&
+        (policy.researchSkill || forceResearch);
     const enableSearch =
         settings.webSearchEnabled !== false && options.suppressWebSearch !== true;
     const enableCalc = settings.calculatorEnabled !== false;
@@ -534,14 +554,14 @@ export async function buildChatTools(
     // sends the result back before the model continues.
     const enablePython = settings.pythonEnabled !== false;
     const enableSkillSuite =
-        settings.skillsEnabled !== false && policy.skillSuite;
+        settings.skillsEnabled !== false && (policy.skillSuite || forceSkillSuite);
 
     const tools: Record<string, Tool> = {};
 
     if (enableResearch) {
         tools.research_skill = tool({
             description:
-                "Callable research skill for substantial factual, current, technical, or comparison research. It plans the minimum focused queries, source checks, and stopping point; choose quick depth by default, then run only the necessary searches and page reads.",
+                "Callable research skill for substantial factual, current, technical, or comparison research. Plans focused queries and source checks. For time-sensitive facts and new releases, forbid answering from training data; retrieve live sources first. When Research is forced or the question needs live facts, call this tool before answering.",
             needsApproval: false,
             inputSchema: z.object({
                 question: z.string(),

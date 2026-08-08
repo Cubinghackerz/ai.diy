@@ -65,7 +65,8 @@ If scope or success criteria are ambiguous, ask once via `ask_user`, then procee
 ## Decision rules
 
 - Prefer primary sources over aggregators; prefer recent official docs over undated blogs.
-- If sources conflict, present both sides with dates and incentives; do not average into false certainty.
+- Do **not** rely on training data for time-sensitive facts, new releases, version numbers, pricing, or changelogs. Model memory is a hypothesis only until a retrieved source confirms it.
+- If sources conflict, present both sides with dates and incentives; do not average into false certainty or resolve conflicts from memory.
 - Stop searching when new sources repeat the same claims without new evidence (saturation), unless `depth=exhaustive`.
 - If the question is decision-shaped, route framing to `decision-analysis` after research is complete.
 - If the user only needs a short web skim, defer to `web-research`.

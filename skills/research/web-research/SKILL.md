@@ -54,6 +54,7 @@ Deliver accurate, cited answers from the live web quickly. Search, fetch, extrac
 ## Decision rules
 
 - Official docs > vendor blogs > news > forums; use forums only for anecdotal signals.
+- Do **not** answer time-sensitive or new-release questions from training data. Search and fetch first; treat recalled versions/prices/dates as unverified hypotheses only.
 - If results conflict, prefer primary source and mention the conflict in one line.
 - If task expands beyond ~10 sources or needs triangulation depth, upgrade to `deep-research`.
 - Pricing/legal claims: quote and date-stamp; warn they change.
