@@ -698,7 +698,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                             alt="ai.diy workspace analyzing the Cubinghackerz/ai.diy repository with streaming reasoning and a deep analysis report"
                             className="block h-auto w-full"
                             width={1024}
-                            height={527}
+                            height={557}
                             loading="lazy"
                         />
                     </div>
