@@ -139,8 +139,18 @@ export interface AppSettings {
     calculatorEnabled: boolean;
     memoryEnabled: boolean;
     skillsEnabled: boolean;
+    /**
+     * Controls system-prompt size, tool suite, and step budget.
+     * Default balanced — full suite matches the previous always-on behavior.
+     */
+    tokenMode: import("./token-mode").TokenMode;
     /** Beta: let the model delegate subtasks to user-approved subagents. */
     subagentsEnabled: boolean;
+    /**
+     * Agent Mode: plan → select installed skills/tools → execute → verify.
+     * Uses General Task Solver routing when available.
+     */
+    agentModeEnabled: boolean;
     preview: PreviewSettings;
     // MCP settings
     mcpServers: McpServerConfig[];
@@ -425,7 +435,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
     calculatorEnabled: true,
     memoryEnabled: true,
     skillsEnabled: true,
+    tokenMode: "balanced",
     subagentsEnabled: false,
+    agentModeEnabled: false,
     preview: {
         enabled: false,
         primaryModels: [],

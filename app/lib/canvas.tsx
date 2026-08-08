@@ -69,6 +69,11 @@ function clampCanvasWidth(width: number, viewport = viewportWidth()) {
     return Math.max(minWidth, Math.min(maxWidth, Math.round(width)));
 }
 
+function isImageLikeArtifact(artifact: Omit<Artifact, "id" | "createdAt">) {
+    if (artifact.mimeType && /^image\//i.test(artifact.mimeType)) return true;
+    return Boolean(artifact.filename?.match(/\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i));
+}
+
 function recommendedCanvasWidth(artifact: Omit<Artifact, "id" | "createdAt">) {
     const viewport = viewportWidth();
     const maxWidth = Math.round(viewport * MAX_WIDTH_RATIO);
@@ -79,10 +84,10 @@ function recommendedCanvasWidth(artifact: Omit<Artifact, "id" | "createdAt">) {
     );
     const complexity = Math.min(1, longestLine / 140);
 
-    // Interactive previews need the most room. Code and data get a compact
-    // split unless long lines make a wider editor materially more useful.
+    // Interactive previews and images need the most room. Code and data get a
+    // compact split unless long lines make a wider editor materially more useful.
     const ratio =
-        artifact.kind === "html"
+        artifact.kind === "html" || isImageLikeArtifact(artifact)
             ? MAX_WIDTH_RATIO
             : artifact.kind === "python"
               ? 0.4 + complexity * 0.1
@@ -208,4 +213,8 @@ export function useCanvas() {
     const ctx = useContext(CanvasContext);
     if (!ctx) throw new Error("useCanvas must be used within CanvasProvider");
     return ctx;
+}
+
+export function useOptionalCanvas() {
+    return useContext(CanvasContext);
 }

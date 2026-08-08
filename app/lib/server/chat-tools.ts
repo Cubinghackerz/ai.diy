@@ -8,6 +8,8 @@ import { z } from "zod";
 import { ARTIFACT_MARKER, type ArtifactContentEncoding } from "~/lib/artifacts";
 import {
     duckDuckGoInstantAnswer,
+    formatCompactSearchResults,
+    clipSearchText,
     webSearch,
     type DuckDuckGoInstantAnswer,
     type SearchEngine,
@@ -15,6 +17,17 @@ import {
 import { connectorSearch } from "~/lib/search/connectors";
 import type { ConnectorConfig } from "~/lib/types";
 import { assertPublicHttpUrl } from "~/lib/server/ssrf";
+import {
+    normalizeTokenMode,
+    tokenModePolicy,
+    type TokenMode,
+} from "~/lib/token-mode";
+import {
+    compactUiMessages,
+    compactionSkillGuide,
+    type CompactableMessage,
+} from "~/lib/server/context-compaction";
+import type { UIMessage } from "ai";
 
 export { ARTIFACT_MARKER };
 
@@ -28,6 +41,9 @@ export type ToolSettings = {
     connectors?: ConnectorConfig[];
     memoryAvailable?: boolean;
     subagentsEnabled?: boolean;
+    tokenMode?: TokenMode;
+    /** Tool ids that must be registered this turn even outside full-suite mode. */
+    forceToolNames?: string[];
 };
 
 function evaluateMath(expression: string): string {
@@ -329,31 +345,29 @@ function connectorGuide(connectors: ConnectorConfig[]): string {
 
 function formatDuckDuckGoInstantAnswer(answer: DuckDuckGoInstantAnswer): string {
     const lines = [
-        "DuckDuckGo Instant Answer (free first-pass overview; verify material claims with web_search and read_url):",
+        "DuckDuckGo Instant Answer (overview only; verify with search/fetch):",
         `Query: ${answer.query}`,
     ];
-    if (answer.answer) lines.push(`Answer: ${answer.answer}`);
+    if (answer.answer) lines.push(`Answer: ${clipSearchText(answer.answer, 280)}`);
     if (answer.abstractText) {
         lines.push(
-            `Abstract${answer.abstractSource ? ` (${answer.abstractSource})` : ""}: ${answer.abstractText}`,
+            `Abstract${answer.abstractSource ? ` (${answer.abstractSource})` : ""}: ${clipSearchText(answer.abstractText, 280)}`,
         );
     }
     if (answer.abstractUrl) lines.push(`Abstract URL: ${answer.abstractUrl}`);
     if (answer.definition) {
         lines.push(
-            `Definition${answer.definitionSource ? ` (${answer.definitionSource})` : ""}: ${answer.definition}`,
+            `Definition${answer.definitionSource ? ` (${answer.definitionSource})` : ""}: ${clipSearchText(answer.definition, 280)}`,
         );
     }
     if (answer.definitionUrl) lines.push(`Definition URL: ${answer.definitionUrl}`);
     if (answer.relatedTopics.length > 0) {
         lines.push(
-            "Related topics:\n" +
-                answer.relatedTopics
-                    .map(
-                        (topic, index) =>
-                            `[${index + 1}] ${topic.title}\nURL: ${topic.url}\nSnippet: ${topic.snippet}`,
-                    )
-                    .join("\n\n"),
+            "Related:\n" +
+                formatCompactSearchResults(answer.relatedTopics.slice(0, 3), {
+                    maxSnippetChars: 120,
+                    maxTitleChars: 60,
+                }),
         );
     }
     if (lines.length === 2) {
@@ -361,7 +375,7 @@ function formatDuckDuckGoInstantAnswer(answer: DuckDuckGoInstantAnswer): string 
             "No instant answer was available. Use web_search, third-party search, and read_url instead.",
         );
     }
-    return lines.join("\n").slice(0, 8_000);
+    return lines.join("\n").slice(0, 2_500);
 }
 
 function researchSkillGuide(input: {
@@ -376,45 +390,52 @@ Depth: ${input.depth || "standard"}
 Known context (treat as unverified until confirmed): ${input.context?.trim() || "none provided"}
 
 ## Mission
-Answer the question with live, verifiable evidence. Your training data, knowledge cutoff, and saved local memory are not evidence. Every material claim must trace to a source you actually retrieved in this session.
+Answer the question with live, verifiable evidence retrieved in this session. Your training data, knowledge cutoff, parametric memory, and saved local memory are not evidence. Do not lean on what you "already know", especially for time-sensitive topics, new releases, version numbers, pricing, changelogs, APIs, docs that change, incidents, or anything that may have moved since training.
+
+## Training-data ban (mandatory)
+1. Never treat model memory as current fact. If you recall a version, date, price, release name, API shape, or product status, treat that recall as a hypothesis only and verify it with a live retrieval before stating it.
+2. Time-sensitive or release topics (news, launches, updates, "latest", "new", "announced", GA/beta, changelogs, model cards, pricing pages, security advisories): search and read first; do not answer from training data even if you feel confident.
+3. Do not fill gaps with remembered details. If a page is thin or missing, say what could not be verified. Prefer "not found in retrieved sources" over inventing from memory.
+4. When Instant Answer or a search snippet matches your prior knowledge, still fetch the primary page before asserting numbers, dates, or release claims.
+5. If live tools fail or return nothing usable, report the gap. Do not silently fall back to training data as if it were researched.
 
 ## Before searching
 1. Define the answerable core: what must be true for the answer to be reliable.
 2. Split the question into only the necessary subquestions, normally 1-3; each subquestion gets at most one focused query unless the result fails or sources conflict.
 3. For definitions, entities, concepts, and broad factual overviews, call duckduckgo_instant_answer first. Treat its output as a fast discovery/overview layer, not as proof or a substitute for a retrieved primary page.
-4. Design queries per subquestion using exact phrases ("quoted term"), site restriction (site:docs.example.com), file type (filetype:pdf for primary documents), date terms (e.g. 2026) for freshness, and synonym variants when results are thin.
+4. Design queries per subquestion using exact phrases ("quoted term"), site restriction (site:docs.example.com), file type (filetype:pdf for primary documents), date terms (e.g. 2026) for freshness, and synonym variants when results are thin. For releases and "what's new" questions, include year/month terms and official vendor domains.
 5. Classify how fast the facts change:
-   - Volatile (prices, releases, incidents, live status, schedules): use the newest sources and cross-check within the session.
-   - Stable (documentation, APIs, history, specs): verify against the primary source and note its date.
-   - Subjective or contested: sample multiple perspectives and report the range.
+   - Volatile (prices, releases, incidents, live status, schedules, model/API capability tables): newest official sources only; cross-check within the session; never use training recall as the answer.
+   - Stable (documentation, APIs, history, specs): still verify against the primary source and note its date; do not quote remembered docs.
+   - Subjective or contested: sample multiple perspectives and report the range from retrieved sources.
 
 ## Depth behavior
-- Quick: use duckduckgo_instant_answer when applicable, then 1-2 focused queries; verify the direct answer with one authoritative source plus one independent check when the claim is consequential.
+- Quick: use duckduckgo_instant_answer when applicable, then 1-2 focused queries; verify the direct answer with one authoritative source plus one independent check when the claim is consequential. For release/time-sensitive asks, always fetch at least one primary/official page.
 - Standard: use the Instant Answer overview when applicable, cover every necessary subquestion, read only the most relevant pages with read_url, and cross-check claims that materially affect the answer.
 - Deep: use all relevant discovery layers, including Instant Answer, traditional search, third-party providers, and primary-source reads; use multiple query families only when needed to resolve uncertainty.
 
 ## Token-efficient stopping
 - Start with quick depth unless the user asks for a deep review.
 - Use no more than 3 search results per focused query by default and read only pages that can change the answer.
-- Never repeat an equivalent query or fetch the same URL twice. Stop when the answer is supported, or state the unresolved gap.
+- Never repeat an equivalent query or fetch the same URL twice. Stop when the answer is supported by retrieved evidence, or state the unresolved gap without inventing from memory.
 
 ## Evidence rules
 1. Prefer primary and official sources: official documentation, specifications, standards bodies, original research, direct datasets, maintained repositories, and primary reporting. Treat forums, blogs, and unknown domains as weak evidence.
 2. A search snippet is a lead, not evidence. Read the page with read_url before quoting numbers, dates, or claims; extract the exact sentence and the stable source URL.
 3. Check each source's date: is it the newest relevant document, and does it claim to be current?
-4. Consequential claims (safety, financial, legal, medical, identity, versions, API behavior) require two independent credible sources, or one primary source you verified directly.
-5. If sources disagree, report the disagreement explicitly with dates and source types; never silently average them or pick the one that fits.
+4. Consequential claims (safety, financial, legal, medical, identity, versions, releases, API behavior) require two independent credible sources, or one primary source you verified directly in this session.
+5. If sources disagree, report the disagreement explicitly with dates and source types; never silently average them, pick the one that fits, or resolve the conflict from training data.
 
 ## Anti-hallucination
 - Cite only URLs that actually appeared in tool results. Never construct or guess URLs.
 - Never invent quotes, numbers, dates, authors, or sources. If you could not read the page, say so.
-- Distinguish "stated by source X" from "verified fact".
+- Distinguish "stated by source X (retrieved)" from "prior model belief (unverified)".
 - If a search returns nothing usable, change the query or state that the answer could not be verified. Do not fall back to training data or memory.
 
 ## Synthesis
-1. Answer the exact question first, in 1-3 sentences.
+1. Answer the exact question first, in 1-3 sentences, grounded only in retrieved evidence.
 2. Support the answer with key findings; each finding cites a source and, when useful, its date.
-3. Label confidence per claim: High (primary source or two independent credible sources), Medium (single reputable source), Low (unverified or conflicting).
+3. Label confidence per claim: High (primary source or two independent credible sources retrieved this session), Medium (single reputable retrieved source), Low (unverified, conflicting, or only weakly sourced). Anything from training data alone is Low / unverified and should not be presented as researched fact.
 4. State remaining gaps or what would change the answer.
 
 ## Output contract
@@ -515,22 +536,75 @@ Use before any Word document request, including when the user says "report", "pr
 
 export async function buildChatTools(
     settings: ToolSettings = {},
-    options: { subagentMode?: boolean; suppressWebSearch?: boolean } = {},
+    options: {
+        subagentMode?: boolean;
+        suppressWebSearch?: boolean;
+        /** Current thread messages — used by compaction_skill. */
+        messages?: CompactableMessage[];
+    } = {},
 ) {
     const subagentMode = options.subagentMode === true;
-    const enableResearch = settings.webSearchEnabled !== false;
-    const enableSearch = enableResearch && options.suppressWebSearch !== true;
+    const policy = tokenModePolicy(normalizeTokenMode(settings.tokenMode));
+    const forcedTools = new Set(
+        (settings.forceToolNames ?? []).filter((name) => typeof name === "string"),
+    );
+    const forceResearch = forcedTools.has("research_skill");
+    const forceCompaction = forcedTools.has("compaction_skill");
+    const forceSkillSuite =
+        forcedTools.has("ultimate_frontend_ui") ||
+        forcedTools.has("frontend_design_skill") ||
+        forcedTools.has("create_skill") ||
+        forcedTools.has("python_file_creation_skill") ||
+        forcedTools.has("word_document_skill");
+    const enableResearch =
+        settings.webSearchEnabled !== false &&
+        (policy.researchSkill || forceResearch);
+    const enableSearch =
+        settings.webSearchEnabled !== false && options.suppressWebSearch !== true;
     const enableCalc = settings.calculatorEnabled !== false;
     // Python is a client-side tool. The browser executes it in Pyodide and
     // sends the result back before the model continues.
     const enablePython = settings.pythonEnabled !== false;
+    const enableSkillSuite =
+        settings.skillsEnabled !== false && (policy.skillSuite || forceSkillSuite);
 
     const tools: Record<string, Tool> = {};
+
+    // Always available; forceable via /Compaction.
+    tools.compaction_skill = tool({
+        description:
+            "Compress prior chat into a faithful carry-forward brief (goals, decisions, constraints, open threads, URLs). Call when /Compaction is selected or the user asks to compact context. Does not invent facts.",
+        needsApproval: false,
+        inputSchema: z.object({
+            focus: z.string().optional(),
+            reason: z.string().optional(),
+        }),
+        execute: async ({ focus, reason }) => {
+            const source = (options.messages ?? []) as UIMessage[];
+            const result = compactUiMessages(source, {
+                contextWindow: 32_000,
+                force: true,
+                focus,
+                reason: reason || (forceCompaction ? "forced /Compaction" : "compaction_skill"),
+                keepRecent: 6,
+            });
+            return compactionSkillGuide({
+                focus,
+                reason: reason || (forceCompaction ? "forced /Compaction" : "compaction_skill"),
+                summary:
+                    result.summary ||
+                    "No older turns to compact; recent messages already fit.",
+                beforeTokens: result.beforeTokens,
+                afterTokens: result.afterTokens,
+                droppedMessages: result.droppedMessages,
+            });
+        },
+    });
 
     if (enableResearch) {
         tools.research_skill = tool({
             description:
-                "Callable research skill for substantial factual, current, technical, or comparison research. It plans the minimum focused queries, source checks, and stopping point; choose quick depth by default, then run only the necessary searches and page reads.",
+                "Callable research skill for substantial factual, current, technical, or comparison research. Plans focused queries and source checks. For time-sensitive facts and new releases, forbid answering from training data; retrieve live sources first. When Research is forced or the question needs live facts, call this tool before answering.",
             needsApproval: false,
             inputSchema: z.object({
                 question: z.string(),
@@ -541,10 +615,11 @@ export async function buildChatTools(
         });
     }
 
-    if (enableSearch) {
+    if (enableSearch && policy.instantAnswer) {
         tools.duckduckgo_instant_answer = tool({
-            description:
-                "Use DuckDuckGo's free Instant Answer API as a compact first-pass overview for definitions, entities, concepts, and broad factual questions. Use it once when applicable, not for current proof; verify only material claims with a focused web search and relevant page fetch. This service is intended for non-commercial use; review current DuckDuckGo terms before commercial deployment.",
+            description: policy.compactToolDescriptions
+                ? "DuckDuckGo Instant Answer overview for definitions/entities. Verify material claims with search/fetch. Non-commercial use."
+                : "Use DuckDuckGo's free Instant Answer API as a compact first-pass overview for definitions, entities, concepts, and broad factual questions. Use it once when applicable, not for current proof; verify only material claims with a focused web search and relevant page fetch. This service is intended for non-commercial use; review current DuckDuckGo terms before commercial deployment.",
             needsApproval: false,
             inputSchema: z.object({
                 query: z.string(),
@@ -562,7 +637,10 @@ export async function buildChatTools(
         });
     }
 
-    if (settings.connectors?.some((connector) => connector.enabled)) {
+    if (
+        policy.connectorsMeta &&
+        settings.connectors?.some((connector) => connector.enabled)
+    ) {
         tools.connector_guide = tool({
             description:
                 "Read the enabled connector/integration capability guide before using connected tools. Use it to understand available actions and permission boundaries.",
@@ -587,15 +665,14 @@ export async function buildChatTools(
                 ? "SearXNG"
                 : "DuckDuckGo");
 
-        const formatResults = (results: Awaited<ReturnType<typeof webSearch>>) =>
-            results.length
-                ? results
-                      .map(
-                          (result, index) =>
-                              `[${index + 1}] ${result.title}\nURL: ${result.url}\nSnippet: ${result.snippet}`,
-                      )
-                      .join("\n\n")
-                : "No results found.";
+        const formatResults = (results: Awaited<ReturnType<typeof webSearch>>) => {
+            const body = formatCompactSearchResults(results, {
+                maxSnippetChars: policy.maxSnippetChars,
+                maxTitleChars: 72,
+                includeSnippets: policy.maxSnippetChars > 0,
+            });
+            return `${body}\n\nCite only these URLs. Snippets are leads, not proof—fetch a page before quoting numbers/dates. Do not invent sources.`;
+        };
 
         const builtInSearch = async (query: string, maxResults: number) =>
             formatResults(
@@ -606,23 +683,34 @@ export async function buildChatTools(
                 }),
             );
 
+        const defaultHits = policy.defaultSearchResults;
+        const maxHits = policy.maxSearchResults;
+
+        const resolveHitCount = (requested?: number) => {
+            if (typeof requested !== "number" || !Number.isFinite(requested)) {
+                return defaultHits;
+            }
+            return Math.max(1, Math.min(maxHits, Math.round(requested)));
+        };
+
         const searchTool = tool({
-            description: `Search the web using ${engineLabel} for real-time information, facts, news, and technical topics. Cite result URLs.`,
+            description: `Search the web using ${engineLabel} for real-time information, facts, news, and technical topics. Default ${defaultHits} results (max ${maxHits}). Cite result URLs.`,
             needsApproval: false,
             inputSchema: z.object({
                 query: z.string().optional(),
-                maxResults: z.number().int().min(1).max(5).optional(),
+                maxResults: z.number().int().min(1).max(maxHits).optional(),
             }),
             execute: async ({ query, maxResults }) => {
                 const normalizedQuery = query?.trim();
                 if (!normalizedQuery) {
                     return "Search query required. Retry with a focused query string.";
                 }
+                const hits = resolveHitCount(maxResults);
                 try {
                     const results = activeConnector
-                        ? await connectorSearch(activeConnector, normalizedQuery, maxResults ?? 3)
+                        ? await connectorSearch(activeConnector, normalizedQuery, hits)
                         : await webSearch(normalizedQuery, {
-                              maxResults: maxResults ?? 3,
+                              maxResults: hits,
                               engine,
                               searxngUrl: settings.searxngUrl,
                           });
@@ -630,7 +718,7 @@ export async function buildChatTools(
                 } catch (err) {
                     if (activeConnector) {
                         try {
-                            return `${await builtInSearch(normalizedQuery, maxResults ?? 3)}\n\nNote: ${activeConnector.name} was unavailable, so built-in web search was used instead.`;
+                            return `${await builtInSearch(normalizedQuery, hits)}\n\nNote: ${activeConnector.name} was unavailable, so built-in web search was used instead.`;
                         } catch {
                             // Return a model-readable result instead of failing the stream.
                         }
@@ -647,7 +735,7 @@ export async function buildChatTools(
                 needsApproval: false,
                 inputSchema: z.object({
                     query: z.string().optional(),
-                    maxResults: z.number().int().min(1).max(5).optional(),
+                    maxResults: z.number().int().min(1).max(maxHits).optional(),
                 }),
                 execute: async ({ query, maxResults }) => {
                     const normalizedQuery = query?.trim();
@@ -655,7 +743,7 @@ export async function buildChatTools(
                         return "Search query required. Retry with a focused query string.";
                     }
                     try {
-                        return await builtInSearch(normalizedQuery, maxResults ?? 3);
+                        return await builtInSearch(normalizedQuery, resolveHitCount(maxResults));
                     } catch (err) {
                         return `Search unavailable: ${err instanceof Error ? err.message : "the built-in provider failed"}`;
                     }
@@ -689,7 +777,7 @@ export async function buildChatTools(
                         .replace(/<[^>]+>/g, " ")
                         .replace(/\s+/g, " ")
                         .trim()
-                        .slice(0, 4000);
+                        .slice(0, policy.maxFetchChars);
                 } catch (err) {
                     return `Fetch error: ${err instanceof Error ? err.message : String(err)}`;
                 }
@@ -712,8 +800,9 @@ export async function buildChatTools(
 
     if (enablePython) {
         tools.run_python = tool({
-            description:
-                "Execute Python 3 in the browser with Pyodide and return stdout, stderr, or error logs. Every listed library auto-loads on first import; simply import it and never manage package installation yourself with micropip, pip, or subprocess. Top-level await is supported; do not use asyncio.run (Pyodide already runs inside an event loop), just write await at top level. Data/analysis: numpy, pandas, scipy, sympy, scikit-learn, networkx. Plotting: matplotlib. Parsing: BeautifulSoup, lxml, regex, python-dateutil, pyyaml. File creation: openpyxl and xlsxwriter (Excel), python-docx (Word), python-pptx (PowerPoint), reportlab and fpdf2 (PDF), pillow (images), jinja2 (templates), requests (HTTP), plus the csv, json, and zipfile standard libraries. Always use these real libraries instead of hand-rolling zip/XML files. Save generated files in the current working directory; the browser captures up to four new files of 2 MiB each as session-only downloadable Canvas artifacts and never persists their binary data to browser storage. When a result reports created artifacts, do not call create_file or copy/Base64 their bytes again.",
+            description: policy.compactToolDescriptions
+                ? "Run Python in browser Pyodide. Libraries auto-import (numpy, pandas, matplotlib, openpyxl, python-docx, etc.). Save files in cwd for Canvas capture; do not re-upload binary artifacts via create_file."
+                : "Execute Python 3 in the browser with Pyodide and return stdout, stderr, or error logs. Every listed library auto-loads on first import; simply import it and never manage package installation yourself with micropip, pip, or subprocess. Top-level await is supported; do not use asyncio.run (Pyodide already runs inside an event loop), just write await at top level. Data/analysis: numpy, pandas, scipy, sympy, scikit-learn, networkx. Plotting: matplotlib. Parsing: BeautifulSoup, lxml, regex, python-dateutil, pyyaml. File creation: openpyxl and xlsxwriter (Excel), python-docx (Word), python-pptx (PowerPoint), reportlab and fpdf2 (PDF), pillow (images), jinja2 (templates), requests (HTTP), plus the csv, json, and zipfile standard libraries. Always use these real libraries instead of hand-rolling zip/XML files. Save generated files in the current working directory; the browser captures up to four new files of 2 MiB each as session-only downloadable Canvas artifacts and never persists their binary data to browser storage. When a result reports created artifacts, do not call create_file or copy/Base64 their bytes again.",
             inputSchema: z.object({
                 code: z.string(),
                 description: z.string().optional(),
@@ -722,7 +811,7 @@ export async function buildChatTools(
         tools.run_code = tools.run_python;
     }
 
-    if (enablePython && settings.skillsEnabled !== false) {
+    if (enablePython && enableSkillSuite) {
         const pythonFileSkill = tool({
             description:
                 "Callable Python file-creation and execution skill. Invoke before non-trivial DOCX, XLSX, PPTX, PDF, image, archive, or data-file work. It defines the verified Pyodide library, direct Canvas artifact-capture, validation, size-limit, and failure-recovery protocol.",
@@ -765,20 +854,22 @@ export async function buildChatTools(
         });
     }
 
-    tools.list_connections = tool({
-        description: "List enabled integrations and their capability categories without exposing credentials.",
-        inputSchema: z.object({}),
-        execute: async () =>
-            JSON.stringify(
-                (settings.connectors ?? [])
-                    .filter((connector) => connector.enabled)
-                    .map((connector) => ({
-                        name: connector.name,
-                        kind: connector.kind,
-                        capabilities: connector.kind === "remote-mcp" ? ["discovered tools"] : ["configured connector"],
-                    })),
-            ),
-    });
+    if (policy.connectorsMeta) {
+        tools.list_connections = tool({
+            description: "List enabled integrations and their capability categories without exposing credentials.",
+            inputSchema: z.object({}),
+            execute: async () =>
+                JSON.stringify(
+                    (settings.connectors ?? [])
+                        .filter((connector) => connector.enabled)
+                        .map((connector) => ({
+                            name: connector.name,
+                            kind: connector.kind,
+                            capabilities: connector.kind === "remote-mcp" ? ["discovered tools"] : ["configured connector"],
+                        })),
+                ),
+        });
+    }
 
     if (!subagentMode) {
         tools.ask_user = tool({
@@ -791,7 +882,7 @@ export async function buildChatTools(
         });
     }
 
-    if (settings.skillsEnabled !== false) {
+    if (enableSkillSuite) {
         const skillArchitectInput = z.object({
             name: z.string(),
             description: z.string().optional(),
@@ -864,8 +955,9 @@ export async function buildChatTools(
     }
 
     tools.create_file = tool({
-        description:
-            "Create a document, code file, SVG, interactive HTML preview, or downloadable binary file in the Canvas panel. For binary bytes produced by run_python, pass the exact Base64 or hex string with contentEncoding set to base64 or hex; the client decodes it before download. Always use this tool for a file the user asked to download and cite the resulting file.",
+        description: policy.compactToolDescriptions
+            ? "Create a Canvas file (text/code/HTML/SVG or base64/hex binary). Mention the filename in backticks, not as a markdown link."
+            : "Create a document, code file, SVG, interactive HTML preview, or downloadable binary file in the Canvas panel. For binary bytes produced by run_python, pass the exact Base64 or hex string with contentEncoding set to base64 or hex; the client decodes it before download. For interactive HTML, use in-page # anchors or absolute https:// links only—never root-relative paths like /pricing that would leave the preview. Always use this tool for a file the user asked to download and mention the resulting filename in backticks (never as a markdown link).",
         inputSchema: z.object({
             filename: z.string(),
             title: z.string(),
@@ -878,28 +970,31 @@ export async function buildChatTools(
             artifactPayload({ title, filename, content, kind, mimeType, contentEncoding }),
     });
 
-    tools.generate_file = tool({
-        description:
-            "Generate a downloadable text/data/code file from content and cite it in the response. Use this for CSV, JSON, Markdown, TXT, SVG, HTML, or source code when the user asks for a file. Do not call this for an image or binary file already created by run_python; do not Base64-encode and duplicate a Python-created file. For data-heavy text files, use run_python first, then pass the resulting text here.",
-        inputSchema: z.object({
-            filename: z.string(),
-            title: z.string(),
-            content: z.string(),
-            kind: z.string(),
-            mimeType: z.string().optional(),
-            contentEncoding: z.enum(["base64", "hex"]).optional(),
-        }),
-        execute: async ({ title, filename, content, kind, mimeType, contentEncoding }) => {
-            if (
-                mimeType?.startsWith("image/") ||
-                /^(image|binary|blob)/i.test(kind) ||
-                /\.(png|jpe?g|gif|webp|bmp|ico|pdf|zip)$/i.test(filename)
-            ) {
-                return "No duplicate artifact was generated. The binary/image file was already created by run_python; do not Base64-encode it again unless the user explicitly asks for a separate downloadable copy.";
-            }
-            return artifactPayload({ title, filename, content, kind, mimeType, contentEncoding });
-        },
-    });
+    if (policy.generateFile) {
+        tools.generate_file = tool({
+            description: policy.compactToolDescriptions
+                ? "Generate a downloadable text/data/code file and mention its filename in backticks. Do not duplicate run_python binary artifacts."
+                : "Generate a downloadable text/data/code file from content and mention its filename in backticks (never as a markdown link). Use this for CSV, JSON, Markdown, TXT, SVG, HTML, or source code when the user asks for a file. Do not call this for an image or binary file already created by run_python; do not Base64-encode and duplicate a Python-created file. For data-heavy text files, use run_python first, then pass the resulting text here.",
+            inputSchema: z.object({
+                filename: z.string(),
+                title: z.string(),
+                content: z.string(),
+                kind: z.string(),
+                mimeType: z.string().optional(),
+                contentEncoding: z.enum(["base64", "hex"]).optional(),
+            }),
+            execute: async ({ title, filename, content, kind, mimeType, contentEncoding }) => {
+                if (
+                    mimeType?.startsWith("image/") ||
+                    /^(image|binary|blob)/i.test(kind) ||
+                    /\.(png|jpe?g|gif|webp|bmp|ico|pdf|zip)$/i.test(filename)
+                ) {
+                    return "No duplicate artifact was generated. The binary/image file was already created by run_python; do not Base64-encode it again unless the user explicitly asks for a separate downloadable copy.";
+                }
+                return artifactPayload({ title, filename, content, kind, mimeType, contentEncoding });
+            },
+        });
+    }
 
     if (settings.subagentsEnabled && !subagentMode) {
         tools.spawn_subagent = tool({

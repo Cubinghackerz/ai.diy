@@ -79,6 +79,15 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                     },
                     connectors: parsed.connectors ?? [],
                     customSkills: parsed.customSkills ?? [],
+                    agentModeEnabled: parsed.agentModeEnabled ?? false,
+                    subagentsEnabled: parsed.subagentsEnabled ?? false,
+                    tokenMode:
+                        parsed.tokenMode === "efficient" ||
+                        parsed.tokenMode === "balanced" ||
+                        parsed.tokenMode === "caching" ||
+                        parsed.tokenMode === "full"
+                            ? parsed.tokenMode
+                            : "balanced",
                 });
             }
         } catch {

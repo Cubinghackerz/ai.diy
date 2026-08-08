@@ -7,3 +7,9 @@ node_modules
 .env.local
 .env.*.local
 .vercel
+
+# Local agent / design tooling (not product source)
+.agents/
+.backup/
+.codex/
+.impeccable/

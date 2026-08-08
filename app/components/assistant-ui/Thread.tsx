@@ -71,6 +71,7 @@ import { useSettings } from "~/lib/providers/SettingsProvider";
 import {
     BUILTIN_FORCED_SKILLS,
     forcedSkillStore,
+    skillMatchesSlashQuery,
     type ForcedSkill,
 } from "~/lib/skill-command";
 
@@ -304,13 +305,14 @@ const ComposerInput: FC = () => {
     const selectedNames = new Set(
       appliedSkills.map((skill) => skill.name.toLowerCase()),
     );
-    const all = [...custom, ...BUILTIN_FORCED_SKILLS].filter(
+    // Builtins first so Compaction / Research are not pushed off by custom skills.
+    const all = [...BUILTIN_FORCED_SKILLS, ...custom].filter(
       (skill) => !selectedNames.has(skill.name.toLowerCase()),
     );
     const matches = query
-      ? all.filter((skill) => skill.name.toLowerCase().includes(query))
+      ? all.filter((skill) => skillMatchesSlashQuery(skill.name, query))
       : all;
-    return matches.slice(0, 8);
+    return matches.slice(0, 16);
   }, [appliedSkills, commandActive, settings.customSkills, value]);
 
   useEffect(() => {
@@ -447,7 +449,9 @@ const Composer: FC = () => {
 
   const send = () => {
     if (!canSend) return;
-    forcedSkillStore.current = [];
+    // Keep forced skills in the module store until the transport reads them.
+    // Clearing here raced prepareSendMessagesRequest and dropped every skill.
+    forcedSkillStore.current = appliedSkills;
     setAppliedSkills([]);
     composerSend();
   };
@@ -549,8 +553,8 @@ const ComposerAction: FC = () => {
 const MessageError: FC = () => {
   return (
     <MessagePrimitive.Error>
-      <ErrorPrimitive.Root className="aui-message-error-root border-destructive bg-destructive/10 text-destructive dark:bg-destructive/5 mt-2 rounded-md border p-3 text-sm dark:text-red-200">
-        <ErrorPrimitive.Message className="aui-message-error-message line-clamp-2" />
+      <ErrorPrimitive.Root className="aui-message-error-root border-destructive bg-destructive/10 text-destructive dark:bg-destructive/5 mt-2 rounded-md border p-3 text-sm whitespace-pre-wrap dark:text-red-200">
+        <ErrorPrimitive.Message className="aui-message-error-message" />
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
   );

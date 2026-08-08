@@ -132,9 +132,11 @@ export function AssistantRuntimeProvider({
                                 connectors: s.connectors,
                                 memoryAvailable,
                                 subagentsEnabled: s.subagentsEnabled,
+                                tokenMode: s.tokenMode ?? "balanced",
                             },
                             mcpServers: s.mcpServers.filter((m) => m.enabled),
                             memoryContext,
+                            agentMode: s.agentModeEnabled === true,
                             ...(forcedSkills.length ? { customSkills: forcedSkills } : {}),
                         },
                     };

@@ -1,0 +1,14 @@
+services:
+  ai-diy:
+    build: .
+    image: ai-diy:local
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      # Optional: CORS_ORIGINS=https://app.example.com
+      # Optional (trusted self-host only): ALLOW_PRIVATE_PROVIDER_URLS=true
+    # Uncomment to reach Ollama/LM Studio on the Docker host from the container:
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
+    restart: unless-stopped

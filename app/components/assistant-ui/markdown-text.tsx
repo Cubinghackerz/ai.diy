@@ -13,11 +13,101 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import rehypeRaw from "rehype-raw";
-import { type FC, useState } from "react";
+import { type AnchorHTMLAttributes, type FC, type ReactNode, useState } from "react";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
 import { TooltipIconButton } from "~/components/assistant-ui/tooltip-icon-button";
+import { useOptionalCanvas } from "~/lib/canvas";
 import { cn } from "~/lib/utils";
+
+function collectText(node: ReactNode): string {
+  if (node == null || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(collectText).join("");
+  if (typeof node === "object" && "props" in node) {
+    return collectText((node as { props?: { children?: ReactNode } }).props?.children);
+  }
+  return "";
+}
+
+function isExternalHref(href: string | undefined): boolean {
+  if (!href) return false;
+  return /^(https?:|mailto:|tel:)/i.test(href);
+}
+
+function citationFilename(href: string | undefined, label: string): string | null {
+  const fromHref = href?.trim() ?? "";
+  const fromLabel = label.trim();
+  const candidate =
+    fromHref && !isExternalHref(fromHref) && !/^[#/]/.test(fromHref)
+      ? fromHref.split(/[?#]/)[0]?.split("/").pop()
+      : fromLabel;
+  if (!candidate) return null;
+  // Treat bare filenames / relative paths as canvas citations, not navigable URLs.
+  if (/^[a-z0-9][a-z0-9._-]*\.[a-z0-9]{1,12}$/i.test(candidate)) return candidate;
+  return null;
+}
+
+const MarkdownLink: FC<AnchorHTMLAttributes<HTMLAnchorElement> & { node?: unknown }> = ({
+  href,
+  className,
+  children,
+  node: _node,
+  ...props
+}) => {
+  const canvas = useOptionalCanvas();
+  const label = collectText(children);
+  const filename = citationFilename(href, label);
+  const linkClass = cn(
+    "aui-md-a text-primary hover:text-primary/80 underline underline-offset-2",
+    className,
+  );
+
+  if (isExternalHref(href)) {
+    return (
+      <a
+        className={linkClass}
+        href={href}
+        target="_blank"
+        rel="noreferrer noopener"
+        {...props}
+      >
+        {children}
+      </a>
+    );
+  }
+
+  // Empty, relative, or file-like citations must not be real anchors — browsers
+  // show the current /workspace URL in the status bar on hover.
+  if (filename && canvas) {
+    return (
+      <button
+        type="button"
+        className={cn(linkClass, "cursor-pointer border-0 bg-transparent p-0 font-inherit")}
+        title={`Open ${filename}`}
+        onClick={() => {
+          const match = [...canvas.artifacts]
+            .reverse()
+            .find(
+              (artifact) =>
+                artifact.filename === filename ||
+                artifact.title === filename ||
+                artifact.filename?.endsWith(`/${filename}`) ||
+                artifact.title.endsWith(filename),
+            );
+          if (match) {
+            canvas.setActiveArtifactId(match.id);
+          }
+          canvas.openCanvas();
+        }}
+      >
+        {children}
+      </button>
+    );
+  }
+
+  return <span className={linkClass}>{children}</span>;
+};
 
 const MarkdownTextImpl = () => {
   return (
@@ -144,15 +234,7 @@ const defaultComponents = memoizeMarkdownComponents({
       {...props}
     />
   ),
-  a: ({ className, ...props }) => (
-    <a
-      className={cn(
-        "aui-md-a text-primary hover:text-primary/80 underline underline-offset-2",
-        className,
-      )}
-      {...props}
-    />
-  ),
+  a: MarkdownLink,
   blockquote: ({ className, ...props }) => (
     <blockquote
       className={cn(

@@ -6,6 +6,11 @@ import { isLocalProvider } from "~/lib/setup";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { corsPreflight, withCors } from "~/lib/server/cors";
 import { normalizeProviderBaseUrl } from "~/lib/server/provider-url";
+import {
+    classifyProviderError,
+    formatProviderError,
+    httpStatusForProviderError,
+} from "~/lib/provider-errors";
 
 export function loader({ request }: LoaderFunctionArgs) {
     const preflight = corsPreflight(request);
@@ -126,7 +131,14 @@ export async function action({ request }: ActionFunctionArgs) {
             ),
         );
     } catch (err) {
-        const message = modelDiscoveryError(err);
+        const message = formatProviderError(err, {
+            provider: body.provider,
+            context: "models",
+        });
+        const kind = classifyProviderError(err, {
+            provider: body.provider,
+            context: "models",
+        }).kind;
         const fallback = (DEFAULT_MODELS[body.provider] ?? []).map((m) =>
             enrichModelInfo({ ...m, provider: body.provider }),
         );
@@ -145,25 +157,15 @@ export async function action({ request }: ActionFunctionArgs) {
                 ),
             );
         }
-        const status =
-            /invalid|unauthorized|forbidden|api key/i.test(message) ? 401 : 502;
         return withCors(
             request,
             Response.json(
                 { error: message, models: [] },
-                { status, headers: { "Cache-Control": "no-store" } },
+                {
+                    status: httpStatusForProviderError(kind),
+                    headers: { "Cache-Control": "no-store" },
+                },
             ),
         );
     }
-}
-
-function modelDiscoveryError(error: unknown): string {
-    const message = error instanceof Error ? error.message : "";
-    if (/invalid|unauthorized|forbidden|api key|authentication/i.test(message)) {
-        return "Provider authentication failed. Check the API key and permissions.";
-    }
-    if (/timeout|timed out|network|fetch failed|econn/i.test(message)) {
-        return "Could not reach the provider. Check the API root and network connection.";
-    }
-    return "Model discovery failed. Check the API root and provider compatibility.";
 }

@@ -1,10 +1,20 @@
 import type { ConnectorConfig } from "~/lib/types";
-import type { SearchResult } from "~/lib/search";
+import { clipSearchText, type SearchResult } from "~/lib/search";
 
 type ConnectorResponse = {
     results?: SearchResult[];
     web?: { results?: Array<{ title?: string; url?: string; description?: string; age?: string }> };
 };
+
+const CONNECTOR_SNIPPET_CHARS = 160;
+
+function normalizeConnectorResults(results: SearchResult[]): SearchResult[] {
+    return results.map((result) => ({
+        title: clipSearchText(result.title, 80),
+        url: result.url,
+        snippet: clipSearchText(result.snippet, CONNECTOR_SNIPPET_CHARS),
+    }));
+}
 
 function keyFor(connector: ConnectorConfig): string {
     const key = connector.apiKey?.trim();
@@ -30,7 +40,7 @@ export async function connectorSearch(
         });
         if (!response.ok) throw new Error(`Tavily returned HTTP ${response.status}`);
         const data = (await response.json()) as ConnectorResponse;
-        return (data.results ?? []).map((result) => result);
+        return normalizeConnectorResults(data.results ?? []);
     }
 
     if (connector.kind === "brave") {
@@ -46,10 +56,12 @@ export async function connectorSearch(
         });
         if (!response.ok) throw new Error(`Brave Search returned HTTP ${response.status}`);
         const data = (await response.json()) as ConnectorResponse;
-        return (data.web?.results ?? []).flatMap((result) =>
-            result.title && result.url
-                ? [{ title: result.title, url: result.url, snippet: result.description || result.age || "" }]
-                : [],
+        return normalizeConnectorResults(
+            (data.web?.results ?? []).flatMap((result) =>
+                result.title && result.url
+                    ? [{ title: result.title, url: result.url, snippet: result.description || result.age || "" }]
+                    : [],
+            ),
         );
     }
 
@@ -64,16 +76,26 @@ export async function connectorSearch(
                 query,
                 type: "auto",
                 numResults: Math.min(maxResults, 20),
-                contents: { highlights: { maxCharacters: 600 } },
+                contents: { highlights: { maxCharacters: CONNECTOR_SNIPPET_CHARS } },
             }),
             signal: AbortSignal.timeout(15_000),
         });
         if (!response.ok) throw new Error(`Exa returned HTTP ${response.status}`);
-        const data = (await response.json()) as { results?: Array<{ title?: string; url?: string; highlights?: string[]; text?: string }> };
-        return (data.results ?? []).flatMap((result) =>
-            result.title && result.url
-                ? [{ title: result.title, url: result.url, snippet: result.highlights?.join(" ") || result.text || "" }]
-                : [],
+        const data = (await response.json()) as {
+            results?: Array<{ title?: string; url?: string; highlights?: string[]; text?: string }>;
+        };
+        return normalizeConnectorResults(
+            (data.results ?? []).flatMap((result) =>
+                result.title && result.url
+                    ? [
+                          {
+                              title: result.title,
+                              url: result.url,
+                              snippet: result.highlights?.join(" ") || result.text || "",
+                          },
+                      ]
+                    : [],
+            ),
         );
     }
 
@@ -92,11 +114,15 @@ export async function connectorSearch(
             signal: AbortSignal.timeout(20_000),
         });
         if (!response.ok) throw new Error(`Parallel Search returned HTTP ${response.status}`);
-        const data = (await response.json()) as { results?: Array<{ title?: string; url?: string; excerpts?: string[] }> };
-        return (data.results ?? []).flatMap((result) =>
-            result.title && result.url
-                ? [{ title: result.title, url: result.url, snippet: result.excerpts?.join(" ") || "" }]
-                : [],
+        const data = (await response.json()) as {
+            results?: Array<{ title?: string; url?: string; excerpts?: string[] }>;
+        };
+        return normalizeConnectorResults(
+            (data.results ?? []).flatMap((result) =>
+                result.title && result.url
+                    ? [{ title: result.title, url: result.url, snippet: result.excerpts?.join(" ") || "" }]
+                    : [],
+            ),
         );
     }
 

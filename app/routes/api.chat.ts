@@ -12,7 +12,20 @@ import {
 } from "ai";
 import { buildChatTools } from "~/lib/server/chat-tools";
 import { closeMcpClients, loadMcpTools } from "~/lib/server/mcp-tools";
-import { buildChatSystemPrompt } from "~/lib/server/prompt";
+import { buildChatSystemPromptParts } from "~/lib/server/prompt";
+import {
+    ensureCompactionSkill,
+    ensureFrontendSkill,
+    ensureResearchSkill,
+    lastUserTextFromMessages,
+    resolveRequiredSkillTools,
+    type ForcedSkill,
+} from "~/lib/skill-command";
+import {
+    compactUiMessages,
+    estimateTokensFromText,
+    resolveModelContextWindow,
+} from "~/lib/server/context-compaction";
 import {
     buildReasoningProviderOptions,
     type ReasoningEffort,
@@ -34,6 +47,17 @@ import { imageRequestOptions } from "~/lib/image-generation";
 import { providerNeedsKey } from "~/lib/provider-credentials";
 import { corsPreflight, withCors } from "~/lib/server/cors";
 import { normalizeProviderBaseUrl } from "~/lib/server/provider-url";
+import {
+    formatProviderError,
+    httpStatusForProviderError,
+    classifyProviderError,
+} from "~/lib/provider-errors";
+import {
+    normalizeTokenMode,
+    providerSupportsExplicitCache,
+    tokenModePolicy,
+    type TokenMode,
+} from "~/lib/token-mode";
 
 interface ChatRequestBody {
     messages: UIMessage[];
@@ -58,6 +82,7 @@ interface ChatRequestBody {
         connectors?: ConnectorConfig[];
         memoryAvailable?: boolean;
         subagentsEnabled?: boolean;
+        tokenMode?: TokenMode;
     };
     mcpServers?: McpServerConfig[];
     imageSettings?: {
@@ -68,6 +93,8 @@ interface ChatRequestBody {
     customSkills?: { name: string; content: string }[];
     /** When true the request runs as a delegated subagent (no ask_user/spawn_subagent). */
     subagentMode?: boolean;
+    /** Agent Mode: plan → skills/tools → verify → synthesize. */
+    agentMode?: boolean;
     openAICompatible?: {
         apiMode: "auto" | "chat" | "responses";
         reasoningWithTools: "auto" | "none" | "allow";
@@ -97,24 +124,8 @@ function imagePrompt(messages: UIMessage[]): string {
     );
 }
 
-function publicChatError(error: unknown): string {
-    const message = error instanceof Error ? error.message : "";
-    if (/only http\(s\)|valid http\(s\)|credentials must not be embedded|private.*not allowed/i.test(message)) {
-        return message;
-    }
-    if (/invalid|unauthorized|forbidden|api key|authentication/i.test(message)) {
-        return "Provider authentication failed. Check the API key and permissions.";
-    }
-    if (/model.*not found|not found.*model/i.test(message)) {
-        return "The selected model was not found by this provider.";
-    }
-    if (/rate limit|\b429\b/i.test(message)) {
-        return "The provider rate limit was reached. Wait and try again.";
-    }
-    if (/timeout|timed out|network|fetch failed|econn/i.test(message)) {
-        return "Could not reach the provider. Check the API root and network connection.";
-    }
-    return "Provider request failed. Check the selected model and provider compatibility.";
+function publicChatError(error: unknown, provider?: string): string {
+    return formatProviderError(error, { provider, context: "chat" });
 }
 
 async function generateImageResponse(
@@ -240,26 +251,45 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     if (providerNeedsKey(body.provider) && !body.apiKey) {
+        const payload = {
+            error: formatProviderError("API key required", {
+                provider: body.provider,
+                context: "chat",
+            }),
+        };
         return withCors(
             request,
-            Response.json(
-                { error: "API key required — add yours in Settings." },
-                { status: 400 },
-            ),
+            Response.json(payload, { status: 400 }),
         );
     }
 
     if (!body.model) {
         return withCors(
             request,
-            Response.json({ error: "Model required." }, { status: 400 }),
+            Response.json(
+                {
+                    error: formatProviderError("Model required", {
+                        provider: body.provider,
+                        context: "chat",
+                    }),
+                },
+                { status: 400 },
+            ),
         );
     }
 
     if (!Array.isArray(body.messages)) {
         return withCors(
             request,
-            Response.json({ error: "Messages required." }, { status: 400 }),
+            Response.json(
+                {
+                    error: formatProviderError("Messages required", {
+                        provider: body.provider,
+                        context: "chat",
+                    }),
+                },
+                { status: 400 },
+            ),
         );
     }
 
@@ -269,7 +299,12 @@ export async function action({ request }: ActionFunctionArgs) {
         return withCors(
             request,
             Response.json(
-                { error: err instanceof Error ? err.message : "Invalid provider URL" },
+                {
+                    error: formatProviderError(err, {
+                        provider: body.provider,
+                        context: "chat",
+                    }),
+                },
                 { status: 400 },
             ),
         );
@@ -282,11 +317,15 @@ export async function action({ request }: ActionFunctionArgs) {
         try {
             return withCors(request, await generateAudioResponse(body, request.signal));
         } catch (err) {
-            const message = publicChatError(err);
-            console.error("[api/chat:audio]", message);
+            const message = publicChatError(err, body.provider);
+            const kind = classifyProviderError(err, {
+                provider: body.provider,
+                context: "chat",
+            }).kind;
+            console.error("[api/chat:audio]", message.split("\n")[0]);
             return withCors(
                 request,
-                Response.json({ error: message }, { status: 500 }),
+                Response.json({ error: message }, { status: httpStatusForProviderError(kind) }),
             );
         }
     }
@@ -298,11 +337,15 @@ export async function action({ request }: ActionFunctionArgs) {
         try {
             return withCors(request, await generateVideoResponse(body, request.signal));
         } catch (err) {
-            const message = publicChatError(err);
-            console.error("[api/chat:video]", message);
+            const message = publicChatError(err, body.provider);
+            const kind = classifyProviderError(err, {
+                provider: body.provider,
+                context: "chat",
+            }).kind;
+            console.error("[api/chat:video]", message.split("\n")[0]);
             return withCors(
                 request,
-                Response.json({ error: message }, { status: 500 }),
+                Response.json({ error: message }, { status: httpStatusForProviderError(kind) }),
             );
         }
     }
@@ -314,11 +357,15 @@ export async function action({ request }: ActionFunctionArgs) {
         try {
             return withCors(request, await generateImageResponse(body, request.signal));
         } catch (err) {
-            const message = publicChatError(err);
-            console.error("[api/chat:image]", message);
+            const message = publicChatError(err, body.provider);
+            const kind = classifyProviderError(err, {
+                provider: body.provider,
+                context: "chat",
+            }).kind;
+            console.error("[api/chat:image]", message.split("\n")[0]);
             return withCors(
                 request,
-                Response.json({ error: message }, { status: 500 }),
+                Response.json({ error: message }, { status: httpStatusForProviderError(kind) }),
             );
         }
     }
@@ -333,23 +380,84 @@ export async function action({ request }: ActionFunctionArgs) {
     };
 
     try {
-        const loadedMcp = await loadMcpTools(body.mcpServers);
+        const mode = normalizeTokenMode(body.toolSettings?.tokenMode);
+        const policy = tokenModePolicy(mode);
+
+        const loadedMcp = await loadMcpTools(body.mcpServers, policy);
         mcpTools = loadedMcp.tools;
         mcpClients = loadedMcp.clients;
         const modelInstance = createChatModel(body);
         const mcpSearchAvailable = Object.keys(mcpTools).some((name) =>
             /^mcp_(?:parallel_search_mcp_(?:web_search|web_fetch)|firecrawl_keyless_firecrawl_(?:search|scrape|parse))$/i.test(name),
         );
-        const builtIn = await buildChatTools(body.toolSettings ?? {}, {
-            subagentMode: body.subagentMode === true,
-            suppressWebSearch: mcpSearchAvailable,
-        });
+
+        // Slash-selected skills + auto Research / Frontend when intent is clear.
+        const userText = lastUserTextFromMessages(body.messages);
+        const activeSkills: ForcedSkill[] = ensureCompactionSkill(
+            ensureFrontendSkill(
+                ensureResearchSkill(body.customSkills, userText, {
+                    webSearchEnabled: body.toolSettings?.webSearchEnabled,
+                }),
+                userText,
+            ),
+            userText,
+        );
+        const requiredSkillTools = resolveRequiredSkillTools(activeSkills);
+
+        const builtIn = await buildChatTools(
+            {
+                ...(body.toolSettings ?? {}),
+                forceToolNames: requiredSkillTools,
+            },
+            {
+                subagentMode: body.subagentMode === true,
+                suppressWebSearch: mcpSearchAvailable,
+                messages: body.messages,
+            },
+        );
         const tools =
             body.openAICompatible?.capabilityOverrides?.tools === false
                 ? {}
                 : { ...builtIn, ...mcpTools };
 
-        const modelMessages = await convertToModelMessages(body.messages);
+        const forceCompaction = requiredSkillTools.includes("compaction_skill");
+        const contextWindow = resolveModelContextWindow(body.provider, body.model);
+        const reserveTokens = Math.max(2_048, body.maxTokens ?? 4_096);
+        // Draft prompt length for budget estimate (tools reminder added after).
+        const draftPromptParts = buildChatSystemPromptParts(
+            body.system || body.systemPrompt || undefined,
+            body.memoryContext,
+            activeSkills,
+            body.subagentMode === true ? "subagent" : "main",
+            body.projectInstructions,
+            body.agentMode === true,
+            mode,
+            Object.keys(tools),
+        );
+        // Auto-compact only near the context limit. Forced /Compaction must call
+        // compaction_skill instead of silently rewriting history into plain text.
+        const compacted = compactUiMessages(body.messages, {
+            contextWindow,
+            reserveTokens,
+            systemTokens: estimateTokensFromText(draftPromptParts.full),
+            force: false,
+            reason: "auto context limit",
+            keepRecent: 8,
+        });
+        const promptMessages = forceCompaction ? body.messages : compacted.messages;
+
+        const promptParts = buildChatSystemPromptParts(
+            body.system || body.systemPrompt || undefined,
+            body.memoryContext,
+            activeSkills,
+            body.subagentMode === true ? "subagent" : "main",
+            body.projectInstructions,
+            body.agentMode === true,
+            mode,
+            Object.keys(tools),
+        );
+
+        const modelMessages = await convertToModelMessages(promptMessages);
         const effort = body.reasoningEffort ?? "medium";
         const providerOptions = buildReasoningProviderOptions(
             body.provider,
@@ -393,17 +501,76 @@ export async function action({ request }: ActionFunctionArgs) {
             }
         }
 
+        // Prompt-caching mode: stable prefix first (explicit cache_control on
+        // Anthropic-family providers). OpenAI-style automatic prefix caches
+        // also benefit because the large static block leads the prompt.
+        const useExplicitCache =
+            policy.promptCaching &&
+            providerSupportsExplicitCache(body.provider);
+        const cachedMessages = policy.promptCaching
+            ? [
+                  {
+                      role: "system" as const,
+                      content: promptParts.stable,
+                      ...(useExplicitCache
+                          ? {
+                                providerOptions: {
+                                    anthropic: {
+                                        cacheControl: {
+                                            type: "ephemeral" as const,
+                                        },
+                                    },
+                                },
+                            }
+                          : {}),
+                  },
+                  ...(promptParts.volatile.trim()
+                      ? [
+                            {
+                                role: "system" as const,
+                                content: promptParts.volatile,
+                            },
+                        ]
+                      : []),
+                  ...modelMessages,
+              ]
+            : modelMessages;
+
+        // Mark the last built-in tool so Anthropic can cache tool schemas too.
+        let cachedTools: Record<string, (typeof tools)[string]> = tools;
+        if (useExplicitCache && toolsEnabled) {
+            const names = Object.keys(tools);
+            const last = names[names.length - 1];
+            const lastTool = last ? tools[last as keyof typeof tools] : undefined;
+            if (last && lastTool) {
+                cachedTools = {
+                    ...tools,
+                    [last]: {
+                        ...lastTool,
+                        providerOptions: {
+                            ...(lastTool as { providerOptions?: object })
+                                .providerOptions,
+                            anthropic: {
+                                cacheControl: { type: "ephemeral" as const },
+                            },
+                        },
+                    },
+                };
+            }
+        }
+
+        // Hard-require forced skill tools on early steps until each has run once.
+        const forceableTools = requiredSkillTools.filter((name) =>
+            Object.prototype.hasOwnProperty.call(cachedTools, name),
+        );
+
         const result = streamText({
             model: modelInstance,
             abortSignal: request.signal,
-            messages: modelMessages,
-            system: buildChatSystemPrompt(
-                body.system || body.systemPrompt || undefined,
-                body.memoryContext,
-                body.customSkills,
-                body.subagentMode === true ? "subagent" : "main",
-                body.projectInstructions,
-            ),
+            messages: cachedMessages,
+            ...(policy.promptCaching
+                ? {}
+                : { system: promptParts.full }),
             ...(anthropicThinkingOn
                 ? { temperature: 1 }
                 : {
@@ -411,12 +578,29 @@ export async function action({ request }: ActionFunctionArgs) {
                       topP: body.topP ?? 1,
                   }),
             maxOutputTokens,
-            tools: Object.keys(tools).length > 0 ? tools : undefined,
-            // Five steps is too easy to exhaust with repeated searches or a
-            // tool call followed by a correction. Keep a finite guard while
-            // leaving room for substantial multi-tool work to finish.
-            stopWhen: stepCountIs(20),
+            tools: Object.keys(cachedTools).length > 0 ? cachedTools : undefined,
+            stopWhen: stepCountIs(policy.maxSteps),
             ...(safeProviderOptions ? { providerOptions: safeProviderOptions } : {}),
+            ...(forceableTools.length > 0
+                ? {
+                      prepareStep: ({ steps }) => {
+                          const called = new Set<string>();
+                          for (const step of steps) {
+                              for (const call of step.toolCalls ?? []) {
+                                  if (call?.toolName) called.add(call.toolName);
+                              }
+                          }
+                          const next = forceableTools.find((name) => !called.has(name));
+                          if (!next) return {};
+                          return {
+                              toolChoice: {
+                                  type: "tool" as const,
+                                  toolName: next,
+                              },
+                          };
+                      },
+                  }
+                : {}),
             onFinish: async () => {
                 await closeLoadedMcp();
             },
@@ -429,7 +613,7 @@ export async function action({ request }: ActionFunctionArgs) {
             request,
             result.toUIMessageStreamResponse({
                 sendReasoning: true,
-                onError: publicChatError,
+                onError: (error) => publicChatError(error, body.provider),
                 // Attach real provider-reported usage plus the model/provider
                 // used for this request to the assistant message metadata so
                 // the client can persist and aggregate it (usage analytics).
@@ -445,11 +629,18 @@ export async function action({ request }: ActionFunctionArgs) {
         );
     } catch (err) {
         await closeLoadedMcp();
-        const errorMsg = publicChatError(err);
-        console.error("[api/chat]", errorMsg);
+        const errorMsg = publicChatError(err, body.provider);
+        const kind = classifyProviderError(err, {
+            provider: body.provider,
+            context: "chat",
+        }).kind;
+        console.error("[api/chat]", errorMsg.split("\n")[0]);
         return withCors(
             request,
-            Response.json({ error: errorMsg }, { status: 500 }),
+            Response.json(
+                { error: errorMsg },
+                { status: httpStatusForProviderError(kind) },
+            ),
         );
     }
 }

@@ -3,8 +3,8 @@
 @import "tw-shimmer";
 
 @theme {
-    --font-sans: "DM Sans", system-ui, -apple-system, sans-serif;
-    --font-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", monospace;
+    --font-sans: "Hanken Grotesk", system-ui, -apple-system, sans-serif;
+    --font-mono: "Fragment Mono", "SF Mono", "Cascadia Code", monospace;
 
     /* Clean dark (default) */
     --color-background: #0a0a0a;

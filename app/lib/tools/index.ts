@@ -7,7 +7,7 @@
  */
 
 import type { LLMTool } from "~/lib/llm/types";
-import { duckDuckGoSearch } from "~/lib/search";
+import { duckDuckGoSearch, formatCompactSearchResults } from "~/lib/search";
 
 export interface ToolExecutor {
     name: string;
@@ -85,12 +85,10 @@ export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
             if (!query) return "Error: No query provided";
 
             try {
-                const results = await duckDuckGoSearch(query, maxResults);
+                const results = await duckDuckGoSearch(query, Math.min(maxResults, 3));
                 if (results.length === 0) return "No results found.";
 
-                return results
-                    .map((r, i) => `${i + 1}. ${r.title}\n   URL: ${r.url}\n   ${r.snippet}`)
-                    .join("\n\n");
+                return formatCompactSearchResults(results, { maxSnippetChars: 160 });
             } catch (err) {
                 return `Search error: ${err instanceof Error ? err.message : String(err)}`;
             }
