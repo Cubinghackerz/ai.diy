@@ -9,7 +9,7 @@ Local-first, bring-your-own-key chat for Node or Docker. No server-side LLM cred
 
 Built with React Router, assistant-ui, the Vercel AI SDK, Tailwind CSS, and browser-side Pyodide.
 
-![ai.diy workspace](./public/workspace-demo.png)
+![ai.diy workspace running a deep analysis of the Cubinghackerz/ai.diy repository](./public/workspace-demo.png)
 
 ## Demo → Deploy → GitHub
 

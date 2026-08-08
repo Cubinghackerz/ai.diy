@@ -689,16 +689,16 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                     <div data-landing-reveal className="mb-8 max-w-2xl">
                         <p className="text-3xl font-semibold leading-tight tracking-[-0.03em] sm:text-5xl">See the workspace.</p>
                         <p className="mt-4 text-base leading-relaxed text-[color:var(--landing-ink-dim)]">
-                            Streaming chat, model switching, and tools in one local-first surface.
+                            Streaming reasoning, multi-model chat, and deep analysis in one local-first surface.
                         </p>
                     </div>
                     <div data-landing-reveal className="overflow-hidden rounded-[1.25rem] border border-[color:var(--landing-hairline)] bg-[color:var(--landing-panel)] shadow-[0_24px_80px_-48px_rgba(11,5,34,0.85)]">
                         <img
                             src="/workspace-demo.png"
-                            alt="ai.diy workspace showing chat, model picker, and tools"
+                            alt="ai.diy workspace analyzing the Cubinghackerz/ai.diy repository with streaming reasoning and a deep analysis report"
                             className="block h-auto w-full"
-                            width={1600}
-                            height={900}
+                            width={1024}
+                            height={527}
                             loading="lazy"
                         />
                     </div>
