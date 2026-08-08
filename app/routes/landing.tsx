@@ -560,9 +560,9 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                         ai.diy
                     </Link>
                     <div className="hidden items-center gap-7 text-xs text-[color:var(--landing-ink-dim)] md:flex">
-                        <Link to="/workspace" className="transition-colors hover:text-[color:var(--landing-ink)]">
+                        <a href="#demo" className="transition-colors hover:text-[color:var(--landing-ink)]">
                             Demo
-                        </Link>
+                        </a>
                         <a href="#deploy" className="transition-colors hover:text-[color:var(--landing-ink)]">
                             Deploy
                         </a>
@@ -601,9 +601,9 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                 {menuOpen ? (
                     <div className="border-t border-[color:var(--landing-hairline)] bg-[color:var(--landing-ground)] px-5 py-4 md:hidden">
                         <div className="flex flex-col gap-3 text-sm text-[color:var(--landing-ink-dim)]">
-                            <Link to="/workspace" onClick={() => setMenuOpen(false)} className="hover:text-[color:var(--landing-ink)]">
+                            <a href="#demo" onClick={() => setMenuOpen(false)} className="hover:text-[color:var(--landing-ink)]">
                                 Demo
-                            </Link>
+                            </a>
                             <a href="#deploy" onClick={() => setMenuOpen(false)} className="hover:text-[color:var(--landing-ink)]">
                                 Deploy
                             </a>
@@ -636,13 +636,13 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                             Local-first, bring-your-own-key chat with tools, skills, and browser-owned history. No server-side LLM credentials.
                         </p>
                         <div className="mt-9 flex flex-wrap items-center gap-3">
-                            <Link
-                                to="/workspace"
+                            <a
+                                href="#demo"
                                 className="group inline-flex items-center gap-2 rounded-full bg-[color:var(--landing-accent)] px-5 py-3 text-sm font-semibold text-[color:var(--landing-accent-ink)] transition-transform duration-300 hover:scale-[1.03] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--landing-accent)]"
                             >
                                 Demo
                                 <ArrowRight className="transition-transform duration-300 group-hover:translate-x-1" size={16} />
-                            </Link>
+                            </a>
                             <a
                                 href="#deploy"
                                 className="inline-flex items-center gap-2 rounded-full border border-[color:var(--landing-hairline)] px-5 py-3 text-sm font-semibold text-[color:var(--landing-ink-dim)] transition-colors hover:border-[color:var(--landing-ink-dim)]/60 hover:text-[color:var(--landing-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--landing-accent)]"
@@ -661,6 +661,40 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                     </div>
                     <div data-landing-reveal className="relative z-10">
                         <ApertureHero />
+                    </div>
+                </section>
+
+                <section id="demo" className="landing-section-lazy mx-auto w-full max-w-[90rem] px-5 py-24 sm:px-8 md:py-32 lg:px-12">
+                    <div data-landing-reveal className="mb-8 max-w-2xl">
+                        <p className="landing-display text-3xl font-semibold leading-tight tracking-[-0.03em] sm:text-5xl">
+                            See the workspace.
+                        </p>
+                        <p className="mt-4 text-base leading-relaxed text-[color:var(--landing-ink-dim)]">
+                            Streaming reasoning, multi-model chat, and deep analysis in one local-first surface.
+                        </p>
+                    </div>
+                    <div
+                        data-landing-reveal
+                        className="overflow-hidden rounded-[1.25rem] border border-[color:var(--landing-hairline)] bg-[color:var(--landing-panel)] shadow-[0_24px_80px_-48px_rgba(11,5,34,0.85)]"
+                    >
+                        <img
+                            src="/workspace-demo.gif"
+                            alt="ai.diy workspace demo: streaming chat, reasoning, and Canvas artifacts"
+                            className="block h-auto w-full"
+                            width={1100}
+                            height={665}
+                            loading="lazy"
+                            decoding="async"
+                        />
+                    </div>
+                    <div className="mt-6 flex flex-wrap gap-3">
+                        <Link
+                            to="/workspace"
+                            className="inline-flex items-center gap-2 rounded-full bg-[color:var(--landing-ink)] px-5 py-3 text-sm font-semibold text-[color:var(--landing-ground)] transition-transform duration-300 hover:scale-[1.03] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--landing-accent)]"
+                        >
+                            Open workspace
+                            <ArrowRight size={16} />
+                        </Link>
                     </div>
                 </section>
 
@@ -685,6 +719,15 @@ npm run build && npm start
 # or
 docker compose up --build`}
                         </pre>
+                        <a
+                            href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FCubinghackerz%2Fai.diy&project-name=ai-diy-preview"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-6 inline-flex items-center gap-2 rounded-full bg-[color:var(--landing-ink)] px-5 py-3 text-sm font-semibold text-[color:var(--landing-ground)] transition-transform duration-300 hover:scale-[1.03] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--landing-accent)]"
+                        >
+                            Deploy to Vercel
+                            <ArrowUpRight size={16} />
+                        </a>
                     </div>
                 </section>
 
