@@ -72,6 +72,7 @@ import {
     Globe,
     HardDrives,
     Key,
+    Lightning,
     Moon,
     Plus,
     Pencil,
@@ -92,6 +93,11 @@ import {
     uninstallBundledSkill,
 } from "~/lib/skills/catalog";
 import type { PortableSkill } from "~/lib/skills/format";
+import {
+    TOKEN_MODE_DESCRIPTIONS,
+    TOKEN_MODE_LABELS,
+    type TokenMode,
+} from "~/lib/token-mode";
 import * as Switch from "@radix-ui/react-switch";
 import {
     chatMarkdownFilename,
@@ -127,6 +133,7 @@ import {
 type SidebarPanel = "chats" | "settings";
 type SettingsSection =
     | "keys"
+    | "tokens"
     | "tools"
     | "mcp"
     | "experimental"
@@ -886,6 +893,7 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
         icon: typeof Key;
     }[] = [
         { id: "keys", label: "API Keys", icon: Key },
+        { id: "tokens", label: "Tokens", icon: Lightning },
         { id: "tools", label: "Tools", icon: Globe },
         { id: "mcp", label: "MCP Beta", icon: Plug },
         { id: "experimental", label: "Experimental", icon: Flask },
@@ -962,44 +970,10 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
 
             {section === "keys" && <KeysSection />}
 
+            {section === "tokens" && <TokenModeSettingsSection />}
+
             {section === "tools" && (
                 <div className="flex flex-col gap-2">
-                    <div className="flex flex-col gap-2 rounded-xl border border-border/70 p-2.5">
-                        <label
-                            htmlFor="token-mode"
-                            className="text-[11px] font-medium text-muted-foreground"
-                        >
-                            Token mode
-                        </label>
-                        <select
-                            id="token-mode"
-                            value={settings.tokenMode ?? "balanced"}
-                            onChange={(e) =>
-                                updateSettings({
-                                    tokenMode: e.target.value as
-                                        | "efficient"
-                                        | "balanced"
-                                        | "caching"
-                                        | "full",
-                                })
-                            }
-                            className="h-8 w-full rounded-lg border border-border bg-background px-2 text-xs outline-none"
-                        >
-                            <option value="efficient">Token efficiency</option>
-                            <option value="balanced">Balanced (default)</option>
-                            <option value="caching">Prompt caching</option>
-                            <option value="full">Full suite</option>
-                        </select>
-                        <p className="text-[10px] leading-relaxed text-muted-foreground">
-                            {(settings.tokenMode ?? "balanced") === "efficient"
-                                ? "Shortest prompt and core tools only. Best for everyday Q&A."
-                                : (settings.tokenMode ?? "balanced") === "caching"
-                                  ? "Balanced tools with a stable cacheable prompt prefix. Lowers repeat input cost on Anthropic/OpenAI caches."
-                                  : (settings.tokenMode ?? "balanced") === "full"
-                                    ? "Maximum tool catalog, skill suite, and step budget (previous default)."
-                                    : "Lean prompt with search, Python, files, and MCP. Omits heavy skill-suite tools."}
-                        </p>
-                    </div>
                     {(() => {
                         const activeSearchConnector = settings.connectors.find(
                             (connector) =>
@@ -1267,6 +1241,72 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
             >
                 Reset all settings
             </button>
+        </div>
+    );
+}
+
+function TokenModeSettingsSection() {
+    const { settings, updateSettings } = useSettings();
+    const current = (settings.tokenMode ?? "balanced") as TokenMode;
+    const modes: TokenMode[] = ["efficient", "balanced", "caching", "full"];
+
+    return (
+        <div className="flex flex-col gap-3">
+            <div>
+                <h3 className="text-xs font-semibold">Token mode</h3>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                    Controls system-prompt size, tool suite, step budget, and
+                    optional prompt caching. Default is Balanced.
+                </p>
+            </div>
+            <div
+                className="flex flex-col gap-1.5"
+                role="radiogroup"
+                aria-label="Token mode"
+            >
+                {modes.map((mode) => {
+                    const selected = current === mode;
+                    return (
+                        <button
+                            key={mode}
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            onClick={() => {
+                                hapticSelect();
+                                updateSettings({ tokenMode: mode });
+                            }}
+                            className={cn(
+                                "rounded-xl border px-3 py-2.5 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                                selected
+                                    ? "border-primary bg-primary/10"
+                                    : "border-border/70 bg-background hover:bg-muted/40",
+                            )}
+                        >
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs font-semibold">
+                                    {TOKEN_MODE_LABELS[mode]}
+                                    {mode === "balanced" ? (
+                                        <span className="ml-1.5 text-[10px] font-medium text-muted-foreground">
+                                            default
+                                        </span>
+                                    ) : null}
+                                </span>
+                                {selected ? (
+                                    <CheckCircle
+                                        size={14}
+                                        weight="fill"
+                                        className="shrink-0 text-primary"
+                                    />
+                                ) : null}
+                            </div>
+                            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                                {TOKEN_MODE_DESCRIPTIONS[mode]}
+                            </p>
+                        </button>
+                    );
+                })}
+            </div>
         </div>
     );
 }
