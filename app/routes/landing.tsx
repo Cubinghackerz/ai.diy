@@ -166,27 +166,6 @@ function ApertureHero() {
     );
 }
 
-function ProviderStrip() {
-    return (
-        <div className="border-y border-[color:var(--landing-hairline)] py-5">
-            <div className="mx-auto flex w-full max-w-[90rem] flex-wrap items-center justify-center gap-3 px-5 sm:gap-4 sm:px-8 lg:px-12">
-                {PROVIDER_NETWORK.map((provider) => (
-                    <span
-                        key={provider.id}
-                        className="flex size-9 items-center justify-center rounded-full border border-[color:var(--landing-hairline)] bg-[color:var(--landing-panel)] sm:size-10"
-                        title={provider.label}
-                    >
-                        <span className="flex size-6 items-center justify-center rounded-full bg-white/95 sm:size-7">
-                            <ModelLogo provider={provider.id} size={16} />
-                        </span>
-                        <span className="sr-only">{provider.label}</span>
-                    </span>
-                ))}
-            </div>
-        </div>
-    );
-}
-
 function BentoProof() {
     return (
         <div className="grid grid-flow-dense grid-cols-1 gap-3 md:auto-rows-[13rem] md:grid-cols-12">
@@ -501,7 +480,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                 }
                 .landing-section-lazy {
                     content-visibility: auto;
-                    contain-intrinsic-size: auto 720px;
+                    contain-intrinsic-size: auto 480px;
                 }
                 .light-tunnel-fallback {
                     background:
@@ -581,9 +560,9 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                         ai.diy
                     </Link>
                     <div className="hidden items-center gap-7 text-xs text-[color:var(--landing-ink-dim)] md:flex">
-                        <a href="#demo" className="transition-colors hover:text-[color:var(--landing-ink)]">
+                        <Link to="/workspace" className="transition-colors hover:text-[color:var(--landing-ink)]">
                             Demo
-                        </a>
+                        </Link>
                         <a href="#deploy" className="transition-colors hover:text-[color:var(--landing-ink)]">
                             Deploy
                         </a>
@@ -622,9 +601,9 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                 {menuOpen ? (
                     <div className="border-t border-[color:var(--landing-hairline)] bg-[color:var(--landing-ground)] px-5 py-4 md:hidden">
                         <div className="flex flex-col gap-3 text-sm text-[color:var(--landing-ink-dim)]">
-                            <a href="#demo" onClick={() => setMenuOpen(false)} className="hover:text-[color:var(--landing-ink)]">
+                            <Link to="/workspace" onClick={() => setMenuOpen(false)} className="hover:text-[color:var(--landing-ink)]">
                                 Demo
-                            </a>
+                            </Link>
                             <a href="#deploy" onClick={() => setMenuOpen(false)} className="hover:text-[color:var(--landing-ink)]">
                                 Deploy
                             </a>
@@ -644,12 +623,12 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
             <main>
                 <section
                     data-anim-gate="hero"
-                    className="relative isolate mx-auto grid min-h-[100dvh] w-full max-w-[90rem] items-center gap-12 px-5 pb-16 pt-16 sm:px-8 md:pb-20 md:pt-20 lg:grid-cols-[5fr_7fr] lg:gap-16 lg:px-12"
+                    className="relative isolate mx-auto grid min-h-[min(100dvh,56rem)] w-full max-w-[90rem] items-center gap-12 overflow-visible px-5 pb-16 pt-10 sm:px-8 md:pb-20 md:pt-14 lg:grid-cols-[5fr_7fr] lg:gap-16 lg:px-12"
                 >
-                    <div data-landing-reveal className="relative z-10">
-                        <p className="landing-display max-w-xl text-[clamp(2.4rem,5.4vw,4.6rem)] font-semibold leading-[0.98] tracking-[-0.04em]">
+                    <div data-landing-reveal className="relative z-10 overflow-visible">
+                        <p className="landing-display max-w-xl overflow-visible text-[clamp(2.4rem,5.4vw,4.6rem)] font-semibold leading-[1.08] tracking-[-0.04em]">
                             ai.diy
-                            <span className="mt-3 block text-[0.72em] font-semibold leading-[1.05] tracking-[-0.03em] text-[color:var(--landing-ink)]">
+                            <span className="mt-3 block text-[0.72em] font-semibold leading-[1.12] tracking-[-0.03em] text-[color:var(--landing-ink)]">
                                 The open-source AI workspace you own.
                             </span>
                         </p>
@@ -657,13 +636,13 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                             Local-first, bring-your-own-key chat with tools, skills, and browser-owned history. No server-side LLM credentials.
                         </p>
                         <div className="mt-9 flex flex-wrap items-center gap-3">
-                            <a
-                                href="#demo"
+                            <Link
+                                to="/workspace"
                                 className="group inline-flex items-center gap-2 rounded-full bg-[color:var(--landing-accent)] px-5 py-3 text-sm font-semibold text-[color:var(--landing-accent-ink)] transition-transform duration-300 hover:scale-[1.03] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--landing-accent)]"
                             >
                                 Demo
                                 <ArrowRight className="transition-transform duration-300 group-hover:translate-x-1" size={16} />
-                            </a>
+                            </Link>
                             <a
                                 href="#deploy"
                                 className="inline-flex items-center gap-2 rounded-full border border-[color:var(--landing-hairline)] px-5 py-3 text-sm font-semibold text-[color:var(--landing-ink-dim)] transition-colors hover:border-[color:var(--landing-ink-dim)]/60 hover:text-[color:var(--landing-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--landing-accent)]"
@@ -682,41 +661,6 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                     </div>
                     <div data-landing-reveal className="relative z-10">
                         <ApertureHero />
-                    </div>
-                </section>
-
-                <ProviderStrip />
-
-                <section id="demo" className="landing-section-lazy mx-auto w-full max-w-[90rem] px-5 py-24 sm:px-8 md:py-32 lg:px-12">
-                    <div data-landing-reveal className="mb-8 max-w-2xl">
-                        <p className="landing-display text-3xl font-semibold leading-tight tracking-[-0.03em] sm:text-5xl">
-                            See the workspace.
-                        </p>
-                        <p className="mt-4 text-base leading-relaxed text-[color:var(--landing-ink-dim)]">
-                            Streaming reasoning, multi-model chat, and deep analysis in one local-first surface.
-                        </p>
-                    </div>
-                    <div
-                        data-landing-reveal
-                        className="overflow-hidden rounded-[1.25rem] border border-[color:var(--landing-hairline)] bg-[color:var(--landing-panel)] shadow-[0_24px_80px_-48px_rgba(11,5,34,0.85)]"
-                    >
-                        <img
-                            src="/workspace-demo.png"
-                            alt="ai.diy workspace analyzing the Cubinghackerz/ai.diy repository with streaming reasoning and a deep analysis report"
-                            className="block h-auto w-full"
-                            width={1024}
-                            height={557}
-                            loading="lazy"
-                        />
-                    </div>
-                    <div className="mt-6 flex flex-wrap gap-3">
-                        <Link
-                            to="/workspace"
-                            className="inline-flex items-center gap-2 rounded-full bg-[color:var(--landing-ink)] px-5 py-3 text-sm font-semibold text-[color:var(--landing-ground)] transition-transform duration-300 hover:scale-[1.03] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--landing-accent)]"
-                        >
-                            Open workspace
-                            <ArrowRight size={16} />
-                        </Link>
                     </div>
                 </section>
 

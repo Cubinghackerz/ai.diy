@@ -214,3 +214,7 @@ export function useCanvas() {
     if (!ctx) throw new Error("useCanvas must be used within CanvasProvider");
     return ctx;
 }
+
+export function useOptionalCanvas() {
+    return useContext(CanvasContext);
+}

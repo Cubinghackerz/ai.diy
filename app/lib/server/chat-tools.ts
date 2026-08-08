@@ -956,8 +956,8 @@ export async function buildChatTools(
 
     tools.create_file = tool({
         description: policy.compactToolDescriptions
-            ? "Create a Canvas file (text/code/HTML/SVG or base64/hex binary). Cite the filename in the reply."
-            : "Create a document, code file, SVG, interactive HTML preview, or downloadable binary file in the Canvas panel. For binary bytes produced by run_python, pass the exact Base64 or hex string with contentEncoding set to base64 or hex; the client decodes it before download. For interactive HTML, use in-page # anchors or absolute https:// links only—never root-relative paths like /pricing that would leave the preview. Always use this tool for a file the user asked to download and cite the resulting file.",
+            ? "Create a Canvas file (text/code/HTML/SVG or base64/hex binary). Mention the filename in backticks, not as a markdown link."
+            : "Create a document, code file, SVG, interactive HTML preview, or downloadable binary file in the Canvas panel. For binary bytes produced by run_python, pass the exact Base64 or hex string with contentEncoding set to base64 or hex; the client decodes it before download. For interactive HTML, use in-page # anchors or absolute https:// links only—never root-relative paths like /pricing that would leave the preview. Always use this tool for a file the user asked to download and mention the resulting filename in backticks (never as a markdown link).",
         inputSchema: z.object({
             filename: z.string(),
             title: z.string(),
@@ -973,8 +973,8 @@ export async function buildChatTools(
     if (policy.generateFile) {
         tools.generate_file = tool({
             description: policy.compactToolDescriptions
-                ? "Generate a downloadable text/data/code file and cite it. Do not duplicate run_python binary artifacts."
-                : "Generate a downloadable text/data/code file from content and cite it in the response. Use this for CSV, JSON, Markdown, TXT, SVG, HTML, or source code when the user asks for a file. Do not call this for an image or binary file already created by run_python; do not Base64-encode and duplicate a Python-created file. For data-heavy text files, use run_python first, then pass the resulting text here.",
+                ? "Generate a downloadable text/data/code file and mention its filename in backticks. Do not duplicate run_python binary artifacts."
+                : "Generate a downloadable text/data/code file from content and mention its filename in backticks (never as a markdown link). Use this for CSV, JSON, Markdown, TXT, SVG, HTML, or source code when the user asks for a file. Do not call this for an image or binary file already created by run_python; do not Base64-encode and duplicate a Python-created file. For data-heavy text files, use run_python first, then pass the resulting text here.",
             inputSchema: z.object({
                 filename: z.string(),
                 title: z.string(),

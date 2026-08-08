@@ -56,18 +56,22 @@ export async function initLandingAnimations(
 
         const reveal = gsap.utils.toArray<HTMLElement>("[data-landing-reveal]", scope);
         reveal.forEach((element) => {
+            // Hero copy sits under a sticky nav; a vertical slide + reverse
+            // clips ascenders on the display type. Fade only there.
+            const inHero = Boolean(element.closest('[data-anim-gate="hero"]'));
             gsap.fromTo(
                 element,
-                { y: 24 },
+                inHero ? { opacity: 0 } : { y: 24, opacity: 0.001 },
                 {
                     y: 0,
+                    opacity: 1,
                     duration: 0.9,
                     immediateRender: false,
                     ease: "power3.out",
                     scrollTrigger: {
                         trigger: element,
-                        start: "top 86%",
-                        toggleActions: "play none none reverse",
+                        start: inHero ? "top 95%" : "top 86%",
+                        toggleActions: inHero ? "play none none none" : "play none none reverse",
                     },
                 },
             );
