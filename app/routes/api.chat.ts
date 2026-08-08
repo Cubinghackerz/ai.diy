@@ -65,7 +65,7 @@ interface ChatRequestBody {
         count?: number;
     };
     memoryContext?: string;
-    customSkill?: { name: string; content: string };
+    customSkills?: { name: string; content: string }[];
     /** When true the request runs as a delegated subagent (no ask_user/spawn_subagent). */
     subagentMode?: boolean;
     openAICompatible?: {
@@ -117,7 +117,10 @@ function publicChatError(error: unknown): string {
     return "Provider request failed. Check the selected model and provider compatibility.";
 }
 
-async function generateImageResponse(body: ChatRequestBody): Promise<Response> {
+async function generateImageResponse(
+    body: ChatRequestBody,
+    abortSignal: AbortSignal,
+): Promise<Response> {
     const imageOptions = imageRequestOptions(
         body.provider,
         body.imageSettings?.size,
@@ -126,6 +129,7 @@ async function generateImageResponse(body: ChatRequestBody): Promise<Response> {
     const result = await generateImage({
         model: createImageModel(body),
         prompt: imagePrompt(body.messages),
+        abortSignal,
         ...imageOptions,
     });
 
@@ -148,10 +152,14 @@ async function generateImageResponse(body: ChatRequestBody): Promise<Response> {
     return createUIMessageStreamResponse({ stream });
 }
 
-async function generateVideoResponse(body: ChatRequestBody): Promise<Response> {
+async function generateVideoResponse(
+    body: ChatRequestBody,
+    abortSignal: AbortSignal,
+): Promise<Response> {
     const result = await experimental_generateVideo({
         model: createVideoModel(body),
         prompt: imagePrompt(body.messages),
+        abortSignal,
     });
 
     const stream = createUIMessageStream({
@@ -173,11 +181,15 @@ async function generateVideoResponse(body: ChatRequestBody): Promise<Response> {
     return createUIMessageStreamResponse({ stream });
 }
 
-async function generateAudioResponse(body: ChatRequestBody): Promise<Response> {
+async function generateAudioResponse(
+    body: ChatRequestBody,
+    abortSignal: AbortSignal,
+): Promise<Response> {
     const result = await generateSpeech({
         model: createSpeechModel(body),
         text: imagePrompt(body.messages),
         outputFormat: "mp3",
+        abortSignal,
     });
 
     const stream = createUIMessageStream({
@@ -268,7 +280,7 @@ export async function action({ request }: ActionFunctionArgs) {
         inferModelSupportsAudioOutput(body.model, body.provider)
     ) {
         try {
-            return withCors(request, await generateAudioResponse(body));
+            return withCors(request, await generateAudioResponse(body, request.signal));
         } catch (err) {
             const message = publicChatError(err);
             console.error("[api/chat:audio]", message);
@@ -284,7 +296,7 @@ export async function action({ request }: ActionFunctionArgs) {
         inferModelSupportsVideo(body.model, body.provider)
     ) {
         try {
-            return withCors(request, await generateVideoResponse(body));
+            return withCors(request, await generateVideoResponse(body, request.signal));
         } catch (err) {
             const message = publicChatError(err);
             console.error("[api/chat:video]", message);
@@ -300,7 +312,7 @@ export async function action({ request }: ActionFunctionArgs) {
         inferModelSupportsImageGeneration(body.model, body.provider)
     ) {
         try {
-            return withCors(request, await generateImageResponse(body));
+            return withCors(request, await generateImageResponse(body, request.signal));
         } catch (err) {
             const message = publicChatError(err);
             console.error("[api/chat:image]", message);
@@ -313,14 +325,24 @@ export async function action({ request }: ActionFunctionArgs) {
 
     let mcpTools = {};
     let mcpClients: Awaited<ReturnType<typeof loadMcpTools>>["clients"] = [];
+    let mcpClosed = false;
+    const closeLoadedMcp = async () => {
+        if (mcpClosed) return;
+        mcpClosed = true;
+        await closeMcpClients(mcpClients);
+    };
 
     try {
         const loadedMcp = await loadMcpTools(body.mcpServers);
         mcpTools = loadedMcp.tools;
         mcpClients = loadedMcp.clients;
         const modelInstance = createChatModel(body);
+        const mcpSearchAvailable = Object.keys(mcpTools).some((name) =>
+            /^mcp_(?:parallel_search_mcp_(?:web_search|web_fetch)|firecrawl_keyless_firecrawl_(?:search|scrape|parse))$/i.test(name),
+        );
         const builtIn = await buildChatTools(body.toolSettings ?? {}, {
             subagentMode: body.subagentMode === true,
+            suppressWebSearch: mcpSearchAvailable,
         });
         const tools =
             body.openAICompatible?.capabilityOverrides?.tools === false
@@ -373,11 +395,12 @@ export async function action({ request }: ActionFunctionArgs) {
 
         const result = streamText({
             model: modelInstance,
+            abortSignal: request.signal,
             messages: modelMessages,
             system: buildChatSystemPrompt(
                 body.system || body.systemPrompt || undefined,
                 body.memoryContext,
-                body.customSkill,
+                body.customSkills,
                 body.subagentMode === true ? "subagent" : "main",
                 body.projectInstructions,
             ),
@@ -395,7 +418,10 @@ export async function action({ request }: ActionFunctionArgs) {
             stopWhen: stepCountIs(20),
             ...(safeProviderOptions ? { providerOptions: safeProviderOptions } : {}),
             onFinish: async () => {
-                await closeMcpClients(mcpClients);
+                await closeLoadedMcp();
+            },
+            onAbort: async () => {
+                await closeLoadedMcp();
             },
         });
 
@@ -418,7 +444,7 @@ export async function action({ request }: ActionFunctionArgs) {
             }),
         );
     } catch (err) {
-        await closeMcpClients(mcpClients);
+        await closeLoadedMcp();
         const errorMsg = publicChatError(err);
         console.error("[api/chat]", errorMsg);
         return withCors(

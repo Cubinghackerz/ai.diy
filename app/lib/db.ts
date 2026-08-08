@@ -46,7 +46,7 @@ interface PrismiumDB extends DBSchema {
 }
 
 const DB_NAME = "prismium-lite-db";
-const DB_VERSION = 6;
+const DB_VERSION = 8;
 
 let dbPromise: Promise<IDBPDatabase<PrismiumDB>> | null = null;
 

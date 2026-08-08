@@ -269,8 +269,8 @@ type ComposerDraftContextValue = {
   canSend: boolean;
   isRunning: boolean;
   stop: () => void;
-  appliedSkill: ForcedSkill | null;
-  setAppliedSkill: (skill: ForcedSkill | null) => void;
+  appliedSkills: ForcedSkill[];
+  setAppliedSkills: (skills: ForcedSkill[]) => void;
 };
 
 const ComposerDraftContext = createContext<ComposerDraftContextValue | null>(
@@ -284,7 +284,7 @@ const useComposerDraft = () => {
 };
 
 const ComposerInput: FC = () => {
-  const { value, setText, send, isRunning, appliedSkill, setAppliedSkill } =
+  const { value, setText, send, isRunning, appliedSkills, setAppliedSkills } =
     useComposerDraft();
   const { settings } = useSettings();
   const disabled = useAuiState(
@@ -301,12 +301,17 @@ const ComposerInput: FC = () => {
     const custom = settings.customSkills
       .filter((skill) => skill.enabled)
       .map((skill) => ({ name: skill.name, content: skill.content }));
-    const all = [...custom, ...BUILTIN_FORCED_SKILLS];
+    const selectedNames = new Set(
+      appliedSkills.map((skill) => skill.name.toLowerCase()),
+    );
+    const all = [...custom, ...BUILTIN_FORCED_SKILLS].filter(
+      (skill) => !selectedNames.has(skill.name.toLowerCase()),
+    );
     const matches = query
       ? all.filter((skill) => skill.name.toLowerCase().includes(query))
       : all;
     return matches.slice(0, 8);
-  }, [commandActive, settings.customSkills, value]);
+  }, [appliedSkills, commandActive, settings.customSkills, value]);
 
   useEffect(() => {
     setMenuOpen(commandActive);
@@ -317,8 +322,10 @@ const ComposerInput: FC = () => {
   }, [value]);
 
   const applySkill = (skill: ForcedSkill) => {
-    forcedSkillStore.current = skill;
-    setAppliedSkill(skill);
+    if (appliedSkills.some((item) => item.name === skill.name)) return;
+    const nextSkills = [...appliedSkills, skill];
+    forcedSkillStore.current = nextSkills;
+    setAppliedSkills(nextSkills);
     setText("");
     setMenuOpen(false);
   };
@@ -328,7 +335,7 @@ const ComposerInput: FC = () => {
       {menuOpen && skills.length > 0 ? (
         <div className="absolute bottom-full left-0 right-0 z-30 mb-1 max-h-56 overflow-y-auto rounded-xl border border-border bg-popover p-1 shadow-lg">
           <p className="px-2 pb-1 pt-0.5 text-[10px] font-medium text-muted-foreground">
-            Force a skill — the AI must use it
+            Add skills — the AI must use each selected skill
           </p>
           {skills.map((skill, index) => (
             <button
@@ -357,7 +364,7 @@ const ComposerInput: FC = () => {
         maxRows={8}
         value={value}
         disabled={disabled}
-        placeholder="Send a message...  (type / to force a skill)"
+        placeholder="Send a message...  (type / to add a skill)"
         className="aui-composer-input caret-foreground placeholder:text-muted-foreground/70 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none ring-0 shadow-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
         autoFocus
         enterKeyHint="send"
@@ -393,24 +400,32 @@ const ComposerInput: FC = () => {
           send();
         }}
       />
-      {appliedSkill ? (
-        <div className="flex items-center gap-1.5 px-1 pt-1">
-          <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-            <SparklesIcon size={10} />
-            <span className="truncate">Skill: {appliedSkill.name}</span>
-            <button
-              type="button"
-              aria-label="Clear forced skill"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                forcedSkillStore.current = null;
-                setAppliedSkill(null);
-              }}
-              className="ml-0.5 rounded-full p-0.5 outline-none hover:bg-primary/20"
+      {appliedSkills.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-1.5 px-1 pt-1">
+          {appliedSkills.map((skill) => (
+            <span
+              key={skill.name}
+              className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary"
             >
-              <XIcon size={10} />
-            </button>
-          </span>
+              <SparklesIcon size={10} />
+              <span className="truncate">Skill: {skill.name}</span>
+              <button
+                type="button"
+                aria-label={`Remove ${skill.name} skill`}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  const nextSkills = appliedSkills.filter(
+                    (item) => item.name !== skill.name,
+                  );
+                  forcedSkillStore.current = nextSkills;
+                  setAppliedSkills(nextSkills);
+                }}
+                className="ml-0.5 rounded-full p-0.5 outline-none hover:bg-primary/20"
+              >
+                <XIcon size={10} />
+              </button>
+            </span>
+          ))}
         </div>
       ) : null}
     </div>
@@ -426,14 +441,14 @@ const Composer: FC = () => {
     canSend: storeCanSend,
   } = unstable_useComposerInput();
   const isRunning = useAuiState((s) => s.thread.isRunning);
-  const [appliedSkill, setAppliedSkill] = useState<ForcedSkill | null>(null);
+  const [appliedSkills, setAppliedSkills] = useState<ForcedSkill[]>([]);
 
   const canSend = storeCanSend && !isRunning;
 
   const send = () => {
     if (!canSend) return;
-    forcedSkillStore.current = null;
-    setAppliedSkill(null);
+    forcedSkillStore.current = [];
+    setAppliedSkills([]);
     composerSend();
   };
 
@@ -443,7 +458,7 @@ const Composer: FC = () => {
 
   return (
     <ComposerDraftContext.Provider
-      value={{ value, setText, send, canSend, isRunning, stop, appliedSkill, setAppliedSkill }}
+      value={{ value, setText, send, canSend, isRunning, stop, appliedSkills, setAppliedSkills }}
     >
       <ComposerPrimitive.Root
         className="aui-composer-root relative flex w-full flex-col"

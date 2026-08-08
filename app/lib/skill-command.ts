@@ -1,9 +1,9 @@
 /**
  * Skill command store — typed "/" command in the composer.
  *
- * Picking a skill from the slash menu marks it as forced: the next chat
- * request carries it as `customSkill` so the server appends it to the system
- * prompt and the model is instructed to apply it, guaranteed.
+ * Picking skills from the slash menu marks them as forced: the next chat
+ * request carries them as `customSkills` so the server appends them to the
+ * system prompt and the model is instructed to apply them, guaranteed.
  */
 
 export type ForcedSkill = {
@@ -11,8 +11,8 @@ export type ForcedSkill = {
     content: string;
 };
 
-export const forcedSkillStore: { current: ForcedSkill | null } = {
-    current: null,
+export const forcedSkillStore: { current: ForcedSkill[] } = {
+    current: [],
 };
 
 /** Built-in skills that can be force-selected without custom content. */

@@ -515,16 +515,31 @@ Use before any Word document request, including when the user says "report", "pr
 
 export async function buildChatTools(
     settings: ToolSettings = {},
-    options: { subagentMode?: boolean } = {},
+    options: { subagentMode?: boolean; suppressWebSearch?: boolean } = {},
 ) {
     const subagentMode = options.subagentMode === true;
-    const enableSearch = settings.webSearchEnabled !== false;
+    const enableResearch = settings.webSearchEnabled !== false;
+    const enableSearch = enableResearch && options.suppressWebSearch !== true;
     const enableCalc = settings.calculatorEnabled !== false;
     // Python is a client-side tool. The browser executes it in Pyodide and
     // sends the result back before the model continues.
     const enablePython = settings.pythonEnabled !== false;
 
     const tools: Record<string, Tool> = {};
+
+    if (enableResearch) {
+        tools.research_skill = tool({
+            description:
+                "Callable research skill for substantial factual, current, technical, or comparison research. It plans the minimum focused queries, source checks, and stopping point; choose quick depth by default, then run only the necessary searches and page reads.",
+            needsApproval: false,
+            inputSchema: z.object({
+                question: z.string(),
+                depth: z.enum(["quick", "standard", "deep"]).optional(),
+                context: z.string().optional(),
+            }),
+            execute: async (input) => researchSkillGuide(input),
+        });
+    }
 
     if (enableSearch) {
         tools.duckduckgo_instant_answer = tool({
@@ -544,17 +559,6 @@ export async function buildChatTools(
                     return `DuckDuckGo Instant Answer unavailable: ${err instanceof Error ? err.message : "the service failed"}. Continue with web_search and read_url.`;
                 }
             },
-        });
-        tools.research_skill = tool({
-            description:
-                "Callable research skill for substantial factual, current, technical, or comparison research. It plans the minimum focused queries, source checks, and stopping point; choose quick depth by default, then run only the necessary searches and page reads.",
-            needsApproval: false,
-            inputSchema: z.object({
-                question: z.string(),
-                depth: z.enum(["quick", "standard", "deep"]).optional(),
-                context: z.string().optional(),
-            }),
-            execute: async (input) => researchSkillGuide(input),
         });
     }
 

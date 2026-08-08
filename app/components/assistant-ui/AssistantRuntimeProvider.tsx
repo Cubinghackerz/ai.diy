@@ -91,8 +91,8 @@ export function AssistantRuntimeProvider({
                         : "";
                     const memoryAvailable =
                         memoryEnabled && (await hasLocalMemoryEntries());
-                    const forcedSkill = forcedSkillStore.current;
-                    forcedSkillStore.current = null;
+                    const forcedSkills = forcedSkillStore.current;
+                    forcedSkillStore.current = [];
                     return {
                         body: {
                             // Keep assistant-ui forwarded context (tools/system/etc).
@@ -135,7 +135,7 @@ export function AssistantRuntimeProvider({
                             },
                             mcpServers: s.mcpServers.filter((m) => m.enabled),
                             memoryContext,
-                            ...(forcedSkill ? { customSkill: forcedSkill } : {}),
+                            ...(forcedSkills.length ? { customSkills: forcedSkills } : {}),
                         },
                     };
                 },
