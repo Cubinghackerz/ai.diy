@@ -18,35 +18,105 @@ export function artifactContentHash(content: string): string {
 }
 
 /**
+ * Neutralize relative/root-relative navigation attrs so they cannot resolve
+ * against the parent app origin inside a srcdoc iframe.
+ */
+function rewritePreviewNavigationAttributes(html: string): string {
+    const attrs = ["href", "action", "formaction", "data-href"] as const;
+    let next = html;
+    for (const attr of attrs) {
+        next = next.replace(
+            new RegExp(`\\b${attr}\\s*=\\s*(["'])([\\s\\S]*?)\\1`, "gi"),
+            (match, quote: string, raw: string) => {
+                const value = String(raw).trim();
+                if (!value || value.charAt(0) === "#") return match;
+                if (/^(https?:|mailto:|tel:)/i.test(value)) return match;
+                if (/^\/\//.test(value)) {
+                    return `${attr}=${quote}https:${value}${quote}`;
+                }
+                // Relative, root-relative, javascript:, data:, etc.
+                return `${attr}=${quote}#${quote}`;
+            },
+        );
+    }
+    return next;
+}
+
+/**
  * Wrap generated HTML before it goes into a sandboxed preview iframe.
  *
  * With `srcdoc`, relative and root-relative links resolve against the parent
- * app's URL, so clicking a button or link would load ai.diy inside the preview
- * panel. We inject a `<base target="_blank">` plus a capture-phase guard so
- * every link/form navigation leaves the iframe (opens a new tab) instead of
- * hijacking the preview. Anchor `#hash` navigation is kept in place.
+ * app origin (e.g. `/pricing` becomes `https://your-host/pricing` and 404s).
+ * We rewrite those attributes, pin `<base href="about:blank">`, and block
+ * leftover navigations that are not absolute http(s)/mailto/tel. In-page
+ * `#hash` anchors still work.
  */
 export function preparePreviewDocument(html: string): string {
+    const guardedHtml = rewritePreviewNavigationAttributes(html);
     const guard = [
         "<script>",
         "(function(){",
-        'function externalUrl(href){try{var u=new URL(href,window.location.href);if(u.protocol==="http:"||u.protocol==="https:")return u.toString()}catch(e){}return null}',
-        'document.addEventListener("click",function(e){var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(!a)return;var h=a.getAttribute("href");if(!h||h.charAt(0)==="#")return;e.preventDefault();var u=externalUrl(h);if(u)window.open(u,"_blank","noopener")},true);',
-        'document.addEventListener("submit",function(e){e.preventDefault();var u=externalUrl(e.target&&e.target.action||"");if(u)window.open(u,"_blank","noopener")},true);',
+        'function allowNav(href){',
+        'if(!href)return null;',
+        'var h=String(href).trim();',
+        'if(!h||h.charAt(0)==="#")return null;',
+        'if(/^javascript:/i.test(h)||/^data:/i.test(h))return null;',
+        'if(/^https?:\\/\\//i.test(h))return h;',
+        'if(/^mailto:/i.test(h)||/^tel:/i.test(h))return h;',
+        // Protocol-relative URLs are treated as https, never as app-origin paths.
+        'if(/^\\/\\//.test(h))return "https:"+h;',
+        // Relative, root-relative, and app-path links stay inside the preview dead-end.
+        'return null;',
+        "}",
+        'function openExternal(href){var u=allowNav(href);if(u){try{window.open(u,"_blank","noopener,noreferrer")}catch(e){}}}',
+        'document.addEventListener("click",function(e){',
+        'var el=e.target&&e.target.closest?e.target.closest("a[href],area[href],[data-href]"):null;',
+        "if(!el)return;",
+        'var h=el.getAttribute("href")||el.getAttribute("data-href")||"";',
+        'if(h.charAt(0)==="#")return;', // keep in-document anchors
+        "e.preventDefault();e.stopPropagation();",
+        "openExternal(h);",
+        "},true);",
+        'document.addEventListener("auxclick",function(e){',
+        "if(e.button!==1)return;",
+        'var el=e.target&&e.target.closest?e.target.closest("a[href],area[href]"):null;',
+        "if(!el)return;",
+        'var h=el.getAttribute("href")||"";',
+        'if(h.charAt(0)==="#")return;',
+        "e.preventDefault();e.stopPropagation();",
+        "openExternal(h);",
+        "},true);",
+        'document.addEventListener("submit",function(e){',
+        "e.preventDefault();e.stopPropagation();",
+        'var form=e.target;var action=(form&&form.getAttribute&&form.getAttribute("action"))||"";',
+        "openExternal(action);",
+        "},true);",
+        // Soft-block scripted navigations that would otherwise hit the parent origin.
+        "try{",
+        'var blocked=function(){return null;};',
+        '["assign","replace"].forEach(function(m){try{window.location[m]=blocked}catch(e){}});',
+        "var _open=window.open;",
+        'window.open=function(url){var u=allowNav(url==null?"":String(url));if(!u)return null;return _open.call(window,u,"_blank","noopener,noreferrer")};',
+        "}catch(e){}",
         "})();",
         "</script>",
     ].join("\n");
-    const injection = `<base target="_blank">\n${guard}`;
+    // about:blank base stops relative/root-relative resolution against the host app.
+    const injection = `<base href="about:blank">\n${guard}`;
 
-    const headMatch = html.match(/<head[^>]*>/i);
+    const headMatch = guardedHtml.match(/<head[^>]*>/i);
     if (headMatch) {
-        return html.replace(headMatch[0], `${headMatch[0]}\n${injection}`);
+        return guardedHtml.replace(headMatch[0], `${headMatch[0]}\n${injection}`);
     }
-    const htmlMatch = html.match(/<html[^>]*>/i);
+    const htmlMatch = guardedHtml.match(/<html[^>]*>/i);
     if (htmlMatch) {
-        return html.replace(htmlMatch[0], `${htmlMatch[0]}\n<head>${injection}</head>`);
+        return guardedHtml.replace(htmlMatch[0], `${htmlMatch[0]}\n<head>${injection}</head>`);
     }
-    return `<!doctype html>\n<html>\n<head>${injection}</head>\n<body>\n${html}\n</body>\n</html>`;
+    return `<!doctype html>\n<html>\n<head>${injection}</head>\n<body>\n${guardedHtml}\n</body>\n</html>`;
+}
+
+export function isImageMimeType(mimeType?: string | null): boolean {
+    return Boolean(mimeType && /^image\//i.test(mimeType));
 }
 
 export function inferArtifactMimeType(filename: string): string {

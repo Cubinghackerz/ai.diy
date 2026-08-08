@@ -192,6 +192,16 @@
       "tools": ["run_python", "create_file", "generate_file", "ask_user", "memory"]
     },
     {
+      "id": "compaction",
+      "name": "Compaction",
+      "version": "1.0.0",
+      "description": "Compress long chat history into a faithful carry-forward brief so the model can continue near the context limit without hallucinations from truncated dumps. Use for /Compaction or when reclaiming context.",
+      "category": "general",
+      "path": "general/compaction/SKILL.md",
+      "popular": true,
+      "tools": ["compaction_skill", "memory", "ask_user"]
+    },
+    {
       "id": "general-task-solver",
       "name": "General Task Solver",
       "version": "1.0.0",

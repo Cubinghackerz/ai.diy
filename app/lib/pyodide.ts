@@ -302,7 +302,7 @@ json.dumps(_prismium_result)
         ? parsed.skippedFiles.map((filename) => String(filename)).filter(Boolean).slice(0, MAX_PYTHON_ARTIFACTS)
         : [];
     const artifactSummary = artifacts.length
-        ? `Created downloadable artifact${artifacts.length === 1 ? "" : "s"}: ${artifacts.map((artifact) => artifact.filename).join(", ")}. They are available in Canvas for this browser session; download them to keep a copy. Do not recreate or Base64-copy them.`
+        ? `Created Canvas artifact${artifacts.length === 1 ? "" : "s"}: ${artifacts.map((artifact) => artifact.filename).join(", ")}. Images and other files are shown in Canvas for this browser session; download them to keep a copy. Do not recreate or Base64-copy them.`
         : "";
     const skippedSummary = skippedFiles.length
         ? `Not exported from Python (limit: ${MAX_PYTHON_ARTIFACT_BYTES / (1024 * 1024)} MiB each): ${skippedFiles.join(", ")}.`

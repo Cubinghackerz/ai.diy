@@ -1,6 +1,6 @@
 /**
  * Token usage modes — control system prompt size, tool suite, step budget,
- * and optional prompt-caching layout for lower $/request.
+ * search/result caps, and optional prompt-caching layout for lower $/request.
  */
 
 export type TokenMode = "efficient" | "balanced" | "caching" | "full";
@@ -16,7 +16,7 @@ export const TOKEN_MODE_DESCRIPTIONS: Record<TokenMode, string> = {
     efficient:
         "Shortest prompt and core tools only. Best for everyday Q&A and light coding.",
     balanced:
-        "Lean prompt with search, Python, files, and MCP. Omits heavy skill-suite tools.",
+        "Full everyday tools with a lean prompt. Web search hits and snippets stay short so Parallel/Firecrawl do not flood context.",
     caching:
         "Balanced capability with a stable cacheable prompt prefix. Cuts repeat input cost on Anthropic/OpenAI-style caches without dropping core tools.",
     full: "Maximum tool catalog, skill suite, and highest step budget.",
@@ -46,6 +46,16 @@ export interface TokenModePolicy {
     generateFile: boolean;
     connectorsMeta: boolean;
     compactToolDescriptions: boolean;
+    /** Default / injected search hit count when the model omits a limit. */
+    defaultSearchResults: number;
+    /** Hard ceiling on search hits (built-in + MCP arg clamping). */
+    maxSearchResults: number;
+    /** Max chars per search-result snippet / excerpt. */
+    maxSnippetChars: number;
+    /** Max chars returned from fetch_url / read_url. */
+    maxFetchChars: number;
+    /** Max chars for any single MCP tool result after compacting. */
+    maxMcpResultChars: number;
     /**
      * Split system prompt into a large stable prefix (cacheable) and a small
      * volatile suffix (date, memory, skills). Enables provider cache breakpoints.
@@ -68,6 +78,11 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
                 generateFile: false,
                 connectorsMeta: false,
                 compactToolDescriptions: true,
+                defaultSearchResults: 2,
+                maxSearchResults: 2,
+                maxSnippetChars: 80,
+                maxFetchChars: 2_000,
+                maxMcpResultChars: 2_500,
                 promptCaching: false,
             };
         case "caching":
@@ -84,6 +99,12 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
                 connectorsMeta: true,
                 // Keep tool schemas identical across turns for cache hits.
                 compactToolDescriptions: true,
+                // Search-only tightness; page fetch stays usable.
+                defaultSearchResults: 2,
+                maxSearchResults: 3,
+                maxSnippetChars: 120,
+                maxFetchChars: 4_000,
+                maxMcpResultChars: 8_000,
                 promptCaching: true,
             };
         case "full":
@@ -99,6 +120,11 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
                 generateFile: true,
                 connectorsMeta: true,
                 compactToolDescriptions: false,
+                defaultSearchResults: 3,
+                maxSearchResults: 5,
+                maxSnippetChars: 160,
+                maxFetchChars: 8_000,
+                maxMcpResultChars: 16_000,
                 promptCaching: false,
             };
         case "balanced":
@@ -115,6 +141,12 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
                 generateFile: true,
                 connectorsMeta: true,
                 compactToolDescriptions: true,
+                // Only search listings are kept short; skills/tools stay fully usable.
+                defaultSearchResults: 2,
+                maxSearchResults: 3,
+                maxSnippetChars: 120,
+                maxFetchChars: 4_000,
+                maxMcpResultChars: 8_000,
                 promptCaching: false,
             };
     }

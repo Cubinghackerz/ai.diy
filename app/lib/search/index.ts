@@ -13,6 +13,40 @@ export interface SearchResult {
     snippet: string;
 }
 
+/** Compact one-line search hits for tool results (token-efficient). */
+export function formatCompactSearchResults(
+    results: SearchResult[],
+    options: {
+        maxSnippetChars?: number;
+        maxTitleChars?: number;
+        /** When false, omit snippets entirely (title + URL only). */
+        includeSnippets?: boolean;
+    } = {},
+): string {
+    if (!results.length) return "No results found. Do not invent sources.";
+    const snippetMax = options.maxSnippetChars ?? 100;
+    const titleMax = options.maxTitleChars ?? 72;
+    const includeSnippets = options.includeSnippets !== false && snippetMax > 0;
+    return results
+        .map((result, index) => {
+            const title = clipSearchText(result.title, titleMax) || "Untitled";
+            const url = result.url.trim();
+            if (!includeSnippets) return `${index + 1}. ${title}\n${url}`;
+            const snippet = clipSearchText(result.snippet, snippetMax);
+            return snippet
+                ? `${index + 1}. ${title}\n${url}\n${snippet}`
+                : `${index + 1}. ${title}\n${url}`;
+        })
+        .join("\n");
+}
+
+export function clipSearchText(value: string | undefined | null, maxChars: number): string {
+    const text = String(value ?? "").replace(/\s+/g, " ").trim();
+    if (!text) return "";
+    if (text.length <= maxChars) return text;
+    return `${text.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
+}
+
 export type SearchEngine = "duckduckgo" | "searxng";
 
 export interface DuckDuckGoInstantAnswer {
@@ -186,7 +220,7 @@ type DuckDuckGoRelatedTopic = {
     Topics?: DuckDuckGoRelatedTopic[];
 };
 
-function cleanSearchText(value: unknown, maxLength = 500): string | undefined {
+function cleanSearchText(value: unknown, maxLength = 160): string | undefined {
     if (typeof value !== "string") return undefined;
     const text = value.replace(/\s+/g, " ").trim().slice(0, maxLength);
     return text || undefined;
@@ -213,7 +247,7 @@ function flattenDuckDuckGoTopics(
         for (const item of items) {
             if (results.length >= maxResults) return;
             const url = publicHttpUrl(item.FirstURL);
-            const snippet = cleanSearchText(item.Text, 600);
+            const snippet = cleanSearchText(item.Text, 160);
             if (url && snippet) {
                 results.push({
                     title: snippet.slice(0, 120),
@@ -582,7 +616,7 @@ export async function searxngSearch(
         .map((r) => ({
             title: String(r.title),
             url: String(r.url || r.pretty_url || ""),
-            snippet: String(r.content || "").slice(0, 400),
+            snippet: String(r.content || "").slice(0, 160),
         }));
     return rankSearchResults(normalizedQuery, results, maxResults);
 }

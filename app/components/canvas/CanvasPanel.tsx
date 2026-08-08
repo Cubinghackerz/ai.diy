@@ -3,14 +3,92 @@
  *
  * Supports:
  * - HTML interactive previews inside sandboxed iframe
+ * - Inline image previews for Python / binary image artifacts
  * - Python code & execution stdout viewer
  * - Code & file downloads (CSV, Markdown, JSON, SVG)
  */
 
-import { useCanvas } from "~/lib/canvas";
-import { decodeArtifactContent, preparePreviewDocument } from "~/lib/artifacts";
-import { X, Download, Code, Play, Eye, FileText, Check, Copy } from "@phosphor-icons/react";
-import { useState, useRef, useEffect } from "react";
+import { useCanvas, type Artifact } from "~/lib/canvas";
+import {
+    decodeArtifactContent,
+    isImageMimeType,
+    preparePreviewDocument,
+} from "~/lib/artifacts";
+import {
+    X,
+    Download,
+    Code,
+    Eye,
+    FileText,
+    Check,
+    Copy,
+    Image as ImageIcon,
+} from "@phosphor-icons/react";
+import { useState, useRef, useEffect, useMemo } from "react";
+
+function isImageArtifact(artifact: Artifact | undefined | null): boolean {
+    if (!artifact) return false;
+    if (isImageMimeType(artifact.mimeType)) return true;
+    return Boolean(artifact.filename?.match(/\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i));
+}
+
+function ArtifactImagePreview({ artifact }: { artifact: Artifact }) {
+    const [failed, setFailed] = useState(false);
+    const objectUrl = useMemo(() => {
+        if (typeof URL === "undefined") return null;
+        const mime = artifact.mimeType || "image/png";
+
+        if (artifact.contentEncoding) {
+            const binary = decodeArtifactContent(artifact.content, artifact.contentEncoding);
+            if (!binary) return null;
+            return URL.createObjectURL(new Blob([binary], { type: mime }));
+        }
+
+        // Text SVG (or other image markup) saved without binary encoding.
+        if (mime === "image/svg+xml" || artifact.filename?.toLowerCase().endsWith(".svg")) {
+            return URL.createObjectURL(
+                new Blob([artifact.content], { type: "image/svg+xml" }),
+            );
+        }
+
+        if (/^data:image\//i.test(artifact.content.trim())) {
+            return artifact.content.trim();
+        }
+
+        return null;
+    }, [artifact.content, artifact.contentEncoding, artifact.filename, artifact.mimeType]);
+
+    useEffect(() => {
+        return () => {
+            if (objectUrl && objectUrl.startsWith("blob:")) {
+                URL.revokeObjectURL(objectUrl);
+            }
+        };
+    }, [objectUrl]);
+
+    if (!objectUrl || failed) {
+        return (
+            <div className="flex h-full flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card p-6 text-center">
+                <ImageIcon size={28} className="text-muted-foreground" />
+                <p className="text-sm font-medium">Image preview unavailable</p>
+                <p className="max-w-xs text-xs text-muted-foreground">
+                    Use Download to save the original file.
+                </p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex h-full min-h-[12rem] items-center justify-center overflow-auto rounded-xl border border-border bg-[radial-gradient(circle_at_1px_1px,rgba(127,127,127,0.18)_1px,transparent_0)] bg-size-[12px_12px] p-4">
+            <img
+                src={objectUrl}
+                alt={artifact.title || artifact.filename || "Generated image"}
+                className="max-h-full max-w-full object-contain shadow-sm"
+                onError={() => setFailed(true)}
+            />
+        </div>
+    );
+}
 
 export function CanvasPanel() {
     const { artifacts, activeArtifactId, canvasOpen, closeCanvas, setActiveArtifactId, canvasWidth, setCanvasWidth } = useCanvas();
@@ -66,6 +144,7 @@ export function CanvasPanel() {
     if (!canvasOpen || !artifacts.length) return null;
 
     const activeArtifact = artifacts.find((a) => a.id === activeArtifactId) ?? artifacts[artifacts.length - 1];
+    const showImagePreview = isImageArtifact(activeArtifact);
 
     const handleDownload = () => {
         if (!activeArtifact) return;
@@ -201,7 +280,7 @@ export function CanvasPanel() {
                                     : "text-muted-foreground hover:bg-accent"
                             }`}
                         >
-                            <FileText size={12} />
+                            {isImageArtifact(art) ? <ImageIcon size={12} /> : <FileText size={12} />}
                             <span className="max-w-[100px] truncate">{art.title}</span>
                         </button>
                     ))}
@@ -220,7 +299,8 @@ export function CanvasPanel() {
                         srcDoc={preparePreviewDocument(activeArtifact.content)}
                         title={activeArtifact.title}
                         className="h-full w-full rounded-xl border border-border shadow-sm"
-                        sandbox="allow-scripts allow-modals allow-popups"
+                        sandbox="allow-scripts allow-modals allow-popups allow-popups-to-escape-sandbox"
+                        referrerPolicy="no-referrer"
                     />
                 ) : activeArtifact?.kind === "python" ? (
                     <div className="space-y-4">
@@ -239,6 +319,8 @@ export function CanvasPanel() {
                             </div>
                         )}
                     </div>
+                ) : showImagePreview && activeArtifact ? (
+                    <ArtifactImagePreview artifact={activeArtifact} />
                 ) : activeArtifact?.contentEncoding ? (
                     <div className="flex h-full flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card p-6 text-center">
                         <FileText size={28} className="text-muted-foreground" />

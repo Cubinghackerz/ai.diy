@@ -8,6 +8,8 @@ import { z } from "zod";
 import { ARTIFACT_MARKER, type ArtifactContentEncoding } from "~/lib/artifacts";
 import {
     duckDuckGoInstantAnswer,
+    formatCompactSearchResults,
+    clipSearchText,
     webSearch,
     type DuckDuckGoInstantAnswer,
     type SearchEngine,
@@ -20,6 +22,12 @@ import {
     tokenModePolicy,
     type TokenMode,
 } from "~/lib/token-mode";
+import {
+    compactUiMessages,
+    compactionSkillGuide,
+    type CompactableMessage,
+} from "~/lib/server/context-compaction";
+import type { UIMessage } from "ai";
 
 export { ARTIFACT_MARKER };
 
@@ -337,31 +345,29 @@ function connectorGuide(connectors: ConnectorConfig[]): string {
 
 function formatDuckDuckGoInstantAnswer(answer: DuckDuckGoInstantAnswer): string {
     const lines = [
-        "DuckDuckGo Instant Answer (free first-pass overview; verify material claims with web_search and read_url):",
+        "DuckDuckGo Instant Answer (overview only; verify with search/fetch):",
         `Query: ${answer.query}`,
     ];
-    if (answer.answer) lines.push(`Answer: ${answer.answer}`);
+    if (answer.answer) lines.push(`Answer: ${clipSearchText(answer.answer, 280)}`);
     if (answer.abstractText) {
         lines.push(
-            `Abstract${answer.abstractSource ? ` (${answer.abstractSource})` : ""}: ${answer.abstractText}`,
+            `Abstract${answer.abstractSource ? ` (${answer.abstractSource})` : ""}: ${clipSearchText(answer.abstractText, 280)}`,
         );
     }
     if (answer.abstractUrl) lines.push(`Abstract URL: ${answer.abstractUrl}`);
     if (answer.definition) {
         lines.push(
-            `Definition${answer.definitionSource ? ` (${answer.definitionSource})` : ""}: ${answer.definition}`,
+            `Definition${answer.definitionSource ? ` (${answer.definitionSource})` : ""}: ${clipSearchText(answer.definition, 280)}`,
         );
     }
     if (answer.definitionUrl) lines.push(`Definition URL: ${answer.definitionUrl}`);
     if (answer.relatedTopics.length > 0) {
         lines.push(
-            "Related topics:\n" +
-                answer.relatedTopics
-                    .map(
-                        (topic, index) =>
-                            `[${index + 1}] ${topic.title}\nURL: ${topic.url}\nSnippet: ${topic.snippet}`,
-                    )
-                    .join("\n\n"),
+            "Related:\n" +
+                formatCompactSearchResults(answer.relatedTopics.slice(0, 3), {
+                    maxSnippetChars: 120,
+                    maxTitleChars: 60,
+                }),
         );
     }
     if (lines.length === 2) {
@@ -369,7 +375,7 @@ function formatDuckDuckGoInstantAnswer(answer: DuckDuckGoInstantAnswer): string 
             "No instant answer was available. Use web_search, third-party search, and read_url instead.",
         );
     }
-    return lines.join("\n").slice(0, 8_000);
+    return lines.join("\n").slice(0, 2_500);
 }
 
 function researchSkillGuide(input: {
@@ -530,7 +536,12 @@ Use before any Word document request, including when the user says "report", "pr
 
 export async function buildChatTools(
     settings: ToolSettings = {},
-    options: { subagentMode?: boolean; suppressWebSearch?: boolean } = {},
+    options: {
+        subagentMode?: boolean;
+        suppressWebSearch?: boolean;
+        /** Current thread messages — used by compaction_skill. */
+        messages?: CompactableMessage[];
+    } = {},
 ) {
     const subagentMode = options.subagentMode === true;
     const policy = tokenModePolicy(normalizeTokenMode(settings.tokenMode));
@@ -538,6 +549,7 @@ export async function buildChatTools(
         (settings.forceToolNames ?? []).filter((name) => typeof name === "string"),
     );
     const forceResearch = forcedTools.has("research_skill");
+    const forceCompaction = forcedTools.has("compaction_skill");
     const forceSkillSuite =
         forcedTools.has("ultimate_frontend_ui") ||
         forcedTools.has("frontend_design_skill") ||
@@ -557,6 +569,37 @@ export async function buildChatTools(
         settings.skillsEnabled !== false && (policy.skillSuite || forceSkillSuite);
 
     const tools: Record<string, Tool> = {};
+
+    // Always available; forceable via /Compaction.
+    tools.compaction_skill = tool({
+        description:
+            "Compress prior chat into a faithful carry-forward brief (goals, decisions, constraints, open threads, URLs). Call when /Compaction is selected or the user asks to compact context. Does not invent facts.",
+        needsApproval: false,
+        inputSchema: z.object({
+            focus: z.string().optional(),
+            reason: z.string().optional(),
+        }),
+        execute: async ({ focus, reason }) => {
+            const source = (options.messages ?? []) as UIMessage[];
+            const result = compactUiMessages(source, {
+                contextWindow: 32_000,
+                force: true,
+                focus,
+                reason: reason || (forceCompaction ? "forced /Compaction" : "compaction_skill"),
+                keepRecent: 6,
+            });
+            return compactionSkillGuide({
+                focus,
+                reason: reason || (forceCompaction ? "forced /Compaction" : "compaction_skill"),
+                summary:
+                    result.summary ||
+                    "No older turns to compact; recent messages already fit.",
+                beforeTokens: result.beforeTokens,
+                afterTokens: result.afterTokens,
+                droppedMessages: result.droppedMessages,
+            });
+        },
+    });
 
     if (enableResearch) {
         tools.research_skill = tool({
@@ -622,15 +665,14 @@ export async function buildChatTools(
                 ? "SearXNG"
                 : "DuckDuckGo");
 
-        const formatResults = (results: Awaited<ReturnType<typeof webSearch>>) =>
-            results.length
-                ? results
-                      .map(
-                          (result, index) =>
-                              `[${index + 1}] ${result.title}\nURL: ${result.url}\nSnippet: ${result.snippet}`,
-                      )
-                      .join("\n\n")
-                : "No results found.";
+        const formatResults = (results: Awaited<ReturnType<typeof webSearch>>) => {
+            const body = formatCompactSearchResults(results, {
+                maxSnippetChars: policy.maxSnippetChars,
+                maxTitleChars: 72,
+                includeSnippets: policy.maxSnippetChars > 0,
+            });
+            return `${body}\n\nCite only these URLs. Snippets are leads, not proof—fetch a page before quoting numbers/dates. Do not invent sources.`;
+        };
 
         const builtInSearch = async (query: string, maxResults: number) =>
             formatResults(
@@ -641,23 +683,34 @@ export async function buildChatTools(
                 }),
             );
 
+        const defaultHits = policy.defaultSearchResults;
+        const maxHits = policy.maxSearchResults;
+
+        const resolveHitCount = (requested?: number) => {
+            if (typeof requested !== "number" || !Number.isFinite(requested)) {
+                return defaultHits;
+            }
+            return Math.max(1, Math.min(maxHits, Math.round(requested)));
+        };
+
         const searchTool = tool({
-            description: `Search the web using ${engineLabel} for real-time information, facts, news, and technical topics. Cite result URLs.`,
+            description: `Search the web using ${engineLabel} for real-time information, facts, news, and technical topics. Default ${defaultHits} results (max ${maxHits}). Cite result URLs.`,
             needsApproval: false,
             inputSchema: z.object({
                 query: z.string().optional(),
-                maxResults: z.number().int().min(1).max(5).optional(),
+                maxResults: z.number().int().min(1).max(maxHits).optional(),
             }),
             execute: async ({ query, maxResults }) => {
                 const normalizedQuery = query?.trim();
                 if (!normalizedQuery) {
                     return "Search query required. Retry with a focused query string.";
                 }
+                const hits = resolveHitCount(maxResults);
                 try {
                     const results = activeConnector
-                        ? await connectorSearch(activeConnector, normalizedQuery, maxResults ?? 3)
+                        ? await connectorSearch(activeConnector, normalizedQuery, hits)
                         : await webSearch(normalizedQuery, {
-                              maxResults: maxResults ?? 3,
+                              maxResults: hits,
                               engine,
                               searxngUrl: settings.searxngUrl,
                           });
@@ -665,7 +718,7 @@ export async function buildChatTools(
                 } catch (err) {
                     if (activeConnector) {
                         try {
-                            return `${await builtInSearch(normalizedQuery, maxResults ?? 3)}\n\nNote: ${activeConnector.name} was unavailable, so built-in web search was used instead.`;
+                            return `${await builtInSearch(normalizedQuery, hits)}\n\nNote: ${activeConnector.name} was unavailable, so built-in web search was used instead.`;
                         } catch {
                             // Return a model-readable result instead of failing the stream.
                         }
@@ -682,7 +735,7 @@ export async function buildChatTools(
                 needsApproval: false,
                 inputSchema: z.object({
                     query: z.string().optional(),
-                    maxResults: z.number().int().min(1).max(5).optional(),
+                    maxResults: z.number().int().min(1).max(maxHits).optional(),
                 }),
                 execute: async ({ query, maxResults }) => {
                     const normalizedQuery = query?.trim();
@@ -690,7 +743,7 @@ export async function buildChatTools(
                         return "Search query required. Retry with a focused query string.";
                     }
                     try {
-                        return await builtInSearch(normalizedQuery, maxResults ?? 3);
+                        return await builtInSearch(normalizedQuery, resolveHitCount(maxResults));
                     } catch (err) {
                         return `Search unavailable: ${err instanceof Error ? err.message : "the built-in provider failed"}`;
                     }
@@ -724,7 +777,7 @@ export async function buildChatTools(
                         .replace(/<[^>]+>/g, " ")
                         .replace(/\s+/g, " ")
                         .trim()
-                        .slice(0, 4000);
+                        .slice(0, policy.maxFetchChars);
                 } catch (err) {
                     return `Fetch error: ${err instanceof Error ? err.message : String(err)}`;
                 }
@@ -904,7 +957,7 @@ export async function buildChatTools(
     tools.create_file = tool({
         description: policy.compactToolDescriptions
             ? "Create a Canvas file (text/code/HTML/SVG or base64/hex binary). Cite the filename in the reply."
-            : "Create a document, code file, SVG, interactive HTML preview, or downloadable binary file in the Canvas panel. For binary bytes produced by run_python, pass the exact Base64 or hex string with contentEncoding set to base64 or hex; the client decodes it before download. Always use this tool for a file the user asked to download and cite the resulting file.",
+            : "Create a document, code file, SVG, interactive HTML preview, or downloadable binary file in the Canvas panel. For binary bytes produced by run_python, pass the exact Base64 or hex string with contentEncoding set to base64 or hex; the client decodes it before download. For interactive HTML, use in-page # anchors or absolute https:// links only—never root-relative paths like /pricing that would leave the preview. Always use this tool for a file the user asked to download and cite the resulting file.",
         inputSchema: z.object({
             filename: z.string(),
             title: z.string(),

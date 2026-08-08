@@ -14,6 +14,19 @@ import { buildChatTools } from "~/lib/server/chat-tools";
 import { closeMcpClients, loadMcpTools } from "~/lib/server/mcp-tools";
 import { buildChatSystemPromptParts } from "~/lib/server/prompt";
 import {
+    ensureCompactionSkill,
+    ensureFrontendSkill,
+    ensureResearchSkill,
+    lastUserTextFromMessages,
+    resolveRequiredSkillTools,
+    type ForcedSkill,
+} from "~/lib/skill-command";
+import {
+    compactUiMessages,
+    estimateTokensFromText,
+    resolveModelContextWindow,
+} from "~/lib/server/context-compaction";
+import {
     buildReasoningProviderOptions,
     type ReasoningEffort,
 } from "~/lib/reasoning";
@@ -367,35 +380,84 @@ export async function action({ request }: ActionFunctionArgs) {
     };
 
     try {
-        const loadedMcp = await loadMcpTools(body.mcpServers);
+        const mode = normalizeTokenMode(body.toolSettings?.tokenMode);
+        const policy = tokenModePolicy(mode);
+
+        const loadedMcp = await loadMcpTools(body.mcpServers, policy);
         mcpTools = loadedMcp.tools;
         mcpClients = loadedMcp.clients;
         const modelInstance = createChatModel(body);
         const mcpSearchAvailable = Object.keys(mcpTools).some((name) =>
             /^mcp_(?:parallel_search_mcp_(?:web_search|web_fetch)|firecrawl_keyless_firecrawl_(?:search|scrape|parse))$/i.test(name),
         );
-        const builtIn = await buildChatTools(body.toolSettings ?? {}, {
-            subagentMode: body.subagentMode === true,
-            suppressWebSearch: mcpSearchAvailable,
-        });
+
+        // Slash-selected skills + auto Research / Frontend when intent is clear.
+        const userText = lastUserTextFromMessages(body.messages);
+        const activeSkills: ForcedSkill[] = ensureCompactionSkill(
+            ensureFrontendSkill(
+                ensureResearchSkill(body.customSkills, userText, {
+                    webSearchEnabled: body.toolSettings?.webSearchEnabled,
+                }),
+                userText,
+            ),
+            userText,
+        );
+        const requiredSkillTools = resolveRequiredSkillTools(activeSkills);
+
+        const builtIn = await buildChatTools(
+            {
+                ...(body.toolSettings ?? {}),
+                forceToolNames: requiredSkillTools,
+            },
+            {
+                subagentMode: body.subagentMode === true,
+                suppressWebSearch: mcpSearchAvailable,
+                messages: body.messages,
+            },
+        );
         const tools =
             body.openAICompatible?.capabilityOverrides?.tools === false
                 ? {}
                 : { ...builtIn, ...mcpTools };
 
-        const mode = normalizeTokenMode(body.toolSettings?.tokenMode);
-        const policy = tokenModePolicy(mode);
-        const promptParts = buildChatSystemPromptParts(
+        const forceCompaction = requiredSkillTools.includes("compaction_skill");
+        const contextWindow = resolveModelContextWindow(body.provider, body.model);
+        const reserveTokens = Math.max(2_048, body.maxTokens ?? 4_096);
+        // Draft prompt length for budget estimate (tools reminder added after).
+        const draftPromptParts = buildChatSystemPromptParts(
             body.system || body.systemPrompt || undefined,
             body.memoryContext,
-            body.customSkills,
+            activeSkills,
             body.subagentMode === true ? "subagent" : "main",
             body.projectInstructions,
             body.agentMode === true,
             mode,
+            Object.keys(tools),
+        );
+        // Auto-compact only near the context limit. Forced /Compaction must call
+        // compaction_skill instead of silently rewriting history into plain text.
+        const compacted = compactUiMessages(body.messages, {
+            contextWindow,
+            reserveTokens,
+            systemTokens: estimateTokensFromText(draftPromptParts.full),
+            force: false,
+            reason: "auto context limit",
+            keepRecent: 8,
+        });
+        const promptMessages = forceCompaction ? body.messages : compacted.messages;
+
+        const promptParts = buildChatSystemPromptParts(
+            body.system || body.systemPrompt || undefined,
+            body.memoryContext,
+            activeSkills,
+            body.subagentMode === true ? "subagent" : "main",
+            body.projectInstructions,
+            body.agentMode === true,
+            mode,
+            Object.keys(tools),
         );
 
-        const modelMessages = await convertToModelMessages(body.messages);
+        const modelMessages = await convertToModelMessages(promptMessages);
         const effort = body.reasoningEffort ?? "medium";
         const providerOptions = buildReasoningProviderOptions(
             body.provider,
@@ -475,17 +537,18 @@ export async function action({ request }: ActionFunctionArgs) {
             : modelMessages;
 
         // Mark the last built-in tool so Anthropic can cache tool schemas too.
-        let cachedTools = tools;
+        let cachedTools: Record<string, (typeof tools)[string]> = tools;
         if (useExplicitCache && toolsEnabled) {
             const names = Object.keys(tools);
             const last = names[names.length - 1];
-            if (last) {
+            const lastTool = last ? tools[last as keyof typeof tools] : undefined;
+            if (last && lastTool) {
                 cachedTools = {
                     ...tools,
                     [last]: {
-                        ...tools[last],
+                        ...lastTool,
                         providerOptions: {
-                            ...(tools[last] as { providerOptions?: object })
+                            ...(lastTool as { providerOptions?: object })
                                 .providerOptions,
                             anthropic: {
                                 cacheControl: { type: "ephemeral" as const },
@@ -495,6 +558,11 @@ export async function action({ request }: ActionFunctionArgs) {
                 };
             }
         }
+
+        // Hard-require forced skill tools on early steps until each has run once.
+        const forceableTools = requiredSkillTools.filter((name) =>
+            Object.prototype.hasOwnProperty.call(cachedTools, name),
+        );
 
         const result = streamText({
             model: modelInstance,
@@ -513,6 +581,26 @@ export async function action({ request }: ActionFunctionArgs) {
             tools: Object.keys(cachedTools).length > 0 ? cachedTools : undefined,
             stopWhen: stepCountIs(policy.maxSteps),
             ...(safeProviderOptions ? { providerOptions: safeProviderOptions } : {}),
+            ...(forceableTools.length > 0
+                ? {
+                      prepareStep: ({ steps }) => {
+                          const called = new Set<string>();
+                          for (const step of steps) {
+                              for (const call of step.toolCalls ?? []) {
+                                  if (call?.toolName) called.add(call.toolName);
+                              }
+                          }
+                          const next = forceableTools.find((name) => !called.has(name));
+                          if (!next) return {};
+                          return {
+                              toolChoice: {
+                                  type: "tool" as const,
+                                  toolName: next,
+                              },
+                          };
+                      },
+                  }
+                : {}),
             onFinish: async () => {
                 await closeLoadedMcp();
             },

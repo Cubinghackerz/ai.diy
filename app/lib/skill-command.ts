@@ -23,6 +23,11 @@ export const BUILTIN_FORCED_SKILLS: ForcedSkill[] = [
             "You MUST handle this request with the research_skill: call the research_skill tool first, then run only the necessary searches and page reads it prescribes. Do not rely on training data or knowledge-cutoff memory for time-sensitive facts, new releases, versions, pricing, or changelogs; every material claim must come from sources retrieved in this session. Cite every source URL you used and report confidence per claim. Do not answer before calling research_skill.",
     },
     {
+        name: "Compaction",
+        content:
+            "You MUST activate and follow the compaction_skill for this request: call the compaction_skill tool first to compress prior conversation into a faithful carry-forward brief (goals, decisions, constraints, open threads, cited URLs). Do not invent details that are not in the source turns. After compaction, continue from the brief plus the recent messages, and keep using the active tools available this turn. Do not answer before calling compaction_skill.",
+    },
+    {
         name: "Ultimate Frontend UI",
         content:
             "You MUST activate and follow the ultimate_frontend_ui skill for this request before writing any code: call the ultimate_frontend_ui tool, then comply with its design thesis, interface-mode classification, state map, responsive/accessibility/performance/security gates, and validation contract. Do not answer before calling ultimate_frontend_ui.",
@@ -49,6 +54,27 @@ export const BUILTIN_FORCED_SKILLS: ForcedSkill[] = [
     },
 ];
 
+/** Search aliases for the slash skill menu (name + shortcuts). */
+const SKILL_MENU_ALIASES: Record<string, string[]> = {
+    research: ["research", "web research", "search"],
+    compaction: ["compaction", "compact", "compress", "context", "shrink"],
+    "ultimate frontend ui": ["ultimate frontend ui", "frontend ui", "ui"],
+    "frontend design": ["frontend design", "design"],
+    "python file creation": ["python file creation", "python", "file"],
+    "word document": ["word document", "word", "docx"],
+    "skill architect": ["skill architect", "skill", "architect"],
+};
+
+/** Whether a skill should appear for the current `/query` filter. */
+export function skillMatchesSlashQuery(skillName: string, query: string): boolean {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    const name = skillName.toLowerCase();
+    if (name.includes(q) || q.includes(name)) return true;
+    const aliases = SKILL_MENU_ALIASES[name] ?? [];
+    return aliases.some((alias) => alias.includes(q) || q.includes(alias));
+}
+
 /** Map forced skill display names (and aliases) to callable tool ids. */
 const SKILL_TOOL_BY_NAME: Record<string, string> = {
     research: "research_skill",
@@ -59,6 +85,9 @@ const SKILL_TOOL_BY_NAME: Record<string, string> = {
     "python file creation": "python_file_creation_skill",
     "word document": "word_document_skill",
     "skill architect": "create_skill",
+    compaction: "compaction_skill",
+    "context compaction": "compaction_skill",
+    compress: "compaction_skill",
 };
 
 export function lookupForcedSkill(name: string): ForcedSkill | null {
@@ -75,6 +104,7 @@ export function toolNameForForcedSkill(skillName: string): string | null {
     // Portable / custom skills often share a catalog id with a tool, or include
     // "research" in the name — map the common research cases.
     if (/\bresearch\b/.test(key)) return "research_skill";
+    if (/\bcompact/.test(key) || /\bcompress\b/.test(key)) return "compaction_skill";
     return null;
 }
 
@@ -174,5 +204,102 @@ export function ensureResearchSkill(
     if (!detectResearchIntent(userText)) return next;
     const research = lookupForcedSkill("Research");
     if (research) next.unshift(research);
+    return next;
+}
+
+/**
+ * Detect UI / frontend build or redesign asks so we can auto-force a design skill.
+ * Soft prompt-only guidance is easy for models to skip; hard-forcing the tool
+ * makes them actually load the contract before writing HTML/CSS/React.
+ */
+export function detectFrontendIntent(text: string | undefined | null): boolean {
+    const raw = (text ?? "").trim();
+    if (!raw || raw.length < 8) return false;
+    const t = raw.toLowerCase();
+
+    // Explicit skill / design brief asks.
+    if (
+        /\b(frontend design|ui design|design brief|design system|visual hierarchy|accessibility)\b/.test(
+            t,
+        )
+    ) {
+        return true;
+    }
+
+    // Build / redesign a frontend surface.
+    if (
+        /\b(build|create|make|generate|design|redesign|restyle|polish)\b/.test(t) &&
+        /\b(website|web\s*site|landing\s*page|web\s*page|webpage|dashboard|ui|ux|frontend|front-end|interface|html\s*page|react\s*(app|component|page)|next\.?js|tailwind)\b/.test(
+            t,
+        )
+    ) {
+        return true;
+    }
+
+    // Shorthand site asks without an explicit verb.
+    if (
+        /\b(landing\s*page|marketing\s*site|portfolio\s*site|saas\s*(landing|site)|admin\s*dashboard)\b/.test(
+            t,
+        )
+    ) {
+        return true;
+    }
+
+    return false;
+}
+
+/** Prefer Ultimate Frontend UI for builds; Frontend Design for brief-only asks. */
+export function ensureFrontendSkill(
+    skills: ForcedSkill[] | undefined,
+    userText: string,
+): ForcedSkill[] {
+    const next = [...(skills ?? [])];
+    const hasFrontend = next.some((skill) => {
+        const tool = toolNameForForcedSkill(skill.name);
+        return tool === "ultimate_frontend_ui" || tool === "frontend_design_skill";
+    });
+    if (hasFrontend) return next;
+    if (!detectFrontendIntent(userText)) return next;
+
+    const t = userText.toLowerCase();
+    const briefOnly =
+        /\b(design brief|design guidance|design recommendations?|wireframe|component structure)\b/.test(
+            t,
+        ) && !/\b(build|create|make|generate|implement|code|html|css|react)\b/.test(t);
+
+    const skill = lookupForcedSkill(
+        briefOnly ? "Frontend Design" : "Ultimate Frontend UI",
+    );
+    if (skill) next.unshift(skill);
+    return next;
+}
+
+export function detectCompactionIntent(text: string | undefined | null): boolean {
+    const raw = (text ?? "").trim();
+    if (!raw || raw.length < 6) return false;
+    const t = raw.toLowerCase();
+    return (
+        /\b\/?\s*compaction\b/.test(t) ||
+        /\b(compact|compress|shrink|reclaim)\b.{0,24}\b(context|history|thread|conversation|chat)\b/.test(
+            t,
+        ) ||
+        /\b(context|history|thread|conversation)\b.{0,24}\b(compact|compress|too long|context limit)\b/.test(
+            t,
+        )
+    );
+}
+
+export function ensureCompactionSkill(
+    skills: ForcedSkill[] | undefined,
+    userText: string,
+): ForcedSkill[] {
+    const next = [...(skills ?? [])];
+    const hasCompaction = next.some(
+        (skill) => toolNameForForcedSkill(skill.name) === "compaction_skill",
+    );
+    if (hasCompaction) return next;
+    if (!detectCompactionIntent(userText)) return next;
+    const skill = lookupForcedSkill("Compaction");
+    if (skill) next.unshift(skill);
     return next;
 }
