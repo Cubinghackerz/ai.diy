@@ -4,7 +4,11 @@ import { GITHUB_URL } from "./constants";
 import { formatStars, useGithubStars, usePrefersReducedMotion } from "./hooks";
 import { EASE_OUT } from "./motion";
 import { ProductBezel } from "./ProductBezel";
+import StrokeText from "./StrokeText";
 import { cn } from "~/lib/utils";
+
+const HEADLINE_LINE_1 = "The open-source AI";
+const HEADLINE_LINE_2 = "workspace you own.";
 
 export function Hero() {
     const stars = useGithubStars();
@@ -31,21 +35,47 @@ export function Hero() {
             </a>
 
             <h1
-                className={cn(
-                    "max-w-[14ch] text-[clamp(2.4rem,5.5vw,4rem)] font-medium leading-[1.05] tracking-[-0.04em] text-white",
-                    !reduced && "landing-hero-step opacity-0",
-                )}
-                data-hero-step="1"
+                className="mx-auto w-full max-w-[20ch] text-white"
             >
-                The open-source AI workspace you own.
+                <StrokeText
+                    text={HEADLINE_LINE_1}
+                    strokeColor="rgba(255,255,255,0.42)"
+                    fillColor="#FFFFFF"
+                    strokeWidth={1.1}
+                    drawDuration={1.05}
+                    fillDelay={0.15}
+                    stagger={0.04}
+                    ease="power2.out"
+                    trigger="mount"
+                    fillMode="wipe"
+                    fontSize={104}
+                    fontWeight={500}
+                    letterSpacing={-3}
+                />
+                <span className="block h-1.5 sm:h-2" aria-hidden />
+                <StrokeText
+                    text={HEADLINE_LINE_2}
+                    strokeColor="rgba(255,255,255,0.42)"
+                    fillColor="#FFFFFF"
+                    strokeWidth={1.1}
+                    drawDuration={1.05}
+                    fillDelay={0.15}
+                    stagger={0.04}
+                    ease="power2.out"
+                    trigger="mount"
+                    fillMode="wipe"
+                    fontSize={104}
+                    fontWeight={500}
+                    letterSpacing={-3}
+                />
             </h1>
 
             <p
                 className={cn(
-                    "mt-5 max-w-[38rem] text-[15px] leading-relaxed text-zinc-500 sm:text-base",
+                    "mt-6 max-w-[38rem] text-[15px] leading-relaxed text-zinc-500 sm:text-base",
                     !reduced && "landing-hero-step opacity-0",
                 )}
-                data-hero-step="2"
+                data-hero-step="1"
             >
                 Local-first, bring-your-own-key chat with streaming reasoning, multi-model
                 switching, and Canvas artifacts. Zero server-side LLM credentials.
@@ -56,7 +86,7 @@ export function Hero() {
                     "mt-9 flex flex-wrap items-center justify-center gap-3",
                     !reduced && "landing-hero-step opacity-0",
                 )}
-                data-hero-step="3"
+                data-hero-step="2"
             >
                 <Link
                     to="/workspace"
@@ -86,7 +116,7 @@ export function Hero() {
                     "mt-14 w-full max-w-[52rem] scroll-mt-28 sm:mt-16",
                     !reduced && "landing-hero-step opacity-0",
                 )}
-                data-hero-step="4"
+                data-hero-step="3"
             >
                 <ProductBezel />
             </div>
