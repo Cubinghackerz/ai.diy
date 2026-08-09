@@ -9,6 +9,7 @@ import { Input } from "~/components/ui/input";
 import { ModelPicker } from "~/components/ui/ModelPicker";
 import { ProviderPicker } from "~/components/ui/ProviderPicker";
 import { ModelLogo } from "~/components/ui/ModelLogo";
+import { ChatGPTLoginSettings } from "~/components/settings/ChatGPTLoginSettings";
 import { haptic, hapticConfirm, hapticSelect } from "~/lib/haptics";
 import { testProviderKey } from "~/lib/key-test";
 import { useSettings } from "~/lib/providers/SettingsProvider";
@@ -2781,6 +2782,7 @@ function SubagentsSettingsSection() {
     const { settings, updateSettings } = useSettings();
     return (
         <div className="flex flex-col gap-3">
+            <ChatGPTLoginSettings />
             <ToolToggle
                 title="Agent Mode"
                 description="Plan with skills and tools, then verify before the final answer. Uses General Task Solver routing when installed."
@@ -3239,7 +3241,9 @@ function KeysSection() {
             </p>
 
             <div className="flex flex-wrap gap-1">
-                {(Object.keys(PROVIDER_DEFAULTS) as ProviderId[]).map((id) => {
+                {(Object.keys(PROVIDER_DEFAULTS) as ProviderId[])
+                    .filter((id) => id !== "chatgpt")
+                    .map((id) => {
                     const ready = isProviderReady(settings, id);
                     return (
                         <button

@@ -69,7 +69,9 @@ export function ChatLifecycle({
         const provider = settings.chat.provider;
         const providerConfig = settings.providers[provider];
         const apiKey =
-            providerConfig?.apiKey || localProviderKey(provider);
+            provider === "chatgpt"
+                ? localProviderKey("chatgpt")
+                : providerConfig?.apiKey || localProviderKey(provider);
         const titleThreadId = threadId;
 
         void (async () => {
@@ -77,11 +79,12 @@ export function ChatLifecycle({
                 const res = await fetch("/api/title", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
+                    credentials: "include",
                     body: JSON.stringify({
                         message: text,
                         model: settings.chat.model,
                         provider,
-                        apiKey,
+                        apiKey: provider === "chatgpt" ? "" : apiKey,
                         baseUrl: providerConfig?.baseUrl || undefined,
                     }),
                 });

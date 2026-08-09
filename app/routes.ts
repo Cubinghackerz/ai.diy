@@ -10,6 +10,7 @@ export default [
     index("routes/landing.tsx"),
     route("workspace", "routes/home.tsx"),
     route("api/chat", "routes/api.chat.ts"),
+    route("api/chatgpt/*", "routes/api.chatgpt.$.ts"),
     route("api/models", "routes/api.models.ts"),
     route("api/search", "routes/api.search.ts"),
     route("api/connectors", "routes/api.connectors.ts"),

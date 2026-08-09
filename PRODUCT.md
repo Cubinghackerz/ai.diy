@@ -30,6 +30,7 @@ The claim a neighboring product could not copy truthfully: a self-hosted AI work
 - Voice dictation via browser Web Speech; Python execution via browser-side Pyodide (generated files land in Canvas and are saved with the chat).
 - Client soft spend/token/RPM guardrails per key fingerprint, plus optional server sliding-window rate limits.
 - Import/export: ChatGPT, Claude, ShareGPT, Markdown, ai.diy JSON.
+- Experimental BETA: Login with ChatGPT subscription (`Settings → Experimental`) via HttpOnly session cookie — spends the user's ChatGPT plan through `/api/chatgpt`, not an OpenAI API key.
 
 ## Capabilities and Constraints
 
@@ -41,6 +42,7 @@ Confirmed functionality (from README and code):
 - Private on-device RAG (Settings → Knowledge Base) over uploaded documents via WASM embeddings + HNSW.
 - Local usage and cost tracking with optional soft caps; import/export; S3/WebDAV/Google Drive cloud backup (client-side).
 - Multi-model preview workspace (experimental); optional Agent Mode and Subagents (Settings → Experimental).
+- Optional Login with ChatGPT (Experimental BETA) for subscription-backed models alongside BYOK providers.
 - Light, dark, and system themes.
 - The workspace route is `/workspace`; the landing page is `/`.
 

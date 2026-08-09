@@ -56,8 +56,19 @@ ALLOW_PRIVATE_PROVIDER_URLS=true   # trusted self-host only
 NODE_ENV=production
 RATE_LIMIT_RPM=60                  # per API key or IP, sliding 1-minute window
 # RATE_LIMIT_DISABLED=true         # skip in-memory rate limiting (dev only)
+
+# Login with ChatGPT (Experimental BETA) — signs the session cookie and encrypts
+# subscription tokens at rest. Required for stable sessions across restarts.
+# LWC_SECRET=$(openssl rand -hex 32)
 ```
 
+**Login with ChatGPT notes**
+
+- Enable under **Settings → Experimental**, then sign in with the consent widget.
+- Tokens stay server-side (HttpOnly cookie). The default session store is **in-memory** (fine for single-node Docker/local). Multi-instance / serverless hosts need a shared `sessionStore` (Redis/KV) before you rely on it in production.
+- Set `LWC_SECRET` so sessions survive restarts. Without it, restarts log everyone out.
+- This is a community SDK path, not an official OpenAI product. Users spend their own ChatGPT plan; disconnect via the widget or [ChatGPT security settings](https://chatgpt.com/#settings/Security).
+- GPT Live WebRTC voice is **not** included in this BETA.
 ## Public deployment
 
 1. Push this repo to any Node-capable host (VPS, Docker, PaaS).

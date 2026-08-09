@@ -709,7 +709,7 @@ export async function buildChatTools(
             const formatted = formatCompactSearchResults(results, {
                 maxSnippetChars: policy.maxSnippetChars,
                 maxTitleChars: 72,
-                includeSnippets: policy.maxSnippetChars > 80,
+                includeSnippets: true,
                 includeCitationFooter: !searchCitationFooterShown,
             });
             if (!searchCitationFooterShown) searchCitationFooterShown = true;

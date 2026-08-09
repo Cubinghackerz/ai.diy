@@ -5,6 +5,8 @@ import { DEFAULT_MODELS, type ModelInfo, type ProviderId } from "~/lib/types";
 import { isLocalProvider } from "~/lib/setup";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { corsPreflight, withCors } from "~/lib/server/cors";
+import { chatgptModelsFromSlugs } from "~/lib/chatgpt-models";
+import { getChatGPTHandler } from "~/lib/server/chatgpt-auth";
 import { normalizeProviderBaseUrl } from "~/lib/server/provider-url";
 import {
     classifyProviderError,
@@ -61,6 +63,71 @@ export async function action({ request }: ActionFunctionArgs) {
                 { status: 400, headers: { "Cache-Control": "no-store" } },
             ),
         );
+    }
+
+    if (body.provider === "chatgpt") {
+        try {
+            const auth = getChatGPTHandler();
+            const session = await auth.getSession(request);
+            if (session.status !== "authenticated") {
+                return withCors(
+                    request,
+                    Response.json(
+                        {
+                            error: "Sign in with ChatGPT under Settings → Experimental.",
+                            models: (DEFAULT_MODELS.chatgpt ?? []).map((m) =>
+                                enrichModelInfo({ ...m, provider: "chatgpt" }),
+                            ),
+                            live: false,
+                        },
+                        { status: 401, headers: { "Cache-Control": "no-store" } },
+                    ),
+                );
+            }
+            const slugs = (await auth.getModels(request)) ?? [];
+            const raw: ModelInfo[] =
+                slugs.length > 0
+                    ? chatgptModelsFromSlugs(slugs)
+                    : (DEFAULT_MODELS.chatgpt ?? []).map((m) =>
+                          enrichModelInfo({ ...m, provider: "chatgpt" }),
+                      );
+            return withCors(
+                request,
+                Response.json(
+                    {
+                        models: raw,
+                        live: slugs.length > 0,
+                        fetchedAt: Date.now(),
+                        checks: {
+                            keyValid: true,
+                            modelsListed: raw.length > 0,
+                            provider: "chatgpt",
+                        },
+                    },
+                    { headers: { "Cache-Control": "no-store" } },
+                ),
+            );
+        } catch (err) {
+            const message = formatProviderError(err, {
+                provider: "chatgpt",
+                context: "models",
+            });
+            const fallback = (DEFAULT_MODELS.chatgpt ?? []).map((m) =>
+                enrichModelInfo({ ...m, provider: "chatgpt" }),
+            );
+            return withCors(
+                request,
+                Response.json(
+                    {
+                        models: fallback,
+                        live: false,
+                        error: message,
+                        fetchedAt: Date.now(),
+                    },
+                    { headers: { "Cache-Control": "no-store" } },
+                ),
+            );
+        }
     }
 
     const apiKey = body.apiKey?.trim() ?? "";

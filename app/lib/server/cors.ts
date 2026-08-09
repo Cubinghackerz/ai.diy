@@ -25,6 +25,7 @@ export function withCors(request: Request, response: Response): Response {
     headers.set("Access-Control-Allow-Origin", origin);
     headers.set("Access-Control-Allow-Methods", ALLOW_METHODS);
     headers.set("Access-Control-Allow-Headers", ALLOW_HEADERS);
+    headers.set("Access-Control-Allow-Credentials", "true");
     headers.set("Access-Control-Max-Age", "86400");
     const vary = headers.get("Vary");
     headers.set("Vary", vary ? `${vary}, Origin` : "Origin");

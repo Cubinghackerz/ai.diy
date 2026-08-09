@@ -8,6 +8,7 @@
 
 export type ProviderId =
     | "openai"
+    | "chatgpt"
     | "anthropic"
     | "gemini"
     | "groq"
@@ -162,6 +163,11 @@ export interface AppSettings {
      * Uses General Task Solver routing when available.
      */
     agentModeEnabled: boolean;
+    /**
+     * Experimental BETA: Login with ChatGPT subscription (HttpOnly session).
+     * Not an API key — spends the signed-in user's ChatGPT plan via /api/chatgpt.
+     */
+    chatgptLoginEnabled: boolean;
     preview: PreviewSettings;
     usageLimits: UsageLimitsConfig;
     // MCP settings
@@ -322,6 +328,11 @@ export const PROVIDER_DEFAULTS: Record<ProviderId, Omit<ProviderConfig, "apiKey"
         name: "OpenAI",
         baseUrl: "https://api.openai.com/v1",
     },
+    chatgpt: {
+        id: "chatgpt",
+        name: "ChatGPT (subscription)",
+        baseUrl: "",
+    },
     anthropic: {
         id: "anthropic",
         name: "Anthropic",
@@ -407,6 +418,7 @@ export const PROVIDER_DEFAULTS: Record<ProviderId, Omit<ProviderConfig, "apiKey"
 export const DEFAULT_SETTINGS: AppSettings = {
     providers: {
         openai: { ...PROVIDER_DEFAULTS.openai, apiKey: "", enabled: false },
+        chatgpt: { ...PROVIDER_DEFAULTS.chatgpt, apiKey: "", enabled: false },
         anthropic: { ...PROVIDER_DEFAULTS.anthropic, apiKey: "", enabled: false },
         gemini: { ...PROVIDER_DEFAULTS.gemini, apiKey: "", enabled: false },
         groq: { ...PROVIDER_DEFAULTS.groq, apiKey: "", enabled: false },
@@ -451,6 +463,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     tokenMode: "balanced",
     subagentsEnabled: false,
     agentModeEnabled: false,
+    chatgptLoginEnabled: false,
     preview: {
         enabled: false,
         primaryModels: [],
@@ -488,6 +501,18 @@ export const DEFAULT_MODELS: Record<ProviderId, ModelInfo[]> = {
         { id: "tts-1", name: "TTS-1", provider: "openai", supportsAudio: true },
         { id: "tts-1-hd", name: "TTS-1 HD", provider: "openai", supportsAudio: true },
         { id: "gpt-4o-mini-tts", name: "GPT-4o Mini TTS", provider: "openai", supportsAudio: true },
+    ],
+    chatgpt: [
+        { id: "gpt-5.6", name: "GPT-5.6", provider: "chatgpt", contextWindow: 1050000, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "gpt-5.6-sol", name: "GPT-5.6 Sol", provider: "chatgpt", contextWindow: 1050000, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "gpt-5.6-terra", name: "GPT-5.6 Terra", provider: "chatgpt", contextWindow: 1050000, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "gpt-5.6-luna", name: "GPT-5.6 Luna", provider: "chatgpt", contextWindow: 1050000, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "gpt-5.5", name: "GPT-5.5", provider: "chatgpt", contextWindow: 1050000, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "gpt-5.4", name: "GPT-5.4", provider: "chatgpt", contextWindow: 400000, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "gpt-5.4-mini", name: "GPT-5.4 Mini", provider: "chatgpt", contextWindow: 200000, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "gpt-5.3-codex", name: "GPT-5.3 Codex", provider: "chatgpt", contextWindow: 200000, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "gpt-4o", name: "GPT-4o", provider: "chatgpt", contextWindow: 128000, supportsTools: true, supportsVision: true },
+        { id: "gpt-image-1", name: "GPT Image 1", provider: "chatgpt", supportsImageGeneration: true },
     ],
     anthropic: [
         { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet", provider: "anthropic", contextWindow: 200000, supportsTools: true },

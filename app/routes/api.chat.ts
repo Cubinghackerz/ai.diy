@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import {
     streamText,
+    generateText,
     convertToModelMessages,
     createUIMessageStream,
     createUIMessageStreamResponse,
@@ -10,6 +11,7 @@ import {
     stepCountIs,
     type UIMessage,
 } from "ai";
+import { createChatGPTProxyProvider } from "@opencoredev/loginwithchatgpt-ai";
 import { buildChatTools } from "~/lib/server/chat-tools";
 import { closeMcpClients, loadMcpTools } from "~/lib/server/mcp-tools";
 import { buildChatSystemPromptParts } from "~/lib/server/prompt";
@@ -46,6 +48,7 @@ import {
 import { imageRequestOptions } from "~/lib/image-generation";
 import { providerNeedsKey } from "~/lib/provider-credentials";
 import { corsPreflight, withCors } from "~/lib/server/cors";
+import { getChatGPTHandler } from "~/lib/server/chatgpt-auth";
 import { normalizeProviderBaseUrl } from "~/lib/server/provider-url";
 import {
     formatProviderError,
@@ -137,7 +140,11 @@ function publicChatError(error: unknown, provider?: string): string {
 async function generateImageResponse(
     body: ChatRequestBody,
     abortSignal: AbortSignal,
+    request?: Request,
 ): Promise<Response> {
+    if (body.provider === "chatgpt") {
+        return generateChatGPTImageResponse(body, abortSignal, request);
+    }
     const imageOptions = imageRequestOptions(
         body.provider,
         body.imageSettings?.size,
@@ -158,6 +165,89 @@ async function generateImageResponse(
                     type: "file",
                     url: `data:${image.mediaType};base64,${image.base64}`,
                     mediaType: image.mediaType,
+                });
+            }
+            writer.write({ type: "finish", finishReason: "stop" });
+        },
+        onError: (error) =>
+            error instanceof Error ? error.message : "Image generation failed",
+    });
+
+    return createUIMessageStreamResponse({ stream });
+}
+
+/**
+ * ChatGPT subscription image path — uses the session proxy Responses model.
+ * Dedicated Images API is not exposed by loginwithchatgpt 0.2.x; we ask the
+ * selected model and surface any returned file parts.
+ */
+async function generateChatGPTImageResponse(
+    body: ChatRequestBody,
+    abortSignal: AbortSignal,
+    request?: Request,
+): Promise<Response> {
+    if (!request) {
+        throw new Error("ChatGPT image generation requires an HTTP request context.");
+    }
+    const session = await getChatGPTHandler().getSession(request);
+    if (session.status !== "authenticated") {
+        throw new Error("Sign in with ChatGPT to generate images on your subscription.");
+    }
+
+    const chatgpt = createChatGPTProxyProvider({
+        fetch: getChatGPTHandler().proxyFetch(request),
+    });
+    const prompt = imagePrompt(body.messages);
+    const result = await generateText({
+        model: chatgpt(body.model),
+        prompt: `Generate an image for this request and return the image as a file attachment.\n\n${prompt}`,
+        abortSignal,
+    });
+
+    const files = (
+        result as {
+            files?: Array<{ mediaType?: string; base64?: string; uint8Array?: Uint8Array }>;
+        }
+    ).files;
+
+    if (!files?.length) {
+        const text = result.text?.trim();
+        if (text) {
+            const stream = createUIMessageStream({
+                execute({ writer }) {
+                    writer.write({ type: "start" });
+                    writer.write({ type: "text-start", id: "img-note" });
+                    writer.write({
+                        type: "text-delta",
+                        id: "img-note",
+                        delta: text,
+                    });
+                    writer.write({ type: "text-end", id: "img-note" });
+                    writer.write({ type: "finish", finishReason: "stop" });
+                },
+            });
+            return createUIMessageStreamResponse({ stream });
+        }
+        throw new Error(
+            "This ChatGPT model did not return an image file. Try a different model from your account, or use OpenAI (API key) for dedicated image models.",
+        );
+    }
+
+    const stream = createUIMessageStream({
+        execute({ writer }) {
+            writer.write({ type: "start" });
+            for (const file of files) {
+                const mediaType = file.mediaType || "image/png";
+                const base64 =
+                    file.base64 ||
+                    (file.uint8Array
+                        ? Buffer.from(file.uint8Array).toString("base64")
+                        : "");
+                if (!base64) continue;
+                writer.write({
+                    type: "file",
+                    url: `data:${mediaType};base64,${base64}`,
+                    mediaType,
                 });
             }
             writer.write({ type: "finish", finishReason: "stop" });
@@ -256,13 +346,32 @@ export async function action({ request }: ActionFunctionArgs) {
         );
     }
 
-    const rateKey = rateLimitKeyFromRequest(request, body.apiKey);
+    const rateKey = rateLimitKeyFromRequest(
+        request,
+        body.provider === "chatgpt" ? "chatgpt-subscription" : body.apiKey,
+    );
     const rateCheck = checkRateLimit(rateKey);
     if (!rateCheck.ok) {
         return withCors(request, rateLimitResponse(rateCheck.retryAfterMs));
     }
 
-    if (providerNeedsKey(body.provider) && !body.apiKey) {
+    if (body.provider === "chatgpt") {
+        const session = await getChatGPTHandler().getSession(request);
+        if (session.status !== "authenticated") {
+            return withCors(
+                request,
+                Response.json(
+                    {
+                        error: formatProviderError(
+                            "Sign in with ChatGPT under Settings → Experimental before using the ChatGPT (subscription) provider.",
+                            { provider: "chatgpt", context: "chat" },
+                        ),
+                    },
+                    { status: 401 },
+                ),
+            );
+        }
+    } else if (providerNeedsKey(body.provider) && !body.apiKey) {
         const payload = {
             error: formatProviderError("API key required", {
                 provider: body.provider,
@@ -367,7 +476,7 @@ export async function action({ request }: ActionFunctionArgs) {
         inferModelSupportsImageGeneration(body.model, body.provider)
     ) {
         try {
-            return withCors(request, await generateImageResponse(body, request.signal));
+            return withCors(request, await generateImageResponse(body, request.signal, request));
         } catch (err) {
             const message = publicChatError(err, body.provider);
             const kind = classifyProviderError(err, {
@@ -398,7 +507,7 @@ export async function action({ request }: ActionFunctionArgs) {
         const loadedMcp = await loadMcpTools(body.mcpServers, policy);
         mcpTools = loadedMcp.tools;
         mcpClients = loadedMcp.clients;
-        const modelInstance = createChatModel(body);
+        const modelInstance = createChatModel({ ...body, request });
         const mcpSearchAvailable = Object.keys(mcpTools).some((name) =>
             /^mcp_(?:parallel_search_mcp_(?:web_search|web_fetch)|firecrawl_keyless_firecrawl_(?:search|scrape|parse))$/i.test(name),
         );
@@ -601,6 +710,12 @@ export async function action({ request }: ActionFunctionArgs) {
                       topP: body.topP ?? 1,
                   }),
             maxOutputTokens,
+            // ChatGPT subscription 429 usage limits are not transient — don't burn
+            // three attempts before surfacing the plan/quota error.
+            maxRetries:
+                body.provider === "chatgpt"
+                    ? 0
+                    : (body.openAICompatible?.maxRetries ?? undefined),
             tools: Object.keys(cachedTools).length > 0 ? cachedTools : undefined,
             stopWhen: stepCountIs(maxSteps),
             ...(safeProviderOptions ? { providerOptions: safeProviderOptions } : {}),
