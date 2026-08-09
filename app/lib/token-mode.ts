@@ -79,11 +79,11 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
                 generateFile: false,
                 connectorsMeta: false,
                 compactToolDescriptions: true,
-                defaultSearchResults: 6,
-                maxSearchResults: 6,
-                maxSnippetChars: 80,
-                maxFetchChars: 2_000,
-                maxMcpResultChars: 2_500,
+                defaultSearchResults: 12,
+                maxSearchResults: 15,
+                maxSnippetChars: 160,
+                maxFetchChars: 3_000,
+                maxMcpResultChars: 8_000,
                 promptCaching: false,
             };
         case "caching":
@@ -100,12 +100,12 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
                 connectorsMeta: true,
                 // Keep tool schemas identical across turns for cache hits.
                 compactToolDescriptions: true,
-                // Prefer ranked hits with tight snippets over long page dumps.
-                defaultSearchResults: 9,
-                maxSearchResults: 9,
-                maxSnippetChars: 100,
-                maxFetchChars: 4_000,
-                maxMcpResultChars: 8_000,
+                // Prefer ranked hits with usable snippets over truncated JSON dumps.
+                defaultSearchResults: 18,
+                maxSearchResults: 20,
+                maxSnippetChars: 220,
+                maxFetchChars: 6_000,
+                maxMcpResultChars: 18_000,
                 promptCaching: true,
             };
         case "full":
@@ -121,11 +121,11 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
                 generateFile: true,
                 connectorsMeta: true,
                 compactToolDescriptions: false,
-                defaultSearchResults: 9,
-                maxSearchResults: 15,
-                maxSnippetChars: 160,
-                maxFetchChars: 8_000,
-                maxMcpResultChars: 16_000,
+                defaultSearchResults: 20,
+                maxSearchResults: 30,
+                maxSnippetChars: 280,
+                maxFetchChars: 10_000,
+                maxMcpResultChars: 28_000,
                 promptCaching: false,
             };
         case "balanced":
@@ -142,12 +142,12 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
                 generateFile: true,
                 connectorsMeta: true,
                 compactToolDescriptions: true,
-                // Prefer ranked hits with tight snippets over long page dumps.
-                defaultSearchResults: 9,
-                maxSearchResults: 9,
-                maxSnippetChars: 100,
-                maxFetchChars: 4_000,
-                maxMcpResultChars: 8_000,
+                // Prefer ranked hits with usable snippets over truncated JSON dumps.
+                defaultSearchResults: 18,
+                maxSearchResults: 20,
+                maxSnippetChars: 220,
+                maxFetchChars: 6_000,
+                maxMcpResultChars: 18_000,
                 promptCaching: false,
             };
     }

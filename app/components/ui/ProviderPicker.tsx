@@ -16,6 +16,7 @@ import { hapticSelect } from "~/lib/haptics";
 import { isLocalProvider } from "~/lib/setup";
 import { PROVIDER_DEFAULTS, type ProviderId } from "~/lib/types";
 import { ModelLogo } from "~/components/ui/ModelLogo";
+import { useChatGPTProviderVisible } from "~/components/settings/ChatGPTLoginSettings";
 import { cn } from "~/lib/utils";
 
 const PROVIDER_IDS = Object.keys(PROVIDER_DEFAULTS) as ProviderId[];
@@ -39,15 +40,18 @@ export function ProviderPicker({
     const menuRef = useRef<HTMLDivElement>(null);
     const [menuStyle, setMenuStyle] = useState<React.CSSProperties | null>(null);
     const selected = PROVIDER_DEFAULTS[value];
+    const chatgptVisible = useChatGPTProviderVisible();
 
     const options = useMemo(
         () =>
-            PROVIDER_IDS.map((id) => ({
-                id,
-                name: PROVIDER_DEFAULTS[id].name,
-                local: isLocalProvider(id),
-            })),
-        [],
+            PROVIDER_IDS.filter((id) => id !== "chatgpt" || chatgptVisible).map(
+                (id) => ({
+                    id,
+                    name: PROVIDER_DEFAULTS[id].name,
+                    local: isLocalProvider(id),
+                }),
+            ),
+        [chatgptVisible],
     );
 
     useEffect(() => {

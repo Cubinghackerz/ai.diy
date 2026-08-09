@@ -10,11 +10,13 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createXai } from "@ai-sdk/xai";
+import { createChatGPTProxyProvider } from "@opencoredev/loginwithchatgpt-ai";
 import type { ImageModel, SpeechModel } from "ai";
 import { experimental_generateVideo } from "ai";
 import type { ProviderConfig, ProviderId } from "~/lib/types";
 import { parseProviderCredentials } from "~/lib/provider-credentials";
 import { modelSupportsReasoning } from "~/lib/reasoning";
+import { getChatGPTHandler } from "~/lib/server/chatgpt-auth";
 import { normalizeProviderBaseUrl } from "~/lib/server/provider-url";
 import { createCompatibleFetch } from "~/lib/server/compatible-fetch";
 
@@ -24,6 +26,8 @@ export type ModelRequest = {
     baseUrl?: string;
     model: string;
     openAICompatible?: ProviderConfig["openAICompatible"];
+    /** Required for provider === "chatgpt" (session cookie via proxyFetch). */
+    request?: Request;
 };
 
 export function createChatModel(body: ModelRequest) {
@@ -34,6 +38,17 @@ export function createChatModel(body: ModelRequest) {
     const compatibleHeaders = body.openAICompatible?.headers;
 
     switch (provider) {
+        case "chatgpt": {
+            if (!body.request) {
+                throw new Error(
+                    "ChatGPT subscription requires an authenticated HTTP request (session cookie).",
+                );
+            }
+            const chatgpt = createChatGPTProxyProvider({
+                fetch: getChatGPTHandler().proxyFetch(body.request),
+            });
+            return chatgpt(model);
+        }
         case "openai": {
             const openai = createOpenAI({
                 apiKey: key,
@@ -158,6 +173,10 @@ export function createImageModel(body: ModelRequest): ImageModel {
     const compatibleHeaders = body.openAICompatible?.headers;
 
     switch (provider) {
+        case "chatgpt":
+            throw new Error(
+                "ChatGPT subscription image generation uses the session proxy path, not a dedicated Images API key.",
+            );
         case "openai":
         case "openrouter":
         case "custom":

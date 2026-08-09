@@ -51,6 +51,9 @@ function resolveApiKey(
     provider: ProviderId,
     settings: AppSettings,
 ): string {
+    if (provider === "chatgpt") {
+        return localProviderKey("chatgpt");
+    }
     const providerConfig = settings.providers[provider];
     const apiKey = providerConfig?.apiKey?.trim() || "";
     if (

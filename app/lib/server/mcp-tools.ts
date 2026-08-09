@@ -80,14 +80,15 @@ export function wrapMcpToolForBudget(
     const kind = classifyMcpTool(toolName);
     const execute = original.execute.bind(original);
     const snippetChars = policy.maxSnippetChars ?? 160;
-    // Keep page scrapes usable; only search listings are kept tiny.
+    // Keep page scrapes usable; search listings are formatted first so we never
+    // truncate mid-JSON before extraction (Parallel/Firecrawl payloads are rich).
     const bodyChars =
         kind === "search"
-            ? Math.min(800, Math.max(400, Math.floor(policy.maxMcpResultChars / 4)))
+            ? Math.min(1_200, Math.max(600, Math.floor(policy.maxMcpResultChars / 4)))
             : Math.min(policy.maxMcpResultChars, Math.max(4_000, Math.floor(policy.maxMcpResultChars * 0.75)));
     const resultBudget =
         kind === "search"
-            ? Math.min(policy.maxMcpResultChars, Math.max(3_500, policy.maxSearchResults * 320))
+            ? Math.min(policy.maxMcpResultChars, Math.max(8_000, policy.maxSearchResults * 480))
             : policy.maxMcpResultChars;
 
     return {
@@ -99,18 +100,21 @@ export function wrapMcpToolForBudget(
                     ? clampMcpSearchArgs(rawArgs, policy, original)
                     : rawArgs;
             const result = await execute(args, ...rest);
-            const compacted = compactMcpToolResult(result, resultBudget, {
-                // Keep a larger raw pool so ranking can pick the best few.
-                maxItems: kind === "search" ? Math.max(policy.maxSearchResults * 2, 6) : undefined,
+            if (kind === "search") {
+                // Format from the full payload first — compacting JSON before
+                // extraction produces truncated garbage the model cannot use.
+                const formatted = formatMcpSearchToolOutput(result, {
+                    query: extractMcpSearchQuery(args),
+                    maxItems: policy.maxSearchResults,
+                    maxSnippetChars: snippetChars,
+                    includeSnippets: true,
+                });
+                if (formatted !== result) return formatted;
+            }
+            return compactMcpToolResult(result, resultBudget, {
+                maxItems: kind === "search" ? Math.max(policy.maxSearchResults * 2, 8) : undefined,
                 maxSnippetChars: snippetChars,
-                maxBodyChars: kind === "fetch" ? bodyChars : bodyChars,
-            });
-            if (kind !== "search") return compacted;
-            return formatMcpSearchToolOutput(compacted, {
-                query: extractMcpSearchQuery(args),
-                maxItems: policy.maxSearchResults,
-                maxSnippetChars: snippetChars,
-                includeSnippets: snippetChars > 80,
+                maxBodyChars: bodyChars,
             });
         },
     } as ToolSet[string];
@@ -146,6 +150,7 @@ const SEARCH_QUERY_KEYS = [
     "search",
     "search_query",
     "searchQuery",
+    "objective",
     "prompt",
     "text",
     "input",
@@ -157,6 +162,14 @@ function extractMcpSearchQuery(args: unknown): string {
     for (const key of SEARCH_QUERY_KEYS) {
         const value = record[key];
         if (typeof value === "string" && value.trim()) return value.trim();
+    }
+    // Parallel-style: search_queries: string[]
+    const queries = record.search_queries ?? record.searchQueries ?? record.queries;
+    if (Array.isArray(queries)) {
+        const joined = queries
+            .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+            .join(" ");
+        if (joined) return joined;
     }
     return "";
 }
@@ -176,6 +189,12 @@ function clampMcpSearchArgs(
             const focused = focusSearchQuery(value);
             if (focused) next[key] = focused;
         }
+    }
+    for (const key of ["search_queries", "searchQueries", "queries"] as const) {
+        if (!(key in next) || !Array.isArray(next[key])) continue;
+        next[key] = (next[key] as unknown[]).map((item) =>
+            typeof item === "string" ? focusSearchQuery(item) || item : item,
+        );
     }
 
     let sawLimit = false;
@@ -304,6 +323,18 @@ function compactJsonValue(
         }
         if (typeof child === "string" && /^(snippet|description|excerpt|summary|title)$/i.test(key)) {
             next[key] = truncateText(child, key === "title" ? 80 : snippetChars);
+            continue;
+        }
+        if (
+            Array.isArray(child) &&
+            /^(excerpts|highlights|snippets)$/i.test(key) &&
+            child.every((item) => typeof item === "string")
+        ) {
+            const joined = (child as string[])
+                .map((item) => item.trim())
+                .filter(Boolean)
+                .join(" · ");
+            next[key] = [truncateText(joined, snippetChars)];
             continue;
         }
         next[key] = compactJsonValue(child, options);
@@ -436,16 +467,17 @@ function parseMcpSearchResultItem(item: unknown): SearchResult | null {
     if (!url || !/^https?:\/\//i.test(url)) return null;
     const title =
         pickMcpString(record, ["title", "name", "heading", "page_title"]) || "Untitled";
-    const snippet = pickMcpString(record, [
-        "snippet",
-        "description",
-        "excerpt",
-        "summary",
-        "content",
-        "text",
-        "body",
-        "markdown",
-    ]);
+    const snippet =
+        pickMcpString(record, [
+            "snippet",
+            "description",
+            "excerpt",
+            "summary",
+            "content",
+            "text",
+            "body",
+            "markdown",
+        ]) || pickMcpJoinedText(record, ["excerpts", "highlights", "snippets"]);
     return { title, url, snippet: snippet || "" };
 }
 
@@ -453,6 +485,19 @@ function pickMcpString(record: Record<string, unknown>, keys: string[]): string 
     for (const key of keys) {
         const value = record[key];
         if (typeof value === "string" && value.trim()) return value.trim();
+    }
+    return "";
+}
+
+/** Parallel returns excerpts/highlights as string arrays — join into one snippet. */
+function pickMcpJoinedText(record: Record<string, unknown>, keys: string[]): string {
+    for (const key of keys) {
+        const value = record[key];
+        if (!Array.isArray(value) || value.length === 0) continue;
+        const parts = value
+            .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+            .map((item) => item.trim());
+        if (parts.length) return parts.join(" · ");
     }
     return "";
 }

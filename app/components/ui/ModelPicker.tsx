@@ -127,14 +127,17 @@ export function useProviderModels(provider: ProviderId, enabled: boolean) {
             const res = await fetch("/api/models", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                credentials: "include",
                 body: JSON.stringify({
                     provider,
                     apiKey:
-                        provider === "custom" &&
-                        settings.providers[provider]?.openAICompatible?.authMode &&
-                        settings.providers[provider].openAICompatible.authMode !== "bearer"
+                        provider === "chatgpt"
                             ? ""
-                            : apiKey || localProviderKey(provider),
+                            : provider === "custom" &&
+                                settings.providers[provider]?.openAICompatible?.authMode &&
+                                settings.providers[provider].openAICompatible.authMode !== "bearer"
+                              ? ""
+                              : apiKey || localProviderKey(provider),
                     baseUrl: baseUrl || undefined,
                     headers: compatibleHeaders,
                     timeoutMs,
@@ -167,9 +170,13 @@ export function useProviderModels(provider: ProviderId, enabled: boolean) {
                 setError(
                     data.error || `Failed to load models (HTTP ${res.status})`,
                 );
-                setModels(
-                    (DEFAULT_MODELS[provider] ?? []).map(enrichModelInfo),
-                );
+                // Keep live ChatGPT account models when discovery returned them;
+                // only fall back to static defaults when the list is empty.
+                if (!(provider === "chatgpt" && data.models && data.models.length > 0)) {
+                    setModels(
+                        (DEFAULT_MODELS[provider] ?? []).map(enrichModelInfo),
+                    );
+                }
             }
         } catch (err) {
             setModels(

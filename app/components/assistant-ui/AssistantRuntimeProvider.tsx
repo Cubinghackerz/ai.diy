@@ -79,7 +79,10 @@ export function AssistantRuntimeProvider({
             new AssistantChatTransport({
                 api: "/api/chat",
                 fetch: async (input, init) => {
-                    const res = await globalThis.fetch(input, init);
+                    const res = await globalThis.fetch(input, {
+                        ...init,
+                        credentials: "include",
+                    });
                     if (!res.ok) {
                         throw new Error(await parseChatError(res));
                     }
@@ -92,11 +95,13 @@ export function AssistantRuntimeProvider({
                     const apiKey = providerConfig?.apiKey?.trim() || "";
                     const baseUrl = providerConfig?.baseUrl?.trim() || undefined;
                     const resolvedApiKey =
-                        provider === "custom" &&
-                        providerConfig?.openAICompatible?.authMode &&
-                        providerConfig.openAICompatible.authMode !== "bearer"
-                            ? ""
-                            : apiKey || localProviderKey(provider);
+                        provider === "chatgpt"
+                            ? localProviderKey("chatgpt")
+                            : provider === "custom" &&
+                                providerConfig?.openAICompatible?.authMode &&
+                                providerConfig.openAICompatible.authMode !== "bearer"
+                              ? ""
+                              : apiKey || localProviderKey(provider);
 
                     await assertClientUsageAllowed(s, provider, resolvedApiKey);
 
@@ -141,7 +146,10 @@ export function AssistantRuntimeProvider({
                             metadata: options.requestMetadata,
                             model: s.chat.model,
                             provider,
-                            apiKey: resolvedApiKey,
+                            apiKey:
+                                provider === "chatgpt"
+                                    ? ""
+                                    : resolvedApiKey,
                             baseUrl,
                             openAICompatible: providerConfig?.openAICompatible,
                              systemPrompt: s.chat.systemPrompt,

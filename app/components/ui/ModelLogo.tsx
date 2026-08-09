@@ -13,6 +13,7 @@ const BRAND: Record<
     { logo?: string; letter: string; bg: string; fg: string; label: string }
 > = {
     openai: { logo: "openai", letter: "O", bg: "#10a37f", fg: "#ffffff", label: "OpenAI" },
+    chatgpt: { logo: "openai", letter: "C", bg: "#10a37f", fg: "#ffffff", label: "ChatGPT" },
     anthropic: { logo: "anthropic", letter: "A", bg: "#d97757", fg: "#ffffff", label: "Anthropic" },
     google: { logo: "google", letter: "G", bg: "#4285f4", fg: "#ffffff", label: "Google" },
     gemini: { logo: "gemini", letter: "G", bg: "#4285f4", fg: "#ffffff", label: "Gemini" },

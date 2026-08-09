@@ -577,7 +577,10 @@ function SubagentRun({
             new AssistantChatTransport({
                 api: "/api/chat",
                 fetch: async (input, init) => {
-                    const response = await globalThis.fetch(input, init);
+                    const response = await globalThis.fetch(input, {
+                        ...init,
+                        credentials: "include",
+                    });
                     if (!response.ok) {
                         throw new Error(
                             await parseChatError(response, "Subagent run failed"),
@@ -592,11 +595,13 @@ function SubagentRun({
                     const apiKey = providerConfig?.apiKey?.trim() || "";
                     const baseUrl = providerConfig?.baseUrl?.trim() || undefined;
                     const resolvedApiKey =
-                        provider === "custom" &&
-                        providerConfig?.openAICompatible?.authMode &&
-                        providerConfig.openAICompatible.authMode !== "bearer"
-                            ? ""
-                            : apiKey || localProviderKey(provider);
+                        provider === "chatgpt"
+                            ? localProviderKey("chatgpt")
+                            : provider === "custom" &&
+                                providerConfig?.openAICompatible?.authMode &&
+                                providerConfig.openAICompatible.authMode !== "bearer"
+                              ? ""
+                              : apiKey || localProviderKey(provider);
 
                     await assertClientUsageAllowed(s, provider, resolvedApiKey);
 
@@ -607,7 +612,7 @@ function SubagentRun({
                             messages: options.messages,
                             model: s.chat.model,
                             provider,
-                            apiKey: resolvedApiKey,
+                            apiKey: provider === "chatgpt" ? "" : resolvedApiKey,
                             baseUrl,
                             openAICompatible: providerConfig?.openAICompatible,
                             systemPrompt: s.chat.systemPrompt,

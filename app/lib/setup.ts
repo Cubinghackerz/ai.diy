@@ -13,13 +13,16 @@ export function isLocalProvider(id: ProviderId): boolean {
     return LOCAL_PROVIDERS.includes(id);
 }
 
-/** True when the provider can make requests (local endpoint or non-empty API key). */
+/** True when the provider can make requests (local endpoint, ChatGPT session, or non-empty API key). */
 export function isProviderReady(
     settings: AppSettings,
     id: ProviderId = settings.chat.provider,
 ): boolean {
     const config = settings.providers[id];
     if (!config) return false;
+    if (id === "chatgpt") {
+        return settings.chatgptLoginEnabled === true && config.enabled === true;
+    }
     if (isLocalProvider(id)) return true;
     return Boolean(config.apiKey?.trim());
 }

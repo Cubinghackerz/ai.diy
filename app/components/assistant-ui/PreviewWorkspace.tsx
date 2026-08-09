@@ -204,11 +204,13 @@ export const PreviewWorkspace: FC = () => {
         return {
             ...config,
             apiKey:
-                config.provider === "custom" &&
-                provider?.openAICompatible?.authMode &&
-                provider.openAICompatible.authMode !== "bearer"
-                    ? ""
-                    : provider?.apiKey?.trim() || localProviderKey(config.provider),
+                config.provider === "chatgpt"
+                    ? localProviderKey("chatgpt")
+                    : config.provider === "custom" &&
+                        provider?.openAICompatible?.authMode &&
+                        provider.openAICompatible.authMode !== "bearer"
+                      ? ""
+                      : provider?.apiKey?.trim() || localProviderKey(config.provider),
             baseUrl: provider?.baseUrl?.trim() || undefined,
             openAICompatible: provider?.openAICompatible,
             systemPrompt: settings.chat.systemPrompt,
@@ -942,7 +944,10 @@ const PreviewRunPanel: FC<{
             new AssistantChatTransport({
                 api: "/api/chat",
                 fetch: async (input, init) => {
-                    const response = await globalThis.fetch(input, init);
+                    const response = await globalThis.fetch(input, {
+                        ...init,
+                        credentials: "include",
+                    });
                     if (!response.ok) {
                         throw new Error(
                             await parseChatError(response, "Preview run failed"),
@@ -961,7 +966,10 @@ const PreviewRunPanel: FC<{
                         messages: options.messages,
                         model: run.config.model,
                         provider: run.config.provider as ProviderId,
-                        apiKey: run.config.apiKey,
+                        apiKey:
+                            run.config.provider === "chatgpt"
+                                ? ""
+                                : run.config.apiKey,
                         baseUrl: run.config.baseUrl,
                         openAICompatible: run.config.openAICompatible,
                         systemPrompt: run.config.systemPrompt,

@@ -6,7 +6,7 @@ type ConnectorResponse = {
     web?: { results?: Array<{ title?: string; url?: string; description?: string; age?: string }> };
 };
 
-const CONNECTOR_SNIPPET_CHARS = 160;
+const CONNECTOR_SNIPPET_CHARS = 220;
 
 function normalizeConnectorResults(results: SearchResult[]): SearchResult[] {
     return results.map((result) => ({
