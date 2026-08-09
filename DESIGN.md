@@ -32,7 +32,7 @@ Persuade. Understand BYOK local-first ownership → open `/workspace` or deploy.
 
 ## Composition
 
-- Island nav → hero (announcement, headline, CTAs, product bezel) → provider constellation → asymmetric ownership bento → deploy terminal → footer
+- Island nav → hero (announcement, headline, CTAs, product bezel) → ownership bento → profile showcase → deploy terminal → footer
 - Hero brand-first; one dominant product proof (not a dashboard collage)
 
 ## Motion

@@ -99,7 +99,7 @@ Do not attach a production domain or use `npx vercel --prod` for this beta works
 
 ## Privacy
 
-- API keys and chat history stay in the **user's browser** (localStorage + IndexedDB).
+- API keys, chat history, Canvas artifacts, memory, knowledge-base chunks, and usage events stay in the **user's browser** (localStorage + IndexedDB).
 - Keys are sent to **your** server only to proxy requests to the user's chosen provider — they are not stored server-side.
 - Do not log request bodies or provider credentials in production.
 
@@ -108,5 +108,5 @@ Do not attach a production domain or use `npx vercel --prod` for this beta works
 - `fetch_url` blocks private/local network URLs (SSRF guard).
 - Provider roots, SearXNG, and remote MCP URLs reject private targets in production unless `ALLOW_PRIVATE_PROVIDER_URLS=true`.
 - Stdio MCP is rejected server-side.
-- Consider adding rate limiting on `/api/chat` for public instances.
+- Built-in server rate limiting uses `RATE_LIMIT_RPM` (default 60 requests/minute per API key or client IP); set `RATE_LIMIT_DISABLED=true` only for local development. Clients also support soft spend/token/RPM caps under Settings → Usage & cost.
 - Users should treat shared public demos like any BYOK client: only use keys they trust the instance with.

@@ -5,7 +5,7 @@
 
 **The open-source AI workspace you own.**
 
-Local-first, bring-your-own-key chat for Node or Docker. No server-side LLM credentials. Your keys, chats, and memory stay in the browser.
+Local-first, bring-your-own-key chat for Node or Docker. No server-side LLM credentials. Your keys, chats, memory, knowledge base, and Canvas artifacts stay in the browser.
 
 Built with React Router, assistant-ui, the Vercel AI SDK, Tailwind CSS, and browser-side Pyodide.
 
@@ -45,16 +45,16 @@ docker run -p 3000:3000 ai-diy
 
 Beta. Features marked **available** are wired. **Planned** items are not claimed as working.
 
-- **Available:** landing, chat, 17 providers, model discovery, local persistence, files, browser Python, search + connectors, remote MCP, artifacts, memory, voice dictation (Web Speech), multi-model Preview, import/export, client-side S3/WebDAV/Google Drive backup, portable skills catalog + install, Agent Mode
-- **Coming soon:** direct GitHub/Supabase/PostgreSQL adapters, encrypted browser settings, in-app `ask_user` panels, custom-provider capability probing, MCP OAuth
+- **Available:** landing, chat, 17 providers, model discovery, local persistence, files, browser Python (Canvas capture + IndexedDB persistence for generated images/binaries), search + connectors, remote MCP, artifacts, memory, on-device knowledge RAG, usage ledger with soft spend/token/RPM caps, server rate-limit hooks, voice dictation (Web Speech), multi-model Preview, import/export, client-side S3/WebDAV/Google Drive backup, portable skills catalog + install, slash commands (`/Research`, `/Compaction`, `/Subagent`, …), Agent Mode, subagents (approve → wait → synthesize)
+- **Coming soon:** direct GitHub/Supabase/PostgreSQL adapters, encrypted browser settings, custom-provider capability probing, MCP OAuth
 
 ## What You Own
 
 | Component | Location |
 | --- | --- |
-| Chat UI, settings, history, artifacts, memory, Preview | Browser (localStorage + IndexedDB) |
+| Chat UI, settings, history, Canvas artifacts, memory, knowledge base, usage events, Preview | Browser (localStorage + IndexedDB) |
 | Dictation and Python | Browser (Web Speech + Pyodide) |
-| LLM relay, model discovery, search, MCP | Node server |
+| LLM relay, model discovery, search, MCP, optional RPM rate limit | Node server |
 | Provider API keys | Browser only; relayed per request |
 
 Settings are not encrypted at rest today. Protect the browser profile. Treat hosted instances as able to observe keys in transit.
@@ -63,13 +63,25 @@ Settings are not encrypted at rest today. Protect the browser profile. Treat hos
 
 Portable skill packages live in [`skills/`](./skills/). Install from **Settings → Skills** (search → Install → available via `/` in the composer).
 
+Built-in slash commands force matching tools for the next send — including **`/Subagent`** (spawns approved subagents; the main chat waits for results before continuing), `/Research`, `/Compaction`, and design/file-creation skills. Skill tool calls appear in chat as **Used skill: …**.
+
 Flagship starters include Deep Research, Code Review, GitHub Repository Analysis, PDF Analysis, Incident Investigator, and **General Task Solver** (understand → select skills → execute → verify → synthesize).
 
 Authoring guide for agents: [`.cursor/skills/ai-diy-skill-authoring/SKILL.md`](./.cursor/skills/ai-diy-skill-authoring/SKILL.md).
 
-## Agent Mode
+## Agent Mode & Subagents
 
-Enable under **Settings → Experimental**. The model plans, selects installed skills/tools, verifies, and synthesizes. Pair with General Task Solver. Optional approved **Subagents** remain available for nested runs.
+Enable Agent Mode under **Settings → Experimental**. The model plans, selects installed skills/tools, verifies, and synthesizes. Pair with General Task Solver.
+
+**Subagents** (same Experimental section, or force with `/Subagent`): the model calls `spawn_subagent` / `spawn_subagents`; you approve each run in a popup; the main chat pauses until those sessions finish (or are declined/cancelled), then continues from structured results. Nested subagents cannot spawn further subagents or ask the user questions.
+
+## Knowledge Base
+
+**Settings → Knowledge Base** uploads documents for private on-device RAG (browser WASM embeddings + HNSW). The model can call `knowledge_search` / `knowledge_list`. Nothing is uploaded to a vendor vector store.
+
+## Usage Guardrails
+
+**Settings → Usage & cost** shows provider-reported tokens/cost and optional soft caps (daily spend, tokens, RPM) keyed by API-key fingerprint in IndexedDB. The server also supports sliding-window RPM limits via `RATE_LIMIT_RPM` / `RATE_LIMIT_DISABLED` (see `.env.example`). Soft caps are client-enforced; configure server limits before public exposure.
 
 ## Available Features
 
@@ -79,7 +91,9 @@ OpenAI, Anthropic, Gemini, Groq, OpenRouter, xAI, DeepSeek, Bedrock, Azure, Vert
 
 ### Tools
 
-Web search (DuckDuckGo + connectors), URL fetch, calculator, browser Python, files/artifacts, research and design skills, local time, memory, ask user, remote MCP (Firecrawl + Parallel bundled keyless).
+Web search (DuckDuckGo + connectors), URL fetch, calculator, browser Python, files/artifacts, research and design skills, local time, memory, knowledge search, ask user, remote MCP (Firecrawl + Parallel bundled keyless), subagents.
+
+Python saves generated files in the working directory; the browser captures up to four files (≤2 MiB each) into Canvas and persists them with the chat when under the client size cap.
 
 ### Import / Export / Backup
 
@@ -92,7 +106,8 @@ ChatGPT, Claude, ShareGPT, Markdown, ai.diy JSON. Client-side backup to S3-compa
 - No LLM keys in server env
 - SSRF guards on `fetch_url` and private provider/MCP URLs (unless `ALLOW_PRIVATE_PROVIDER_URLS=true` on trusted self-host)
 - Stdio MCP rejected
-- **Add rate limits** before public exposure
+- Optional server `RATE_LIMIT_RPM` (enable before public exposure; see `.env.example`)
+- Client soft usage caps in Settings → Usage & cost
 - Do not log request bodies or credentials
 
 See [DEPLOYMENT.md](./DEPLOYMENT.md) and `.env.example`.
