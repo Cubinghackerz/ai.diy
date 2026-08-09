@@ -102,7 +102,18 @@ export function preparePreviewDocument(html: string): string {
         "</script>",
     ].join("\n");
     // about:blank base stops relative/root-relative resolution against the host app.
-    const injection = `<base href="about:blank">\n${guard}`;
+    // Also hide matplotlib/jQuery-UI toolbar icon buttons whose sprites 404 under
+    // about:blank (empty white squares next to PDF/PNG/SVG).
+    const previewChrome = [
+        "<style data-prismium-preview-chrome>",
+        "/* Matplotlib webagg / jQuery UI icons fail without their theme assets */",
+        ".ui-button-icon-only,.ui-icon,.matplotlib-toolbar .ui-button-icon-only,",
+        "button.mpl-widget,a.mpl-widget{display:none!important}",
+        ".ui-dialog-titlebar-close{display:none!important}",
+        "img[src=''],img:not([src]){display:none!important}",
+        "</style>",
+    ].join("");
+    const injection = `<base href="about:blank">\n${previewChrome}\n${guard}`;
 
     const headMatch = guardedHtml.match(/<head[^>]*>/i);
     if (headMatch) {

@@ -190,6 +190,14 @@ import json
 import os
 import traceback
 
+# Charts must be static files (PNG/SVG). Interactive matplotlib backends leave
+# broken toolbars in Canvas iframes (missing icon CSS under about:blank).
+try:
+    import matplotlib
+    matplotlib.use("Agg", force=True)
+except BaseException:
+    pass
+
 _prismium_stdout = io.StringIO()
 _prismium_stderr = io.StringIO()
 _prismium_working_directory = os.getcwd()
@@ -302,7 +310,7 @@ json.dumps(_prismium_result)
         ? parsed.skippedFiles.map((filename) => String(filename)).filter(Boolean).slice(0, MAX_PYTHON_ARTIFACTS)
         : [];
     const artifactSummary = artifacts.length
-        ? `Created Canvas artifact${artifacts.length === 1 ? "" : "s"}: ${artifacts.map((artifact) => artifact.filename).join(", ")}. Images and other files are shown in Canvas for this browser session; download them to keep a copy. Do not recreate or Base64-copy them.`
+        ? `Created Canvas artifact${artifacts.length === 1 ? "" : "s"}: ${artifacts.map((artifact) => artifact.filename).join(", ")}. Images and other files are shown in Canvas and persisted with this chat when under the size limit. Prefer PNG/SVG from savefig for charts; do not recreate or Base64-copy them.`
         : "";
     const skippedSummary = skippedFiles.length
         ? `Not exported from Python (limit: ${MAX_PYTHON_ARTIFACT_BYTES / (1024 * 1024)} MiB each): ${skippedFiles.join(", ")}.`

@@ -1031,7 +1031,10 @@ const PreviewRunPanel: FC<{
                         for (const artifact of pythonResult.artifacts) {
                             addArtifact(
                                 {
-                                    kind: "file",
+                                    kind:
+                                        /\.html?$/i.test(artifact.filename)
+                                            ? "html"
+                                            : "file",
                                     title: artifact.filename,
                                     filename: artifact.filename,
                                     content: artifact.content,

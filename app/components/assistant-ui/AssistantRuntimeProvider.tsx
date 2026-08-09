@@ -252,9 +252,13 @@ export function AssistantRuntimeProvider({
                         for (const artifact of pythonResult.artifacts) {
                             const mimeType = inferArtifactMimeType(artifact.filename);
                             const sourceKey = `python:${artifact.filename}:${artifact.contentEncoding}:${artifact.content.length}:${artifactContentHash(artifact.content)}`;
+                            const kind =
+                                /\.html?$/i.test(artifact.filename) || /text\/html/i.test(mimeType)
+                                    ? ("html" as const)
+                                    : ("file" as const);
                             const artifactId = addArtifact(
                                 {
-                                    kind: "file",
+                                    kind,
                                     title: artifact.filename,
                                     filename: artifact.filename,
                                     content: artifact.content,
@@ -266,7 +270,7 @@ export function AssistantRuntimeProvider({
                             );
                             persistArtifactForScope(threadId, {
                                 id: artifactId,
-                                kind: "file",
+                                kind,
                                 title: artifact.filename,
                                 filename: artifact.filename,
                                 content: artifact.content,

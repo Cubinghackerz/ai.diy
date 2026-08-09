@@ -468,7 +468,7 @@ Create real, downloadable files with browser-side Pyodide. Use this skill before
 - PowerPoint: from pptx import Presentation
 - PDF: from reportlab.pdfgen import canvas or from fpdf import FPDF
 - Images: from PIL import Image, ImageDraw
-- Charts: import matplotlib.pyplot as plt
+- Charts: import matplotlib.pyplot as plt; use Agg (forced) and plt.savefig("chart.png"); close figures after saving.
 - Data: import pandas as pd, csv, json, zipfile
 
 ## Standard workflow
@@ -844,8 +844,8 @@ export async function buildChatTools(
     if (enablePython) {
         tools.run_python = tool({
             description: policy.compactToolDescriptions
-                ? "Run Python in browser Pyodide. Libraries auto-import (numpy, pandas, matplotlib, openpyxl, python-docx, etc.). Save files in cwd for Canvas capture; do not re-upload binary artifacts via create_file."
-                : "Execute Python 3 in the browser with Pyodide and return stdout, stderr, or error logs. Every listed library auto-loads on first import; simply import it and never manage package installation yourself with micropip, pip, or subprocess. Top-level await is supported; do not use asyncio.run (Pyodide already runs inside an event loop), just write await at top level. Data/analysis: numpy, pandas, scipy, sympy, scikit-learn, networkx. Plotting: matplotlib. Parsing: BeautifulSoup, lxml, regex, python-dateutil, pyyaml. File creation: openpyxl and xlsxwriter (Excel), python-docx (Word), python-pptx (PowerPoint), reportlab and fpdf2 (PDF), pillow (images), jinja2 (templates), requests (HTTP), plus the csv, json, and zipfile standard libraries. Always use these real libraries instead of hand-rolling zip/XML files. Save generated files in the current working directory; the browser captures up to four new files of 2 MiB each as Canvas artifacts, persists them with the chat locally, and offers download. When a result reports created artifacts, do not call create_file or copy/Base64 their bytes again.",
+                ? "Run Python in browser Pyodide. Libraries auto-import (numpy, pandas, matplotlib, openpyxl, python-docx, etc.). Save charts with matplotlib Agg + savefig to PNG/SVG in cwd; do not emit interactive plot HTML. Rely on Canvas capture; do not re-upload binary artifacts via create_file."
+                : "Execute Python 3 in the browser with Pyodide and return stdout, stderr, or error logs. Every listed library auto-loads on first import; simply import it and never manage package installation yourself with micropip, pip, or subprocess. Top-level await is supported; do not use asyncio.run (Pyodide already runs inside an event loop), just write await at top level. Data/analysis: numpy, pandas, scipy, sympy, scikit-learn, networkx. Plotting: matplotlib (Agg is forced — use savefig to write PNG or SVG files such as chart.png; never interactive matplotlib HTML/toolbars). Parsing: BeautifulSoup, lxml, regex, python-dateutil, pyyaml. File creation: openpyxl and xlsxwriter (Excel), python-docx (Word), python-pptx (PowerPoint), reportlab and fpdf2 (PDF), pillow (images), jinja2 (templates), requests (HTTP), plus the csv, json, and zipfile standard libraries. Always use these real libraries instead of hand-rolling zip/XML files. Save generated files in the current working directory; the browser captures up to four new files of 2 MiB each as Canvas artifacts, persists them with the chat locally, and offers download. When a result reports created artifacts, do not call create_file or copy/Base64 their bytes again.",
             inputSchema: z.object({
                 code: z.string(),
                 description: z.string().optional(),

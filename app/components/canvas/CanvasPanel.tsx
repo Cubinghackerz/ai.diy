@@ -32,6 +32,22 @@ function isImageArtifact(artifact: Artifact | undefined | null): boolean {
     return Boolean(artifact.filename?.match(/\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i));
 }
 
+function isHtmlArtifact(artifact: Artifact | undefined | null): boolean {
+    if (!artifact) return false;
+    if (artifact.kind === "html") return true;
+    if (artifact.mimeType && /text\/html/i.test(artifact.mimeType)) return true;
+    return Boolean(artifact.filename?.match(/\.html?$/i));
+}
+
+function artifactHtmlSource(artifact: Artifact): string | null {
+    if (artifact.contentEncoding) {
+        const binary = decodeArtifactContent(artifact.content, artifact.contentEncoding);
+        if (!binary) return null;
+        return new TextDecoder().decode(binary);
+    }
+    return artifact.content;
+}
+
 function ArtifactImagePreview({ artifact }: { artifact: Artifact }) {
     const [failed, setFailed] = useState(false);
     const objectUrl = useMemo(() => {
@@ -79,7 +95,7 @@ function ArtifactImagePreview({ artifact }: { artifact: Artifact }) {
     }
 
     return (
-        <div className="flex h-full min-h-[12rem] items-center justify-center overflow-auto rounded-xl border border-border bg-[radial-gradient(circle_at_1px_1px,rgba(127,127,127,0.18)_1px,transparent_0)] bg-size-[12px_12px] p-4">
+        <div className="flex h-full min-h-[12rem] items-center justify-center overflow-auto rounded-xl border border-border bg-[radial-gradient(circle_at_1px_1px,rgba(127,127,127,0.18)_1px,transparent_0)] bg-size-[12px_12px] p-6">
             <img
                 src={objectUrl}
                 alt={artifact.title || artifact.filename || "Generated image"}
@@ -151,6 +167,13 @@ export function CanvasPanel() {
 
     const activeArtifact = artifacts.find((a) => a.id === activeArtifactId) ?? artifacts[artifacts.length - 1];
     const showImagePreview = isImageArtifact(activeArtifact);
+    const showHtmlPreview =
+        Boolean(activeArtifact) &&
+        isHtmlArtifact(activeArtifact) &&
+        viewMode === "preview";
+    const htmlSource = showHtmlPreview && activeArtifact
+        ? artifactHtmlSource(activeArtifact)
+        : null;
 
     const handleDownload = () => {
         if (!activeArtifact) return;
@@ -224,7 +247,7 @@ export function CanvasPanel() {
 
                 <div className="flex items-center gap-1.5">
                     {/* View mode toggle for HTML */}
-                    {activeArtifact?.kind === "html" && (
+                    {activeArtifact && isHtmlArtifact(activeArtifact) && (
                         <div className="flex items-center rounded-lg border border-border bg-secondary/50 p-0.5">
                             <button
                                 onClick={() => setViewMode("preview")}
@@ -300,11 +323,11 @@ export function CanvasPanel() {
                         {downloadError}
                     </p>
                 ) : null}
-                {activeArtifact?.kind === "html" && viewMode === "preview" ? (
+                {showHtmlPreview && htmlSource ? (
                     <iframe
-                        srcDoc={preparePreviewDocument(activeArtifact.content)}
-                        title={activeArtifact.title}
-                        className="h-full w-full rounded-xl border border-border shadow-sm"
+                        srcDoc={preparePreviewDocument(htmlSource)}
+                        title={activeArtifact?.title}
+                        className="h-full w-full rounded-xl border border-border bg-white shadow-sm"
                         sandbox="allow-scripts allow-modals allow-popups allow-popups-to-escape-sandbox"
                         referrerPolicy="no-referrer"
                     />
