@@ -7,12 +7,6 @@ import {
     useRef,
     useState,
 } from "react";
-import { gsap } from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
-
-if (typeof window !== "undefined") {
-    gsap.registerPlugin(ScrollTrigger);
-}
 
 export type StrokeTextTrigger = "mount" | "hover" | "scroll" | "loop";
 export type StrokeTextFillMode = "wipe" | "fade" | "none";
@@ -45,7 +39,11 @@ interface StrokeTextBox {
 
 const DEFAULT_TEXT = "Draw Attention";
 
-const StrokeText = ({
+/**
+ * SVG stroke-draw headline. GSAP must stay client-only — a static
+ * `gsap/ScrollTrigger` import crashes Vercel Node ESM SSR.
+ */
+export default function StrokeText({
     text = DEFAULT_TEXT,
     strokeColor = "#A78BFA",
     fillColor = "#F8FAFC",
@@ -62,18 +60,15 @@ const StrokeText = ({
     reverse = false,
     className = "",
     style = {},
-}: StrokeTextProps) => {
+}: StrokeTextProps) {
     const rootRef = useRef<HTMLSpanElement | null>(null);
     const strokeTextRef = useRef<SVGTextElement | null>(null);
     const wipeRectRef = useRef<SVGRectElement | null>(null);
-
     const [box, setBox] = useState<StrokeTextBox | null>(null);
 
     const rawId = useId();
     const wipeId = `stroke-text-wipe-${rawId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
-
     const characters = useMemo(() => Array.from(String(text ?? "")), [text]);
-
     const dash = Math.max(fontSize * 7, 200);
 
     const fontStyle = useMemo<CSSProperties>(
@@ -133,105 +128,170 @@ const StrokeText = ({
         const root = rootRef.current;
         if (typeof window === "undefined" || !root || !box) return undefined;
 
-        const strokes = gsap.utils.toArray(root.querySelectorAll("[data-stroke-char]"));
-        const fills = gsap.utils.toArray(root.querySelectorAll("[data-fill-char]"));
-        const wipe = wipeRectRef.current;
-        if (!strokes.length) return undefined;
+        let cancelled = false;
+        let cleanup: (() => void) | undefined;
 
-        const fillEnabled = fillMode !== "none";
-        const useWipe = fillEnabled && fillMode === "wipe";
-        const fillDuration = Math.max(0.4, drawDuration * 0.5);
-        const staggerConfig: number | gsap.StaggerVars = reverse
-            ? { each: stagger, from: "end" as const }
-            : stagger;
-        const targets = [...strokes, ...fills, wipe].filter(Boolean);
+        void (async () => {
+            const [{ default: gsap }, { default: ScrollTrigger }] =
+                await Promise.all([
+                    import("gsap"),
+                    import("gsap/ScrollTrigger"),
+                ]);
+            if (cancelled || !rootRef.current) return;
 
-        const setStart = () => {
-            gsap.killTweensOf(targets);
-            gsap.set(strokes, { strokeDasharray: dash, strokeDashoffset: dash });
-            gsap.set(fills, { opacity: useWipe ? 1 : 0 });
-            if (wipe) gsap.set(wipe, { attr: { width: 0 } });
-        };
+            gsap.registerPlugin(ScrollTrigger);
 
-        const setEnd = () => {
-            gsap.killTweensOf(targets);
-            gsap.set(strokes, { strokeDasharray: dash, strokeDashoffset: 0 });
-            gsap.set(fills, { opacity: fillEnabled ? 1 : 0 });
-            if (wipe) gsap.set(wipe, { attr: { width: fillEnabled ? box.width : 0 } });
-        };
-
-        const prefersReducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-        if (prefersReducedMotion) {
-            setEnd();
-            return () => gsap.killTweensOf(targets);
-        }
-
-        const build = () => {
-            setStart();
-            const tl = gsap.timeline({
-                paused: true,
-                repeat: trigger === "loop" ? -1 : 0,
-                repeatDelay: trigger === "loop" ? 0.9 : 0,
-                defaults: { overwrite: "auto" },
-            });
-
-            tl.to(
-                strokes,
-                { strokeDashoffset: 0, duration: drawDuration, ease, stagger: staggerConfig },
-                0,
+            const strokes = gsap.utils.toArray(
+                root.querySelectorAll("[data-stroke-char]"),
             );
+            const fills = gsap.utils.toArray(
+                root.querySelectorAll("[data-fill-char]"),
+            );
+            const wipe = wipeRectRef.current;
+            if (!strokes.length) return;
 
-            if (useWipe && wipe) {
-                tl.to(
-                    wipe,
-                    { attr: { width: box.width }, duration: fillDuration, ease: "power2.inOut" },
-                    drawDuration + fillDelay,
-                );
-            } else if (fillEnabled) {
-                tl.to(
-                    fills,
-                    { opacity: 1, duration: fillDuration, ease: "power2.out", stagger: staggerConfig },
-                    drawDuration + fillDelay,
-                );
-            }
+            const fillEnabled = fillMode !== "none";
+            const useWipe = fillEnabled && fillMode === "wipe";
+            const fillDuration = Math.max(0.4, drawDuration * 0.5);
+            const staggerConfig = reverse
+                ? { each: stagger, from: "end" as const }
+                : stagger;
+            const targets = [...strokes, ...fills, wipe].filter(Boolean);
 
-            return tl;
-        };
-
-        let timeline: gsap.core.Timeline | null = null;
-        let scrollTrigger: ReturnType<typeof ScrollTrigger.create> | null = null;
-        let removeHover: (() => void) | null = null;
-
-        if (trigger === "hover") {
-            setEnd();
-            const play = () => {
-                timeline?.kill();
-                timeline = build();
-                timeline.play(0);
-            };
-            root.addEventListener("pointerenter", play);
-            removeHover = () => root.removeEventListener("pointerenter", play);
-        } else {
-            timeline = build();
-            if (trigger === "scroll") {
-                scrollTrigger = ScrollTrigger.create({
-                    trigger: root,
-                    start: "top 82%",
-                    once: true,
-                    onEnter: () => timeline?.play(0),
+            const setStart = () => {
+                gsap.killTweensOf(targets);
+                gsap.set(strokes, {
+                    strokeDasharray: dash,
+                    strokeDashoffset: dash,
                 });
-            } else {
-                timeline.play(0);
+                gsap.set(fills, { opacity: useWipe ? 1 : 0 });
+                if (wipe) gsap.set(wipe, { attr: { width: 0 } });
+            };
+
+            const setEnd = () => {
+                gsap.killTweensOf(targets);
+                gsap.set(strokes, {
+                    strokeDasharray: dash,
+                    strokeDashoffset: 0,
+                });
+                gsap.set(fills, { opacity: fillEnabled ? 1 : 0 });
+                if (wipe) {
+                    gsap.set(wipe, {
+                        attr: { width: fillEnabled ? box.width : 0 },
+                    });
+                }
+            };
+
+            if (
+                window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+            ) {
+                setEnd();
+                cleanup = () => gsap.killTweensOf(targets);
+                return;
             }
-        }
+
+            const build = () => {
+                setStart();
+                const tl = gsap.timeline({
+                    paused: true,
+                    repeat: trigger === "loop" ? -1 : 0,
+                    repeatDelay: trigger === "loop" ? 0.9 : 0,
+                    defaults: { overwrite: "auto" },
+                });
+
+                tl.to(
+                    strokes,
+                    {
+                        strokeDashoffset: 0,
+                        duration: drawDuration,
+                        ease,
+                        stagger: staggerConfig,
+                    },
+                    0,
+                );
+
+                if (useWipe && wipe) {
+                    tl.to(
+                        wipe,
+                        {
+                            attr: { width: box.width },
+                            duration: fillDuration,
+                            ease: "power2.inOut",
+                        },
+                        drawDuration + fillDelay,
+                    );
+                } else if (fillEnabled) {
+                    tl.to(
+                        fills,
+                        {
+                            opacity: 1,
+                            duration: fillDuration,
+                            ease: "power2.out",
+                            stagger: staggerConfig,
+                        },
+                        drawDuration + fillDelay,
+                    );
+                }
+
+                return tl;
+            };
+
+            let timeline: ReturnType<typeof gsap.timeline> | null = null;
+            let scrollTrigger: { kill: () => void } | null = null;
+            let removeHover: (() => void) | null = null;
+
+            if (trigger === "hover") {
+                setEnd();
+                const play = () => {
+                    timeline?.kill();
+                    timeline = build();
+                    timeline.play(0);
+                };
+                root.addEventListener("pointerenter", play);
+                removeHover = () =>
+                    root.removeEventListener("pointerenter", play);
+            } else {
+                timeline = build();
+                if (trigger === "scroll") {
+                    scrollTrigger = ScrollTrigger.create({
+                        trigger: root,
+                        start: "top 82%",
+                        once: true,
+                        onEnter: () => timeline?.play(0),
+                    });
+                } else {
+                    timeline.play(0);
+                }
+            }
+
+            cleanup = () => {
+                removeHover?.();
+                scrollTrigger?.kill();
+                timeline?.kill();
+                gsap.killTweensOf(targets);
+            };
+
+            if (cancelled) {
+                cleanup();
+                cleanup = undefined;
+            }
+        })();
 
         return () => {
-            removeHover?.();
-            scrollTrigger?.kill();
-            timeline?.kill();
-            gsap.killTweensOf(targets);
+            cancelled = true;
+            cleanup?.();
         };
-    }, [box, dash, drawDuration, fillDelay, stagger, ease, trigger, fillMode, reverse]);
+    }, [
+        box,
+        dash,
+        drawDuration,
+        fillDelay,
+        stagger,
+        ease,
+        trigger,
+        fillMode,
+        reverse,
+    ]);
 
     const viewBox = box
         ? `${box.x} ${box.y} ${box.width} ${box.height}`
@@ -294,7 +354,9 @@ const StrokeText = ({
                     stroke="none"
                     style={fontStyle}
                     clipPath={
-                        fillMode === "wipe" && box ? `url(#${wipeId})` : undefined
+                        fillMode === "wipe" && box
+                            ? `url(#${wipeId})`
+                            : undefined
                     }
                 >
                     {characters.map((char, index) => (
@@ -306,6 +368,4 @@ const StrokeText = ({
             </svg>
         </span>
     );
-};
-
-export default StrokeText;
+}
