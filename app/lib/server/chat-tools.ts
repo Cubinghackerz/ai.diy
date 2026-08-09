@@ -8,6 +8,7 @@ import { z } from "zod";
 import { ARTIFACT_MARKER, type ArtifactContentEncoding } from "~/lib/artifacts";
 import {
     duckDuckGoInstantAnswer,
+    focusSearchQuery,
     formatCompactSearchResults,
     clipSearchText,
     webSearch,
@@ -384,66 +385,28 @@ function researchSkillGuide(input: {
     depth?: "quick" | "standard" | "deep";
     context?: string;
 }): string {
+    const question = input.question.trim().slice(0, 280);
+    const depth = input.depth || "standard";
+    const context = input.context?.trim().slice(0, 400) || "none";
     return `# Research Skill
 
-Research question: ${input.question.trim()}
-Depth: ${input.depth || "standard"}
-Known context (treat as unverified until confirmed): ${input.context?.trim() || "none provided"}
+Question: ${question}
+Depth: ${depth}
+Context (unverified): ${context}
 
-## Mission
-Answer the question with live, verifiable evidence retrieved in this session. Your training data, knowledge cutoff, parametric memory, and saved local memory are not evidence. Do not lean on what you "already know", especially for time-sensitive topics, new releases, version numbers, pricing, changelogs, APIs, docs that change, incidents, or anything that may have moved since training.
+## Rules
+1. Answer only from sources retrieved this session. Training recall is hypothesis, not evidence.
+2. Keep \`research_skill.question\` close to the user's words (≤1 short sentence). Do not invent years, vendors, model names, or scope the user did not ask for.
+3. Search queries must be short keywords (3–10 words), not essays. Prefer exact phrases + official domains (\`site:openai.com\`, \`site:anthropic.com\`, docs hosts). Call \`get_current_time\` when a calendar year is needed — never guess a year into the query.
+4. Budget by depth:
+   - quick: 1–2 searches, 1 primary fetch
+   - standard: ≤3 focused searches, fetch only pages that change the answer
+   - deep: more angles only while sources still disagree
+5. Prefer official / primary hosts. Snippets are leads — fetch before stating dates, versions, prices, or capabilities.
+6. Stop when evidence supports the answer. Cite only retrieved URLs. If tools fail, say so; do not fill from memory.
 
-## Training-data ban (mandatory)
-1. Never treat model memory as current fact. If you recall a version, date, price, release name, API shape, or product status, treat that recall as a hypothesis only and verify it with a live retrieval before stating it.
-2. Time-sensitive or release topics (news, launches, updates, "latest", "new", "announced", GA/beta, changelogs, model cards, pricing pages, security advisories): search and read first; do not answer from training data even if you feel confident.
-3. Do not fill gaps with remembered details. If a page is thin or missing, say what could not be verified. Prefer "not found in retrieved sources" over inventing from memory.
-4. When Instant Answer or a search snippet matches your prior knowledge, still fetch the primary page before asserting numbers, dates, or release claims.
-5. If live tools fail or return nothing usable, report the gap. Do not silently fall back to training data as if it were researched.
-
-## Before searching
-1. Define the answerable core: what must be true for the answer to be reliable.
-2. Split the question into only the necessary subquestions, normally 1-3; each subquestion gets at most one focused query unless the result fails or sources conflict.
-3. For definitions, entities, concepts, and broad factual overviews, call duckduckgo_instant_answer first. Treat its output as a fast discovery/overview layer, not as proof or a substitute for a retrieved primary page.
-4. Design queries per subquestion using exact phrases ("quoted term"), site restriction (site:docs.example.com), file type (filetype:pdf for primary documents), date terms (e.g. 2026) for freshness, and synonym variants when results are thin. For releases and "what's new" questions, include year/month terms and official vendor domains.
-5. Classify how fast the facts change:
-   - Volatile (prices, releases, incidents, live status, schedules, model/API capability tables): newest official sources only; cross-check within the session; never use training recall as the answer.
-   - Stable (documentation, APIs, history, specs): still verify against the primary source and note its date; do not quote remembered docs.
-   - Subjective or contested: sample multiple perspectives and report the range from retrieved sources.
-
-## Depth behavior
-- Quick: use duckduckgo_instant_answer when applicable, then 1-2 focused queries; verify the direct answer with one authoritative source plus one independent check when the claim is consequential. For release/time-sensitive asks, always fetch at least one primary/official page.
-- Standard: use the Instant Answer overview when applicable, cover every necessary subquestion, read only the most relevant pages with read_url, and cross-check claims that materially affect the answer.
-- Deep: use all relevant discovery layers, including Instant Answer, traditional search, third-party providers, and primary-source reads; use multiple query families only when needed to resolve uncertainty.
-
-## Token-efficient stopping
-- Start with quick depth unless the user asks for a deep review.
-- Use no more than 2 search results per focused query by default and read only pages that can change the answer.
-- Never repeat an equivalent query or fetch the same URL twice. Stop when the answer is supported by retrieved evidence, or state the unresolved gap without inventing from memory.
-
-## Evidence rules
-1. Prefer primary and official sources: official documentation, specifications, standards bodies, original research, direct datasets, maintained repositories, and primary reporting. Treat forums, blogs, and unknown domains as weak evidence.
-2. A search snippet is a lead, not evidence. Read the page with read_url before quoting numbers, dates, or claims; extract the exact sentence and the stable source URL.
-3. Check each source's date: is it the newest relevant document, and does it claim to be current?
-4. Consequential claims (safety, financial, legal, medical, identity, versions, releases, API behavior) require two independent credible sources, or one primary source you verified directly in this session.
-5. If sources disagree, report the disagreement explicitly with dates and source types; never silently average them, pick the one that fits, or resolve the conflict from training data.
-
-## Anti-hallucination
-- Cite only URLs that actually appeared in tool results. Never construct or guess URLs.
-- Never invent quotes, numbers, dates, authors, or sources. If you could not read the page, say so.
-- Distinguish "stated by source X (retrieved)" from "prior model belief (unverified)".
-- If a search returns nothing usable, change the query or state that the answer could not be verified. Do not fall back to training data or memory.
-
-## Synthesis
-1. Answer the exact question first, in 1-3 sentences, grounded only in retrieved evidence.
-2. Support the answer with key findings; each finding cites a source and, when useful, its date.
-3. Label confidence per claim: High (primary source or two independent credible sources retrieved this session), Medium (single reputable retrieved source), Low (unverified, conflicting, or only weakly sourced). Anything from training data alone is Low / unverified and should not be presented as researched fact.
-4. State remaining gaps or what would change the answer.
-
-## Output contract
-- Answer first; evidence after.
-- Bullet findings with inline source URLs; keep the answer as concise as accuracy allows.
-- End with confidence labels and unresolved uncertainty only when relevant.
-- Do not narrate searches or expose private reasoning.`;
+## Output
+Answer first (1–3 sentences) → bullet findings with source URLs → confidence (High/Medium/Low) only when useful.`;
 }
 
 function pythonFileCreationSkill(input: { task?: string }): string {
@@ -541,18 +504,39 @@ function extractMainContentFromHtml(html: string, maxChars: number): string {
         .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
         .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, "")
         .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, "")
-        .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, "");
+        .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, "")
+        .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, "");
 
     const blockRegex =
-        /<(p|article|main|section|div|li|h[1-6])[^>]*>([\s\S]*?)<\/\1>/gi;
-    const blocks: string[] = [];
+        /<(article|main|h[1-6]|p|section|li|div)[^>]*>([\s\S]*?)<\/\1>/gi;
+    const tagWeight: Record<string, number> = {
+        article: 8,
+        main: 7,
+        h1: 6,
+        h2: 5,
+        h3: 4,
+        h4: 3,
+        h5: 2,
+        h6: 2,
+        p: 3,
+        section: 2,
+        li: 1,
+        div: 0,
+    };
+    const blocks: Array<{ text: string; score: number; index: number }> = [];
     let match: RegExpExecArray | null;
+    let index = 0;
     while ((match = blockRegex.exec(stripped)) !== null) {
+        const tag = match[1].toLowerCase();
         const text = match[2]
             .replace(/<[^>]+>/g, " ")
             .replace(/\s+/g, " ")
             .trim();
-        if (text.length >= 40) blocks.push(text);
+        if (text.length < 40) continue;
+        // Prefer earlier, higher-signal blocks over longest boilerplate.
+        const score = (tagWeight[tag] ?? 0) * 200 + Math.min(text.length, 800) - index;
+        blocks.push({ text, score, index });
+        index += 1;
     }
 
     if (blocks.length === 0) {
@@ -563,18 +547,18 @@ function extractMainContentFromHtml(html: string, maxChars: number): string {
             .slice(0, maxChars);
     }
 
-    blocks.sort((left, right) => right.length - left.length);
+    blocks.sort((left, right) => right.score - left.score || left.index - right.index);
     const parts: string[] = [];
     let total = 0;
     for (const block of blocks) {
         const separator = parts.length > 0 ? 2 : 0;
-        if (total + separator + block.length > maxChars) {
+        if (total + separator + block.text.length > maxChars) {
             const remaining = maxChars - total - separator;
-            if (remaining > 80) parts.push(block.slice(0, remaining));
+            if (remaining > 80) parts.push(block.text.slice(0, remaining));
             break;
         }
-        parts.push(block);
-        total += separator + block.length;
+        parts.push(block.text);
+        total += separator + block.text.length;
     }
     return parts.join("\n\n");
 }
@@ -652,11 +636,20 @@ export async function buildChatTools(
                 "Callable research skill for substantial factual, current, technical, or comparison research. Plans focused queries and source checks. For time-sensitive facts and new releases, forbid answering from training data; retrieve live sources first. When Research is forced or the question needs live facts, call this tool before answering.",
             needsApproval: false,
             inputSchema: z.object({
-                question: z.string(),
+                question: z
+                    .string()
+                    .describe(
+                        "Stay close to the user's words (one short sentence). Do not invent years, vendors, or extra scope.",
+                    ),
                 depth: z.enum(["quick", "standard", "deep"]).optional(),
                 context: z.string().optional(),
             }),
-            execute: async (input) => researchSkillGuide(input),
+            execute: async (input) =>
+                researchSkillGuide({
+                    ...input,
+                    question: input.question.trim().slice(0, 280),
+                    context: input.context?.trim().slice(0, 400),
+                }),
         });
     }
 
@@ -743,16 +736,19 @@ export async function buildChatTools(
         };
 
         const searchTool = tool({
-            description: `Search the web using ${engineLabel} for real-time information, facts, news, and technical topics. Default ${defaultHits} results (max ${maxHits}). Cite result URLs.`,
+            description: `Search the web using ${engineLabel}. Pass a short keyword query (3–10 words), not an essay. Default ${defaultHits} results (max ${maxHits}). Cite result URLs.`,
             needsApproval: false,
             inputSchema: z.object({
-                query: z.string().optional(),
+                query: z
+                    .string()
+                    .optional()
+                    .describe("Short keyword query (3–10 words). Prefer exact phrases and site: filters."),
                 maxResults: z.number().int().min(1).max(maxHits).optional(),
             }),
             execute: async ({ query, maxResults }) => {
-                const normalizedQuery = query?.trim();
+                const normalizedQuery = focusSearchQuery(query ?? "");
                 if (!normalizedQuery) {
-                    return "Search query required. Retry with a focused query string.";
+                    return "Search query required. Retry with a focused 3–10 word keyword query.";
                 }
                 const hits = resolveHitCount(maxResults);
                 try {
@@ -780,16 +776,16 @@ export async function buildChatTools(
         if (activeConnector) {
             tools.web_search = tool({
                 description:
-                    "Built-in web search fallback. Use this when the configured provider search connector is unavailable.",
+                    "Built-in web search fallback. Use a short keyword query when the configured provider search connector is unavailable.",
                 needsApproval: false,
                 inputSchema: z.object({
                     query: z.string().optional(),
                     maxResults: z.number().int().min(1).max(maxHits).optional(),
                 }),
                 execute: async ({ query, maxResults }) => {
-                    const normalizedQuery = query?.trim();
+                    const normalizedQuery = focusSearchQuery(query ?? "");
                     if (!normalizedQuery) {
-                        return "Search query required. Retry with a focused query string.";
+                        return "Search query required. Retry with a focused 3–10 word keyword query.";
                     }
                     try {
                         return await builtInSearch(normalizedQuery, resolveHitCount(maxResults));

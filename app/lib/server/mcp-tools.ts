@@ -4,7 +4,9 @@ import type { McpServerConfig } from "~/lib/types";
 import { assertConfiguredHttpUrl } from "~/lib/server/provider-url";
 import type { TokenModePolicy } from "~/lib/token-mode";
 import {
+    focusSearchQuery,
     formatCompactSearchResults,
+    rankSearchResults,
     type SearchResult,
 } from "~/lib/search";
 
@@ -85,7 +87,7 @@ export function wrapMcpToolForBudget(
             : Math.min(policy.maxMcpResultChars, Math.max(4_000, Math.floor(policy.maxMcpResultChars * 0.75)));
     const resultBudget =
         kind === "search"
-            ? Math.min(policy.maxMcpResultChars, 3_500)
+            ? Math.min(policy.maxMcpResultChars, Math.max(3_500, policy.maxSearchResults * 320))
             : policy.maxMcpResultChars;
 
     return {
@@ -98,12 +100,14 @@ export function wrapMcpToolForBudget(
                     : rawArgs;
             const result = await execute(args, ...rest);
             const compacted = compactMcpToolResult(result, resultBudget, {
-                maxItems: kind === "search" ? policy.maxSearchResults : undefined,
+                // Keep a larger raw pool so ranking can pick the best few.
+                maxItems: kind === "search" ? Math.max(policy.maxSearchResults * 2, 6) : undefined,
                 maxSnippetChars: snippetChars,
                 maxBodyChars: kind === "fetch" ? bodyChars : bodyChars,
             });
             if (kind !== "search") return compacted;
             return formatMcpSearchToolOutput(compacted, {
+                query: extractMcpSearchQuery(args),
                 maxItems: policy.maxSearchResults,
                 maxSnippetChars: snippetChars,
                 includeSnippets: snippetChars > 80,
@@ -136,6 +140,27 @@ const SEARCH_LIMIT_KEYS = [
     "size",
 ] as const;
 
+const SEARCH_QUERY_KEYS = [
+    "query",
+    "q",
+    "search",
+    "search_query",
+    "searchQuery",
+    "prompt",
+    "text",
+    "input",
+] as const;
+
+function extractMcpSearchQuery(args: unknown): string {
+    if (!args || typeof args !== "object" || Array.isArray(args)) return "";
+    const record = args as Record<string, unknown>;
+    for (const key of SEARCH_QUERY_KEYS) {
+        const value = record[key];
+        if (typeof value === "string" && value.trim()) return value.trim();
+    }
+    return "";
+}
+
 function clampMcpSearchArgs(
     args: unknown,
     policy: Pick<TokenModePolicy, "defaultSearchResults" | "maxSearchResults">,
@@ -143,6 +168,16 @@ function clampMcpSearchArgs(
 ): unknown {
     if (!args || typeof args !== "object" || Array.isArray(args)) return args;
     const next: Record<string, unknown> = { ...(args as Record<string, unknown>) };
+
+    for (const key of SEARCH_QUERY_KEYS) {
+        if (!(key in next)) continue;
+        const value = next[key];
+        if (typeof value === "string") {
+            const focused = focusSearchQuery(value);
+            if (focused) next[key] = focused;
+        }
+    }
+
     let sawLimit = false;
     for (const key of SEARCH_LIMIT_KEYS) {
         if (!(key in next)) continue;
@@ -314,15 +349,23 @@ const SEARCH_RESULT_ARRAY_KEYS =
 function formatMcpSearchToolOutput(
     result: unknown,
     options: {
+        query?: string;
         maxItems: number;
         maxSnippetChars: number;
         includeSnippets: boolean;
     },
 ): unknown {
-    const parsed = extractSearchResultsFromMcpPayload(result).slice(0, options.maxItems);
+    const parsed = extractSearchResultsFromMcpPayload(result);
     if (parsed.length === 0) return result;
 
-    const text = formatCompactSearchResults(parsed, {
+    // Rank a slightly larger pool, then keep only the policy budget.
+    const ranked = rankSearchResults(
+        options.query || "",
+        parsed,
+        Math.min(parsed.length, Math.max(options.maxItems * 2, options.maxItems)),
+    ).slice(0, options.maxItems);
+
+    const text = formatCompactSearchResults(ranked, {
         maxSnippetChars: options.maxSnippetChars,
         maxTitleChars: 72,
         includeSnippets: options.includeSnippets,

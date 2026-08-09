@@ -463,8 +463,60 @@ const TEMPORAL_TERMS = new Set([
     "yesterday",
 ]);
 
+/** Hard cap for engine queries — long essay prompts dilute ranking. */
+export const MAX_SEARCH_QUERY_CHARS = 120;
+
+const QUERY_FLUFF_PATTERNS: RegExp[] = [
+    /\b(?:please\s+)?(?:provide|include|list|give)\s+(?:me\s+)?(?:sources?|citations?|references?|details?)\b[^.?!]*/gi,
+    /\bi\s+need\s+(?:information|info|details?)\s+on\b/gi,
+    /\bfocus\s+on\s+(?:the\s+)?(?:most\s+)?(?:recent|latest)[^.?!]*/gi,
+    /\b(?:including|with)\s+their\s+[^.?!]*/gi,
+    /\b(?:and\s+any\s+other|as\s+well\s+as)[^.?!]*/gi,
+    /\bfor\s+all\s+claims\b/gi,
+    /\bplease\b/gi,
+];
+
+/**
+ * Turn model-written essay queries into short, high-signal search strings.
+ * Keeps accuracy high (engines rank short queries better) and cuts tokens.
+ */
+export function focusSearchQuery(query: string, maxChars = MAX_SEARCH_QUERY_CHARS): string {
+    let text = String(query ?? "").replace(/\s+/g, " ").trim();
+    if (!text) return "";
+
+    // Preserve quoted phrases; strip common instruction fluff around them.
+    for (const pattern of QUERY_FLUFF_PATTERNS) {
+        text = text.replace(pattern, " ");
+    }
+    text = text
+        .replace(/[?!]+/g, " ")
+        .replace(/\s*,\s*/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const wordCount = text.split(/\s+/).filter(Boolean).length;
+    const looksLikeEssay =
+        wordCount > 12 ||
+        text.length > 90 ||
+        /\b(?:i need|please|including|provide sources|focus on)\b/i.test(query);
+
+    // Prefer dense keywords over paragraph questions — engines rank these better.
+    if (looksLikeEssay) {
+        const quoted = [...text.matchAll(/"([^"]{2,80})"/g)].map((m) => m[1].trim());
+        const terms = searchTerms(text)
+            // Drop lonely 4-digit years unless the user typed a short query;
+            // invented years bias results without improving recall.
+            .filter((term) => !/^(19|20)\d{2}$/.test(term))
+            .slice(0, 10);
+        const rebuilt = [...quoted, ...terms].join(" ").replace(/\s+/g, " ").trim();
+        if (rebuilt) text = rebuilt;
+    }
+
+    return text.slice(0, maxChars).trim();
+}
+
 function normalizeSearchQuery(query: string): string {
-    return query.replace(/\s+/g, " ").trim().slice(0, 500);
+    return focusSearchQuery(query);
 }
 
 function searchTerms(query: string): string[] {
@@ -487,14 +539,72 @@ function escapeRegExp(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function rankSearchResults(
+/** Prefer primary/official hosts; demote SEO farms. */
+const AUTHORITY_HOST_BOOSTS: Array<{ test: RegExp; boost: number }> = [
+    { test: /(^|\.)openai\.com$/i, boost: 8 },
+    { test: /(^|\.)anthropic\.com$/i, boost: 8 },
+    { test: /(^|\.)ai\.google\.(dev|com)$/i, boost: 8 },
+    { test: /(^|\.)deepmind\.google$/i, boost: 8 },
+    { test: /(^|\.)meta\.com$/i, boost: 6 },
+    { test: /(^|\.)ai\.meta\.com$/i, boost: 8 },
+    { test: /(^|\.)microsoft\.com$/i, boost: 6 },
+    { test: /(^|\.)mistral\.ai$/i, boost: 7 },
+    { test: /(^|\.)x\.ai$/i, boost: 7 },
+    { test: /(^|\.)huggingface\.co$/i, boost: 5 },
+    { test: /(^|\.)arxiv\.org$/i, boost: 6 },
+    { test: /(^|\.)github\.com$/i, boost: 4 },
+    { test: /(^|\.)gov(\.[a-z]{2})?$/i, boost: 5 },
+    { test: /(^|\.)edu$/i, boost: 4 },
+    { test: /(^|\.)wikipedia\.org$/i, boost: 3 },
+    { test: /(^|\.)developer\./i, boost: 3 },
+    { test: /(^|\.)docs\./i, boost: 4 },
+];
+
+const LOW_QUALITY_HOST_PENALTIES: Array<{ test: RegExp; penalty: number }> = [
+    { test: /(^|\.)(pinterest|quora|reddit|medium|blogspot|wordpress|tumblr)\./i, penalty: 3 },
+    { test: /(^|\.)(listicle|top10|bestof|clickbait)/i, penalty: 4 },
+];
+
+function hostnameOf(url: string): string {
+    try {
+        return new URL(url).hostname.replace(/^www\./i, "");
+    } catch {
+        return "";
+    }
+}
+
+function authorityScore(url: string): number {
+    const host = hostnameOf(url);
+    if (!host) return 0;
+    let score = 0;
+    for (const rule of AUTHORITY_HOST_BOOSTS) {
+        if (rule.test.test(host)) score += rule.boost;
+    }
+    for (const rule of LOW_QUALITY_HOST_PENALTIES) {
+        if (rule.test.test(host)) score -= rule.penalty;
+    }
+    return score;
+}
+
+/**
+ * Rank/filter search hits by query relevance + source authority.
+ * Used by built-in search and MCP search result compaction.
+ */
+export function rankSearchResults(
     query: string,
     results: SearchResult[],
     maxResults: number,
 ): SearchResult[] {
     if (results.length === 0) return [];
     const terms = searchTerms(query);
-    if (terms.length === 0) return results.slice(0, maxResults);
+    if (terms.length === 0) {
+        return [...results]
+            .sort(
+                (left, right) =>
+                    authorityScore(right.url) - authorityScore(left.url),
+            )
+            .slice(0, maxResults);
+    }
 
     const weatherQuery = terms.some((term) => WEATHER_TERMS.has(term));
     const locationTerms = weatherQuery
@@ -527,6 +637,7 @@ function rankSearchResults(
         let score = matchedTerms.length * 1.5;
         score += matchedTerms.filter((term) => containsSearchTerm(title, term)).length * 4;
         score += matchedTerms.filter((term) => containsSearchTerm(url, term)).length * 1.5;
+        score += authorityScore(result.url);
         if (phrase.length > 8 && searchable.includes(phrase)) score += 5;
         if (weatherQuery) {
             score += matchedWeather.length * 4;
@@ -538,9 +649,12 @@ function rankSearchResults(
         return [{ result, score, index }];
     });
 
-    const minimumScore = weatherQuery ? 6 : Math.max(2, Math.ceil(terms.length * 1.25));
-    return scored
-        .filter((entry) => entry.score >= minimumScore)
+    // Soft floor: keep a few best hits even when term overlap is thin,
+    // so authority-ranked MCP results are not dropped entirely.
+    const minimumScore = weatherQuery ? 6 : Math.max(1.5, Math.ceil(terms.length * 0.75));
+    const filtered = scored.filter((entry) => entry.score >= minimumScore);
+    const pool = filtered.length > 0 ? filtered : scored;
+    return pool
         .sort((left, right) => right.score - left.score || left.index - right.index)
         .slice(0, maxResults)
         .map((entry) => entry.result);

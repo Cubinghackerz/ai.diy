@@ -572,8 +572,19 @@ export async function action({ request }: ActionFunctionArgs) {
         }
 
         // Hard-require forced skill tools on early steps until each has run once.
+        // Reserve the final step for text so research/search loops cannot burn the
+        // entire budget on tools and leave the user with no answer.
         const forceableTools = requiredSkillTools.filter((name) =>
             Object.prototype.hasOwnProperty.call(cachedTools, name),
+        );
+        const researchHeavy =
+            forceableTools.includes("research_skill") ||
+            Object.keys(cachedTools).some((name) =>
+                /search|scrape|fetch|firecrawl|parallel/i.test(name),
+            );
+        const maxSteps = Math.min(
+            32,
+            policy.maxSteps + (researchHeavy ? 4 : 0),
         );
 
         const result = streamText({
@@ -591,28 +602,29 @@ export async function action({ request }: ActionFunctionArgs) {
                   }),
             maxOutputTokens,
             tools: Object.keys(cachedTools).length > 0 ? cachedTools : undefined,
-            stopWhen: stepCountIs(policy.maxSteps),
+            stopWhen: stepCountIs(maxSteps),
             ...(safeProviderOptions ? { providerOptions: safeProviderOptions } : {}),
-            ...(forceableTools.length > 0
-                ? {
-                      prepareStep: ({ steps }) => {
-                          const called = new Set<string>();
-                          for (const step of steps) {
-                              for (const call of step.toolCalls ?? []) {
-                                  if (call?.toolName) called.add(call.toolName);
-                              }
-                          }
-                          const next = forceableTools.find((name) => !called.has(name));
-                          if (!next) return {};
-                          return {
-                              toolChoice: {
-                                  type: "tool" as const,
-                                  toolName: next,
-                              },
-                          };
-                      },
-                  }
-                : {}),
+            prepareStep: ({ steps }) => {
+                // Last allowed step: no more tools — synthesize from results.
+                if (steps.length >= maxSteps - 1) {
+                    return { toolChoice: "none" as const };
+                }
+                if (!forceableTools.length) return {};
+                const called = new Set<string>();
+                for (const step of steps) {
+                    for (const call of step.toolCalls ?? []) {
+                        if (call?.toolName) called.add(call.toolName);
+                    }
+                }
+                const next = forceableTools.find((name) => !called.has(name));
+                if (!next) return {};
+                return {
+                    toolChoice: {
+                        type: "tool" as const,
+                        toolName: next,
+                    },
+                };
+            },
             onFinish: async () => {
                 await closeLoadedMcp();
             },

@@ -20,7 +20,7 @@ export const BUILTIN_FORCED_SKILLS: ForcedSkill[] = [
     {
         name: "Research",
         content:
-            "You MUST handle this request with the research_skill: call the research_skill tool first, then run only the necessary searches and page reads it prescribes. Do not rely on training data or knowledge-cutoff memory for time-sensitive facts, new releases, versions, pricing, or changelogs; every material claim must come from sources retrieved in this session. Cite every source URL you used and report confidence per claim. Do not answer before calling research_skill.",
+            "You MUST handle this request with the research_skill: call research_skill first with a question close to the user's words (do not invent years/vendors/scope). Then run only short keyword searches (3–10 words) and fetch primary pages. Do not rely on training data for time-sensitive facts. Cite retrieved URLs and report confidence. Do not answer before calling research_skill.",
     },
     {
         name: "Compaction",
