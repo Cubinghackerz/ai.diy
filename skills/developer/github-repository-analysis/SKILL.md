@@ -108,7 +108,7 @@ CI | tests | contributing | code ownership
 
 ## Failure handling
 
-- **Rate limits / blocked**: fall back to raw.githubusercontent.com; reduce fan-out.
+- **Rate limits / blocked**: fall back to raw.githubusercontent.com; reduce fan-out. When subagents are enabled, prefer `spawn_subagents` (up to 3 parallel slices) over many sequential fetches, then synthesize.
 - **Monorepo overwhelm**: analyze path the user cares about; summarize the rest.
 - **Sparse README**: reconstruct from manifests + `web_search`; flag low documentation confidence.
 - **Ambiguous fork vs upstream**: state which URL was analyzed.

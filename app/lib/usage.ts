@@ -4,7 +4,7 @@
  * Pure functions only (node-safe, tested by scripts/usage-smoke.mjs).
  */
 
-import type { MessageData } from "./types.ts";
+import type { MessageData, UsageLimitsConfig } from "./types.ts";
 import type { ModelCatalogEntry } from "./model-catalog.ts";
 
 export interface UsageTokens {
@@ -248,4 +248,147 @@ export function formatCost(usd: number | null | undefined): string {
     if (usd < 0.01) return `$${usd.toFixed(4)}`;
     if (usd < 100) return `$${usd.toFixed(2)}`;
     return `$${Math.round(usd).toLocaleString("en-US")}`;
+}
+
+// ─── Usage ledger & limits (node-safe) ───────────────────────────
+
+export type UsageEventSource =
+    | "chat"
+    | "title"
+    | "preview"
+    | "subagent"
+    | "other";
+
+export interface UsageEvent {
+    id: string;
+    keyFingerprint: string;
+    provider: string;
+    model?: string;
+    inputTokens: number;
+    outputTokens: number;
+    reasoningTokens: number;
+    cachedInputTokens: number;
+    totalTokens: number;
+    estimatedCostUsd?: number;
+    source: UsageEventSource;
+    createdAt: number;
+}
+
+export interface UsageRollup {
+    totalTokens: number;
+    totalCostUsd: number;
+    eventCount: number;
+    requestsInLastMinute: number;
+}
+
+export interface UsageLimitCheckResult {
+    ok: boolean;
+    warn: boolean;
+    blocked: boolean;
+    message?: string;
+    tokenPercent?: number;
+    spendPercent?: number;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MINUTE_MS = 60_000;
+
+/** Sync-friendly hex encoding for byte arrays (no Web Crypto). */
+export function bytesToHex(bytes: Uint8Array): string {
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+export function rollupUsageForFingerprint(
+    events: UsageEvent[],
+    windowMs = DAY_MS,
+    now = Date.now(),
+): UsageRollup {
+    const since = now - windowMs;
+    const minuteSince = now - MINUTE_MS;
+    let totalTokens = 0;
+    let totalCostUsd = 0;
+    let eventCount = 0;
+    let requestsInLastMinute = 0;
+
+    for (const event of events) {
+        if (event.createdAt < since) continue;
+        eventCount++;
+        totalTokens += event.totalTokens;
+        totalCostUsd += event.estimatedCostUsd ?? 0;
+        if (event.createdAt >= minuteSince) {
+            requestsInLastMinute++;
+        }
+    }
+
+    return { totalTokens, totalCostUsd, eventCount, requestsInLastMinute };
+}
+
+function percentUsed(used: number, cap: number | null | undefined): number | undefined {
+    if (cap == null || cap <= 0) return undefined;
+    return (used / cap) * 100;
+}
+
+export function checkUsageLimits(
+    config: UsageLimitsConfig,
+    rollup: UsageRollup,
+): UsageLimitCheckResult {
+    if (!config.enabled) {
+        return { ok: true, warn: false, blocked: false };
+    }
+
+    const warnAt = config.warnAtPercent ?? 80;
+    const block = config.blockWhenExceeded !== false;
+    const tokenPercent = percentUsed(rollup.totalTokens, config.dailyTokenCap);
+    const spendPercent = percentUsed(rollup.totalCostUsd, config.dailySpendCapUsd);
+    const rpm = config.requestsPerMinute;
+
+    const tokenExceeded =
+        config.dailyTokenCap != null &&
+        config.dailyTokenCap > 0 &&
+        rollup.totalTokens >= config.dailyTokenCap;
+    const spendExceeded =
+        config.dailySpendCapUsd != null &&
+        config.dailySpendCapUsd > 0 &&
+        rollup.totalCostUsd >= config.dailySpendCapUsd;
+    const rpmExceeded =
+        rpm != null && rpm > 0 && rollup.requestsInLastMinute >= rpm;
+
+    if (block && (tokenExceeded || spendExceeded || rpmExceeded)) {
+        let message = "Usage limit reached.";
+        if (tokenExceeded) {
+            message = `Daily token cap reached (${formatTokens(rollup.totalTokens)} / ${formatTokens(config.dailyTokenCap!)})`;
+        } else if (spendExceeded) {
+            message = `Daily spend cap reached (${formatCost(rollup.totalCostUsd)} / ${formatCost(config.dailySpendCapUsd!)})`;
+        } else if (rpmExceeded) {
+            message = `Request rate limit reached (${rollup.requestsInLastMinute} / ${rpm} per minute)`;
+        }
+        return {
+            ok: false,
+            warn: false,
+            blocked: true,
+            message,
+            tokenPercent,
+            spendPercent,
+        };
+    }
+
+    const tokenWarn =
+        tokenPercent != null && tokenPercent >= warnAt && !tokenExceeded;
+    const spendWarn =
+        spendPercent != null && spendPercent >= warnAt && !spendExceeded;
+
+    if (tokenWarn || spendWarn) {
+        return {
+            ok: true,
+            warn: true,
+            blocked: false,
+            message: tokenWarn
+                ? `Approaching daily token cap (${Math.round(tokenPercent!)}%)`
+                : `Approaching daily spend cap (${Math.round(spendPercent!)}%)`,
+            tokenPercent,
+            spendPercent,
+        };
+    }
+
+    return { ok: true, warn: false, blocked: false, tokenPercent, spendPercent };
 }

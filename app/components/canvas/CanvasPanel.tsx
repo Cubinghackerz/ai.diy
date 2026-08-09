@@ -100,6 +100,12 @@ export function CanvasPanel() {
     const startXRef = useRef(0);
     const startWidthRef = useRef(0);
 
+    useEffect(() => {
+        setViewMode("preview");
+        setDownloadError(null);
+        setCopied(false);
+    }, [activeArtifactId]);
+
     const handleResizeStart = (e: React.MouseEvent) => {
         e.preventDefault();
         setIsResizing(true);
@@ -275,7 +281,7 @@ export function CanvasPanel() {
                             key={art.id}
                             onClick={() => setActiveArtifactId(art.id)}
                             className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
-                                art.id === activeArtifact?.id
+                                art.id === (activeArtifactId ?? activeArtifact?.id)
                                     ? "bg-card text-foreground shadow-sm"
                                     : "text-muted-foreground hover:bg-accent"
                             }`}
@@ -287,8 +293,8 @@ export function CanvasPanel() {
                 </div>
             )}
 
-            {/* Body */}
-            <div className="flex-1 overflow-auto bg-background p-4">
+            {/* Body — key forces remount so iframe/image state tracks the active tab */}
+            <div key={activeArtifact?.id ?? "empty"} className="flex-1 overflow-auto bg-background p-4">
                 {downloadError ? (
                     <p className="mb-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">
                         {downloadError}

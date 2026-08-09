@@ -149,9 +149,16 @@ export function CanvasProvider({ children }: { children: ReactNode }) {
         }
 
         const createdAt = Date.now();
+        // Multiple Python/file captures often land in the same millisecond —
+        // colliding ids make tab switches highlight every matching tab and
+        // `find` always returns the first artifact.
+        const id =
+            typeof crypto !== "undefined" && "randomUUID" in crypto
+                ? `artifact_${crypto.randomUUID()}`
+                : `artifact_${createdAt}_${Math.random().toString(36).slice(2, 10)}`;
         const newArtifact: Artifact = {
             ...a,
-            id: `artifact_${createdAt}`,
+            id,
             sourceKey,
             scopeId,
             createdAt,

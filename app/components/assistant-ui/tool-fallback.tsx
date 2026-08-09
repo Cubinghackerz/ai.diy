@@ -27,6 +27,7 @@ import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
 import { ARTIFACT_MARKER, decodeArtifactContent, type ArtifactContentEncoding } from "~/lib/artifacts";
 import { useCanvas, type ArtifactKind } from "~/lib/canvas";
+import { skillLabelForTool } from "~/lib/skill-command";
 
 const ANIMATION_DURATION = 200;
 
@@ -40,8 +41,11 @@ const AUTO_EXECUTED_CLIENT_TOOL_NAMES = new Set([
   "run_python",
   "run_code",
   "memory",
+  "knowledge_search",
+  "knowledge_list",
   "ask_user",
   "spawn_subagent",
+  "spawn_subagents",
 ]);
 
 function isArtifactPayload(result: unknown): boolean {
@@ -207,7 +211,15 @@ function ToolFallbackTrigger({
     status?.type === "incomplete" && status.reason === "cancelled";
 
   const Icon = statusIconMap[statusType];
-  const label = isCancelled ? "Cancelled tool" : "Used tool";
+  const skillLabel = skillLabelForTool(toolName);
+  const kindLabel = isCancelled
+    ? skillLabel
+      ? "Cancelled skill"
+      : "Cancelled tool"
+    : skillLabel
+      ? "Used skill"
+      : "Used tool";
+  const displayName = skillLabel ?? toolName;
 
   return (
     <CollapsibleTrigger
@@ -234,7 +246,7 @@ function ToolFallbackTrigger({
         )}
       >
         <span>
-          {label}: <b>{toolName}</b>
+          {kindLabel}: <b>{displayName}</b>
         </span>
         {isRunning && (
           <span
@@ -242,7 +254,7 @@ function ToolFallbackTrigger({
             data-slot="tool-fallback-trigger-shimmer"
             className="aui-tool-fallback-trigger-shimmer shimmer pointer-events-none absolute inset-0 motion-reduce:animate-none"
           >
-            {label}: <b>{toolName}</b>
+            {kindLabel}: <b>{displayName}</b>
           </span>
         )}
       </span>

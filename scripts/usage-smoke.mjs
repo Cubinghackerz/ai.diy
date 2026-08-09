@@ -17,6 +17,9 @@ import {
     aggregateUsage,
     formatTokens,
     formatCost,
+    bytesToHex,
+    rollupUsageForFingerprint,
+    checkUsageLimits,
 } from "../app/lib/usage.ts";
 
 let failures = 0;
@@ -206,6 +209,83 @@ check(
 check("aggregate byProvider", agg.byProvider.length === 1 && agg.byProvider[0].provider === "openai");
 check("aggregate thread titles", agg.threads.find((t) => t.threadId === "t2")?.title === "Chat two");
 check("aggregate cost known", agg.totalCost != null && agg.totalCost > 0);
+
+// ─── Usage ledger rollup & limits ────────────────────────────
+check(
+    "bytesToHex",
+    bytesToHex(new Uint8Array([0, 255, 16])) === "00ff10",
+);
+const sampleEvents = /** @type {UsageEvent[]} */ ([
+    {
+        id: "e1",
+        keyFingerprint: "abc",
+        provider: "openai",
+        model: "gpt-5",
+        inputTokens: 1000,
+        outputTokens: 100,
+        reasoningTokens: 0,
+        cachedInputTokens: 0,
+        totalTokens: 1100,
+        estimatedCostUsd: 0.01,
+        source: "chat",
+        createdAt: Date.now() - 45_000,
+    },
+    {
+        id: "e2",
+        keyFingerprint: "abc",
+        provider: "openai",
+        model: "gpt-5",
+        inputTokens: 500,
+        outputTokens: 50,
+        reasoningTokens: 0,
+        cachedInputTokens: 0,
+        totalTokens: 550,
+        estimatedCostUsd: 0.005,
+        source: "chat",
+        createdAt: Date.now() - 15_000,
+    },
+]);
+const rollup = rollupUsageForFingerprint(sampleEvents);
+check("rollup total tokens", rollup.totalTokens === 1650);
+check("rollup total cost", Math.abs(rollup.totalCostUsd - 0.015) < 1e-9);
+check("rollup event count", rollup.eventCount === 2);
+check("rollup rpm count", rollup.requestsInLastMinute === 2);
+
+const blocked = checkUsageLimits(
+    {
+        enabled: true,
+        dailyTokenCap: 1000,
+        blockWhenExceeded: true,
+    },
+    rollup,
+);
+check("checkUsageLimits blocks tokens", blocked.blocked === true);
+
+const warn = checkUsageLimits(
+    {
+        enabled: true,
+        dailyTokenCap: 2000,
+        warnAtPercent: 80,
+        blockWhenExceeded: true,
+    },
+    rollup,
+);
+check("checkUsageLimits warns near cap", warn.warn === true && warn.ok === true);
+
+const rpmBlocked = checkUsageLimits(
+    {
+        enabled: true,
+        requestsPerMinute: 1,
+        blockWhenExceeded: true,
+    },
+    rollup,
+);
+check("checkUsageLimits blocks rpm", rpmBlocked.blocked === true);
+
+check(
+    "checkUsageLimits disabled passes",
+    checkUsageLimits({ enabled: false }, rollup).ok === true,
+);
 
 // ─── Formatting ──────────────────────────────────────────────
 check("formatTokens M", formatTokens(1_200_000) === "1.2M");

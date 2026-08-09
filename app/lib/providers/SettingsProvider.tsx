@@ -88,6 +88,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                         parsed.tokenMode === "full"
                             ? parsed.tokenMode
                             : "balanced",
+                    usageLimits: {
+                        ...DEFAULT_SETTINGS.usageLimits,
+                        ...parsed.usageLimits,
+                    },
                 });
             }
         } catch {

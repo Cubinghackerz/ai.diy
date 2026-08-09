@@ -337,7 +337,7 @@ const ComposerInput: FC = () => {
       {menuOpen && skills.length > 0 ? (
         <div className="absolute bottom-full left-0 right-0 z-30 mb-1 max-h-56 overflow-y-auto rounded-xl border border-border bg-popover p-1 shadow-lg">
           <p className="px-2 pb-1 pt-0.5 text-[10px] font-medium text-muted-foreground">
-            Add skills — the AI must use each selected skill
+            Commands &amp; skills — the AI must use each selection
           </p>
           {skills.map((skill, index) => (
             <button
@@ -366,7 +366,7 @@ const ComposerInput: FC = () => {
         maxRows={8}
         value={value}
         disabled={disabled}
-        placeholder="Send a message...  (type / to add a skill)"
+        placeholder="Send a message... (type / to use a command or a skill)"
         className="aui-composer-input caret-foreground placeholder:text-muted-foreground/70 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none ring-0 shadow-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
         autoFocus
         enterKeyHint="send"

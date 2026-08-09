@@ -67,7 +67,7 @@ If success criteria are ambiguous and blocking, ask once via `ask_user`, then pr
 - **Incident vs RCA** → active IR / containment → `incident-investigator`; causal postmortem → `root-cause-analysis` (often after `log-analysis`).
 - **Code quality** → diff/PR → `code-review`; whole-repo health → `github-repository-analysis`; threat audit → `security-audit`.
 - **Never** invent a skill name not in the table; if none fit, solve with general reasoning and state that no specialist applied.
-- Cap concurrent specialists at 3; deeper work continues in follow-up turns.
+- Cap concurrent specialists at 3; when subagents are enabled, prefer `spawn_subagents` for independent parallel slices, then synthesize.
 - Prefer asking one clarifying question over wrong routing when cost of error is high.
 
 ## Routing table

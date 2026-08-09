@@ -52,6 +52,11 @@ export const BUILTIN_FORCED_SKILLS: ForcedSkill[] = [
         content:
             "You MUST activate and follow the skill_architect contract for this request: call the create_skill tool and produce a complete SKILL.md with job charter, activation boundaries, inputs, workflow, decision rules, tool rules, output contract, validation, failure handling, and positive/negative evaluation cases. Do not answer before calling create_skill.",
     },
+    {
+        name: "Subagent",
+        content:
+            "You MUST use subagents for this request. Call spawn_subagents (preferred for 1–3 independent slices) or spawn_subagent for one focused slice BEFORE answering. The browser will pause for user approval, then run each subagent to completion; you MUST wait for that tool result (do not keep answering as if it finished early). After results return, synthesize Status: complete outputs; for Status: declined/cancelled/error, continue yourself or note the gap — never invent what a failed subagent would have said.",
+    },
 ];
 
 /** Search aliases for the slash skill menu (name + shortcuts). */
@@ -63,6 +68,7 @@ const SKILL_MENU_ALIASES: Record<string, string[]> = {
     "python file creation": ["python file creation", "python", "file"],
     "word document": ["word document", "word", "docx"],
     "skill architect": ["skill architect", "skill", "architect"],
+    subagent: ["subagent", "subagents", "delegate", "fanout", "fan-out", "parallel"],
 };
 
 /** Whether a skill should appear for the current `/query` filter. */
@@ -88,6 +94,8 @@ const SKILL_TOOL_BY_NAME: Record<string, string> = {
     compaction: "compaction_skill",
     "context compaction": "compaction_skill",
     compress: "compaction_skill",
+    subagent: "spawn_subagents",
+    subagents: "spawn_subagents",
 };
 
 export function lookupForcedSkill(name: string): ForcedSkill | null {
@@ -105,6 +113,37 @@ export function toolNameForForcedSkill(skillName: string): string | null {
     // "research" in the name — map the common research cases.
     if (/\bresearch\b/.test(key)) return "research_skill";
     if (/\bcompact/.test(key) || /\bcompress\b/.test(key)) return "compaction_skill";
+    if (/\bsubagents?\b/.test(key)) return "spawn_subagents";
+    return null;
+}
+
+/** Friendly skill label for a tool id shown in chat tool bubbles, or null. */
+const TOOL_TO_SKILL_LABEL: Record<string, string> = {
+    research_skill: "Research",
+    compaction_skill: "Compaction",
+    ultimate_frontend_ui: "Ultimate Frontend UI",
+    frontend_design_skill: "Frontend Design",
+    python_file_creation_skill: "Python File Creation",
+    file_creation_skill: "Python File Creation",
+    word_document_skill: "Word Document",
+    word_doc_skill: "Word Document",
+    create_skill: "Skill Architect",
+    skill_architect: "Skill Architect",
+    spawn_subagent: "Subagent",
+    spawn_subagents: "Subagent",
+};
+
+export function skillLabelForTool(toolName: string): string | null {
+    const key = toolName.trim();
+    if (TOOL_TO_SKILL_LABEL[key]) return TOOL_TO_SKILL_LABEL[key];
+    if (/_skill$/i.test(key)) {
+        return key
+            .replace(/_skill$/i, "")
+            .split(/[_\s]+/)
+            .filter(Boolean)
+            .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+            .join(" ");
+    }
     return null;
 }
 

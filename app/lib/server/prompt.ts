@@ -18,7 +18,7 @@ Available tools:
 - web_search, tavily_search, brave_search, exa_search, parallel_search: Built-in and connector search. These fallback tools are omitted when an MCP search tool was successfully discovered for this request. If a fallback tool is present, use it only when no mcp_* search tool is available or the MCP search tools fail.
 - read_url / fetch_url: Fetch a public webpage or PDF and extract clean readable content. Never access private networks, localhost, metadata endpoints, or unsupported oversized downloads.
 - calculate / calculator: Evaluate arithmetic, percentages, units, dates, and scientific expressions deterministically.
-- run_python / run_code: Execute Python in browser Pyodide for analysis, file processing, charts, and document generation. Libraries auto-load on import (never manage installation with micropip or pip) and top-level await is supported (never asyncio.run, since Pyodide runs inside an event loop). Includes numpy, pandas, matplotlib, scipy, sympy, scikit-learn, pillow, networkx, BeautifulSoup, lxml, regex, python-dateutil, pyyaml, openpyxl/xlsxwriter (Excel), python-docx (Word), python-pptx (PowerPoint), reportlab/fpdf2 (PDF), jinja2, and requests. Always use these real libraries for file creation, never hand-rolled zip/XML. Save generated files in the current working directory: up to four new files of 2 MiB each are captured directly as session-only Canvas artifacts (images are displayed inline; other binaries are downloadable) and are not persisted in browser storage. When the tool reports created artifacts, do not call create_file or copy/Base64 their bytes again. Wait for the result before answering.
+- run_python / run_code: Execute Python in browser Pyodide for analysis, file processing, charts, and document generation. Libraries auto-load on import (never manage installation with micropip or pip) and top-level await is supported (never asyncio.run, since Pyodide runs inside an event loop). Includes numpy, pandas, matplotlib, scipy, sympy, scikit-learn, pillow, networkx, BeautifulSoup, lxml, regex, python-dateutil, pyyaml, openpyxl/xlsxwriter (Excel), python-docx (Word), python-pptx (PowerPoint), reportlab/fpdf2 (PDF), jinja2, and requests. Always use these real libraries for file creation, never hand-rolled zip/XML. Save generated files in the current working directory: up to four new files of 2 MiB each are captured as Canvas artifacts (images display inline; other binaries are downloadable) and persisted with the chat in local browser storage. When the tool reports created artifacts, do not call create_file or copy/Base64 their bytes again. Wait for the result before answering.
 - python_file_creation_skill / file_creation_skill: Call before substantial Python-driven file creation. It defines verified library choices, direct Canvas delivery, validation, size limits, and recovery steps.
 - word_document_skill / word_doc_skill: Call before creating a Word (.docx) document — report, proposal, resume, cover letter, brief, manual, or article. It defines the beautiful-document design contract (cover page, typography, restrained color, heading structure, page numbers, tables) and the python-docx implementation and validation protocol.
 - get_current_time: Return an ISO timestamp for a requested IANA timezone.
@@ -104,6 +104,8 @@ const TOOL_BLURBS: Record<string, string> = {
     generate_file: "create a downloadable text/code file",
     ask_user: "ask a focused clarifying question",
     memory: "retrieve saved local memory",
+    knowledge_search: "private on-device RAG over uploaded documents",
+    knowledge_list: "list local knowledge base documents",
     get_current_time: "current time for a timezone",
     ultimate_frontend_ui: "frontend design contract before UI work",
     frontend_design_skill: "frontend design brief",
@@ -114,7 +116,9 @@ const TOOL_BLURBS: Record<string, string> = {
     duckduckgo_instant_answer: "quick entity/definition overview",
     list_connections: "list enabled connectors",
     connector_guide: "connector capability guide",
-    spawn_subagent: "delegate a focused subagent task",
+    spawn_subagent: "delegate a focused subagent (waits for approval + finish)",
+    spawn_subagents:
+        "spawn up to 3 parallel subagents; wait for all, then synthesize",
 };
 
 /** Per-turn reminder of tools actually registered (prevents “forgotten tools”). */
@@ -146,7 +150,7 @@ You are a delegated subagent. Complete only the given task. Use tools sparingly.
 const AGENT_MODE_PROMPT = `
 
 Agent Mode is ON.
-Plan briefly → select installed skills/tools → execute → verify once → synthesize. Prefer General Task Solver when the task spans domains. Bound tool use.
+Plan briefly → select installed skills/tools → execute → verify once → synthesize. Prefer General Task Solver when the task spans domains. For independent parallel slices (repo analysis, separate research threads), prefer spawn_subagents (up to 3) then synthesize. Bound tool use.
 `;
 
 const AGENT_MODE_PROMPT_FULL = `
@@ -155,9 +159,9 @@ Agent Mode is ON for this request.
 Follow this loop on every non-trivial task:
 1. Plan — restate the goal, success criteria, and constraints in brief bullets.
 2. Select — choose the smallest set of installed skills and tools (prefer General Task Solver routing when the task spans domains).
-3. Execute — apply skill workflows; bound tool calls; reuse prior results.
+3. Execute — apply skill workflows; bound tool calls; reuse prior results. For independent parallel work, prefer spawn_subagents (max 3 tasks) over sequential spawn_subagent.
 4. Verify — check claims, tool failures, and skill validation checklists; recover once on failure.
-5. Synthesize — one coherent final answer with sources only when retrieved.
+5. Synthesize — one coherent final answer with sources only when retrieved (merge parallel subagent outputs when used).
 Do not skip verification for high-stakes recommendations. Prefer installed skill contracts over ad-hoc improvisation.
 `;
 

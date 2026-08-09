@@ -6,6 +6,11 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { webSearch } from "~/lib/search";
 import { corsPreflight, withCors } from "~/lib/server/cors";
 import { assertConfiguredHttpUrl } from "~/lib/server/provider-url";
+import {
+    checkRateLimit,
+    rateLimitKeyFromRequest,
+    rateLimitResponse,
+} from "~/lib/server/rate-limit";
 
 export function loader({ request }: LoaderFunctionArgs) {
     const preflight = corsPreflight(request);
@@ -25,6 +30,12 @@ export async function action({ request }: ActionFunctionArgs) {
             request,
             new Response("Method Not Allowed", { status: 405 }),
         );
+    }
+
+    const rateKey = rateLimitKeyFromRequest(request);
+    const rateCheck = checkRateLimit(rateKey);
+    if (!rateCheck.ok) {
+        return withCors(request, rateLimitResponse(rateCheck.retryAfterMs));
     }
 
     let body: {

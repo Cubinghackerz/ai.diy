@@ -4,8 +4,8 @@
  * Subagents — beta delegation feature.
  *
  * When enabled in Settings > Experimental, the model can call
- * `spawn_subagent`. The browser intercepts the tool call, asks the user for
- * approval in a popup, then runs a nested chat (same tools as the main chat)
+ * `spawn_subagent` or `spawn_subagents` (up to 3 parallel). The browser
+ * intercepts the tool call, asks the user for approval in a popup, then runs a nested chat (same tools as the main chat)
  * whose live reasoning and tool calls stream into the popup. Subagents cannot
  * be prompted by the user, and the main model waits for the subagent's final
  * answer before synthesizing its reply.
@@ -35,6 +35,7 @@ import {
     type ReactNode,
 } from "react";
 import { artifactContentHash, inferArtifactMimeType } from "~/lib/artifacts";
+import { persistArtifactForScope } from "~/lib/artifact-persist.client";
 import { useCanvas } from "~/lib/canvas";
 import {
     buildLocalMemoryContext,
@@ -42,6 +43,7 @@ import {
     readLocalMemory,
 } from "~/lib/memory";
 import { localProviderKey } from "~/lib/provider-credentials";
+import { assertClientUsageAllowed } from "~/lib/usage-ledger.client";
 import { runBrowserPython } from "~/lib/pyodide";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 
@@ -60,11 +62,35 @@ export type SubagentSession = {
     error?: string;
 };
 
+const MAX_CONCURRENT_SUBAGENTS = 3;
+const SUBAGENT_DECLINED_MESSAGE =
+    "Status: declined\nThe user declined this subagent. Continue without it, or finish the work directly with your own tools.";
+const SUBAGENT_CANCELLED_MESSAGE =
+    "Status: cancelled\nThe subagent session was closed before it finished. Continue without its result, or finish the work directly.";
+const SUBAGENT_EMPTY_BATCH_MESSAGE =
+    "Status: error\nNo subagent tasks were provided. Call spawn_subagents again with 1–3 concrete task strings, or complete the work yourself.";
+
+function formatSubagentFailure(error: string): string {
+    const cleaned = error.trim() || "Unknown subagent error";
+    return `Status: error\nThe subagent failed: ${cleaned}\nContinue with any other subagent results you have, or finish the remaining work yourself. Do not pretend the subagent succeeded.`;
+}
+
+function formatSubagentSuccess(output: string): string {
+    const cleaned = output.trim();
+    if (!cleaned) {
+        return "Status: error\nThe subagent finished without returning usable text. Continue without its result, or retry with a narrower task.";
+    }
+    return `Status: complete\n${cleaned}`;
+}
+
 type SubagentContextValue = {
     sessions: SubagentSession[];
     runSubagent: (toolCallId: string, task: string) => Promise<string>;
+    runSubagentsBatch: (parentToolCallId: string, tasks: string[]) => Promise<string>;
     approve: (id: string) => void;
     deny: (id: string) => void;
+    approveAll: () => void;
+    denyAll: () => void;
     complete: (id: string, output: string) => void;
     fail: (id: string, error: string) => void;
     dismiss: (id: string) => void;
@@ -81,6 +107,16 @@ export function SubagentProvider({
 }) {
     const [sessions, setSessions] = useState<SubagentSession[]>([]);
     const resolversRef = useRef(new Map<string, (value: string) => void>());
+    const settledRef = useRef(new Set<string>());
+
+    const resolveOnce = useCallback((id: string, value: string) => {
+        if (settledRef.current.has(id)) return false;
+        settledRef.current.add(id);
+        const resolve = resolversRef.current.get(id);
+        resolversRef.current.delete(id);
+        resolve?.(value);
+        return true;
+    }, []);
 
     const patchSession = useCallback(
         (id: string, patch: Partial<SubagentSession>) => {
@@ -95,9 +131,10 @@ export function SubagentProvider({
 
     const runSubagent = useCallback((toolCallId: string, task: string) => {
         return new Promise<string>((resolve) => {
+            settledRef.current.delete(toolCallId);
             resolversRef.current.set(toolCallId, resolve);
             setSessions((current) => [
-                ...current,
+                ...current.filter((session) => session.id !== toolCallId),
                 {
                     id: toolCallId,
                     task: task.trim() || "Unspecified subtask",
@@ -107,55 +144,160 @@ export function SubagentProvider({
         });
     }, []);
 
+    const runSubagentsBatch = useCallback(
+        (parentToolCallId: string, tasks: string[]) => {
+            const limitedTasks = tasks
+                .map((task) => task.trim())
+                .filter(Boolean)
+                .slice(0, MAX_CONCURRENT_SUBAGENTS);
+
+            if (limitedTasks.length === 0) {
+                return Promise.resolve(SUBAGENT_EMPTY_BATCH_MESSAGE);
+            }
+
+            return new Promise<string>((resolveParent) => {
+                const childPromises = limitedTasks.map((_task, index) => {
+                    const sessionId = `${parentToolCallId}:${index}`;
+                    settledRef.current.delete(sessionId);
+                    return new Promise<string>((resolve) => {
+                        resolversRef.current.set(sessionId, resolve);
+                    });
+                });
+
+                setSessions((current) => {
+                    const withoutStale = current.filter(
+                        (session) => !session.id.startsWith(`${parentToolCallId}:`),
+                    );
+                    return [
+                        ...withoutStale,
+                        ...limitedTasks.map((task, index) => ({
+                            id: `${parentToolCallId}:${index}`,
+                            task,
+                            status: "awaiting-approval" as const,
+                        })),
+                    ];
+                });
+
+                void Promise.allSettled(childPromises).then((results) => {
+                    const combined = results
+                        .map((result, index) => {
+                            const header = `### Subagent ${index + 1}\nTask: ${limitedTasks[index]}`;
+                            const body =
+                                result.status === "fulfilled"
+                                    ? result.value
+                                    : formatSubagentFailure(
+                                          String(result.reason ?? "Unknown error"),
+                                      );
+                            return `${header}\n\n${body}`;
+                        })
+                        .join("\n\n---\n\n");
+                    resolveParent(
+                        `${combined}\n\nSynthesize using every Status: complete result. For declined/cancelled/error results, continue yourself or note the gap — do not invent what those subagents would have said.`,
+                    );
+                });
+            });
+        },
+        [],
+    );
+
     const approve = useCallback(
-        (id: string) => patchSession(id, { status: "running" }),
+        (id: string) => {
+            if (settledRef.current.has(id)) return;
+            patchSession(id, { status: "running" });
+        },
         [patchSession],
     );
 
     const deny = useCallback(
         (id: string) => {
-            resolversRef.current.get(id)?.(
-                "The user declined the subagent request. Continue without it, or complete the work directly.",
-            );
-            resolversRef.current.delete(id);
+            resolveOnce(id, SUBAGENT_DECLINED_MESSAGE);
             patchSession(id, { status: "declined" });
         },
-        [patchSession],
+        [patchSession, resolveOnce],
     );
+
+    const approveAll = useCallback(() => {
+        setSessions((current) =>
+            current.map((session) =>
+                session.status === "awaiting-approval" &&
+                !settledRef.current.has(session.id)
+                    ? { ...session, status: "running" }
+                    : session,
+            ),
+        );
+    }, []);
+
+    const denyAll = useCallback(() => {
+        setSessions((current) => {
+            for (const session of current) {
+                if (session.status !== "awaiting-approval") continue;
+                resolveOnce(session.id, SUBAGENT_DECLINED_MESSAGE);
+            }
+            return current.map((session) =>
+                session.status === "awaiting-approval"
+                    ? { ...session, status: "declined" }
+                    : session,
+            );
+        });
+    }, [resolveOnce]);
 
     const complete = useCallback(
         (id: string, output: string) => {
-            resolversRef.current.get(id)?.(output);
-            resolversRef.current.delete(id);
-            patchSession(id, { status: "complete", output });
+            resolveOnce(id, formatSubagentSuccess(output));
+            patchSession(id, {
+                status: "complete",
+                output: output.trim() || undefined,
+                error: undefined,
+            });
         },
-        [patchSession],
+        [patchSession, resolveOnce],
     );
 
     const fail = useCallback(
         (id: string, error: string) => {
-            resolversRef.current.get(id)?.(`The subagent failed: ${error}`);
-            resolversRef.current.delete(id);
-            patchSession(id, { status: "error", error });
+            const message = formatSubagentFailure(error);
+            resolveOnce(id, message);
+            patchSession(id, { status: "error", error: error.trim() || "Unknown error" });
         },
-        [patchSession],
+        [patchSession, resolveOnce],
     );
 
-    const dismiss = useCallback((id: string) => {
-        setSessions((current) => current.filter((session) => session.id !== id));
-    }, []);
+    const dismiss = useCallback(
+        (id: string) => {
+            // Never leave the main chat waiting on a dismissed session.
+            if (!settledRef.current.has(id)) {
+                resolveOnce(id, SUBAGENT_CANCELLED_MESSAGE);
+            }
+            setSessions((current) => current.filter((session) => session.id !== id));
+        },
+        [resolveOnce],
+    );
 
     const value = useMemo<SubagentContextValue>(
         () => ({
             sessions,
             runSubagent,
+            runSubagentsBatch,
             approve,
             deny,
+            approveAll,
+            denyAll,
             complete,
             fail,
             dismiss,
         }),
-        [approve, complete, deny, dismiss, fail, runSubagent, sessions],
+        [
+            approve,
+            approveAll,
+            complete,
+            deny,
+            denyAll,
+            dismiss,
+            fail,
+            runSubagent,
+            runSubagentsBatch,
+            sessions,
+        ],
     );
 
     return (
@@ -203,12 +345,38 @@ const STATUS_LABEL: Record<SubagentSessionStatus, string> = {
 };
 
 function SubagentPopup({ threadId }: { threadId: string | null }) {
-    const { sessions, dismiss } = useSubagent();
+    const { sessions, dismiss, approveAll, denyAll } = useSubagent();
+    const awaitingCount = sessions.filter(
+        (session) => session.status === "awaiting-approval",
+    ).length;
 
     if (sessions.length === 0) return null;
 
     return (
         <div className="fixed bottom-4 right-4 z-50 flex w-[21rem] max-w-[calc(100vw-2rem)] flex-col gap-2">
+            {awaitingCount > 1 ? (
+                <div className="overflow-hidden rounded-xl border border-border/80 bg-background px-3 py-2 shadow-lg">
+                    <p className="mb-2 text-[10px] text-muted-foreground">
+                        {awaitingCount} subagents need approval
+                    </p>
+                    <div className="flex gap-1.5">
+                        <button
+                            type="button"
+                            onClick={denyAll}
+                            className="flex-1 rounded-lg border border-border px-2 py-1.5 text-[11px] font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
+                        >
+                            Deny all
+                        </button>
+                        <button
+                            type="button"
+                            onClick={approveAll}
+                            className="flex-1 rounded-lg bg-primary px-2 py-1.5 text-[11px] font-semibold text-primary-foreground outline-none hover:bg-primary/90"
+                        >
+                            Approve all
+                        </button>
+                    </div>
+                </div>
+            ) : null}
             {sessions.map((session) => (
                 <SubagentSessionCard
                     key={session.id}
@@ -286,8 +454,8 @@ function SubagentSessionCard({
                     {session.status === "awaiting-approval" ? (
                         <>
                             <p className="mb-2 text-[10px] text-muted-foreground">
-                                You approve each subagent before it runs. You cannot
-                                prompt it while it works.
+                                Approve to run. The main chat waits until this
+                                subagent finishes (or is denied).
                             </p>
                             <div className="flex gap-1.5">
                                 <button
@@ -388,8 +556,21 @@ function SubagentRun({
     const callbacksRef = useRef({ onComplete, onError });
     callbacksRef.current = { onComplete, onError };
     const sentRef = useRef(false);
+    const settledRef = useRef(false);
     const pendingClientCalls = useRef(0);
     const chatRef = useRef<ReturnType<typeof useChat> | null>(null);
+
+    const settleComplete = useCallback((output: string) => {
+        if (settledRef.current) return;
+        settledRef.current = true;
+        callbacksRef.current.onComplete(output);
+    }, []);
+
+    const settleError = useCallback((error: string) => {
+        if (settledRef.current) return;
+        settledRef.current = true;
+        callbacksRef.current.onError(error);
+    }, []);
 
     const transport = useMemo(
         () =>
@@ -410,6 +591,15 @@ function SubagentRun({
                     const providerConfig = s.providers[provider];
                     const apiKey = providerConfig?.apiKey?.trim() || "";
                     const baseUrl = providerConfig?.baseUrl?.trim() || undefined;
+                    const resolvedApiKey =
+                        provider === "custom" &&
+                        providerConfig?.openAICompatible?.authMode &&
+                        providerConfig.openAICompatible.authMode !== "bearer"
+                            ? ""
+                            : apiKey || localProviderKey(provider);
+
+                    await assertClientUsageAllowed(s, provider, resolvedApiKey);
+
                     const memoryEnabled = s.memoryEnabled !== false;
                     return {
                         body: {
@@ -417,12 +607,7 @@ function SubagentRun({
                             messages: options.messages,
                             model: s.chat.model,
                             provider,
-                            apiKey:
-                                provider === "custom" &&
-                                providerConfig?.openAICompatible?.authMode &&
-                                providerConfig.openAICompatible.authMode !== "bearer"
-                                    ? ""
-                                    : apiKey || localProviderKey(provider),
+                            apiKey: resolvedApiKey,
                             baseUrl,
                             openAICompatible: providerConfig?.openAICompatible,
                             systemPrompt: s.chat.systemPrompt,
@@ -489,18 +674,33 @@ function SubagentRun({
                         typeof result === "string" ? null : result;
                     if (pythonResult) {
                         for (const artifact of pythonResult.artifacts) {
-                            addArtifact(
+                            const mimeType = inferArtifactMimeType(artifact.filename);
+                            const sourceKey = `python:${artifact.filename}:${artifact.contentEncoding}:${artifact.content.length}:${artifactContentHash(artifact.content)}`;
+                            const scopeId = threadIdRef.current;
+                            const artifactId = addArtifact(
                                 {
                                     kind: "file",
                                     title: artifact.filename,
                                     filename: artifact.filename,
                                     content: artifact.content,
                                     contentEncoding: artifact.contentEncoding,
-                                    mimeType: inferArtifactMimeType(artifact.filename),
-                                    sourceKey: `python:${artifact.filename}:${artifact.contentEncoding}:${artifact.content.length}:${artifactContentHash(artifact.content)}`,
+                                    mimeType,
+                                    sourceKey,
                                 },
-                                { scopeId: threadIdRef.current },
+                                { scopeId },
                             );
+                            persistArtifactForScope(scopeId, {
+                                id: artifactId,
+                                kind: "file",
+                                title: artifact.filename,
+                                filename: artifact.filename,
+                                content: artifact.content,
+                                contentEncoding: artifact.contentEncoding,
+                                mimeType,
+                                sourceKey,
+                                scopeId: scopeId ?? null,
+                                createdAt: Date.now(),
+                            });
                         }
                     }
                     const addToolOutput = chatRef.current
@@ -520,6 +720,10 @@ function SubagentRun({
                     });
                 },
                 (error) => {
+                    pendingClientCalls.current = Math.max(
+                        0,
+                        pendingClientCalls.current - 1,
+                    );
                     const addToolOutput = chatRef.current
                         ?.addToolOutput as unknown as
                         | ((args: {
@@ -549,13 +753,26 @@ function SubagentRun({
             pendingClientCalls.current = 0;
             return true;
         },
-        onFinish: ({ messages, isError }) => {
-            if (!isError) {
-                callbacksRef.current.onComplete(subagentResultText(messages));
+        onFinish: ({ messages, isError, isAbort, isDisconnect }) => {
+            if (isAbort) {
+                settleError("The subagent run was aborted.");
+                return;
             }
+            if (isDisconnect) {
+                settleError("The subagent lost its network connection.");
+                return;
+            }
+            if (isError) {
+                settleError(
+                    chat.error?.message ||
+                        "The subagent finished with an error.",
+                );
+                return;
+            }
+            settleComplete(subagentResultText(messages));
         },
         onError: (error) => {
-            callbacksRef.current.onError(
+            settleError(
                 error instanceof Error ? error.message : String(error),
             );
         },
@@ -565,8 +782,14 @@ function SubagentRun({
     useEffect(() => {
         if (sentRef.current) return;
         sentRef.current = true;
-        void chat.sendMessage({ text: task });
-    }, [chat, task]);
+        void chat.sendMessage({ text: task }).catch((error) => {
+            settleError(
+                error instanceof Error
+                    ? error.message
+                    : "Failed to start the subagent run.",
+            );
+        });
+    }, [chat, settleError, task]);
 
     return <SubagentActivity chat={chat} />;
 }

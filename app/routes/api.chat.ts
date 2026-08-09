@@ -58,6 +58,11 @@ import {
     tokenModePolicy,
     type TokenMode,
 } from "~/lib/token-mode";
+import {
+    checkRateLimit,
+    rateLimitKeyFromRequest,
+    rateLimitResponse,
+} from "~/lib/server/rate-limit";
 
 interface ChatRequestBody {
     messages: UIMessage[];
@@ -81,6 +86,7 @@ interface ChatRequestBody {
         skillsEnabled?: boolean;
         connectors?: ConnectorConfig[];
         memoryAvailable?: boolean;
+        knowledgeEnabled?: boolean;
         subagentsEnabled?: boolean;
         tokenMode?: TokenMode;
     };
@@ -248,6 +254,12 @@ export async function action({ request }: ActionFunctionArgs) {
             request,
             Response.json({ error: "Invalid JSON body" }, { status: 400 }),
         );
+    }
+
+    const rateKey = rateLimitKeyFromRequest(request, body.apiKey);
+    const rateCheck = checkRateLimit(rateKey);
+    if (!rateCheck.ok) {
+        return withCors(request, rateLimitResponse(rateCheck.retryAfterMs));
     }
 
     if (providerNeedsKey(body.provider) && !body.apiKey) {

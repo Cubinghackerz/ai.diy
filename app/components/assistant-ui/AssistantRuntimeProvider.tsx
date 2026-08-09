@@ -22,20 +22,27 @@ import { getModelModalities } from "~/lib/model-modalities";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { runBrowserPython } from "~/lib/pyodide";
 import { artifactContentHash, inferArtifactMimeType } from "~/lib/artifacts";
+import { persistArtifactForScope } from "~/lib/artifact-persist.client";
 import { useCanvas } from "~/lib/canvas";
 import {
     buildLocalMemoryContext,
     hasLocalMemoryEntries,
     readLocalMemory,
 } from "~/lib/memory";
+import {
+    buildLocalKnowledgeContext,
+    listKnowledgeDocuments,
+    readLocalKnowledge,
+} from "~/lib/knowledge/store.client";
 import { askUserInBrowser } from "~/lib/client-tools";
-import { forcedSkillStore } from "~/lib/skill-command";
+import { forcedSkillStore, toolNameForForcedSkill } from "~/lib/skill-command";
 import { useSubagent } from "~/components/assistant-ui/subagents";
 import {
     createWebSpeechDictationAdapter,
     isWebSpeechDictationSupported,
 } from "~/lib/dictation";
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { assertClientUsageAllowed } from "~/lib/usage-ledger.client";
 
 async function parseChatError(res: Response): Promise<string> {
     const text = await res.text();
@@ -61,7 +68,7 @@ export function AssistantRuntimeProvider({
 }) {
     const { settings } = useSettings();
     const { addArtifact } = useCanvas();
-    const { runSubagent } = useSubagent();
+    const { runSubagent, runSubagentsBatch } = useSubagent();
     const settingsRef = useRef(settings);
     settingsRef.current = settings;
     const projectInstructionsRef = useRef(projectInstructions ?? "");
@@ -84,15 +91,45 @@ export function AssistantRuntimeProvider({
                     const providerConfig = s.providers[provider];
                     const apiKey = providerConfig?.apiKey?.trim() || "";
                     const baseUrl = providerConfig?.baseUrl?.trim() || undefined;
+                    const resolvedApiKey =
+                        provider === "custom" &&
+                        providerConfig?.openAICompatible?.authMode &&
+                        providerConfig.openAICompatible.authMode !== "bearer"
+                            ? ""
+                            : apiKey || localProviderKey(provider);
+
+                    await assertClientUsageAllowed(s, provider, resolvedApiKey);
 
                     const memoryEnabled = s.memoryEnabled !== false;
+                    const knowledgeEnabled = s.knowledgeEnabled !== false;
                     const memoryContext = memoryEnabled
                         ? await buildLocalMemoryContext()
                         : "";
+                    const lastMsg = [...(options.messages ?? [])]
+                        .reverse()
+                        .find((m) => m.role === "user") as
+                        | { parts?: Array<{ type?: string; text?: string }> }
+                        | undefined;
+                    const lastUserText =
+                        lastMsg?.parts
+                            ?.filter((p) => p.type === "text" && typeof p.text === "string")
+                            .map((p) => p.text ?? "")
+                            .join(" ") ?? "";
+                    const knowledgeContext =
+                        knowledgeEnabled && lastUserText.trim()
+                            ? await buildLocalKnowledgeContext(lastUserText)
+                            : "";
+                    const combinedContext = [memoryContext, knowledgeContext]
+                        .filter(Boolean)
+                        .join("\n\n");
                     const memoryAvailable =
                         memoryEnabled && (await hasLocalMemoryEntries());
                     const forcedSkills = forcedSkillStore.current;
                     forcedSkillStore.current = [];
+                    const forceSubagents = forcedSkills.some(
+                        (skill) =>
+                            toolNameForForcedSkill(skill.name) === "spawn_subagents",
+                    );
                     return {
                         body: {
                             // Keep assistant-ui forwarded context (tools/system/etc).
@@ -104,12 +141,7 @@ export function AssistantRuntimeProvider({
                             metadata: options.requestMetadata,
                             model: s.chat.model,
                             provider,
-                            apiKey:
-                                provider === "custom" &&
-                                providerConfig?.openAICompatible?.authMode &&
-                                providerConfig.openAICompatible.authMode !== "bearer"
-                                    ? ""
-                                    : apiKey || localProviderKey(provider),
+                            apiKey: resolvedApiKey,
                             baseUrl,
                             openAICompatible: providerConfig?.openAICompatible,
                              systemPrompt: s.chat.systemPrompt,
@@ -131,11 +163,13 @@ export function AssistantRuntimeProvider({
                                 skillsEnabled: s.skillsEnabled,
                                 connectors: s.connectors,
                                 memoryAvailable,
-                                subagentsEnabled: s.subagentsEnabled,
+                                knowledgeEnabled,
+                                subagentsEnabled:
+                                    s.subagentsEnabled === true || forceSubagents,
                                 tokenMode: s.tokenMode ?? "balanced",
                             },
                             mcpServers: s.mcpServers.filter((m) => m.enabled),
-                            memoryContext,
+                            memoryContext: combinedContext,
                             agentMode: s.agentModeEnabled === true,
                             ...(forcedSkills.length ? { customSkills: forcedSkills } : {}),
                         },
@@ -156,7 +190,10 @@ export function AssistantRuntimeProvider({
                 "run_code",
                 "ask_user",
                 "memory",
+                "knowledge_search",
+                "knowledge_list",
                 "spawn_subagent",
+                "spawn_subagents",
             ].includes(toolCall.toolName)) return;
             pendingClientCalls.current += 1;
             const input = toolCall.input as {
@@ -165,7 +202,9 @@ export function AssistantRuntimeProvider({
                 questionType?: "single" | "multiple" | "short";
                 options?: string[];
                 query?: string;
+                k?: number;
                 task?: string;
+                tasks?: string[];
             };
             const task =
                 toolCall.toolName === "ask_user"
@@ -174,13 +213,35 @@ export function AssistantRuntimeProvider({
                           questionType: input.questionType,
                           options: input.options,
                       })
-                    : toolCall.toolName === "spawn_subagent"
-                      ? runSubagent(toolCall.toolCallId, input.task ?? "")
-                      : toolCall.toolName === "memory"
+                    : toolCall.toolName === "spawn_subagents"
+                      ? runSubagentsBatch(
+                            toolCall.toolCallId,
+                            input.tasks ?? [],
+                        )
+                      : toolCall.toolName === "spawn_subagent"
+                        ? runSubagent(toolCall.toolCallId, input.task ?? "")
+                        : toolCall.toolName === "memory"
                         ? settingsRef.current.memoryEnabled !== false
                             ? readLocalMemory(input.query)
                             : Promise.resolve("Memory is disabled for this chat.")
-                        : runBrowserPython(input.code ?? "");
+                        : toolCall.toolName === "knowledge_list"
+                          ? settingsRef.current.knowledgeEnabled !== false
+                              ? listKnowledgeDocuments().then((docs) =>
+                                    docs.length
+                                        ? docs
+                                              .map(
+                                                  (d, i) =>
+                                                      `${i + 1}. ${d.name} (${d.chunkCount} chunks)`,
+                                              )
+                                              .join("\n")
+                                        : "Knowledge base is empty.",
+                                )
+                              : Promise.resolve("Knowledge base is disabled.")
+                          : toolCall.toolName === "knowledge_search"
+                            ? settingsRef.current.knowledgeEnabled !== false
+                                ? readLocalKnowledge(input.query)
+                                : Promise.resolve("Knowledge base is disabled.")
+                            : runBrowserPython(input.code ?? "");
             void task.then(
                 (result) => {
                     const output =
@@ -191,10 +252,7 @@ export function AssistantRuntimeProvider({
                         for (const artifact of pythonResult.artifacts) {
                             const mimeType = inferArtifactMimeType(artifact.filename);
                             const sourceKey = `python:${artifact.filename}:${artifact.contentEncoding}:${artifact.content.length}:${artifactContentHash(artifact.content)}`;
-                            // Python binary artifacts are session-only: saving
-                            // Base64 to IndexedDB can consume substantial
-                            // browser storage. Canvas still offers download.
-                            addArtifact(
+                            const artifactId = addArtifact(
                                 {
                                     kind: "file",
                                     title: artifact.filename,
@@ -206,6 +264,18 @@ export function AssistantRuntimeProvider({
                                 },
                                 { scopeId: threadId },
                             );
+                            persistArtifactForScope(threadId, {
+                                id: artifactId,
+                                kind: "file",
+                                title: artifact.filename,
+                                filename: artifact.filename,
+                                content: artifact.content,
+                                contentEncoding: artifact.contentEncoding,
+                                mimeType,
+                                sourceKey,
+                                scopeId: threadId,
+                                createdAt: Date.now(),
+                            });
                         }
                     }
                     const addToolOutput = chatRef.current
@@ -225,24 +295,41 @@ export function AssistantRuntimeProvider({
                     });
                 },
                 (error) => {
+                    const isSubagent =
+                        toolCall.toolName === "spawn_subagent" ||
+                        toolCall.toolName === "spawn_subagents";
+                    const errorText =
+                        error instanceof Error
+                            ? error.message
+                            : isSubagent
+                              ? "Subagent run failed"
+                              : "Pyodide execution failed";
+                    // Always resume the main chat — never leave spawn_* hanging.
                     const addToolOutput = chatRef.current
                         ?.addToolOutput as unknown as
                         | ((args: {
                               tool: string;
                               toolCallId: string;
-                              state: "output-error";
-                              errorText: string;
+                              state: "output-available" | "output-error";
+                              output?: string;
+                              errorText?: string;
                           }) => void)
                         | undefined;
-                    addToolOutput?.({
-                        tool: toolCall.toolName,
-                        toolCallId: toolCall.toolCallId,
-                        state: "output-error",
-                        errorText:
-                            error instanceof Error
-                                ? error.message
-                                : "Pyodide execution failed",
-                    });
+                    if (isSubagent) {
+                        addToolOutput?.({
+                            tool: toolCall.toolName,
+                            toolCallId: toolCall.toolCallId,
+                            state: "output-available",
+                            output: `Status: error\n${errorText}\nContinue without this subagent result, or finish the work yourself.`,
+                        });
+                    } else {
+                        addToolOutput?.({
+                            tool: toolCall.toolName,
+                            toolCallId: toolCall.toolCallId,
+                            state: "output-error",
+                            errorText,
+                        });
+                    }
                 },
             );
         },

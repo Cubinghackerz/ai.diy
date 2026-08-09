@@ -15,6 +15,7 @@ import { useSettings } from "~/lib/providers/SettingsProvider";
 import { isLocalProvider, isProviderReady } from "~/lib/setup";
 import {
     DEFAULT_MODELS,
+    DEFAULT_SETTINGS,
     FREE_SEARCH_MCP_PRESETS,
     PROJECT_COLORS,
     PROVIDER_DEFAULTS,
@@ -61,6 +62,7 @@ import {
     CheckCircle,
     Desktop,
     Brain,
+    Books,
     ChartBar,
     ArrowsClockwise,
     CloudArrowUp,
@@ -138,6 +140,7 @@ type SettingsSection =
     | "mcp"
     | "experimental"
     | "memory"
+    | "knowledge"
     | "connectors"
     | "cloud"
     | "data"
@@ -898,6 +901,7 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
         { id: "mcp", label: "MCP Beta", icon: Plug },
         { id: "experimental", label: "Experimental", icon: Flask },
         { id: "memory", label: "Memory Beta", icon: Brain },
+        { id: "knowledge", label: "Knowledge Base", icon: Books },
         { id: "connectors", label: "Connectors Beta", icon: HardDrives },
         { id: "cloud", label: "Cloud Storage Beta", icon: CloudArrowUp },
         { id: "data", label: "Import & Export", icon: UploadSimple },
@@ -1187,6 +1191,8 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
 
             {section === "memory" && <MemorySettingsSection />}
 
+            {section === "knowledge" && <KnowledgeSettingsSection />}
+
             {section === "connectors" && <ConnectorsSection />}
 
             {section === "cloud" && (
@@ -1307,6 +1313,133 @@ function TokenModeSettingsSection() {
                     );
                 })}
             </div>
+        </div>
+    );
+}
+
+function KnowledgeSettingsSection() {
+    const { settings, updateSettings } = useSettings();
+    const knowledgeEnabled = settings.knowledgeEnabled !== false;
+    const [docs, setDocs] = useState<
+        Array<{ id: string; name: string; chunkCount: number }>
+    >([]);
+    const [status, setStatus] = useState<string | null>(null);
+    const [busy, setBusy] = useState(false);
+
+    const refresh = useCallback(() => {
+        void import("~/lib/knowledge/store.client").then(({ listKnowledgeDocuments }) =>
+            listKnowledgeDocuments().then((list) =>
+                setDocs(
+                    list.map((d) => ({
+                        id: d.id,
+                        name: d.name,
+                        chunkCount: d.chunkCount,
+                    })),
+                ),
+            ),
+        );
+    }, []);
+
+    useEffect(() => {
+        refresh();
+    }, [refresh]);
+
+    const ingest = async (file: File) => {
+        setBusy(true);
+        setStatus("Indexing on-device (first run downloads the embedding model)…");
+        try {
+            const { ingestTextFile } = await import("~/lib/knowledge/store.client");
+            const doc = await ingestTextFile(file);
+            setStatus(`Indexed ${doc.name} (${doc.chunkCount} chunks). Embeddings stay in this browser.`);
+            refresh();
+        } catch (error) {
+            setStatus(error instanceof Error ? error.message : "Ingest failed.");
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <div className="flex flex-col gap-3">
+            <ToolToggle
+                title="Local knowledge base"
+                description={
+                    knowledgeEnabled
+                        ? "Private WASM embeddings + HNSW search over uploaded notes. Nothing is sent to embedding APIs."
+                        : "Knowledge tools and auto-retrieval are off."
+                }
+                checked={knowledgeEnabled}
+                onChange={(value) => updateSettings({ knowledgeEnabled: value })}
+            />
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+                Upload text, Markdown, JSON, or CSV. PDFs work best when exported as text.
+                Vectors are stored in IndexedDB; the MiniLM model caches in the browser.
+            </p>
+            <label className="inline-flex h-8 w-fit cursor-pointer items-center rounded-xl border border-border px-3 text-xs font-medium hover:bg-accent">
+                {busy ? "Indexing…" : "Upload document"}
+                <input
+                    type="file"
+                    accept=".txt,.md,.markdown,.json,.csv,.tsv,text/plain,text/markdown,application/json"
+                    className="sr-only"
+                    disabled={busy}
+                    onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void ingest(file);
+                        event.currentTarget.value = "";
+                    }}
+                />
+            </label>
+            {docs.length > 0 ? (
+                <ul className="space-y-2 text-[11px]">
+                    {docs.map((doc) => (
+                        <li
+                            key={doc.id}
+                            className="flex items-center justify-between gap-2 rounded-lg border border-border/60 px-2.5 py-2"
+                        >
+                            <span className="truncate text-foreground">
+                                {doc.name}{" "}
+                                <span className="text-muted-foreground">
+                                    ({doc.chunkCount})
+                                </span>
+                            </span>
+                            <button
+                                type="button"
+                                className="text-muted-foreground hover:text-destructive"
+                                onClick={() => {
+                                    void import("~/lib/knowledge/store.client").then(
+                                        ({ removeKnowledgeDocument }) =>
+                                            removeKnowledgeDocument(doc.id).then(refresh),
+                                    );
+                                }}
+                            >
+                                Remove
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <p className="text-[11px] text-muted-foreground">No documents indexed yet.</p>
+            )}
+            {docs.length > 0 ? (
+                <button
+                    type="button"
+                    className="text-left text-[11px] text-muted-foreground hover:text-destructive"
+                    onClick={() => {
+                        if (!window.confirm("Clear the entire local knowledge base?")) return;
+                        void import("~/lib/knowledge/store.client").then(({ wipeKnowledgeBase }) =>
+                            wipeKnowledgeBase().then(() => {
+                                refresh();
+                                setStatus("Knowledge base cleared.");
+                            }),
+                        );
+                    }}
+                >
+                    Clear knowledge base
+                </button>
+            ) : null}
+            {status ? (
+                <p className="text-[11px] text-muted-foreground">{status}</p>
+            ) : null}
         </div>
     );
 }
@@ -3478,6 +3611,8 @@ function ToolToggle({
 }
 
 function UsageSection() {
+    const { settings, updateSettings } = useSettings();
+    const limits = settings.usageLimits ?? DEFAULT_SETTINGS.usageLimits;
     const catalog = useModelCatalog();
     const [aggregate, setAggregate] = useState<UsageAggregate | null>(null);
     const [loading, setLoading] = useState(true);
@@ -3553,6 +3688,139 @@ function UsageSection() {
                 assistant message and stored locally. Cost is estimated from
                 models.dev pricing — exact billing depends on your provider.
             </p>
+
+            <div className="rounded-xl border border-border/70 bg-muted/10 p-3">
+                <h4 className="text-[11px] font-semibold">Usage limits</h4>
+                <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                    Local guardrails per API key fingerprint. Server rate limits
+                    apply separately via RATE_LIMIT_RPM.
+                </p>
+                <div className="mt-2 flex flex-col gap-2">
+                    <ToolToggle
+                        title="Enable limits"
+                        description="Block or warn before sending when caps are reached"
+                        checked={limits.enabled}
+                        onChange={(enabled) =>
+                            updateSettings({
+                                usageLimits: { ...limits, enabled },
+                            })
+                        }
+                    />
+                    {limits.enabled ? (
+                        <>
+                            <label className="flex flex-col gap-1 text-[10px]">
+                                <span className="font-medium text-muted-foreground">
+                                    Daily token cap
+                                </span>
+                                <Input
+                                    type="number"
+                                    min={0}
+                                    placeholder="No limit"
+                                    value={limits.dailyTokenCap ?? ""}
+                                    onChange={(e) => {
+                                        const raw = e.target.value.trim();
+                                        updateSettings({
+                                            usageLimits: {
+                                                ...limits,
+                                                dailyTokenCap: raw
+                                                    ? Number(raw)
+                                                    : null,
+                                            },
+                                        });
+                                    }}
+                                    className="h-8 text-xs"
+                                />
+                            </label>
+                            <label className="flex flex-col gap-1 text-[10px]">
+                                <span className="font-medium text-muted-foreground">
+                                    Daily spend cap (USD)
+                                </span>
+                                <Input
+                                    type="number"
+                                    min={0}
+                                    step={0.01}
+                                    placeholder="No limit"
+                                    value={limits.dailySpendCapUsd ?? ""}
+                                    onChange={(e) => {
+                                        const raw = e.target.value.trim();
+                                        updateSettings({
+                                            usageLimits: {
+                                                ...limits,
+                                                dailySpendCapUsd: raw
+                                                    ? Number(raw)
+                                                    : null,
+                                            },
+                                        });
+                                    }}
+                                    className="h-8 text-xs"
+                                />
+                            </label>
+                            <label className="flex flex-col gap-1 text-[10px]">
+                                <span className="font-medium text-muted-foreground">
+                                    Client requests / minute
+                                </span>
+                                <Input
+                                    type="number"
+                                    min={1}
+                                    value={limits.requestsPerMinute ?? 30}
+                                    onChange={(e) => {
+                                        const value = Number(e.target.value);
+                                        updateSettings({
+                                            usageLimits: {
+                                                ...limits,
+                                                requestsPerMinute:
+                                                    Number.isFinite(value) &&
+                                                    value > 0
+                                                        ? value
+                                                        : 30,
+                                            },
+                                        });
+                                    }}
+                                    className="h-8 text-xs"
+                                />
+                            </label>
+                            <label className="flex flex-col gap-1 text-[10px]">
+                                <span className="font-medium text-muted-foreground">
+                                    Warn at (% of cap)
+                                </span>
+                                <Input
+                                    type="number"
+                                    min={1}
+                                    max={100}
+                                    value={limits.warnAtPercent ?? 80}
+                                    onChange={(e) => {
+                                        const value = Number(e.target.value);
+                                        updateSettings({
+                                            usageLimits: {
+                                                ...limits,
+                                                warnAtPercent:
+                                                    Number.isFinite(value) &&
+                                                    value > 0
+                                                        ? Math.min(value, 100)
+                                                        : 80,
+                                            },
+                                        });
+                                    }}
+                                    className="h-8 text-xs"
+                                />
+                            </label>
+                            <ToolToggle
+                                title="Block when exceeded"
+                                description="Prevent sends after caps are hit (otherwise warn only)"
+                                checked={limits.blockWhenExceeded !== false}
+                                onChange={(blockWhenExceeded) =>
+                                    updateSettings({
+                                        usageLimits: {
+                                            ...limits,
+                                            blockWhenExceeded,
+                                        },
+                                    })
+                                }
+                            />
+                        </>
+                    ) : null}
+                </div>
+            </div>
 
             {loading ? (
                 <div className="flex items-center gap-2 py-6 text-xs text-muted-foreground">

@@ -25,6 +25,7 @@ import { getModelModalities } from "~/lib/model-modalities";
 import { ModelPicker } from "~/components/ui/ModelPicker";
 import { ProviderPicker } from "~/components/ui/ProviderPicker";
 import { localProviderKey } from "~/lib/provider-credentials";
+import { assertClientUsageAllowed } from "~/lib/usage-ledger.client";
 import { runBrowserPython } from "~/lib/pyodide";
 import { artifactContentHash, inferArtifactMimeType } from "~/lib/artifacts";
 import { useCanvas } from "~/lib/canvas";
@@ -950,6 +951,11 @@ const PreviewRunPanel: FC<{
                     return response;
                 },
         prepareSendMessagesRequest: async (options) => {
+                    await assertClientUsageAllowed(
+                        settingsRef.current,
+                        run.config.provider as ProviderId,
+                        run.config.apiKey,
+                    );
                     return { body: {
                         ...options.body,
                         messages: options.messages,

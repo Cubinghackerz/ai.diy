@@ -54,6 +54,8 @@ Copy `.env.example` — no secrets required. Optional:
 CORS_ORIGINS=https://app.example.com,https://beta.example.com
 ALLOW_PRIVATE_PROVIDER_URLS=true   # trusted self-host only
 NODE_ENV=production
+RATE_LIMIT_RPM=60                  # per API key or IP, sliding 1-minute window
+# RATE_LIMIT_DISABLED=true         # skip in-memory rate limiting (dev only)
 ```
 
 ## Public deployment
@@ -62,7 +64,7 @@ NODE_ENV=production
 2. **Do not** add LLM API keys to environment variables — users enter keys in the UI.
 3. Build with `npm run build`, run with `npm start` (React Router Node SSR).
 4. Ollama / localhost models **do not work** for remote users — the server cannot reach the user's machine. Use cloud providers or expose Ollama at a public HTTPS URL.
-5. **Add rate limiting and request-size limits** before exposing a public instance. Treat shared demos as credential proxies in transit.
+5. **Add rate limiting and request-size limits** before exposing a public instance. Treat shared demos as credential proxies in transit. Built-in server rate limiting uses `RATE_LIMIT_RPM` (default 60 requests/minute per API key or client IP); set `RATE_LIMIT_DISABLED=true` to disable during local development.
 
 ### Features on any host
 

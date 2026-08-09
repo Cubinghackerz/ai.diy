@@ -14,9 +14,10 @@ import { ARTIFACT_MARKER, type ArtifactContentEncoding } from "~/lib/artifacts";
 import { useCanvas, type ArtifactKind } from "~/lib/canvas";
 import {
     getArtifactsForScope,
-    saveArtifactToDB,
 } from "~/lib/db";
+import { persistArtifactForScope } from "~/lib/artifact-persist.client";
 import { indexChatMemories } from "~/lib/memory";
+import { recordUsageFromMessages } from "~/lib/usage-ledger.client";
 import { useChatSession } from "~/components/assistant-ui/ChatSessionContext";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import { isToolUIPart, type UIMessage } from "ai";
@@ -165,6 +166,11 @@ export function ChatThreadSync({
             }).then(() => {
                 window.dispatchEvent(new Event("ai-diy:chats-changed"));
             });
+            void recordUsageFromMessages(
+                chat.messages as UIMessage[],
+                settings,
+                "chat",
+            );
             void indexChatMemories(chat.messages as UIMessage[]);
         }, 400);
         return () => clearTimeout(timer);
@@ -226,7 +232,7 @@ export function ChatThreadSync({
                     },
                 );
                 if (threadId) {
-                    void saveArtifactToDB(threadId, {
+                    persistArtifactForScope(threadId, {
                         id: artifactId,
                         ...artifact,
                         sourceKey: `${artifact.kind}:${artifact.filename}:${artifact.contentEncoding ?? "text"}:${artifact.content}`,

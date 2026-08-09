@@ -2,64 +2,59 @@
 
 ## Direction
 
-The landing page is **The Signal Field**: a local-first AI workspace presented inside a controlled ultraviolet LightTunnel. It rejects the generic glass AI-chat hero and makes the product mechanism visible through converging fibers, scopes, channels, meters, and a provider patchbay.
+The landing page is **Ethereal Glass × Resend blackspace**: an OLED persuasion surface for ai.diy where ownership is visible as mechanism — keys stay local, providers converge into a hub, artifacts emerge from chat. Zinc/white mesh light only; no purple AI glow.
 
 ## Mode
 
-Persuade. The visitor should understand the product, trust its ownership model, and open the workspace without reading a specification sheet.
+Persuade. Understand BYOK local-first ownership → open `/workspace` or deploy.
 
 ## Palette
 
-- Night field: `#080613` ground, translucent `rgba(17,12,39,.76)` panels, `#f7f4ff` ink.
-- Day field: `#eee9ff` ground, translucent white panels, `#19112f` ink.
-- Signal accent: ultraviolet `#a855f7` in dark mode and `#7c3aed` in light mode.
-- Secondary state: electric blue `#4cc9f0` in dark mode and cyan `#0891b2` in light mode.
-- Graticule and borders: low-opacity ink from the active theme.
+- Canvas: `#050505` / black
+- Surfaces: `#0A0A0A` with `white/[0.03]` shells
+- Borders: `white/[0.06]`–`white/[0.1]` hairlines; inset highlight `rgba(255,255,255,0.06)`
+- Type: solid white headings; zinc-400/500 body; zinc-600 meta
+- Primary CTA: solid white pills with nested icon circle (button-in-button)
+- Status: quiet emerald dot
 
 ## Typography
 
-- Display and body: Archivo, loaded alongside the application's existing DM Sans stack.
-- Readouts and measurement labels: JetBrains Mono.
-- Display tracking stops at `-0.04em`; body copy remains open and readable.
+- Geist Sans (display/body), Geist Mono (terminal, badges, meta)
+- Medium weight display; tracking to `-0.04em`
+- No gradient text
 
 ## Shape And Depth
 
-- Instrument panels use a consistent 16px-ish radius and one-pixel hairline bezels.
-- CTAs and small controls use full-pill shapes.
-- Depth uses soft, warm-tinted shadows; no hard offset shadows.
-- Graticules appear only inside instrument or patchbay surfaces where they carry measurement meaning.
+- Double-bezel: outer shell (`rounded-[1.75rem–2rem]` + padding) + concentric inner core
+- Floating island nav (detached glass pill, `backdrop-blur-xl`)
+- Soft layered shadows; avoid harsh solid borders as the only depth cue
+- Logo nodes use `outline` `oklch(1 0 0 / 0.1)`-equivalent white/10
 
 ## Composition
 
-- The hero is an asymmetric split inside a full-bleed LightTunnel field: claim and action on the left, live signal scope on the right.
-- Proof content uses an asymmetric instrument module grid, not equal feature cards.
-- The workspace section uses a sticky stack of three real product statements.
-- Provider freedom is expressed as a patchbay with the ai.diy workspace as the hub.
-- Search integrations use two expansion modules with the real bundled logos.
+- Island nav → hero (announcement, headline, CTAs, product bezel) → provider constellation → asymmetric ownership bento → deploy terminal → footer
+- Hero brand-first; one dominant product proof (not a dashboard collage)
 
-## Motion And Performance
+## Motion
 
-- The authored moment is the LightTunnel fiber field converging behind a product capability panel.
-- LightTunnel uses the page palette: ultraviolet cable rims, electric-blue pulses, and a midnight CSS fallback rather than the supplied purple defaults.
-- VU bars, patchbay lines, and the hub ring are ambient only while their gate is in or near the viewport.
-- `document.visibilityState` pauses ambient animation when the tab is hidden.
-- `prefers-reduced-motion` leaves the trace static and skips GSAP parsing entirely.
-- LightTunnel caps device pixel ratio, pauses outside the viewport, pauses in hidden tabs, and renders one static frame for reduced-motion users.
-- Hero orbit rings, signal points, workspace-panel entrance, and hover transitions explain convergence and hierarchy rather than adding decorative loops everywhere.
-- Below-fold sections use `content-visibility: auto` with intrinsic sizing.
-- Route cleanup disconnects observers and reverts GSAP context on unmount.
+- Custom ease `cubic-bezier(0.32, 0.72, 0, 1)` for UI (~150–200ms); press `scale(0.96)`
+- Hero steps stagger ≤50ms; scroll reveals via IntersectionObserver / lazy GSAP
+- Hero pointer parallax on product bezel only (disabled for touch + reduced-motion)
+- Provider paths brighten on hover; canvas artifact fades in
+- Mobile menu: dimmed overlay + staggered link reveal
+- Honor `prefers-reduced-motion`
 
-## Responsive Rules
+## Icons
 
-- Desktop uses the split hero and patchbay diagram.
-- Below `md`, the hero stacks with the scope below the copy.
-- The patchbay diagram becomes a two-column provider module grid; its decorative SVG wiring is hidden.
-- Accordion channels become a vertical stack with one active channel at a time.
-- CTAs remain single-line and keyboard-visible.
+- Phosphor Light on the landing route only
 
 ## Accessibility
 
-- Existing marketing copy and route structure remain stable.
-- Theme toggle, links, and accordion controls retain semantic buttons and focus-visible rings.
-- Real provider and integration marks keep descriptive alt text.
-- No landing copy uses em dashes.
+- Semantic landmarks, focus-visible rings, ≥40px hit targets on nav/CTAs
+- Live GitHub stars when available; real README deploy commands
+- Reduced-motion: static final states, no parallax/stagger
+
+## Form Contract
+
+- THESIS: Ownership as visible mechanism
+- FORM: Ethereal Glass × Resend blackspace (pinnacle redesign)

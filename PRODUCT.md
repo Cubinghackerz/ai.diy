@@ -50,9 +50,9 @@ Known constraints:
 
 - Product name: ai.diy (logo asset `public/ai-diy.png`).
 - Voice: calm, direct, technical, no hype; "open tools for useful thinking."
-- Landing page copy and factual claims are committed as-is by the user for this redesign; visuals change, copy does not.
-- Provider brand marks use bundled Simple Icons SVGs; Firecrawl and Parallel logos exist in `public/`.
-- Identity tokens currently in use: paper/ink/lime (`#f3f3ee`, `#111111`, `#d7ff4f`) with JetBrains Mono accents and DM Sans. These are incumbent and open to replacement under the approved full visual replacement.
+- Landing page copy and factual claims follow the Resend-dark redesign brief (ownership headline, BYOK subhead, real deploy commands). Do not fabricate metrics, customers, or package names.
+- Provider brand marks use bundled assets in `public/landing-logos/` and Simple Icons where applicable; Firecrawl and Parallel logos exist in `public/`.
+- Landing visual world: Resend-dark (pitch black, zinc hairlines, Geist, white CTAs). Workspace identity tokens may differ.
 
 ## Evidence on Hand
 

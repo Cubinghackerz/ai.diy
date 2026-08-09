@@ -2,6 +2,11 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { corsPreflight, withCors } from "~/lib/server/cors";
 import { connectorSearch } from "~/lib/search/connectors";
 import type { ConnectorConfig } from "~/lib/types";
+import {
+    checkRateLimit,
+    rateLimitKeyFromRequest,
+    rateLimitResponse,
+} from "~/lib/server/rate-limit";
 
 export function loader({ request }: LoaderFunctionArgs) {
     const preflight = corsPreflight(request);
@@ -21,6 +26,13 @@ export async function action({ request }: ActionFunctionArgs) {
             action?: "test";
             connector?: ConnectorConfig;
         };
+
+        const rateKey = rateLimitKeyFromRequest(request, body.connector?.apiKey);
+        const rateCheck = checkRateLimit(rateKey);
+        if (!rateCheck.ok) {
+            return withCors(request, rateLimitResponse(rateCheck.retryAfterMs));
+        }
+
         const connector = body.connector;
         if (body.action !== "test" || !connector) {
             return withCors(request, Response.json({ error: "Connector test required." }, { status: 400 }));

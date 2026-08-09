@@ -3,6 +3,10 @@ import type { ToolSet } from "ai";
 import type { McpServerConfig } from "~/lib/types";
 import { assertConfiguredHttpUrl } from "~/lib/server/provider-url";
 import type { TokenModePolicy } from "~/lib/token-mode";
+import {
+    formatCompactSearchResults,
+    type SearchResult,
+} from "~/lib/search";
 
 export type McpClientHandle = {
     close: () => Promise<void>;
@@ -93,10 +97,16 @@ export function wrapMcpToolForBudget(
                     ? clampMcpSearchArgs(rawArgs, policy, original)
                     : rawArgs;
             const result = await execute(args, ...rest);
-            return compactMcpToolResult(result, resultBudget, {
+            const compacted = compactMcpToolResult(result, resultBudget, {
                 maxItems: kind === "search" ? policy.maxSearchResults : undefined,
                 maxSnippetChars: snippetChars,
                 maxBodyChars: kind === "fetch" ? bodyChars : bodyChars,
+            });
+            if (kind !== "search") return compacted;
+            return formatMcpSearchToolOutput(compacted, {
+                maxItems: policy.maxSearchResults,
+                maxSnippetChars: snippetChars,
+                includeSnippets: snippetChars > 80,
             });
         },
     } as ToolSet[string];
@@ -296,6 +306,131 @@ function safeJsonStringify(value: unknown): string {
     } catch {
         return String(value);
     }
+}
+
+const SEARCH_RESULT_ARRAY_KEYS =
+    /^(results?|items|hits|documents|organic|web_results?|search_results?)$/i;
+
+function formatMcpSearchToolOutput(
+    result: unknown,
+    options: {
+        maxItems: number;
+        maxSnippetChars: number;
+        includeSnippets: boolean;
+    },
+): unknown {
+    const parsed = extractSearchResultsFromMcpPayload(result).slice(0, options.maxItems);
+    if (parsed.length === 0) return result;
+
+    const text = formatCompactSearchResults(parsed, {
+        maxSnippetChars: options.maxSnippetChars,
+        maxTitleChars: 72,
+        includeSnippets: options.includeSnippets,
+        includeCitationFooter: true,
+    });
+
+    if (typeof result === "string") return text;
+    if (isMcpContentEnvelope(result)) {
+        return { content: [{ type: "text", text }] };
+    }
+    return text;
+}
+
+function extractSearchResultsFromMcpPayload(value: unknown): SearchResult[] {
+    const collected: SearchResult[] = [];
+    const visit = (node: unknown, depth = 0) => {
+        if (depth > 6 || node == null) return;
+        if (typeof node === "string") {
+            const trimmed = node.trim();
+            if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+                try {
+                    visit(JSON.parse(trimmed), depth + 1);
+                } catch {
+                    // not JSON — ignore
+                }
+            }
+            return;
+        }
+        if (Array.isArray(node)) {
+            for (const item of node) {
+                const parsed = parseMcpSearchResultItem(item);
+                if (parsed) collected.push(parsed);
+            }
+            return;
+        }
+        if (typeof node !== "object") return;
+
+        const record = node as Record<string, unknown>;
+        if (isMcpContentEnvelope(record)) {
+            for (const part of record.content) visit(part, depth + 1);
+            return;
+        }
+
+        let foundArray = false;
+        for (const [key, child] of Object.entries(record)) {
+            if (!Array.isArray(child) || !SEARCH_RESULT_ARRAY_KEYS.test(key)) continue;
+            foundArray = true;
+            for (const item of child) {
+                const parsed = parseMcpSearchResultItem(item);
+                if (parsed) collected.push(parsed);
+            }
+        }
+        if (foundArray) return;
+
+        if (record.data && typeof record.data === "object") {
+            visit(record.data, depth + 1);
+        }
+    };
+
+    visit(value);
+    return dedupeSearchResults(collected);
+}
+
+function parseMcpSearchResultItem(item: unknown): SearchResult | null {
+    if (!item || typeof item !== "object") return null;
+    const record = item as Record<string, unknown>;
+    const url = pickMcpString(record, ["url", "link", "href", "uri", "source"]);
+    if (!url || !/^https?:\/\//i.test(url)) return null;
+    const title =
+        pickMcpString(record, ["title", "name", "heading", "page_title"]) || "Untitled";
+    const snippet = pickMcpString(record, [
+        "snippet",
+        "description",
+        "excerpt",
+        "summary",
+        "content",
+        "text",
+        "body",
+        "markdown",
+    ]);
+    return { title, url, snippet: snippet || "" };
+}
+
+function pickMcpString(record: Record<string, unknown>, keys: string[]): string {
+    for (const key of keys) {
+        const value = record[key];
+        if (typeof value === "string" && value.trim()) return value.trim();
+    }
+    return "";
+}
+
+function dedupeSearchResults(results: SearchResult[]): SearchResult[] {
+    const seen = new Set<string>();
+    const deduped: SearchResult[] = [];
+    for (const result of results) {
+        let key = result.url.trim();
+        try {
+            const url = new URL(key);
+            url.hash = "";
+            key = url.toString().replace(/\/+$/, "").toLowerCase();
+        } catch {
+            key = key.toLowerCase();
+        }
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(result);
+    }
+    return deduped;
 }
 
 async function connectMcpServer(

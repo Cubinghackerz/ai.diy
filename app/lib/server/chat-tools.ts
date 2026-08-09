@@ -40,6 +40,7 @@ export type ToolSettings = {
     skillsEnabled?: boolean;
     connectors?: ConnectorConfig[];
     memoryAvailable?: boolean;
+    knowledgeEnabled?: boolean;
     subagentsEnabled?: boolean;
     tokenMode?: TokenMode;
     /** Tool ids that must be registered this turn even outside full-suite mode. */
@@ -416,7 +417,7 @@ Answer the question with live, verifiable evidence retrieved in this session. Yo
 
 ## Token-efficient stopping
 - Start with quick depth unless the user asks for a deep review.
-- Use no more than 3 search results per focused query by default and read only pages that can change the answer.
+- Use no more than 2 search results per focused query by default and read only pages that can change the answer.
 - Never repeat an equivalent query or fetch the same URL twice. Stop when the answer is supported by retrieved evidence, or state the unresolved gap without inventing from memory.
 
 ## Evidence rules
@@ -457,7 +458,7 @@ Create real, downloadable files with browser-side Pyodide. Use this skill before
 1. Call run_python with ordinary Python code. Listed libraries are loaded lazily when imported; never run pip, micropip, subprocess, or asyncio.run yourself.
 2. Top-level await is supported. For async work, use await directly rather than asyncio.run.
 3. Save each requested output in the current working directory using a clear filename such as report.docx, budget.xlsx, slides.pptx, or invoice.pdf. Do not write to a custom directory unless required.
-4. The browser automatically captures up to four newly created or changed files, each up to 2 MiB, into Canvas for the current browser session. Binary bytes are never persisted to browser storage.
+4. The browser automatically captures up to four newly created or changed files, each up to 2 MiB, into Canvas and persists them with the chat in local browser storage.
 5. When run_python reports a created artifact, it is already downloadable in Canvas. Do not call create_file, generate_file, or manually Base64/hex encode the same file. Never hand-build a DOCX/XLSX/PPTX ZIP/XML package.
 6. Validate before finishing: reopen the file with the library when practical, check the target file exists and has non-zero size, and print a concise confirmation with filename and byte count.
 
@@ -532,6 +533,50 @@ Use before any Word document request, including when the user says "report", "pr
 ## Delivery contract
 - Rely on automatic Canvas capture of the .docx. Do not call create_file, generate_file, or Base64-copy the file.
 - Reply with the exact captured filename and a concise summary of the document's structure and design choices.`;
+}
+
+function extractMainContentFromHtml(html: string, maxChars: number): string {
+    const stripped = html
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+        .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, "")
+        .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, "")
+        .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, "");
+
+    const blockRegex =
+        /<(p|article|main|section|div|li|h[1-6])[^>]*>([\s\S]*?)<\/\1>/gi;
+    const blocks: string[] = [];
+    let match: RegExpExecArray | null;
+    while ((match = blockRegex.exec(stripped)) !== null) {
+        const text = match[2]
+            .replace(/<[^>]+>/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+        if (text.length >= 40) blocks.push(text);
+    }
+
+    if (blocks.length === 0) {
+        return stripped
+            .replace(/<[^>]+>/g, " ")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, maxChars);
+    }
+
+    blocks.sort((left, right) => right.length - left.length);
+    const parts: string[] = [];
+    let total = 0;
+    for (const block of blocks) {
+        const separator = parts.length > 0 ? 2 : 0;
+        if (total + separator + block.length > maxChars) {
+            const remaining = maxChars - total - separator;
+            if (remaining > 80) parts.push(block.slice(0, remaining));
+            break;
+        }
+        parts.push(block);
+        total += separator + block.length;
+    }
+    return parts.join("\n\n");
 }
 
 export async function buildChatTools(
@@ -665,13 +710,17 @@ export async function buildChatTools(
                 ? "SearXNG"
                 : "DuckDuckGo");
 
+        let searchCitationFooterShown = false;
+
         const formatResults = (results: Awaited<ReturnType<typeof webSearch>>) => {
-            const body = formatCompactSearchResults(results, {
+            const formatted = formatCompactSearchResults(results, {
                 maxSnippetChars: policy.maxSnippetChars,
                 maxTitleChars: 72,
-                includeSnippets: policy.maxSnippetChars > 0,
+                includeSnippets: policy.maxSnippetChars > 80,
+                includeCitationFooter: !searchCitationFooterShown,
             });
-            return `${body}\n\nCite only these URLs. Snippets are leads, not proof—fetch a page before quoting numbers/dates. Do not invent sources.`;
+            if (!searchCitationFooterShown) searchCitationFooterShown = true;
+            return formatted;
         };
 
         const builtInSearch = async (query: string, maxResults: number) =>
@@ -771,13 +820,7 @@ export async function buildChatTools(
                     });
                     if (!res.ok) return `HTTP ${res.status}`;
                     const html = await res.text();
-                    return html
-                        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-                        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-                        .replace(/<[^>]+>/g, " ")
-                        .replace(/\s+/g, " ")
-                        .trim()
-                        .slice(0, policy.maxFetchChars);
+                    return extractMainContentFromHtml(html, policy.maxFetchChars);
                 } catch (err) {
                     return `Fetch error: ${err instanceof Error ? err.message : String(err)}`;
                 }
@@ -802,7 +845,7 @@ export async function buildChatTools(
         tools.run_python = tool({
             description: policy.compactToolDescriptions
                 ? "Run Python in browser Pyodide. Libraries auto-import (numpy, pandas, matplotlib, openpyxl, python-docx, etc.). Save files in cwd for Canvas capture; do not re-upload binary artifacts via create_file."
-                : "Execute Python 3 in the browser with Pyodide and return stdout, stderr, or error logs. Every listed library auto-loads on first import; simply import it and never manage package installation yourself with micropip, pip, or subprocess. Top-level await is supported; do not use asyncio.run (Pyodide already runs inside an event loop), just write await at top level. Data/analysis: numpy, pandas, scipy, sympy, scikit-learn, networkx. Plotting: matplotlib. Parsing: BeautifulSoup, lxml, regex, python-dateutil, pyyaml. File creation: openpyxl and xlsxwriter (Excel), python-docx (Word), python-pptx (PowerPoint), reportlab and fpdf2 (PDF), pillow (images), jinja2 (templates), requests (HTTP), plus the csv, json, and zipfile standard libraries. Always use these real libraries instead of hand-rolling zip/XML files. Save generated files in the current working directory; the browser captures up to four new files of 2 MiB each as session-only downloadable Canvas artifacts and never persists their binary data to browser storage. When a result reports created artifacts, do not call create_file or copy/Base64 their bytes again.",
+                : "Execute Python 3 in the browser with Pyodide and return stdout, stderr, or error logs. Every listed library auto-loads on first import; simply import it and never manage package installation yourself with micropip, pip, or subprocess. Top-level await is supported; do not use asyncio.run (Pyodide already runs inside an event loop), just write await at top level. Data/analysis: numpy, pandas, scipy, sympy, scikit-learn, networkx. Plotting: matplotlib. Parsing: BeautifulSoup, lxml, regex, python-dateutil, pyyaml. File creation: openpyxl and xlsxwriter (Excel), python-docx (Word), python-pptx (PowerPoint), reportlab and fpdf2 (PDF), pillow (images), jinja2 (templates), requests (HTTP), plus the csv, json, and zipfile standard libraries. Always use these real libraries instead of hand-rolling zip/XML files. Save generated files in the current working directory; the browser captures up to four new files of 2 MiB each as Canvas artifacts, persists them with the chat locally, and offers download. When a result reports created artifacts, do not call create_file or copy/Base64 their bytes again.",
             inputSchema: z.object({
                 code: z.string(),
                 description: z.string().optional(),
@@ -851,6 +894,22 @@ export async function buildChatTools(
             inputSchema: z.object({
                 query: z.string().optional(),
             }),
+        });
+    }
+
+    if (settings.knowledgeEnabled !== false) {
+        tools.knowledge_search = tool({
+            description:
+                "Private on-device RAG over the user's local knowledge base (uploaded notes/PDFs/text). Embeddings never leave the browser. Call with a focused query when the user asks about their documents or uploaded materials.",
+            inputSchema: z.object({
+                query: z.string(),
+                k: z.number().int().min(1).max(8).optional(),
+            }),
+        });
+        tools.knowledge_list = tool({
+            description:
+                "List documents in the user's private local knowledge base (names only). Use to see what is indexed before knowledge_search.",
+            inputSchema: z.object({}),
         });
     }
 
@@ -996,15 +1055,23 @@ export async function buildChatTools(
         });
     }
 
-    if (settings.subagentsEnabled && !subagentMode) {
+    if ((settings.subagentsEnabled || forcedTools.has("spawn_subagent") || forcedTools.has("spawn_subagents")) && !subagentMode) {
+        // No server execute — same as ask_user / run_python. The browser must
+        // approve, run, and addToolOutput before the main model continues.
         tools.spawn_subagent = tool({
             description:
-                "Delegate a focused subtask to a subagent. The user must approve each subagent before it runs. A subagent uses the same tools as you (web search, Python, memory, etc.), runs without being prompted or interrupted, and returns only its final answer; you then synthesize its result into your reply. Use this for deep multi-step research, lengthy analysis, or parallelizable work that would otherwise take many sequential tool calls. Provide one complete, self-contained task string; the subagent has no conversation history.",
+                "Delegate a focused subtask to a subagent. The browser pauses until the user approves or denies, then (if approved) until the subagent session finishes. You MUST wait for this tool's result before continuing — do not invent the subagent's answer. On decline/error, continue yourself. Provide one complete, self-contained task string; the subagent has no conversation history.",
             inputSchema: z.object({
                 task: z.string(),
             }),
-            execute: async () =>
-                "The subagent could not be started in this run. The browser UI is required for subagent approval; complete the task directly with your tools instead.",
+        });
+
+        tools.spawn_subagents = tool({
+            description:
+                "Spawn up to 3 independent subagents in parallel. The browser pauses for user approval on each, then waits until every approved subagent finishes before returning. You MUST wait for this tool's result and synthesize Status: complete sections; handle declined/cancelled/error sections yourself without inventing their output. Prefer this over sequential spawn_subagent when tasks are independent. Provide 1–3 complete, self-contained task strings. Call this when /Subagent is selected.",
+            inputSchema: z.object({
+                tasks: z.array(z.string().min(1)).min(1).max(3),
+            }),
         });
     }
 

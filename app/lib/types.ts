@@ -121,6 +121,15 @@ export interface PreviewSettings {
     fusionModel: PreviewModelConfig | null;
 }
 
+export interface UsageLimitsConfig {
+    enabled: boolean;
+    dailyTokenCap?: number | null;
+    dailySpendCapUsd?: number | null;
+    requestsPerMinute?: number;
+    warnAtPercent?: number;
+    blockWhenExceeded?: boolean;
+}
+
 // ─── Settings Types ──────────────────────────────────────────────
 
 export interface AppSettings {
@@ -138,6 +147,8 @@ export interface AppSettings {
     pythonEnabled: boolean;
     calculatorEnabled: boolean;
     memoryEnabled: boolean;
+    /** Private on-device knowledge base (WASM embeddings + local vector search). */
+    knowledgeEnabled: boolean;
     skillsEnabled: boolean;
     /**
      * Controls system-prompt size, tool suite, and step budget.
@@ -152,6 +163,7 @@ export interface AppSettings {
      */
     agentModeEnabled: boolean;
     preview: PreviewSettings;
+    usageLimits: UsageLimitsConfig;
     // MCP settings
     mcpServers: McpServerConfig[];
     connectors: ConnectorConfig[];
@@ -434,6 +446,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     pythonEnabled: true,
     calculatorEnabled: true,
     memoryEnabled: true,
+    knowledgeEnabled: true,
     skillsEnabled: true,
     tokenMode: "balanced",
     subagentsEnabled: false,
@@ -442,6 +455,14 @@ export const DEFAULT_SETTINGS: AppSettings = {
         enabled: false,
         primaryModels: [],
         fusionModel: null,
+    },
+    usageLimits: {
+        enabled: false,
+        dailyTokenCap: null as number | null,
+        dailySpendCapUsd: null as number | null,
+        requestsPerMinute: 30,
+        warnAtPercent: 80,
+        blockWhenExceeded: true,
     },
     mcpServers: FREE_SEARCH_MCP_PRESETS,
     connectors: [],

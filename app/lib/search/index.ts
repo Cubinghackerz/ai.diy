@@ -13,6 +13,9 @@ export interface SearchResult {
     snippet: string;
 }
 
+const SEARCH_CITATION_FOOTER =
+    "Cite only these URLs. Snippets are leads, not proof—fetch a page before quoting numbers/dates. Do not invent sources.";
+
 /** Compact one-line search hits for tool results (token-efficient). */
 export function formatCompactSearchResults(
     results: SearchResult[],
@@ -21,13 +24,15 @@ export function formatCompactSearchResults(
         maxTitleChars?: number;
         /** When false, omit snippets entirely (title + URL only). */
         includeSnippets?: boolean;
+        /** When false, omit the citation reminder (use once per request). */
+        includeCitationFooter?: boolean;
     } = {},
 ): string {
     if (!results.length) return "No results found. Do not invent sources.";
     const snippetMax = options.maxSnippetChars ?? 100;
     const titleMax = options.maxTitleChars ?? 72;
     const includeSnippets = options.includeSnippets !== false && snippetMax > 0;
-    return results
+    const body = results
         .map((result, index) => {
             const title = clipSearchText(result.title, titleMax) || "Untitled";
             const url = result.url.trim();
@@ -38,6 +43,8 @@ export function formatCompactSearchResults(
                 : `${index + 1}. ${title}\n${url}`;
         })
         .join("\n");
+    if (options.includeCitationFooter === false) return body;
+    return `${body}\n\n${SEARCH_CITATION_FOOTER}`;
 }
 
 export function clipSearchText(value: string | undefined | null, maxChars: number): string {

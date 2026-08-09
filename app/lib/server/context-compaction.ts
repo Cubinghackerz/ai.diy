@@ -43,6 +43,43 @@ const KEEP_RECENT_MESSAGES = 8;
 const MAX_SUMMARY_CHARS = 3_500;
 const MAX_TURN_EXTRACT_CHARS = 420;
 const MAX_TOOL_EXTRACT_CHARS = 180;
+const SEARCH_TOOL_COMPACT_CHARS = 180;
+const SEARCH_TOOL_RECENT_THRESHOLD = 400;
+const FETCH_TOOL_TRUNCATE_THRESHOLD = 800;
+const FETCH_TOOL_TRUNCATE_CHARS = 600;
+
+function classifyCompactionToolKind(toolName: string): "search" | "fetch" | "other" {
+    const name = toolName.toLowerCase();
+    if (
+        /search|instant_answer|find/.test(name) &&
+        !/scrape|fetch|crawl|parse|read_url|extract/.test(name)
+    ) {
+        return "search";
+    }
+    if (/fetch|read_url|scrape|crawl|parse|extract/.test(name)) {
+        return "fetch";
+    }
+    return "other";
+}
+
+function compactSearchListingText(text: string, maxChars = SEARCH_TOOL_COMPACT_CHARS): string {
+    const urls = Array.from(
+        new Set(
+            (text.match(/https?:\/\/[^\s)\]>'"]+/gi) ?? []).map((url) =>
+                url.replace(/[.,;:]+$/, ""),
+            ),
+        ),
+    );
+    if (urls.length > 0) {
+        const urlBlock = urls.map((url) => `- ${url}`).join("\n");
+        const header = "Search hits (URLs only):\n";
+        const combined = `${header}${urlBlock}`;
+        if (combined.length <= maxChars) return combined;
+    }
+    const normalized = text.replace(/\s+/g, " ").trim();
+    if (normalized.length <= maxChars) return normalized;
+    return `${normalized.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
+}
 
 export function estimateTokensFromText(text: string): number {
     // Conservative char→token estimate; slightly over so we compact early.
@@ -92,9 +129,12 @@ export function extractMessageText(message: CompactableMessage): string {
                           ? JSON.stringify(output)
                           : "";
                 if (body) {
-                    chunks.push(
-                        `[tool:${name}] ${body.replace(/\s+/g, " ").trim().slice(0, MAX_TOOL_EXTRACT_CHARS)}`,
-                    );
+                    const kind = classifyCompactionToolKind(name);
+                    const extract =
+                        kind === "search"
+                            ? compactSearchListingText(body, MAX_TOOL_EXTRACT_CHARS)
+                            : body.replace(/\s+/g, " ").trim().slice(0, MAX_TOOL_EXTRACT_CHARS);
+                    chunks.push(`[tool:${name}] ${extract}`);
                 }
             }
         }
@@ -254,7 +294,9 @@ export function compactUiMessages(
 
     if (messages.length <= keepRecent + 1) {
         // Still over budget with few messages: strip bulky tool parts in place.
-        const stripped = messages.map(stripBulkyToolParts) as UIMessage[];
+        const stripped = messages.map((message) =>
+            stripBulkyToolParts(message),
+        ) as UIMessage[];
         const afterTokens = estimateMessagesTokens(stripped);
         return {
             messages: stripped,
@@ -266,8 +308,12 @@ export function compactUiMessages(
         };
     }
 
-    const older = messages.slice(0, -keepRecent).map(stripBulkyToolParts);
-    const recent = messages.slice(-keepRecent).map(stripBulkyToolParts);
+    const older = messages
+        .slice(0, -keepRecent)
+        .map((message) => stripBulkyToolParts(message, { aggressive: true }));
+    const recent = messages
+        .slice(-keepRecent)
+        .map((message) => stripBulkyToolParts(message, { aggressive: false }));
     const summary = buildCompactionSummary(older, {
         focus: options.focus,
         reason: options.reason ?? (options.force ? "forced compaction" : "auto context limit"),
@@ -309,12 +355,19 @@ export function compactUiMessages(
     };
 }
 
-function stripBulkyToolParts(message: UIMessage): UIMessage {
+function stripBulkyToolParts(
+    message: UIMessage,
+    options: { aggressive?: boolean } = {},
+): UIMessage {
     if (!Array.isArray(message.parts)) return message;
+    const aggressive = options.aggressive === true;
     const parts = message.parts.map((part) => {
         if (!part || typeof part !== "object") return part;
         const type = "type" in part ? String(part.type) : "";
         if (!type.startsWith("tool-") && type !== "dynamic-tool") return part;
+        const toolName =
+            ("toolName" in part && typeof part.toolName === "string" && part.toolName) ||
+            type.replace(/^tool-/, "");
         const output =
             "output" in part
                 ? part.output
@@ -327,11 +380,29 @@ function stripBulkyToolParts(message: UIMessage): UIMessage {
                 : output != null
                   ? JSON.stringify(output)
                   : "";
-        if (text.length <= 800) return part;
-        return {
-            ...part,
-            output: `${text.slice(0, 600)}\n\n[Truncated tool output for context compaction]`,
-        };
+        if (!text) return part;
+
+        const kind = classifyCompactionToolKind(toolName);
+        if (kind === "search") {
+            const threshold = aggressive ? 0 : SEARCH_TOOL_RECENT_THRESHOLD;
+            if (text.length > threshold) {
+                return {
+                    ...part,
+                    output: compactSearchListingText(
+                        text,
+                        aggressive ? SEARCH_TOOL_COMPACT_CHARS : FETCH_TOOL_TRUNCATE_CHARS,
+                    ),
+                };
+            }
+            return part;
+        }
+        if (kind === "fetch" && text.length > FETCH_TOOL_TRUNCATE_THRESHOLD) {
+            return {
+                ...part,
+                output: `${text.slice(0, FETCH_TOOL_TRUNCATE_CHARS)}\n\n[Truncated tool output for context compaction]`,
+            };
+        }
+        return part;
     });
     return { ...message, parts } as UIMessage;
 }

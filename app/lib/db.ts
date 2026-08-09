@@ -6,6 +6,8 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { ThreadData, MessageData, MemoryEntry, Project } from "~/lib/types";
 import type { Artifact } from "~/lib/canvas";
+import type { UsageEvent } from "~/lib/usage";
+import type { KbChunk, KbDocument } from "~/lib/knowledge/types";
 
 interface PrismiumDB extends DBSchema {
     threads: {
@@ -43,10 +45,25 @@ interface PrismiumDB extends DBSchema {
         value: { id: string; data: unknown; updatedAt: number };
         indexes: { "by-updated": number };
     };
+    usageEvents: {
+        key: string;
+        value: UsageEvent;
+        indexes: { "by-fingerprint": string; "by-created": number };
+    };
+    kbDocuments: {
+        key: string;
+        value: KbDocument;
+        indexes: { "by-created": number };
+    };
+    kbChunks: {
+        key: string;
+        value: KbChunk;
+        indexes: { "by-document": string };
+    };
 }
 
 const DB_NAME = "prismium-lite-db";
-const DB_VERSION = 8;
+const DB_VERSION = 10;
 
 let dbPromise: Promise<IDBPDatabase<PrismiumDB>> | null = null;
 
@@ -95,6 +112,25 @@ function getDB() {
                         keyPath: "id",
                     });
                     catalogStore.createIndex("by-updated", "updatedAt");
+                }
+                if (!db.objectStoreNames.contains("usageEvents")) {
+                    const usageStore = db.createObjectStore("usageEvents", {
+                        keyPath: "id",
+                    });
+                    usageStore.createIndex("by-fingerprint", "keyFingerprint");
+                    usageStore.createIndex("by-created", "createdAt");
+                }
+                if (!db.objectStoreNames.contains("kbDocuments")) {
+                    const kbDocs = db.createObjectStore("kbDocuments", {
+                        keyPath: "id",
+                    });
+                    kbDocs.createIndex("by-created", "createdAt");
+                }
+                if (!db.objectStoreNames.contains("kbChunks")) {
+                    const kbChunks = db.createObjectStore("kbChunks", {
+                        keyPath: "id",
+                    });
+                    kbChunks.createIndex("by-document", "documentId");
                 }
             },
         });
@@ -319,4 +355,78 @@ export async function saveModelCatalogCache(data: unknown): Promise<void> {
         data,
         updatedAt: Date.now(),
     });
+}
+
+export async function appendUsageEventToDB(event: UsageEvent): Promise<void> {
+    const db = await getDB();
+    if (!db) return;
+    const existing = await db.get("usageEvents", event.id);
+    if (existing) return;
+    await db.put("usageEvents", event);
+}
+
+export async function getUsageEventsSinceFromDB(
+    keyFingerprint: string,
+    sinceMs: number,
+): Promise<UsageEvent[]> {
+    const db = await getDB();
+    if (!db) return [];
+    const events = await db.getAllFromIndex(
+        "usageEvents",
+        "by-fingerprint",
+        keyFingerprint,
+    );
+    return events
+        .filter((event) => event.createdAt >= sinceMs)
+        .sort((a, b) => a.createdAt - b.createdAt);
+}
+
+export async function getAllKbDocuments(): Promise<KbDocument[]> {
+    const db = await getDB();
+    if (!db) return [];
+    return db.getAll("kbDocuments");
+}
+
+export async function getAllKbChunks(): Promise<KbChunk[]> {
+    const db = await getDB();
+    if (!db) return [];
+    return db.getAll("kbChunks");
+}
+
+export async function putKbDocumentWithChunks(
+    document: KbDocument,
+    chunks: KbChunk[],
+): Promise<void> {
+    const db = await getDB();
+    if (!db) return;
+    const tx = db.transaction(["kbDocuments", "kbChunks"], "readwrite");
+    await tx.objectStore("kbDocuments").put(document);
+    const chunkStore = tx.objectStore("kbChunks");
+    for (const chunk of chunks) {
+        await chunkStore.put(chunk);
+    }
+    await tx.done;
+}
+
+export async function deleteKbDocument(documentId: string): Promise<void> {
+    const db = await getDB();
+    if (!db) return;
+    const tx = db.transaction(["kbDocuments", "kbChunks"], "readwrite");
+    await tx.objectStore("kbDocuments").delete(documentId);
+    const index = tx.objectStore("kbChunks").index("by-document");
+    let cursor = await index.openCursor(documentId);
+    while (cursor) {
+        await cursor.delete();
+        cursor = await cursor.continue();
+    }
+    await tx.done;
+}
+
+export async function clearKnowledgeBase(): Promise<void> {
+    const db = await getDB();
+    if (!db) return;
+    const tx = db.transaction(["kbDocuments", "kbChunks"], "readwrite");
+    await tx.objectStore("kbDocuments").clear();
+    await tx.objectStore("kbChunks").clear();
+    await tx.done;
 }

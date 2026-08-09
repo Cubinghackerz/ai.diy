@@ -3,9 +3,10 @@ export async function initLandingAnimations(
 ): Promise<() => void> {
     if (typeof window === "undefined" || !scope) return () => {};
 
-    // Do not even parse GSAP for reduced-motion users. CSS also disables the
-    // lightweight ambient loops, leaving the authored aperture visible and still.
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        scope.querySelectorAll<HTMLElement>(".landing-hero-step").forEach((el) => {
+            el.style.opacity = "1";
+        });
         return () => {};
     }
 
@@ -21,7 +22,10 @@ export async function initLandingAnimations(
             ? new IntersectionObserver(
                   (entries) => {
                       for (const entry of entries) {
-                          entry.target.classList.toggle("landing-anim-active", entry.isIntersecting);
+                          entry.target.classList.toggle(
+                              "landing-anim-active",
+                              entry.isIntersecting,
+                          );
                       }
                   },
                   { rootMargin: "120px 0px" },
@@ -37,84 +41,48 @@ export async function initLandingAnimations(
     const syncDocumentVisibility = () => {
         scope.classList.toggle("landing-tab-hidden", document.hidden);
     };
-    document.addEventListener("visibilitychange", syncDocumentVisibility, { passive: true });
+    document.addEventListener("visibilitychange", syncDocumentVisibility, {
+        passive: true,
+    });
     syncDocumentVisibility();
 
     const context = gsap.context(() => {
-        const heroTunnel = scope.querySelector<HTMLElement>(".hero-tunnel-layer");
-        const aperture = scope.querySelector<HTMLElement>(".hero-aperture");
-        if (heroTunnel) {
-            gsap.timeline({ defaults: { ease: "power3.out" } })
-                .fromTo(heroTunnel, { opacity: 0.18 }, { opacity: 0.92, duration: 1.4 }, 0)
-                .fromTo(
-                    aperture,
-                    { scale: 0.96, opacity: 0.7 },
-                    { scale: 1, opacity: 1, duration: 1.1 },
-                    0.08,
-                );
+        const heroSteps = gsap.utils.toArray<HTMLElement>(".landing-hero-step", scope);
+        if (heroSteps.length) {
+            gsap.fromTo(
+                heroSteps,
+                { opacity: 0, y: 12 },
+                {
+                    opacity: 1,
+                    y: 0,
+                    duration: 0.45,
+                    stagger: 0.045,
+                    ease: "power3.out",
+                    delay: 0.05,
+                },
+            );
         }
 
         const reveal = gsap.utils.toArray<HTMLElement>("[data-landing-reveal]", scope);
         reveal.forEach((element) => {
-            // Hero copy sits under a sticky nav; a vertical slide + reverse
-            // clips ascenders on the display type. Fade only there.
             const inHero = Boolean(element.closest('[data-anim-gate="hero"]'));
             gsap.fromTo(
                 element,
-                inHero ? { opacity: 0 } : { y: 24, opacity: 0.001 },
+                inHero ? { opacity: 0.4, y: 8 } : { y: 16, opacity: 0.001 },
                 {
                     y: 0,
                     opacity: 1,
-                    duration: 0.9,
+                    duration: 0.55,
                     immediateRender: false,
                     ease: "power3.out",
                     scrollTrigger: {
                         trigger: element,
-                        start: inHero ? "top 95%" : "top 86%",
-                        toggleActions: inHero ? "play none none none" : "play none none reverse",
+                        start: inHero ? "top 95%" : "top 88%",
+                        toggleActions: "play none none none",
                     },
                 },
             );
         });
-
-        const stack = gsap.utils.toArray<HTMLElement>("[data-stack-card]", scope);
-        if (stack.length) {
-            gsap.fromTo(
-                stack,
-                { y: 36, scale: 0.98 },
-                {
-                    y: 0,
-                    scale: 1,
-                    stagger: 0.15,
-                    ease: "power2.out",
-                    scrollTrigger: {
-                        trigger: scope.querySelector("[data-stack]"),
-                        start: "top 76%",
-                        end: "bottom 54%",
-                        scrub: 1,
-                    },
-                },
-            );
-        }
-
-        const radialLines = scope.querySelectorAll<SVGLineElement>(".radial-line");
-        if (radialLines.length) {
-            gsap.fromTo(
-                radialLines,
-                { strokeDashoffset: 1 },
-                {
-                    strokeDashoffset: 0,
-                    stagger: 0.02,
-                    duration: 1.1,
-                    ease: "power2.out",
-                    scrollTrigger: {
-                        trigger: scope.querySelector("[data-anim-gate='radial']"),
-                        start: "top 70%",
-                        toggleActions: "play none none reverse",
-                    },
-                },
-            );
-        }
     }, scope);
 
     return () => {

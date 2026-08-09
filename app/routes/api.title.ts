@@ -9,6 +9,11 @@ import { createChatModel } from "~/lib/server/model";
 import { providerNeedsKey } from "~/lib/provider-credentials";
 import { inferModelSupportsImageGeneration } from "~/lib/model-capabilities";
 import { corsPreflight, withCors } from "~/lib/server/cors";
+import {
+    checkRateLimit,
+    rateLimitKeyFromRequest,
+    rateLimitResponse,
+} from "~/lib/server/rate-limit";
 
 interface TitleRequestBody {
     message: string;
@@ -62,6 +67,12 @@ export async function action({ request }: ActionFunctionArgs) {
             request,
             Response.json({ error: "Invalid JSON body" }, { status: 400 }),
         );
+    }
+
+    const rateKey = rateLimitKeyFromRequest(request, body.apiKey);
+    const rateCheck = checkRateLimit(rateKey);
+    if (!rateCheck.ok) {
+        return withCors(request, rateLimitResponse(rateCheck.retryAfterMs));
     }
 
     const message = body.message?.trim() ?? "";
