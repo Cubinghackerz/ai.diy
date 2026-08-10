@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">ai.diy — The open-source AI workspace you own.</title>
+  <desc id="desc">Local-first, bring-your-own-key AI chat with web search, tools, Canvas artifacts, and cloud or local providers.</desc>
+  <defs>
+    <radialGradient id="atmosphere" cx="50%" cy="0%" r="80%">
+      <stop offset="0" stop-color="#27272a" stop-opacity="0.75"/>
+      <stop offset="0.56" stop-color="#050505" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="72" height="72" patternUnits="userSpaceOnUse">
+      <path d="M72 0H0V72" fill="none" stroke="#fff" stroke-opacity="0.055"/>
+    </pattern>
+    <linearGradient id="rule" x1="0" x2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#050505"/>
+  <rect width="1200" height="630" fill="url(#atmosphere)"/>
+  <rect width="1200" height="630" fill="url(#grid)" opacity="0.5"/>
+  <path d="M72 92H1128" stroke="#fff" stroke-opacity="0.1"/>
+  <text x="72" y="74" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700" letter-spacing="-0.5">ai.diy</text>
+  <text x="1128" y="74" text-anchor="end" fill="#71717a" font-family="Courier New, monospace" font-size="13" letter-spacing="1.4">OPEN TOOLS FOR USEFUL THINKING</text>
+  <text x="72" y="259" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="70" font-weight="600" letter-spacing="-3">The open-source AI</text>
+  <text x="72" y="340" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="70" font-weight="600" letter-spacing="-3">workspace you own.</text>
+  <path d="M72 388H548" stroke="url(#rule)" stroke-width="2"/>
+  <text x="72" y="439" fill="#a1a1aa" font-family="Arial, Helvetica, sans-serif" font-size="24">Local-first. Bring your own key. Self-host it.</text>
+  <text x="72" y="505" fill="#71717a" font-family="Courier New, monospace" font-size="14" letter-spacing="1.2">BYOK   /   17 PROVIDERS   /   BROWSER-PERSISTED DATA</text>
+  <g transform="translate(980 470)">
+    <rect width="148" height="76" rx="20" fill="#fff"/>
+    <path d="M34 20h80v12H50v10h48v12H50v8h64v12H34z" fill="#050505"/>
+    <circle cx="118" cy="20" r="6" fill="#71717a"/>
+  </g>
+</svg>

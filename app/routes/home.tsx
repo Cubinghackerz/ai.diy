@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import type { MetaFunction } from "react-router";
 import { AssistantRuntimeProvider } from "~/components/assistant-ui/AssistantRuntimeProvider";
 import { ChatLifecycle } from "~/components/assistant-ui/ChatLifecycle";
 import { ChatErrorBanner } from "~/components/assistant-ui/ChatThreadSync";
@@ -19,8 +20,17 @@ import { haptic, hapticSelect } from "~/lib/haptics";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import { useThreads } from "~/lib/hooks/useThreads";
 import { useProjects } from "~/lib/hooks/useProjects";
-import { GearSix, Sidebar as SidebarIcon } from "@phosphor-icons/react";
+import { Sidebar as SidebarIcon } from "@phosphor-icons/react";
 import { cn } from "~/lib/utils";
+
+export const meta: MetaFunction = () => [
+    { title: "Workspace - ai.diy" },
+    {
+        name: "description",
+        content: "A local-first, bring-your-own-key AI workspace for useful thinking.",
+    },
+    { name: "robots", content: "noindex, nofollow" },
+];
 
 export default function Home() {
     return (
@@ -172,7 +182,7 @@ function HomeInner() {
                 ) : null}
 
                 <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
-                    <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border/70 px-3">
+                    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border/70 px-3">
                         <div className="flex min-w-0 items-center gap-2">
                             <button
                                 type="button"
@@ -195,22 +205,6 @@ function HomeInner() {
                                     : activeThread?.title || "New Chat"}
                             </span>
                         </div>
-
-                        <button
-                            type="button"
-                            onClick={() => {
-                                haptic();
-                                setSidebarOpen(true);
-                                setSidebarPanel("settings");
-                                if (window.innerWidth < 768) {
-                                    setMobileSidebarOpen(true);
-                                }
-                            }}
-                            className="flex size-8 items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground"
-                            title="Settings (⌘,)"
-                        >
-                            <GearSix size={18} />
-                        </button>
                     </header>
 
                     <div className="relative flex min-h-0 flex-1">

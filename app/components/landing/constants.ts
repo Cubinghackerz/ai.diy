@@ -1,16 +1,24 @@
 export const GITHUB_REPO = "Cubinghackerz/ai.diy";
 export const GITHUB_URL = `https://github.com/${GITHUB_REPO}`;
 export const DOCS_URL = `${GITHUB_URL}#readme`;
+export const TWITTER_URL = "https://x.com/HeckingHacker";
+export const VERCEL_DEPLOY_URL =
+    "https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FCubinghackerz%2Fai.diy&project-name=ai-diy-preview";
 
+/** Featured provider marks for landing shelves (no infinite marquee). */
 export const PROVIDER_LOGOS: Array<{ src: string; label: string; id: string }> = [
-    { id: "openai", src: "/landing-logos/openai.png", label: "OpenAI" },
-    { id: "anthropic", src: "/landing-logos/anthropic.png", label: "Anthropic" },
-    { id: "google", src: "/landing-logos/google.png", label: "Google Gemini" },
-    { id: "openrouter", src: "/landing-logos/openrouter.png", label: "OpenRouter" },
-    { id: "deepseek", src: "/landing-logos/deepseek.png", label: "DeepSeek" },
-    { id: "firecrawl", src: "/landing-logos/firecrawl.png", label: "Firecrawl" },
-    { id: "parallel", src: "/landing-logos/parallel.png", label: "Parallel" },
+    { id: "openai", src: "/landing-logos/openai-mark.png", label: "OpenAI" },
+    { id: "gemini", src: "/landing-logos/gemini.png", label: "Google Gemini" },
+    { id: "groq", src: "/landing-logos/groq.png", label: "Groq" },
+    { id: "anthropic", src: "/landing-logos/anthropic-mark.png", label: "Anthropic" },
+    { id: "openrouter", src: "/landing-logos/openrouter-lobe.png", label: "OpenRouter" },
+    { id: "deepseek", src: "/landing-logos/deepseek-lobe.png", label: "DeepSeek" },
+    { id: "xai", src: "/landing-logos/xai-lobe.png", label: "xAI" },
+    { id: "ollama", src: "/landing-logos/ollama-lobe.png", label: "Ollama" },
 ];
+
+/** Top four newest Downloads marks — used on ownership constellation nodes. */
+export const FEATURED_PROVIDER_MARKS = PROVIDER_LOGOS.slice(0, 4);
 
 export const DEPLOY_TABS = [
     {

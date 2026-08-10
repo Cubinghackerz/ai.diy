@@ -2,16 +2,53 @@
  * Root Layout — HTML document shell with global providers
  */
 
-import { Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
+import {
+    isRouteErrorResponse,
+    Links,
+    Meta,
+    Outlet,
+    Scripts,
+    ScrollRestoration,
+    useRouteError,
+} from "react-router";
 import type { LinksFunction, MetaFunction } from "react-router";
 import { SettingsProvider } from "~/lib/providers/SettingsProvider";
 import { TooltipProvider } from "~/components/ui/tooltip";
+import { LaunchFallback } from "~/components/launch/LaunchFallback";
+import {
+    SITE_DESCRIPTION,
+    SITE_IMAGE_URL,
+    SITE_NAME,
+    SITE_TITLE,
+    SITE_TWITTER_HANDLE,
+    SITE_URL,
+} from "~/lib/site";
 import "~/styles/app.css";
 
 const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem('prismium-lite:settings');var theme=t?JSON.parse(t).theme:'system';if(theme==='dark'||(theme==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){}})();`;
 
 export const meta: MetaFunction = () => [
+    { title: SITE_TITLE },
+    { name: "description", content: SITE_DESCRIPTION },
     { name: "color-scheme", content: "dark light" },
+    { name: "robots", content: "index, follow" },
+    { property: "og:type", content: "website" },
+    { property: "og:site_name", content: SITE_NAME },
+    { property: "og:title", content: SITE_TITLE },
+    { property: "og:description", content: SITE_DESCRIPTION },
+    { property: "og:url", content: `${SITE_URL}/` },
+    { property: "og:image", content: SITE_IMAGE_URL },
+    { property: "og:image:width", content: "1200" },
+    { property: "og:image:height", content: "630" },
+    { property: "og:image:alt", content: SITE_TITLE },
+    { property: "og:locale", content: "en_US" },
+    { name: "twitter:card", content: "summary_large_image" },
+    { name: "twitter:site", content: SITE_TWITTER_HANDLE },
+    { name: "twitter:creator", content: SITE_TWITTER_HANDLE },
+    { name: "twitter:title", content: SITE_TITLE },
+    { name: "twitter:description", content: SITE_DESCRIPTION },
+    { name: "twitter:image", content: SITE_IMAGE_URL },
+    { name: "twitter:image:alt", content: SITE_TITLE },
 ];
 
 export const links: LinksFunction = () => [
@@ -21,8 +58,11 @@ export const links: LinksFunction = () => [
         rel: "stylesheet",
         href: "https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=Hanken+Grotesk:wght@400;500;600;700&family=Fragment+Mono:wght@400;500&display=swap",
     },
-    { rel: "icon", type: "image/png", href: "/ai-diy.png" },
-    { rel: "apple-touch-icon", href: "/ai-diy.png" },
+    { rel: "icon", type: "image/x-icon", href: "/favicon.ico" },
+    { rel: "icon", type: "image/png", sizes: "16x16", href: "/favicon-16x16.png" },
+    { rel: "icon", type: "image/png", sizes: "32x32", href: "/favicon-32x32.png" },
+    { rel: "apple-touch-icon", sizes: "180x180", href: "/apple-touch-icon.png" },
+    { rel: "manifest", href: "/site.webmanifest" },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -35,10 +75,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
                 />
                 <meta
-                    name="description"
-                    content="ai.diy — Open-source local-first AI chat with BYOK, web search, tools, and MCP support"
+                    name="theme-color"
+                    content="#0a0a0a"
+                    media="(prefers-color-scheme: dark)"
                 />
-                <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
                 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
                 <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
                 <Meta />
@@ -60,5 +100,22 @@ export default function App() {
         <div className="flex h-screen w-screen overflow-x-hidden overflow-y-auto bg-background text-foreground">
             <Outlet />
         </div>
+    );
+}
+
+export function ErrorBoundary() {
+    const error = useRouteError();
+    const status = isRouteErrorResponse(error) ? error.status : 500;
+
+    return (
+        <LaunchFallback
+            eyebrow={`SYSTEM / ${status}`}
+            title={status === 404 ? "That route does not exist." : "The workspace hit an error."}
+            description={
+                status === 404
+                    ? "The page may have moved, or the link may be out of date."
+                    : "Something interrupted this page. Return home or open the workspace and try again."
+            }
+        />
     );
 }

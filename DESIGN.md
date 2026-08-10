@@ -2,7 +2,7 @@
 
 ## Direction
 
-The landing page is **Ethereal Glass × Resend blackspace**: an OLED persuasion surface for ai.diy where ownership is visible as mechanism — keys stay local, providers converge into a hub, artifacts emerge from chat. Zinc/white mesh light only; no purple AI glow.
+The landing page is **Ethereal Glass × Resend blackspace**, elevated with **Cloudflare-scale structure**: luminous full-bleed panels, dotted stage rails, ownership constellation, logo marquee, workflow telemetry, and a closing CTA band. Zinc/white light only — never Cloudflare orange, never purple AI glow.
 
 ## Mode
 
@@ -10,12 +10,17 @@ Persuade. Understand BYOK local-first ownership → open `/workspace` or deploy.
 
 ## Palette
 
-- Canvas: `#050505` / black
-- Surfaces: `#0A0A0A` with `white/[0.03]` shells
-- Borders: `white/[0.06]`–`white/[0.1]` hairlines; inset highlight `rgba(255,255,255,0.06)`
-- Type: solid white headings; zinc-400/500 body; zinc-600 meta
-- Primary CTA: solid white pills with nested icon circle (button-in-button)
+- Canvas: `#111114` brighter graphite blackspace
+- Surfaces: `#17171c` / `#0e0e11` glass shells with `white/[0.05–0.1]` fills
+- Luminous panels: lifted charcoal gradients with stronger white bloom (hero + closing)
+- Solid contrast panel: pure white with black type (workflow CTA)
+- Borders: `white/[0.12]`–`white/[0.18]` hairlines; dashed callout frames
+- Type: solid white headings; zinc-300 body; zinc-400 meta (contrast lift)
+- Primary CTA: solid white pills with nested icon circle
 - Status: quiet emerald dot
+- Setup gate: same blackspace glass language as landing; white selected provider chips
+- Provider shelf: static grid (no marquee loop); top Downloads marks + lobe-icons
+- Deploy: one-click Vercel clone button + terminal tabs
 
 ## Typography
 
@@ -25,23 +30,33 @@ Persuade. Understand BYOK local-first ownership → open `/workspace` or deploy.
 
 ## Shape And Depth
 
-- Double-bezel: outer shell (`rounded-[1.75rem–2rem]` + padding) + concentric inner core
-- Floating island nav (detached glass pill, `backdrop-blur-xl`)
-- Soft layered shadows; avoid harsh solid borders as the only depth cue
-- Logo nodes use `outline` `oklch(1 0 0 / 0.1)`-equivalent white/10
+- Double-bezel + blueprint frames (corner crosshairs)
+- Floating island nav; fixed floating CTA on md+
+- Soft layered shadows; white bloom on luminous panels
+- Dot field + vertical stage rails (Cloudflare stage language)
 
 ## Composition
 
-- Island nav → hero (announcement, headline, CTAs, product bezel) → ownership bento → profile showcase → deploy terminal → footer
-- Hero brand-first; one dominant product proof (not a dashboard collage)
+1. Island nav + floating CTA
+2. Luminous hero panel → product demo
+3. Domain: Device constellation + ownership surface
+4. Provider marquee
+5. Capability rack (tabs)
+6. Hosted vs owned split
+7. Workflow telemetry + white ownership panel
+8. Profile showcase
+9. Deploy terminal
+10. Closing luminous band
+11. Footer
 
 ## Motion
 
-- Custom ease `cubic-bezier(0.32, 0.72, 0, 1)` for UI (~150–200ms); press `scale(0.96)`
-- Hero steps stagger ≤50ms; scroll reveals via IntersectionObserver / lazy GSAP
-- Hero pointer parallax on product bezel only (disabled for touch + reduced-motion)
-- Provider paths brighten on hover; canvas artifact fades in
-- Mobile menu: dimmed overlay + staggered link reveal
+- Custom ease `cubic-bezier(0.32, 0.72, 0, 1)` / GSAP power3
+- Hero: blur-up stagger + panel scale settle
+- Marquee: infinite horizontal track
+- Constellation: slow orbital rotation (icons counter-rotate upright)
+- Closing floaters: sine yoyo
+- Scroll reveals: y + blur clear
 - Honor `prefers-reduced-motion`
 
 ## Icons
@@ -50,11 +65,12 @@ Persuade. Understand BYOK local-first ownership → open `/workspace` or deploy.
 
 ## Accessibility
 
-- Semantic landmarks, focus-visible rings, ≥40px hit targets on nav/CTAs
-- Live GitHub stars when available; real README deploy commands
-- Reduced-motion: static final states, no parallax/stagger
+- Semantic landmarks, focus-visible rings, ≥40px hit targets
+- Live GitHub stars when available; real deploy commands
+- No fabricated metrics, testimonials, or customer logos beyond provider marks we ship
+- Reduced-motion: static final states
 
 ## Form Contract
 
 - THESIS: Ownership as visible mechanism
-- FORM: Ethereal Glass × Resend blackspace (pinnacle redesign)
+- FORM: Ethereal Glass × Resend blackspace × Cloudflare stage structure

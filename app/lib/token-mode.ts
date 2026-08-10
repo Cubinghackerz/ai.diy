@@ -1,6 +1,10 @@
 /**
  * Token usage modes — control system prompt size, tool suite, step budget,
  * search/result caps, and optional prompt-caching layout for lower $/request.
+ *
+ * Design goal: cut waste (padding, oversized search dumps, redundant tools)
+ * without cutting answer quality. Prefer fewer high-signal tool results over
+ * flooding the context with low-value snippets.
  */
 
 export type TokenMode = "efficient" | "balanced" | "caching" | "full";
@@ -14,9 +18,9 @@ export const TOKEN_MODE_LABELS: Record<TokenMode, string> = {
 
 export const TOKEN_MODE_DESCRIPTIONS: Record<TokenMode, string> = {
     efficient:
-        "Shortest prompt and core tools only (12 steps). Best for everyday Q&A and light coding.",
+        "Lean prompt and core tools (12 steps). Best for everyday Q&A and light coding without bloating context.",
     balanced:
-        "Full everyday tools with a lean prompt (16 steps). Web search hits and snippets stay short so Parallel/Firecrawl do not flood context.",
+        "Full everyday tools with a compact prompt (16 steps). Search stays high-signal: fewer hits, tighter snippets, fetch only for proof.",
     caching:
         "Balanced capability with a stable cacheable prompt prefix (16 steps). Cuts repeat input cost on Anthropic/OpenAI-style caches without dropping core tools.",
     full: "Maximum tool catalog, skill suite, and highest step budget (24 steps).",
@@ -68,10 +72,9 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
         case "efficient":
             return {
                 mode,
-                // Research/search loops need room for tools *plus* a final answer step.
                 maxSteps: 12,
-                memoryChars: 1_500,
-                skillChars: 4_000,
+                memoryChars: 1_200,
+                skillChars: 3_500,
                 maxActiveSkills: 1,
                 researchSkill: false,
                 instantAnswer: false,
@@ -79,10 +82,11 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
                 generateFile: false,
                 connectorsMeta: false,
                 compactToolDescriptions: true,
-                defaultSearchResults: 12,
-                maxSearchResults: 15,
-                maxSnippetChars: 160,
-                maxFetchChars: 3_000,
+                // Quality: enough ranked hits to pick a source, not a dump.
+                defaultSearchResults: 8,
+                maxSearchResults: 12,
+                maxSnippetChars: 140,
+                maxFetchChars: 3_500,
                 maxMcpResultChars: 8_000,
                 promptCaching: false,
             };
@@ -90,22 +94,20 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
             return {
                 mode,
                 maxSteps: 16,
-                memoryChars: 2_500,
-                skillChars: 8_000,
+                memoryChars: 2_000,
+                skillChars: 6_000,
                 maxActiveSkills: 2,
                 researchSkill: false,
                 instantAnswer: true,
                 skillSuite: false,
                 generateFile: true,
                 connectorsMeta: true,
-                // Keep tool schemas identical across turns for cache hits.
                 compactToolDescriptions: true,
-                // Prefer ranked hits with usable snippets over truncated JSON dumps.
-                defaultSearchResults: 18,
-                maxSearchResults: 20,
-                maxSnippetChars: 220,
-                maxFetchChars: 6_000,
-                maxMcpResultChars: 18_000,
+                defaultSearchResults: 8,
+                maxSearchResults: 12,
+                maxSnippetChars: 160,
+                maxFetchChars: 4_500,
+                maxMcpResultChars: 10_000,
                 promptCaching: true,
             };
         case "full":
@@ -121,11 +123,11 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
                 generateFile: true,
                 connectorsMeta: true,
                 compactToolDescriptions: false,
-                defaultSearchResults: 20,
-                maxSearchResults: 30,
-                maxSnippetChars: 280,
+                defaultSearchResults: 16,
+                maxSearchResults: 24,
+                maxSnippetChars: 240,
                 maxFetchChars: 10_000,
-                maxMcpResultChars: 28_000,
+                maxMcpResultChars: 24_000,
                 promptCaching: false,
             };
         case "balanced":
@@ -133,8 +135,8 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
             return {
                 mode: "balanced",
                 maxSteps: 16,
-                memoryChars: 2_500,
-                skillChars: 8_000,
+                memoryChars: 2_000,
+                skillChars: 6_000,
                 maxActiveSkills: 2,
                 researchSkill: false,
                 instantAnswer: true,
@@ -142,12 +144,12 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
                 generateFile: true,
                 connectorsMeta: true,
                 compactToolDescriptions: true,
-                // Prefer ranked hits with usable snippets over truncated JSON dumps.
-                defaultSearchResults: 18,
-                maxSearchResults: 20,
-                maxSnippetChars: 220,
-                maxFetchChars: 6_000,
-                maxMcpResultChars: 18_000,
+                // High-signal default: model can raise maxResults when needed.
+                defaultSearchResults: 8,
+                maxSearchResults: 14,
+                maxSnippetChars: 160,
+                maxFetchChars: 4_500,
+                maxMcpResultChars: 10_000,
                 promptCaching: false,
             };
     }

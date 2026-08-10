@@ -1,6 +1,6 @@
 import { Link } from "react-router";
-import { ArrowSquareOut } from "@phosphor-icons/react";
-import { DOCS_URL, GITHUB_URL } from "./constants";
+import { ArrowSquareOut, XLogo } from "@phosphor-icons/react";
+import { DOCS_URL, GITHUB_URL, TWITTER_URL } from "./constants";
 
 export function LandingFooter() {
     return (
@@ -33,7 +33,15 @@ export function LandingFooter() {
                                     href="#features"
                                     className="transition-colors duration-150 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                                 >
-                                    Features
+                                    Ownership
+                                </a>
+                            </li>
+                            <li>
+                                <a
+                                    href="#capabilities"
+                                    className="transition-colors duration-150 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                                >
+                                    Capabilities
                                 </a>
                             </li>
                             <li>
@@ -78,6 +86,38 @@ export function LandingFooter() {
                                 >
                                     MIT License
                                 </a>
+                            </li>
+                            <li>
+                                <a
+                                    href={TWITTER_URL}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1.5 transition-colors duration-150 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                                >
+                                    <XLogo weight="light" className="size-3.5" />
+                                    X / @HeckingHacker
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                    <div>
+                        <p className="font-mono text-[10px] tracking-wide text-zinc-600">LEGAL</p>
+                        <ul className="mt-3 space-y-2.5 text-zinc-500">
+                            <li>
+                                <Link
+                                    to="/privacy"
+                                    className="transition-colors duration-150 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                                >
+                                    Privacy
+                                </Link>
+                            </li>
+                            <li>
+                                <Link
+                                    to="/terms"
+                                    className="transition-colors duration-150 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                                >
+                                    Terms
+                                </Link>
                             </li>
                         </ul>
                     </div>

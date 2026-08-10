@@ -267,7 +267,7 @@ input:focus-visible,
 }
 
 .prose blockquote {
-    border-left: 3px solid var(--color-border);
+    border-left: 2px solid var(--color-border);
     padding-left: 0.875rem;
     color: var(--color-muted-foreground);
     font-style: italic;
@@ -347,6 +347,23 @@ textarea {
 .modal-backdrop {
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
+}
+
+/* Landing contrast lift: brighter graphite blackspace. */
+.landing-pinnacle {
+    background-color: #111114;
+}
+
+.landing-pinnacle .text-zinc-600 {
+    color: #b4b4bb;
+}
+
+.landing-pinnacle .text-zinc-500 {
+    color: #d0d0d6;
+}
+
+.landing-pinnacle .text-zinc-400 {
+    color: #e4e4e7;
 }
 
 @custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));

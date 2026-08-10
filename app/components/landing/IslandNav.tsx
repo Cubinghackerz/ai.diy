@@ -7,10 +7,13 @@ import { EASE_OUT } from "./motion";
 
 const LINKS = [
     { href: "#demo", label: "Demo" },
+    { href: "#features", label: "Ownership" },
+    { href: "#capabilities", label: "Capabilities" },
     { href: "#deploy", label: "Deploy" },
     { href: DOCS_URL, label: "Docs", external: true },
     { href: GITHUB_URL, label: "GitHub", external: true },
 ] as const;
+// Primary CTA lives as fixed floating control on md+ (LandingShell).
 
 export function IslandNav() {
     const [open, setOpen] = useState(false);
@@ -42,20 +45,22 @@ export function IslandNav() {
             <div className="pointer-events-none fixed inset-x-0 top-0 z-40 flex justify-center px-4 pt-5 sm:pt-6">
                 <nav
                     className={cn(
-                        "pointer-events-auto flex w-full max-w-3xl items-center justify-between gap-3 rounded-full border border-white/[0.08] bg-black/55 px-2 py-1.5 pl-4 shadow-[0_8px_40px_-20px_rgba(0,0,0,0.8)] backdrop-blur-xl transition-[border-color,background-color] duration-200",
-                        scrolled && "border-white/[0.12] bg-black/70",
+                        "pointer-events-auto grid w-full max-w-4xl grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-full border border-white/[0.12] bg-black/45 px-3 py-1.5 shadow-[0_8px_40px_-20px_rgba(0,0,0,0.75)] backdrop-blur-xl transition-[border-color,background-color] duration-200 sm:px-4",
+                        scrolled && "border-white/[0.16] bg-black/60",
                     )}
                     style={{ transitionTimingFunction: EASE_OUT }}
                     aria-label="Primary"
                 >
-                    <Link
-                        to="/"
-                        className="font-mono text-[13px] font-medium tracking-tight text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-                    >
-                        ai.diy
-                    </Link>
+                    <div className="justify-self-start">
+                        <Link
+                            to="/"
+                            className="inline-flex min-h-10 items-center font-mono text-[13px] font-medium tracking-tight text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                        >
+                            ai.diy
+                        </Link>
+                    </div>
 
-                    <div className="hidden items-center gap-1 md:flex">
+                    <div className="hidden items-center justify-center gap-0.5 md:flex">
                         {LINKS.map((link) =>
                             "external" in link && link.external ? (
                                 <a
@@ -63,7 +68,7 @@ export function IslandNav() {
                                     href={link.href}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="rounded-full px-3 py-2 text-[13px] text-zinc-400 transition-[color,background-color] duration-200 hover:bg-white/[0.04] hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                                    className="inline-flex min-h-10 items-center rounded-full px-3 text-[13px] text-zinc-300 transition-[color,background-color] duration-200 hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                                     style={{ transitionTimingFunction: EASE_OUT }}
                                 >
                                     {link.label}
@@ -72,7 +77,7 @@ export function IslandNav() {
                                 <a
                                     key={link.label}
                                     href={link.href}
-                                    className="rounded-full px-3 py-2 text-[13px] text-zinc-400 transition-[color,background-color] duration-200 hover:bg-white/[0.04] hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                                    className="inline-flex min-h-10 items-center rounded-full px-3 text-[13px] text-zinc-300 transition-[color,background-color] duration-200 hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                                     style={{ transitionTimingFunction: EASE_OUT }}
                                 >
                                     {link.label}
@@ -81,10 +86,10 @@ export function IslandNav() {
                         )}
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center justify-self-end gap-1.5">
                         <button
                             type="button"
-                            className="inline-flex size-10 items-center justify-center rounded-full text-zinc-400 transition-[color,background-color,transform] duration-200 hover:bg-white/[0.06] hover:text-white active:scale-[0.96] md:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                            className="inline-flex size-10 items-center justify-center rounded-full text-zinc-300 transition-[color,background-color,transform] duration-200 hover:bg-white/[0.08] hover:text-white active:scale-[0.96] md:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                             aria-label={open ? "Close menu" : "Open menu"}
                             aria-expanded={open}
                             aria-controls={titleId}
@@ -111,10 +116,10 @@ export function IslandNav() {
                         </button>
                         <Link
                             to="/workspace"
-                            className="group inline-flex min-h-10 items-center gap-2 rounded-full bg-white py-1.5 pl-4 pr-1.5 text-[12px] font-medium text-black transition-[transform,background-color] duration-200 hover:bg-zinc-200 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                            className="group inline-flex min-h-10 items-center gap-2 rounded-full bg-white py-1.5 pl-4 pr-1.5 text-[12px] font-medium text-black transition-[transform,background-color] duration-200 hover:bg-zinc-200 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 md:hidden"
                             style={{ transitionTimingFunction: EASE_OUT }}
                         >
-                            Enter Workspace
+                            Open
                             <span className="inline-flex size-7 items-center justify-center rounded-full bg-black/10 transition-transform duration-200 group-hover:-translate-y-px group-hover:translate-x-0.5 group-hover:scale-105">
                                 <ArrowUpRight weight="bold" className="size-3.5" />
                             </span>

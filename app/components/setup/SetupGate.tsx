@@ -20,6 +20,7 @@ import {
     CheckCircle,
     HardDrives,
     Key,
+    ShieldCheck,
     SpinnerGap,
     XCircle,
 } from "@phosphor-icons/react";
@@ -154,183 +155,266 @@ export function SetupGate() {
         [provider],
     );
 
+    const step = !keyReady ? 1 : !verified ? 2 : 3;
+
     if (!loaded) {
         return (
-            <div className="flex min-h-dvh w-full items-center justify-center bg-background">
-                <SpinnerGap className="size-6 animate-spin text-muted-foreground" />
+            <div className="relative flex min-h-dvh w-full items-center justify-center overflow-hidden bg-[#070708]">
+                <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_0%,rgba(255,255,255,0.08),transparent_55%)]"
+                />
+                <SpinnerGap className="size-6 animate-spin text-zinc-400" />
             </div>
         );
     }
 
     return (
-        <div className="relative flex h-dvh min-h-0 w-full items-start justify-center overflow-x-hidden overflow-y-auto overscroll-contain bg-background px-4 py-6 sm:py-10">
-            <div className="relative z-10 flex w-full max-w-lg flex-col gap-6 py-2 animate-slide-up sm:gap-8">
-                <header className="flex flex-col items-center gap-3 text-center">
-                    <img
-                        src="/ai-diy.png"
-                        alt="ai.diy"
-                        className="size-12 rounded-2xl object-cover shadow-sm"
-                    />
-                    <div className="flex flex-col gap-1.5">
-                        <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+        <div className="relative flex h-dvh min-h-0 w-full items-start justify-center overflow-x-hidden overflow-y-auto overscroll-contain bg-[#070708] px-4 py-6 text-zinc-100 sm:py-12">
+            <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_55%_at_50%_-10%,rgba(255,255,255,0.12),transparent_58%)]"
+            />
+            <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 opacity-[0.35] [background-image:radial-gradient(rgba(255,255,255,0.08)_0.6px,transparent_0.6px)] [background-size:18px_18px] [mask-image:radial-gradient(ellipse_85%_70%_at_50%_20%,#000_15%,transparent_75%)]"
+            />
+            <div
+                aria-hidden
+                className="pointer-events-none absolute left-1/2 top-[18%] h-64 w-[36rem] -translate-x-1/2 rounded-full bg-white/[0.04] blur-3xl"
+            />
+
+            <div className="relative z-10 flex w-full max-w-xl flex-col gap-7 py-2 animate-slide-up sm:gap-8">
+                <header className="flex flex-col items-center gap-4 text-center">
+                    <div className="relative">
+                        <div
+                            aria-hidden
+                            className="absolute -inset-3 rounded-[1.75rem] bg-white/[0.08] blur-xl"
+                        />
+                        <img
+                            src="/ai-diy.png"
+                            alt="ai.diy"
+                            className="relative size-14 rounded-[1.15rem] object-cover shadow-[0_18px_50px_-20px_rgba(255,255,255,0.45)] ring-1 ring-white/15"
+                        />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                        <h1 className="text-[2rem] font-semibold tracking-[-0.04em] text-white sm:text-[2.15rem]">
                             ai.diy
                         </h1>
-                        <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
-                            Enter your API key, run a live test against the
-                            provider, then pick a model. Keys stay in this
-                            browser.
+                        <p className="mx-auto max-w-md text-[14px] leading-relaxed text-zinc-400">
+                            Connect a provider, live-test the key, then unlock models.
+                            Credentials stay in this browser — never on the server.
                         </p>
+                    </div>
+                    <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 font-mono text-[10px] tracking-wide text-zinc-400">
+                        <ShieldCheck weight="fill" className="size-3.5 text-emerald-400" />
+                        Local-first · BYOK · browser storage
                     </div>
                 </header>
 
-                <section className="flex flex-col gap-5 rounded-2xl border border-border bg-card p-5">
-                    <div className="flex flex-col gap-2">
-                        <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                            Provider
-                        </label>
-                        <div className="flex flex-wrap gap-1.5">
-                            {CLOUD_PROVIDERS.map((id) => (
-                                <ProviderChip
-                                    key={id}
-                                    active={provider === id}
-                                    label={PROVIDER_DEFAULTS[id].name}
-                                    onClick={() => selectProvider(id)}
-                                />
-                            ))}
-                        </div>
-                        <div className="mt-1 flex flex-wrap gap-1.5">
-                            {LOCAL_IDS.map((id) => (
-                                <ProviderChip
-                                    key={id}
-                                    active={provider === id}
-                                    label={PROVIDER_DEFAULTS[id].name}
-                                    icon={<HardDrives size={14} />}
-                                    onClick={() => selectProvider(id)}
-                                />
-                            ))}
-                        </div>
+                <section className="relative overflow-hidden rounded-[1.75rem] border border-white/[0.1] bg-[#0e0e11]/80 p-5 shadow-[0_30px_100px_-40px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl sm:p-6">
+                    <div
+                        aria-hidden
+                        className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),transparent)]"
+                    />
+
+                    <div className="relative mb-5 grid grid-cols-3 gap-2">
+                        {[
+                            { n: 1, label: "Provider" },
+                            { n: 2, label: "Verify" },
+                            { n: 3, label: "Model" },
+                        ].map((item) => {
+                            const done = step > item.n || (item.n === 3 && verified);
+                            const active = step === item.n;
+                            return (
+                                <div
+                                    key={item.n}
+                                    className={cn(
+                                        "rounded-xl border px-2.5 py-2 text-center transition-colors",
+                                        done || active
+                                            ? "border-white/15 bg-white/[0.06]"
+                                            : "border-white/[0.06] bg-white/[0.02]",
+                                    )}
+                                >
+                                    <p
+                                        className={cn(
+                                            "font-mono text-[10px] tracking-wide",
+                                            done || active ? "text-zinc-200" : "text-zinc-500",
+                                        )}
+                                    >
+                                        {String(item.n).padStart(2, "0")}
+                                    </p>
+                                    <p
+                                        className={cn(
+                                            "mt-0.5 text-[11px] font-medium",
+                                            done || active ? "text-white" : "text-zinc-500",
+                                        )}
+                                    >
+                                        {item.label}
+                                    </p>
+                                </div>
+                            );
+                        })}
                     </div>
 
-                    {!local ? (
+                    <div className="relative flex flex-col gap-5">
+                        <div className="flex flex-col gap-2.5">
+                            <label className="text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500">
+                                Provider
+                            </label>
+                            <div className="flex flex-wrap gap-1.5">
+                                {CLOUD_PROVIDERS.map((id) => (
+                                    <ProviderChip
+                                        key={id}
+                                        active={provider === id}
+                                        label={PROVIDER_DEFAULTS[id].name}
+                                        onClick={() => selectProvider(id)}
+                                    />
+                                ))}
+                            </div>
+                            <div className="mt-1 flex flex-wrap gap-1.5">
+                                {LOCAL_IDS.map((id) => (
+                                    <ProviderChip
+                                        key={id}
+                                        active={provider === id}
+                                        label={PROVIDER_DEFAULTS[id].name}
+                                        icon={<HardDrives size={13} weight="light" />}
+                                        onClick={() => selectProvider(id)}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+
+                        {!local ? (
+                            <div className="flex flex-col gap-2">
+                                <label
+                                    htmlFor="setup-api-key"
+                                    className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500"
+                                >
+                                    <Key size={12} weight="light" />
+                                    {providerLabel} API key
+                                </label>
+                                <Input
+                                    id="setup-api-key"
+                                    type="password"
+                                    autoComplete="off"
+                                    spellCheck={false}
+                                    placeholder={`Paste your ${providerLabel} key…`}
+                                    value={apiKey}
+                                    onChange={(e) => {
+                                        setApiKey(e.target.value);
+                                        setVerified(false);
+                                        setError(null);
+                                    }}
+                                    className="h-11 rounded-xl border-white/10 bg-white/[0.04] font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus-visible:border-white/25"
+                                />
+                                {CREDENTIAL_HINTS[provider] ? (
+                                    <p className="text-[11px] leading-relaxed text-zinc-500">
+                                        Paste JSON credentials:{" "}
+                                        <code className="rounded-md border border-white/10 bg-black/40 px-1.5 py-0.5 font-mono text-[10px] text-zinc-300">
+                                            {CREDENTIAL_HINTS[provider]}
+                                        </code>
+                                    </p>
+                                ) : null}
+                            </div>
+                        ) : null}
+
                         <div className="flex flex-col gap-2">
                             <label
-                                htmlFor="setup-api-key"
-                                className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+                                htmlFor="setup-base-url"
+                                className="text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500"
                             >
-                                <Key size={12} />
-                                {providerLabel} API key
+                                Endpoint
                             </label>
                             <Input
-                                id="setup-api-key"
-                                type="password"
-                                autoComplete="off"
-                                spellCheck={false}
-                                placeholder={`Paste your ${providerLabel} key…`}
-                                value={apiKey}
+                                id="setup-base-url"
+                                type="url"
+                                value={baseUrl}
                                 onChange={(e) => {
-                                    setApiKey(e.target.value);
+                                    setBaseUrl(e.target.value);
                                     setVerified(false);
-                                    setError(null);
                                 }}
-                                className="h-10 rounded-xl bg-background font-mono text-sm"
+                                className="h-11 rounded-xl border-white/10 bg-white/[0.04] font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus-visible:border-white/25"
                             />
-                            {CREDENTIAL_HINTS[provider] ? (
-                                <p className="text-[11px] leading-relaxed text-muted-foreground">
-                                    Paste JSON credentials:{" "}
-                                    <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground/80">
-                                        {CREDENTIAL_HINTS[provider]}
-                                    </code>
-                                </p>
-                            ) : null}
                         </div>
-                    ) : null}
 
-                    <div className="flex flex-col gap-2">
-                        <label
-                            htmlFor="setup-base-url"
-                            className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+                        <Button
+                            type="button"
+                            variant="outline"
+                            disabled={!keyReady || testing}
+                            onClick={runTest}
+                            className="h-11 rounded-xl border-white/12 bg-white/[0.04] text-zinc-100 hover:border-white/25 hover:bg-white/[0.08] hover:text-white"
                         >
-                            Endpoint
-                        </label>
-                        <Input
-                            id="setup-base-url"
-                            type="url"
-                            value={baseUrl}
-                            onChange={(e) => {
-                                setBaseUrl(e.target.value);
-                                setVerified(false);
-                            }}
-                            className="h-10 rounded-xl bg-background font-mono text-sm"
-                        />
-                    </div>
+                            {testing ? (
+                                <>
+                                    <SpinnerGap
+                                        className="animate-spin"
+                                        data-icon="inline-start"
+                                    />
+                                    {local ? "Testing endpoint…" : "Testing key…"}
+                                </>
+                            ) : (
+                                "Test connection"
+                            )}
+                        </Button>
 
-                    <Button
-                        type="button"
-                        variant="outline"
-                        disabled={!keyReady || testing}
-                        onClick={runTest}
-                        className="h-10 rounded-xl"
-                    >
-                        {testing ? (
-                            <>
-                                <SpinnerGap
-                                    className="animate-spin"
-                                    data-icon="inline-start"
-                                />
-                                {local ? "Testing endpoint…" : "Testing key…"}
-                            </>
-                        ) : (
-                            "Test connection"
-                        )}
-                    </Button>
-
-                    {error ? (
-                        <p className="flex items-start gap-1.5 whitespace-pre-wrap text-xs text-destructive">
-                            <XCircle size={14} className="mt-0.5 shrink-0" />
-                            <span>{error}</span>
-                        </p>
-                    ) : null}
-
-                    {verified ? (
-                        <div className="flex flex-col gap-2 animate-slide-up">
-                            <label
-                                htmlFor="setup-model"
-                                className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
-                            >
-                                Model
-                                <CheckCircle
-                                    size={12}
-                                    className="text-success"
-                                />
-                            </label>
-                            <SearchableModelSelect
-                                models={models}
-                                value={model}
-                                onChange={setModel}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                Live test succeeded — choose a model to continue.
+                        {error ? (
+                            <p className="flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-xs leading-relaxed text-red-300">
+                                <XCircle size={14} className="mt-0.5 shrink-0" weight="fill" />
+                                <span className="whitespace-pre-wrap">{error}</span>
                             </p>
-                        </div>
-                    ) : (
-                        <p className="rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
-                            {local
-                                ? "Models unlock after a successful live call to this endpoint."
-                                : "Models unlock after a successful live test call to this provider (same key + endpoint you entered)."}
-                        </p>
-                    )}
+                        ) : null}
 
-                    <Button
-                        type="button"
-                        size="lg"
-                        disabled={!canContinue}
-                        onClick={handleContinue}
-                        className="h-11 w-full rounded-xl text-sm font-semibold"
-                    >
-                        Continue to chat
-                        <ArrowRight data-icon="inline-end" />
-                    </Button>
+                        {verified ? (
+                            <div className="flex flex-col gap-2.5 animate-slide-up">
+                                <label
+                                    htmlFor="setup-model"
+                                    className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500"
+                                >
+                                    Model
+                                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-0.5 font-mono text-[10px] normal-case tracking-normal text-emerald-300">
+                                        <CheckCircle size={11} weight="fill" />
+                                        Verified
+                                    </span>
+                                </label>
+                                <SearchableModelSelect
+                                    models={models}
+                                    value={model}
+                                    onChange={setModel}
+                                />
+                                <p className="text-xs text-zinc-400">
+                                    Live test succeeded — choose a model to continue.
+                                </p>
+                            </div>
+                        ) : (
+                            <p className="rounded-xl border border-dashed border-white/10 bg-white/[0.025] px-3.5 py-3 text-xs leading-relaxed text-zinc-400">
+                                {local
+                                    ? "Models unlock after a successful live call to this endpoint."
+                                    : "Models unlock after a successful live test call to this provider (same key + endpoint you entered)."}
+                            </p>
+                        )}
+
+                        <Button
+                            type="button"
+                            size="lg"
+                            disabled={!canContinue}
+                            onClick={handleContinue}
+                            className={cn(
+                                "h-12 w-full rounded-full text-sm font-semibold shadow-none transition-[transform,background-color,opacity] active:scale-[0.98]",
+                                canContinue
+                                    ? "bg-white text-black hover:bg-zinc-100"
+                                    : "bg-white/15 text-zinc-400",
+                            )}
+                        >
+                            Continue to chat
+                            <ArrowRight data-icon="inline-end" weight="bold" />
+                        </Button>
+                    </div>
                 </section>
+
+                <p className="text-center font-mono text-[10px] tracking-wide text-zinc-600">
+                    No server-side LLM credentials · MIT open source
+                </p>
             </div>
         </div>
     );
@@ -352,10 +436,10 @@ function ProviderChip({
             type="button"
             onClick={onClick}
             className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all outline-none active:scale-[0.97]",
+                "inline-flex min-h-8 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium outline-none transition-[background-color,border-color,color,transform,box-shadow] active:scale-[0.97]",
                 active
-                    ? "border-foreground/30 bg-foreground/10 text-foreground"
-                    : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
+                    ? "border-white/20 bg-white text-black shadow-[0_8px_24px_-12px_rgba(255,255,255,0.55)]"
+                    : "border-white/10 bg-white/[0.03] text-zinc-400 hover:border-white/20 hover:bg-white/[0.07] hover:text-zinc-100",
             )}
         >
             {icon}

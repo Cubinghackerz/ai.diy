@@ -6,6 +6,8 @@ export async function initLandingAnimations(
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
         scope.querySelectorAll<HTMLElement>(".landing-hero-step").forEach((el) => {
             el.style.opacity = "1";
+            el.style.transform = "none";
+            el.style.filter = "none";
         });
         return () => {};
     }
@@ -28,7 +30,7 @@ export async function initLandingAnimations(
                           );
                       }
                   },
-                  { rootMargin: "120px 0px" },
+                  { rootMargin: "140px 0px" },
               )
             : null;
 
@@ -51,34 +53,109 @@ export async function initLandingAnimations(
         if (heroSteps.length) {
             gsap.fromTo(
                 heroSteps,
-                { opacity: 0, y: 12 },
+                { opacity: 0, y: 18, filter: "blur(6px)" },
                 {
                     opacity: 1,
                     y: 0,
-                    duration: 0.45,
-                    stagger: 0.045,
+                    filter: "blur(0px)",
+                    duration: 0.7,
+                    stagger: 0.06,
                     ease: "power3.out",
-                    delay: 0.05,
+                    delay: 0.04,
+                    clearProps: "filter",
                 },
             );
         }
 
+        const panel = scope.querySelector<HTMLElement>(".landing-hero-panel");
+        if (panel) {
+            gsap.fromTo(
+                panel,
+                { scale: 0.985 },
+                {
+                    scale: 1,
+                    duration: 1.1,
+                    ease: "power3.out",
+                },
+            );
+        }
+
+        // Constellation gentle rotate
+        const constellation = scope.querySelector<HTMLElement>(".landing-constellation");
+        if (constellation) {
+            gsap.to(constellation.querySelectorAll(".landing-orbit-node"), {
+                rotation: 360,
+                transformOrigin: "50% 50%",
+                duration: 48,
+                ease: "none",
+                repeat: -1,
+                modifiers: {
+                    // keep icons upright relative to page — rotate container instead
+                },
+            });
+            // Prefer orbiting the whole ring via CSS-less path: subtle pulse
+            gsap.to(constellation, {
+                rotate: 360,
+                duration: 80,
+                ease: "none",
+                repeat: -1,
+                transformOrigin: "50% 50%",
+            });
+            gsap.to(constellation.querySelectorAll(".landing-orbit-node img, .landing-orbit-node"), {
+                rotate: -360,
+                duration: 80,
+                ease: "none",
+                repeat: -1,
+                transformOrigin: "50% 50%",
+            });
+        }
+
+        // Floating icons on closing band
+        gsap.utils.toArray<HTMLElement>(".landing-floater", scope).forEach((el, i) => {
+            gsap.to(el, {
+                y: i % 2 === 0 ? -10 : 10,
+                duration: 2.8 + i * 0.25,
+                ease: "sine.inOut",
+                yoyo: true,
+                repeat: -1,
+            });
+        });
+
         const reveal = gsap.utils.toArray<HTMLElement>("[data-landing-reveal]", scope);
         reveal.forEach((element) => {
-            const inHero = Boolean(element.closest('[data-anim-gate="hero"]'));
             gsap.fromTo(
                 element,
-                inHero ? { opacity: 0.4, y: 8 } : { y: 16, opacity: 0.001 },
+                { y: 28, opacity: 0.001, filter: "blur(4px)" },
                 {
                     y: 0,
                     opacity: 1,
-                    duration: 0.55,
+                    filter: "blur(0px)",
+                    duration: 0.75,
                     immediateRender: false,
                     ease: "power3.out",
+                    clearProps: "filter",
                     scrollTrigger: {
                         trigger: element,
-                        start: inHero ? "top 95%" : "top 88%",
+                        start: "top 88%",
                         toggleActions: "play none none none",
+                    },
+                },
+            );
+        });
+
+        // Section gates fade
+        gates.forEach((gate) => {
+            if (gate.dataset.animGate === "hero") return;
+            gsap.fromTo(
+                gate,
+                { opacity: 0.55 },
+                {
+                    opacity: 1,
+                    duration: 0.5,
+                    scrollTrigger: {
+                        trigger: gate,
+                        start: "top 85%",
+                        toggleActions: "play none none reverse",
                     },
                 },
             );

@@ -21,7 +21,7 @@ export function DoubleBezel({
     return (
         <div
             className={cn(
-                "border border-white/[0.08] bg-white/[0.03] shadow-[0_24px_80px_-48px_rgba(0,0,0,0.9)]",
+                "border border-white/[0.12] bg-white/[0.055] shadow-[0_24px_80px_-48px_rgba(0,0,0,0.9)]",
                 outerRadius,
                 padding,
                 className,
@@ -29,7 +29,7 @@ export function DoubleBezel({
         >
             <div
                 className={cn(
-                    "overflow-hidden border border-white/[0.06] bg-[#0A0A0A] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+                    "overflow-hidden border border-white/[0.1] bg-[#111114] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
                     innerRadius,
                     innerClassName,
                 )}

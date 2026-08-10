@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Check, CopySimple } from "@phosphor-icons/react";
-import { DEPLOY_TABS, type DeployTabId } from "./constants";
+import { DEPLOY_TABS, VERCEL_DEPLOY_URL, type DeployTabId } from "./constants";
 import { DoubleBezel, Reveal } from "./DoubleBezel";
 import { useCopy } from "./hooks";
 import { EASE_OUT } from "./motion";
@@ -18,12 +18,25 @@ export function DeployTerminal() {
             data-anim-gate="deploy"
         >
             <Reveal>
-                <h2 className="text-2xl font-medium tracking-tight text-white sm:text-3xl">
-                    Deploy in one command
-                </h2>
-                <p className="mt-2 text-[14px] text-zinc-500">
-                    Node production build, Docker Compose, or a Vercel preview.
-                </p>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                        <h2 className="text-2xl font-medium tracking-tight text-white sm:text-3xl">
+                            Deploy in one command
+                        </h2>
+                        <p className="mt-2 text-[14px] text-zinc-400">
+                            Node production build, Docker Compose, or a Vercel preview.
+                        </p>
+                    </div>
+                    <a
+                        href={VERCEL_DEPLOY_URL}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-white px-5 text-[13px] font-medium text-black transition-[transform,background-color] duration-200 hover:bg-zinc-200 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                        style={{ transitionTimingFunction: EASE_OUT }}
+                    >
+                        Deploy to Vercel
+                    </a>
+                </div>
             </Reveal>
 
             <Reveal delayMs={40} className="mt-8">

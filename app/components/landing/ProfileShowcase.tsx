@@ -9,6 +9,7 @@ const PROFILE_URL = "https://github.com/Cubinghackerz";
 const API_USER = "https://api.github.com/users/Cubinghackerz";
 const API_REPO = `https://api.github.com/repos/${GITHUB_REPO}`;
 const API_COMMITS = `https://api.github.com/repos/${GITHUB_REPO}/commits?per_page=1`;
+const GITHUB_CACHE_MAX_AGE = 24 * 60 * 60 * 1000;
 
 type ProfileData = {
     login: string;
@@ -37,15 +38,75 @@ function parseCommitCount(linkHeader: string | null): number | null {
     return Number.isFinite(page) ? page : null;
 }
 
+function readGithubCache<T>(url: string): T | null {
+    if (typeof window === "undefined") return null;
+    try {
+        const raw = window.sessionStorage.getItem(`ai.diy:github:${url}`);
+        if (!raw) return null;
+        const cached = JSON.parse(raw) as { value?: T; savedAt?: number };
+        if (
+            cached.value === undefined ||
+            typeof cached.savedAt !== "number" ||
+            Date.now() - cached.savedAt > GITHUB_CACHE_MAX_AGE
+        ) {
+            return null;
+        }
+        return cached.value;
+    } catch {
+        return null;
+    }
+}
+
+function writeGithubCache<T>(url: string, value: T) {
+    try {
+        window.sessionStorage.setItem(
+            `ai.diy:github:${url}`,
+            JSON.stringify({ value, savedAt: Date.now() }),
+        );
+    } catch {
+        /* Storage can be unavailable in private browsing. */
+    }
+}
+
 async function fetchGithubJson<T>(url: string): Promise<T | null> {
-    const res = await fetch(url, {
-        headers: {
-            Accept: "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-    });
-    if (!res.ok) return null;
-    return (await res.json()) as T;
+    const cached = readGithubCache<T>(url);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 5000);
+    try {
+        const res = await fetch(url, {
+            headers: {
+                Accept: "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            signal: controller.signal,
+        });
+        if (!res.ok) return cached;
+        const value = (await res.json()) as T;
+        writeGithubCache(url, value);
+        return value;
+    } catch {
+        return cached;
+    } finally {
+        window.clearTimeout(timeout);
+    }
+}
+
+async function fetchGithubResponse(url: string): Promise<Response | null> {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 5000);
+    try {
+        return await fetch(url, {
+            headers: {
+                Accept: "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            signal: controller.signal,
+        });
+    } catch {
+        return null;
+    } finally {
+        window.clearTimeout(timeout);
+    }
 }
 
 export function ProfileShowcase() {
@@ -69,12 +130,7 @@ export function ProfileShowcase() {
                         stargazers_count?: number;
                         forks_count?: number;
                     }>(API_REPO),
-                    fetch(API_COMMITS, {
-                        headers: {
-                            Accept: "application/vnd.github+json",
-                            "X-GitHub-Api-Version": "2022-11-28",
-                        },
-                    }),
+                    fetchGithubResponse(API_COMMITS),
                 ]);
 
                 if (cancelled) return;
@@ -89,9 +145,14 @@ export function ProfileShowcase() {
                     });
                 }
 
-                const commits = commitsRes.ok
+                const cachedCommits = readGithubCache<number>(API_COMMITS);
+                const commits = commitsRes?.ok
                     ? parseCommitCount(commitsRes.headers.get("Link"))
-                    : null;
+                    : cachedCommits;
+
+                if (commitsRes?.ok && commits != null) {
+                    writeGithubCache(API_COMMITS, commits);
+                }
 
                 setRepo({
                     stars: repoJson?.stargazers_count ?? 0,

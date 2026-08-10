@@ -9,6 +9,7 @@ import {
 import { ComposerModelControls } from "~/components/assistant-ui/ComposerModelControls";
 import { ThreadFollowupSuggestions } from "~/components/assistant-ui/follow-up-suggestions";
 import { MarkdownText } from "~/components/assistant-ui/markdown-text";
+import { MessageUsageStats } from "~/components/assistant-ui/MessageUsageStats";
 import {
   ReasoningContent,
   ReasoningRoot,
@@ -33,7 +34,6 @@ import {
   ErrorPrimitive,
   groupPartByType,
   MessagePrimitive,
-  SuggestionPrimitive,
   ThreadPrimitive,
   type ToolCallMessagePartComponent,
   unstable_useComposerInput,
@@ -234,31 +234,54 @@ const ThreadScrollToBottom: FC = () => {
 
 const ThreadWelcome: FC = () => {
   return (
-    <div className="aui-thread-welcome-root mb-8 flex flex-col items-center gap-2 px-4 text-center">
+    <div className="aui-thread-welcome-root mb-8 flex flex-col items-center gap-3 px-4 text-center">
       <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-3xl font-semibold tracking-tight duration-200">
         ai.diy
       </h1>
-      <p className="max-w-sm text-sm text-muted-foreground">
-        Local-first chat. Your keys stay on this device.
+      <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
+        Your local-first workspace is ready. Ask a question, attach a file, or type <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[12px] text-foreground">/</code> to run a skill.
       </p>
     </div>
   );
 };
 
+const STARTER_PROMPTS = [
+  {
+    label: "Research a topic",
+    prompt: "/Research Research the tradeoffs between local and hosted AI workspaces.",
+  },
+  {
+    label: "Plan a project",
+    prompt: "Help me break a project into clear, verifiable steps.",
+  },
+  {
+    label: "Review some code",
+    prompt: "Review this JavaScript for correctness, security, and maintainability: fetch(url).then((res) => res.json())",
+  },
+  {
+    label: "Make a chart",
+    prompt: "Use Python to create a simple chart from this dataset: 2, 4, 3, 7, 6, 9.",
+  },
+] as const;
+
 const ThreadSuggestions: FC = () => {
   return (
-    <div className="aui-thread-welcome-suggestions flex w-full flex-wrap items-center justify-center gap-2 px-4">
-      <ThreadPrimitive.Suggestions>
-        {() => <ThreadSuggestionItem />}
-      </ThreadPrimitive.Suggestions>
-    </div>
-  );
-};
-
-const ThreadSuggestionItem: FC = () => {
-  return (
-    <div className="aui-thread-welcome-suggestion-display fade-in slide-in-from-bottom-2 animate-in fill-mode-both duration-200">
-      <SuggestionPrimitive.Trigger send render={<Button variant="ghost" className="aui-thread-welcome-suggestion text-foreground hover:bg-muted border-border/60 h-auto gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-normal whitespace-nowrap transition-colors" />}><SuggestionPrimitive.Title className="aui-thread-welcome-suggestion-text-1" /><SuggestionPrimitive.Description className="aui-thread-welcome-suggestion-text-2 empty:hidden" /></SuggestionPrimitive.Trigger>
+    <div className="aui-thread-welcome-suggestions flex w-full flex-col items-center gap-3 px-4">
+      <p className="font-mono text-[10px] tracking-wide text-muted-foreground/70">
+        USE A PRESET
+      </p>
+      <div className="flex w-full flex-wrap items-center justify-center gap-2">
+        {STARTER_PROMPTS.map((suggestion) => (
+          <ThreadPrimitive.Suggestion
+            key={suggestion.label}
+            prompt={suggestion.prompt}
+            method="replace"
+            className="aui-thread-welcome-suggestion text-foreground hover:bg-muted border-border/60 h-auto rounded-full border px-3.5 py-1.5 text-sm font-normal whitespace-nowrap transition-colors"
+          >
+            {suggestion.label}
+          </ThreadPrimitive.Suggestion>
+        ))}
+      </div>
     </div>
   );
 };
@@ -701,10 +724,11 @@ const AssistantMessage: FC = () => {
 
       <div
         data-slot="aui_assistant-message-footer"
-        className={cn("ms-2 flex items-center", ACTION_BAR_HEIGHT)}
+        className={cn("ms-2 flex flex-wrap items-center gap-1", ACTION_BAR_HEIGHT)}
       >
         <BranchPicker />
         <AssistantActionBar />
+        <MessageUsageStats />
       </div>
     </MessagePrimitive.Root>
   );

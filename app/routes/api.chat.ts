@@ -696,6 +696,9 @@ export async function action({ request }: ActionFunctionArgs) {
             policy.maxSteps + (researchHeavy ? 4 : 0),
         );
 
+        const streamStartedAt = Date.now();
+        let firstTokenAt: number | null = null;
+
         const result = streamText({
             model: modelInstance,
             abortSignal: request.signal,
@@ -756,14 +759,31 @@ export async function action({ request }: ActionFunctionArgs) {
                 // Attach real provider-reported usage plus the model/provider
                 // used for this request to the assistant message metadata so
                 // the client can persist and aggregate it (usage analytics).
-                messageMetadata: ({ part }) =>
-                    part.type === "finish"
-                        ? {
-                              usage: part.totalUsage,
-                              model: body.model,
-                              provider: body.provider,
-                          }
-                        : undefined,
+                messageMetadata: ({ part }) => {
+                    if (
+                        (part.type === "text-delta" ||
+                            part.type === "reasoning-delta" ||
+                            part.type === "tool-input-start") &&
+                        firstTokenAt == null
+                    ) {
+                        firstTokenAt = Date.now();
+                    }
+                    if (part.type !== "finish") return undefined;
+                    const finishedAt = Date.now();
+                    const ttftMs =
+                        firstTokenAt != null
+                            ? Math.max(0, firstTokenAt - streamStartedAt)
+                            : Math.max(0, finishedAt - streamStartedAt);
+                    return {
+                        usage: part.totalUsage,
+                        model: body.model,
+                        provider: body.provider,
+                        timing: {
+                            ttftMs,
+                            durationMs: Math.max(0, finishedAt - streamStartedAt),
+                        },
+                    };
+                },
             }),
         );
     } catch (err) {

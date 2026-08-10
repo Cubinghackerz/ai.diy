@@ -5,6 +5,8 @@
 
 **The open-source AI workspace you own.**
 
+**Live demo:** [ai-diy-demo.vercel.app](https://ai-diy-demo.vercel.app/)
+
 Local-first, bring-your-own-key chat for Node or Docker. No server-side LLM credentials. Your keys, chats, memory, knowledge base, and Canvas artifacts stay in the browser.
 
 Built with React Router, assistant-ui, the Vercel AI SDK, Tailwind CSS, and browser-side Pyodide.
