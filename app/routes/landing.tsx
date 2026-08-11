@@ -1,23 +1,5 @@
-/**
- * ai.diy landing — Ethereal Glass × Resend blackspace, Cloudflare-scale structure.
- *
- * THESIS: Ownership is a mechanism you can see.
- * FORM: OLED blackspace + luminous panels + dotted stage rails + blueprint frames.
- * STORY: Grasp BYOK local-first ownership → open /workspace or deploy.
- */
 import type { HeadersFunction, LinksFunction, MetaFunction } from "react-router";
-import { CapabilityRack } from "~/components/landing/CapabilityRack";
-import { ClosingBand } from "~/components/landing/ClosingBand";
-import { DeployTerminal } from "~/components/landing/DeployTerminal";
-import { Hero } from "~/components/landing/Hero";
-import { IslandNav } from "~/components/landing/IslandNav";
-import { LandingFooter } from "~/components/landing/LandingFooter";
-import { LandingShell } from "~/components/landing/LandingShell";
-import { OwnershipSplit } from "~/components/landing/OwnershipSplit";
-import { OwnershipStage } from "~/components/landing/OwnershipStage";
-import { ProfileShowcase } from "~/components/landing/ProfileShowcase";
-import { ProviderMarquee } from "~/components/landing/ProviderMarquee";
-import { WorkflowStage } from "~/components/landing/WorkflowStage";
+import { MidnightLanding } from "~/components/landing/MidnightLanding";
 import {
     SITE_DESCRIPTION,
     SITE_IMAGE_URL,
@@ -26,6 +8,7 @@ import {
     SITE_TWITTER_HANDLE,
     SITE_URL,
 } from "~/lib/site";
+import "~/styles/landing.css";
 
 export const headers: HeadersFunction = () => ({
     "Cache-Control": "public, s-maxage=300, stale-while-revalidate=86400",
@@ -34,7 +17,7 @@ export const headers: HeadersFunction = () => ({
 export const meta: MetaFunction = () => [
     { title: SITE_TITLE },
     { name: "description", content: SITE_DESCRIPTION },
-    { name: "color-scheme", content: "dark light" },
+    { name: "color-scheme", content: "dark" },
     { name: "robots", content: "index, follow" },
     { property: "og:type", content: "website" },
     { property: "og:site_name", content: SITE_NAME },
@@ -58,20 +41,8 @@ export const meta: MetaFunction = () => [
 export const links: LinksFunction = () => [
     { rel: "canonical", href: `${SITE_URL}/` },
     {
-        rel: "preload",
-        as: "image",
-        href: "/workspace-demo.png",
-        type: "image/png",
-    },
-    {
-        rel: "preload",
-        as: "video",
-        href: "/AI-DIY_DEMO.mp4",
-        type: "video/mp4",
-    },
-    {
         rel: "stylesheet",
-        href: "https://cdn.jsdelivr.net/npm/geist@1.3.1/dist/fonts/geist-sans/style.css",
+        href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap",
     },
     {
         rel: "stylesheet",
@@ -81,7 +52,7 @@ export const links: LinksFunction = () => [
 
 export default function LandingPage() {
     return (
-        <LandingShell>
+        <>
             <script
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{
@@ -104,19 +75,7 @@ export default function LandingPage() {
                     }),
                 }}
             />
-            <IslandNav />
-            <main>
-                <Hero />
-                <OwnershipStage />
-                <ProviderMarquee />
-                <CapabilityRack />
-                <OwnershipSplit />
-                <WorkflowStage />
-                <ProfileShowcase />
-                <DeployTerminal />
-                <ClosingBand />
-            </main>
-            <LandingFooter />
-        </LandingShell>
+            <MidnightLanding />
+        </>
     );
 }

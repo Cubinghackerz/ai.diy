@@ -4,7 +4,8 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import type { MetaFunction } from "react-router";
+import { useAui } from "@assistant-ui/react";
+import { useSearchParams, type MetaFunction } from "react-router";
 import { AssistantRuntimeProvider } from "~/components/assistant-ui/AssistantRuntimeProvider";
 import { ChatLifecycle } from "~/components/assistant-ui/ChatLifecycle";
 import { ChatErrorBanner } from "~/components/assistant-ui/ChatThreadSync";
@@ -39,6 +40,22 @@ export default function Home() {
             <ArtifactLauncher />
         </CanvasProvider>
     );
+}
+
+function LandingPromptHandoff() {
+    const aui = useAui();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const prompt = searchParams.get("prompt")?.trim();
+
+    useEffect(() => {
+        if (!prompt) return;
+        aui.composer.setText(prompt.slice(0, 8_000));
+        const next = new URLSearchParams(searchParams);
+        next.delete("prompt");
+        setSearchParams(next, { replace: true });
+    }, [aui, prompt, searchParams, setSearchParams]);
+
+    return null;
 }
 
 function HomeInner() {
@@ -213,6 +230,7 @@ function HomeInner() {
                                 <PreviewWorkspace />
                             ) : (
                                 <>
+                                    <LandingPromptHandoff />
                                     <ChatLifecycle
                                         threadId={activeThreadId}
                                         threadTitle={activeThread?.title}

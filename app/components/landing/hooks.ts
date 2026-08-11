@@ -72,16 +72,20 @@ export function formatStars(n: number) {
 
 export function useCopy(text: string) {
     const [copied, setCopied] = useState(false);
+    const [copyError, setCopyError] = useState(false);
     const copy = useCallback(async () => {
         try {
             await navigator.clipboard.writeText(text);
             setCopied(true);
+            setCopyError(false);
             window.setTimeout(() => setCopied(false), 1400);
         } catch {
-            /* ignore */
+            setCopied(false);
+            setCopyError(true);
+            window.setTimeout(() => setCopyError(false), 2200);
         }
     }, [text]);
-    return { copied, copy };
+    return { copied, copy, copyError };
 }
 
 export function usePrefersReducedMotion() {

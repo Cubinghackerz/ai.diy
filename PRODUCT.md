@@ -57,9 +57,9 @@ Known constraints:
 
 - Product name: ai.diy (logo asset `public/ai-diy.png`).
 - Voice: calm, direct, technical, no hype; "open tools for useful thinking."
-- Landing page copy and factual claims follow the Ethereal Glass × Resend blackspace redesign (ownership headline, BYOK subhead, real deploy commands, modular landing under `app/components/landing/`). Do not fabricate metrics, customers, or package names.
+- Landing page copy and factual claims follow the Midnight Flux redesign: a direct BYOK headline, an explicit browser/server/provider trust boundary, real deploy commands, and a compact proof-led narrative under `app/components/landing/`. Do not fabricate metrics, customers, or package names.
 - Provider brand marks use bundled assets in `public/landing-logos/` and Simple Icons where applicable; Firecrawl and Parallel logos exist in `public/`.
-- Landing visual world: OLED `#050505`, zinc/white mesh (no purple), double-bezel hardware, floating island nav, Geist, Phosphor Light, solid white CTAs. Workspace identity tokens may differ.
+- Landing visual world: Void Black `#040506`, achromatic precision chrome, 0.5px structural hairlines, tactile keycap frames, Inter architecture, Phosphor Regular, and a rationed orange/iris/cyan Quantum Flux field used only for atmosphere and selected artifacts. Workspace identity tokens may differ.
 
 ## Evidence on Hand
 
@@ -79,6 +79,6 @@ Known constraints:
 ## Accessibility & Inclusion
 
 - WCAG AA contrast for body and interactive text; AAA target for hero copy.
-- Both light and dark themes supported; respect `prefers-color-scheme`.
+- The workspace supports light, dark, and system themes. The landing is intentionally dark-only to preserve its midnight command-center scene.
 - Motion must honor `prefers-reduced-motion`.
 - Keyboard focus-visible states everywhere.
