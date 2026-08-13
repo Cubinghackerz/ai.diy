@@ -176,7 +176,7 @@ export function ChatThreadSync({
         return () => clearTimeout(timer);
     }, [threadId, chat.status, chat.messages, settings.chat.model, settings.chat.provider]);
 
-    // Push create_file / create_skill / frontend_design_skill results into Canvas.
+                // Push create_file / create_skill / prompt_architect / frontend_design_skill results into Canvas.
     useEffect(() => {
         const messages = chat.messages as UIMessage[];
         for (const msg of messages) {
@@ -197,6 +197,8 @@ export function ChatThreadSync({
                         "create_file",
                         "generate_file",
                         "create_skill",
+                        "prompt_architect",
+                        "create_prompt",
                         "frontend_design_skill",
                     ].includes(
                         toolName,

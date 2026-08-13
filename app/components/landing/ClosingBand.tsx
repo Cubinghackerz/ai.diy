@@ -1,14 +1,13 @@
-import { Link } from "react-router";
 import {
-    ArrowUpRight,
     Code,
     HardDrives,
     Key,
     MagnifyingGlass,
     Stack,
 } from "@phosphor-icons/react";
-import { GITHUB_URL, VERCEL_DEPLOY_URL } from "./constants";
-import { EASE_OUT } from "./motion";
+import { GITHUB_URL } from "./constants";
+import { LandingCta } from "./LandingCta";
+import { LANDING } from "./tokens";
 import { cn } from "~/lib/utils";
 
 const FLOATERS = [
@@ -19,7 +18,6 @@ const FLOATERS = [
     { Icon: HardDrives, className: "left-[46%] top-[12%]" },
 ] as const;
 
-/** Cloudflare bottom CTA band — monochrome luminous version. */
 export function ClosingBand() {
     return (
         <section
@@ -27,17 +25,12 @@ export function ClosingBand() {
             data-anim-gate="closing"
         >
             <div
-                className={cn(
-                    "landing-closing-band relative mx-auto max-w-6xl overflow-hidden rounded-[1.75rem] border border-white/16 sm:rounded-[2rem]",
-                )}
-                style={{
-                    background:
-                        "radial-gradient(100% 80% at 50% 120%, rgba(255,255,255,0.34) 0%, transparent 45%), linear-gradient(180deg, #252529 0%, #111114 100%)",
-                }}
+                className="landing-closing-band relative mx-auto max-w-6xl overflow-hidden rounded-[1.75rem] border border-white/[0.18] shadow-[0_40px_120px_-48px_rgba(0,0,0,0.85),inset_0_1px_0_rgba(255,255,255,0.1)] sm:rounded-[2rem]"
+                style={{ background: LANDING.closingGradient }}
             >
                 <div
                     aria-hidden
-                    className="pointer-events-none absolute inset-0 opacity-55 [background-image:radial-gradient(rgba(255,255,255,0.17)_0.6px,transparent_0.6px)] [background-size:14px_14px]"
+                    className="pointer-events-none absolute inset-0 opacity-45 [background-image:radial-gradient(rgba(255,255,255,0.17)_0.6px,transparent_0.6px)] [background-size:14px_14px]"
                 />
                 <div
                     aria-hidden
@@ -49,7 +42,7 @@ export function ClosingBand() {
                         key={className}
                         aria-hidden
                         className={cn(
-                            "landing-floater absolute hidden size-12 items-center justify-center rounded-2xl border border-dashed border-white/30 bg-white/[0.08] text-zinc-300 sm:flex",
+                            "landing-floater absolute hidden size-12 items-center justify-center rounded-xl border border-dashed border-white/30 bg-white/[0.08] text-zinc-300 sm:flex",
                             className,
                         )}
                     >
@@ -66,39 +59,15 @@ export function ClosingBand() {
                         machine. Or clone the repo and self-host in one command.
                     </p>
                     <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-                        <Link
-                            to="/workspace"
-                            className="group inline-flex min-h-12 items-center gap-2 rounded-full bg-white py-2.5 pl-6 pr-2.5 text-[14px] font-medium text-black transition-[transform,background-color] duration-200 hover:bg-zinc-100 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
-                            style={{ transitionTimingFunction: EASE_OUT }}
-                        >
-                            Open workspace
-                            <span className="inline-flex size-8 items-center justify-center rounded-full bg-black/10 transition-transform duration-200 group-hover:-translate-y-px group-hover:translate-x-0.5">
-                                <ArrowUpRight weight="bold" className="size-3.5" />
-                            </span>
-                        </Link>
-                        <a
-                            href={GITHUB_URL}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex min-h-12 items-center rounded-full border border-white/30 bg-white/[0.09] px-5 py-2.5 text-[14px] font-medium text-zinc-100 transition-[border-color,background-color,transform] duration-200 hover:border-white/50 hover:bg-white/[0.14] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-                            style={{ transitionTimingFunction: EASE_OUT }}
-                        >
+                        <LandingCta to="/workspace">Open workspace</LandingCta>
+                        <LandingCta href={GITHUB_URL} external variant="ghost">
                             View on GitHub
-                        </a>
-                        <a
-                            href={VERCEL_DEPLOY_URL}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex min-h-12 items-center rounded-full border border-white/30 bg-white/[0.09] px-5 py-2.5 text-[14px] font-medium text-zinc-100 transition-[border-color,background-color,transform] duration-200 hover:border-white/50 hover:bg-white/[0.14] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-                            style={{ transitionTimingFunction: EASE_OUT }}
-                        >
-                            Deploy to Vercel
-                        </a>
+                        </LandingCta>
                     </div>
                 </div>
 
-                <div className="relative border-t border-white/[0.08] px-4 py-3">
-                    <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-x-5 gap-y-2 font-mono text-[10px] tracking-wide text-zinc-500 sm:justify-between">
+                <div className="relative border-t border-white/[0.1] px-4 py-3">
+                    <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-x-5 gap-y-2 font-mono text-[10px] tracking-wide text-zinc-400 sm:justify-between">
                         <span>17 providers</span>
                         <span>Zero server LLM keys</span>
                         <span>IndexedDB persistence</span>

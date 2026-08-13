@@ -68,6 +68,7 @@
         "json-schema": "^0.4.0",
         "katex": "^0.18.1",
         "lucide-react": "^1.28.0",
+        "motion": "^13.1.0",
         "ogl": "^1.0.11",
         "openai": "^6.49.0",
         "pyodide": "^314.0.3",

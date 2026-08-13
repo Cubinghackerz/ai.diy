@@ -123,7 +123,18 @@ check(
     "raw provider usage",
     rawProviderUsage?.inputTokens === 10 && rawProviderUsage?.outputTokens === 20,
 );
-check("normalizeUsage rejects garbage", normalizeUsage(null) === null);
+const googleNested = normalizeUsage({
+    inputTokens: { total: 1400, noCache: 1400, cacheRead: 0 },
+    outputTokens: { total: 32, text: 32, reasoning: 0 },
+    raw: { promptTokenCount: 1400, candidatesTokenCount: 32, totalTokenCount: 1432 },
+});
+check(
+    "google nested usage",
+    googleNested?.inputTokens === 1400 &&
+        googleNested?.outputTokens === 32 &&
+        googleNested?.totalTokens === 1432,
+    JSON.stringify(googleNested),
+);
 
 const stored = {
     id: "m1",

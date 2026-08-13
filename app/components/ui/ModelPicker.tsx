@@ -90,6 +90,7 @@ function useHoveredModel() {
     const [hovered, setHovered] = useState<{
         model: ModelInfo;
         rect: { top: number; bottom: number; left: number; right: number };
+        placement: "above" | "side";
     } | null>(null);
     const merged: MergedModelInfo | null = hovered
         ? mergeCatalogInfo(
@@ -296,6 +297,7 @@ export function SearchableModelSelect({
                     if (!open && selected) {
                         setHovered({
                             model: selected,
+                            placement: "above",
                             rect: triggerRef.current?.getBoundingClientRect() ?? {
                                 top: 0,
                                 bottom: 0,
@@ -369,6 +371,7 @@ export function SearchableModelSelect({
                                     onMouseEnter={(event) => {
                                         setHovered({
                                             model,
+                                            placement: "side",
                                             rect: (
                                                 event.currentTarget as HTMLElement
                                             ).getBoundingClientRect(),
@@ -377,6 +380,7 @@ export function SearchableModelSelect({
                                     onFocus={(event) => {
                                         setHovered({
                                             model,
+                                            placement: "side",
                                             rect: (
                                                 event.currentTarget as HTMLElement
                                             ).getBoundingClientRect(),
@@ -420,7 +424,11 @@ export function SearchableModelSelect({
                 : null}
 
             {hovered && merged ? (
-                <ModelHoverCard anchor={hovered.rect} model={merged} />
+                <ModelHoverCard
+                    anchor={hovered.rect}
+                    model={merged}
+                    placement={hovered.placement}
+                />
             ) : null}
         </div>
     );
@@ -579,6 +587,7 @@ export function ModelPicker({
                     if (!open && selected) {
                         setHovered({
                             model: selected,
+                            placement: "above",
                             rect: triggerRef.current?.getBoundingClientRect() ?? {
                                 top: 0,
                                 bottom: 0,
@@ -662,6 +671,7 @@ export function ModelPicker({
                                     onMouseEnter={(event) => {
                                         setHovered({
                                             model: m,
+                                            placement: "side",
                                             rect: (
                                                 event.currentTarget as HTMLElement
                                             ).getBoundingClientRect(),
@@ -670,6 +680,7 @@ export function ModelPicker({
                                     onFocus={(event) => {
                                         setHovered({
                                             model: m,
+                                            placement: "side",
                                             rect: (
                                                 event.currentTarget as HTMLElement
                                             ).getBoundingClientRect(),
@@ -704,7 +715,11 @@ export function ModelPicker({
                 : null}
 
             {hovered && merged ? (
-                <ModelHoverCard anchor={hovered.rect} model={merged} />
+                <ModelHoverCard
+                    anchor={hovered.rect}
+                    model={merged}
+                    placement={hovered.placement}
+                />
             ) : null}
         </div>
     );

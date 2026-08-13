@@ -100,6 +100,8 @@ export type ThreadProps = {
   components?: ThreadComponents | undefined;
   /** Preview runs render messages only; their prompt is composed elsewhere. */
   hideComposer?: boolean;
+  /** Comparison columns: full width, paint immediately, hide the shared prompt bubble. */
+  compact?: boolean;
 };
 
 const EMPTY_COMPONENTS: ThreadComponents = {};
@@ -107,21 +109,26 @@ const EMPTY_COMPONENTS: ThreadComponents = {};
 const ThreadComponentsContext =
   createContext<ThreadComponents>(EMPTY_COMPONENTS);
 
+const ThreadLayoutContext = createContext({ compact: false });
+
 export const Thread: FC<ThreadProps> = ({
   components = EMPTY_COMPONENTS,
   hideComposer = false,
+  compact = false,
 }) => {
   const messageCount = useAuiState((state) => state.thread.messages.length);
   const isEmpty = messageCount === 0;
 
   return (
-    <ThreadComponentsContext.Provider value={components}>
-      <ThreadRoot
-        isEmpty={isEmpty}
-        messageCount={messageCount}
-        hideComposer={hideComposer}
-      />
-    </ThreadComponentsContext.Provider>
+    <ThreadLayoutContext.Provider value={{ compact }}>
+      <ThreadComponentsContext.Provider value={components}>
+        <ThreadRoot
+          isEmpty={isEmpty}
+          messageCount={messageCount}
+          hideComposer={hideComposer}
+        />
+      </ThreadComponentsContext.Provider>
+    </ThreadLayoutContext.Provider>
   );
 };
 
@@ -135,13 +142,21 @@ const ThreadRoot: FC<{
   hideComposer,
 }) => {
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext);
+  const { compact } = useContext(ThreadLayoutContext);
   const composerEmpty = useAuiState((s) => s.composer.isEmpty);
+  const hasAssistant = useAuiState((s) =>
+    s.thread.messages.some((message) => message.role === "assistant"),
+  );
+  const showWelcome = compact ? !hasAssistant : isEmpty;
 
   return (
     <ThreadPrimitive.Root
-      className="aui-root aui-thread-root bg-background @container flex h-full flex-col"
+      className={cn(
+        "aui-root aui-thread-root bg-background @container flex h-full flex-col",
+        compact && "[&_[data-role=user]]:hidden",
+      )}
       style={{
-        ["--thread-max-width" as string]: "44rem",
+        ["--thread-max-width" as string]: compact ? "100%" : "44rem",
         ["--composer-bg" as string]:
           "color-mix(in oklab, var(--color-muted) 55%, var(--color-background))",
         ["--composer-radius" as string]: "1.25rem",
@@ -156,10 +171,11 @@ const ThreadRoot: FC<{
         <div
           className={cn(
             "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4",
-            isEmpty && "justify-center",
+            compact && "px-3 pt-3",
+            isEmpty && !compact && "justify-center",
           )}
         >
-          {isEmpty ? <Welcome /> : null}
+          {showWelcome ? <Welcome /> : null}
 
           <div
             data-slot="aui_message-group"
@@ -589,6 +605,7 @@ const AssistantMessage: FC = () => {
     ToolGroup,
     ReasoningGroup,
   } = useContext(ThreadComponentsContext);
+  const { compact } = useContext(ThreadLayoutContext);
 
   const ACTION_BAR_PT = "pt-1.5";
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
@@ -598,7 +615,11 @@ const AssistantMessage: FC = () => {
     <MessagePrimitive.Root
       data-slot="aui_assistant-message-root"
       data-role="assistant"
-      className="fade-in slide-in-from-bottom-1 animate-in relative -mb-7.5 pb-7.5 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
+      className={cn(
+        "fade-in slide-in-from-bottom-1 animate-in relative -mb-7.5 pb-7.5 duration-150",
+        !compact &&
+          "[contain-intrinsic-size:auto_200px] [content-visibility:auto]",
+      )}
     >
       <div
         data-slot="aui_assistant-message-content"
@@ -724,7 +745,10 @@ const AssistantMessage: FC = () => {
 
       <div
         data-slot="aui_assistant-message-footer"
-        className={cn("ms-2 flex flex-wrap items-center gap-1", ACTION_BAR_HEIGHT)}
+        className={cn(
+          "ms-2 flex min-h-7 flex-wrap items-center gap-1",
+          ACTION_BAR_HEIGHT,
+        )}
       >
         <BranchPicker />
         <AssistantActionBar />

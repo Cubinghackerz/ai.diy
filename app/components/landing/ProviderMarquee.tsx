@@ -1,7 +1,7 @@
 import { PROVIDER_LOGOS } from "./constants";
 import { Reveal } from "./DoubleBezel";
 
-/** Static provider shelf — sleek marks, no infinite logo loop. */
+/** Static provider density band — not a card grid, not a marquee loop. */
 export function ProviderMarquee() {
     return (
         <section
@@ -23,26 +23,24 @@ export function ProviderMarquee() {
             </Reveal>
 
             <Reveal delayMs={40} className="mt-12">
-                <div className="mx-auto grid max-w-4xl grid-cols-2 gap-3 px-5 sm:grid-cols-4 sm:gap-4 sm:px-8">
+                <ul className="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-x-8 gap-y-6 px-5 sm:gap-x-12 sm:px-8">
                     {PROVIDER_LOGOS.map((logo) => (
-                        <div
+                        <li
                             key={logo.id}
-                            className="flex min-h-[5.25rem] flex-col items-center justify-center gap-3 rounded-2xl border border-white/[0.12] bg-white/[0.05] px-4 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-[border-color,background-color] duration-200 hover:border-white/25 hover:bg-white/[0.08]"
+                            className="flex items-center gap-3 text-[13px] font-medium tracking-tight text-zinc-200"
                         >
                             <img
                                 src={logo.src}
                                 alt=""
-                                width={32}
-                                height={32}
-                                className="size-8 object-contain"
+                                width={28}
+                                height={28}
+                                className="size-7 object-contain opacity-90"
                                 loading="lazy"
                             />
-                            <span className="text-[13px] font-medium tracking-tight text-zinc-100">
-                                {logo.label}
-                            </span>
-                        </div>
+                            {logo.label}
+                        </li>
                     ))}
-                </div>
+                </ul>
             </Reveal>
         </section>
     );

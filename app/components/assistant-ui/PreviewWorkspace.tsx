@@ -7,21 +7,34 @@ import {
     useAISDKRuntime,
 } from "@assistant-ui/react-ai-sdk";
 import {
-    Flask,
-    Play,
+    ArrowClockwise,
+    CaretDown,
+    CopySimple,
     Paperclip,
+    Play,
     Plus,
     Sparkle,
     SpinnerGap,
+    Stop,
     WarningCircle,
 } from "@phosphor-icons/react";
-import { useEffect, useMemo, useRef, useState, type FC } from "react";
+import {
+    useEffect,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
+    type FC,
+    type MutableRefObject,
+    type ReactNode,
+} from "react";
 import { lastAssistantMessageIsCompleteWithToolCalls, type UIMessage } from "ai";
 import { ChatSessionProvider } from "~/components/assistant-ui/ChatSessionContext";
 import { ChatThreadSync } from "~/components/assistant-ui/ChatThreadSync";
 import { Thread } from "~/components/assistant-ui/Thread";
 import { createAttachmentAdapter } from "~/lib/attachments";
 import { getModelModalities } from "~/lib/model-modalities";
+import { ModelLogo } from "~/components/ui/ModelLogo";
 import { ModelPicker } from "~/components/ui/ModelPicker";
 import { ProviderPicker } from "~/components/ui/ProviderPicker";
 import { localProviderKey } from "~/lib/provider-credentials";
@@ -44,16 +57,11 @@ import { useSettings } from "~/lib/providers/SettingsProvider";
 import { isProviderReady } from "~/lib/setup";
 import { getReasoningEffortOptions } from "~/lib/reasoning";
 import { resolveModel } from "~/lib/model-capabilities";
-import type {
-    PreviewModelConfig,
-    PreviewSettings,
-    ProviderId,
-    ReasoningEffort,
-} from "~/lib/types";
+import { PROVIDER_DEFAULTS, type PreviewModelConfig, type ProviderId, type ReasoningEffort } from "~/lib/types";
 import { cn } from "~/lib/utils";
 import { X } from "lucide-react";
 
-type RunStatus = "running" | "complete" | "error";
+type RunStatus = "running" | "complete" | "error" | "stopped";
 
 type ResolvedConfig = PreviewModelConfig & {
     apiKey: string;
@@ -92,6 +100,7 @@ type ResolvedConfig = PreviewModelConfig & {
 type PreviewRun = {
     id: string;
     kind: "primary" | "fusion";
+    slotIndex?: number;
     label: string;
     prompt: string;
     config: ResolvedConfig;
@@ -101,6 +110,8 @@ type PreviewRun = {
     messages?: UIMessage[];
     files: PreviewFile[];
     uploadNotice?: string;
+    startedAt: number;
+    finishedAt?: number;
 };
 
 type PreviewFile = {
@@ -154,13 +165,9 @@ type StoredPreviewSession = {
         primaryCount: number;
         fusionStarted: boolean;
     } | null;
-    activeTab: string | null;
-    activeSlot: DraftSlot;
 };
 
 const PREVIEW_SESSION_ID = "last-preview-session";
-
-type DraftSlot = `primary:${number}` | "fusion";
 
 function responseText(messages: UIMessage[]): string {
     return messages
@@ -173,8 +180,14 @@ function responseText(messages: UIMessage[]): string {
         .slice(0, 64_000);
 }
 
-function modelLabel(config: PreviewModelConfig, fusion = false): string {
-    return fusion ? `Fusion · ${config.model}` : config.model;
+function shortModelName(model: string) {
+    const parts = model.split("/");
+    return parts[parts.length - 1] || model;
+}
+
+function formatDuration(ms: number) {
+    if (ms < 1000) return `${Math.max(1, Math.round(ms))}ms`;
+    return `${(ms / 1000).toFixed(ms >= 10_000 ? 0 : 1)}s`;
 }
 
 function parseChatError(response: Response, fallback: string): Promise<string> {
@@ -194,10 +207,13 @@ export const PreviewWorkspace: FC = () => {
     const [files, setFiles] = useState<PreviewFile[]>([]);
     const [runs, setRuns] = useState<PreviewRun[]>([]);
     const [session, setSession] = useState<PreviewSession | null>(null);
-    const [activeTab, setActiveTab] = useState<string | null>(null);
-    const [activeSlot, setActiveSlot] = useState<DraftSlot>("primary:0");
     const [configurationError, setConfigurationError] = useState<string | null>(null);
+    const [fusionOpen, setFusionOpen] = useState(true);
+    const [copiedId, setCopiedId] = useState<string | null>(null);
+    const [focusedColumn, setFocusedColumn] = useState(0);
     const previewHydrated = useRef(false);
+    const stopMap = useRef(new Map<string, () => void>());
+    const columnRefs = useRef<Array<HTMLElement | null>>([]);
 
     const resolveConfig = (config: PreviewModelConfig): ResolvedConfig => {
         const provider = settings.providers[config.provider];
@@ -234,6 +250,24 @@ export const PreviewWorkspace: FC = () => {
         };
     };
 
+    const seedConfig = (): PreviewModelConfig => ({
+        provider: settings.chat.provider,
+        model: settings.chat.model,
+        reasoningEffort: settings.chat.reasoningEffort,
+    });
+
+    useEffect(() => {
+        if (settings.preview.primaryModels.length > 0) return;
+        updateSettings({
+            preview: {
+                ...settings.preview,
+                primaryModels: [seedConfig()],
+            },
+        });
+        // Seed once when preview opens with no columns.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     useEffect(() => {
         let cancelled = false;
         void loadPreviewSession<StoredPreviewSession>(PREVIEW_SESSION_ID).then(
@@ -243,9 +277,15 @@ export const PreviewWorkspace: FC = () => {
                     return;
                 }
                 setPrompt(stored.prompt);
+                const primaries = stored.runs.filter((run) => run.kind === "primary");
                 setRuns(
                     stored.runs.map((run) => ({
                         ...run,
+                        slotIndex:
+                            run.kind === "primary"
+                                ? (run.slotIndex ?? primaries.indexOf(run))
+                                : undefined,
+                        startedAt: run.startedAt ?? Date.now(),
                         config: resolveConfig(run.config),
                     })),
                 );
@@ -259,16 +299,12 @@ export const PreviewWorkspace: FC = () => {
                           }
                         : null,
                 );
-                setActiveTab(stored.activeTab);
-                setActiveSlot(stored.activeSlot);
                 previewHydrated.current = true;
             },
         );
         return () => {
             cancelled = true;
         };
-        // Preview is restored once when this workspace mounts. Credentials are
-        // deliberately re-resolved from current local settings, never stored.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -298,17 +334,17 @@ export const PreviewWorkspace: FC = () => {
                               : null,
                       }
                     : null,
-                activeTab,
-                activeSlot,
             };
             void savePreviewSession(PREVIEW_SESSION_ID, stored);
         }, 300);
         return () => window.clearTimeout(timer);
-    }, [activeSlot, activeTab, prompt, runs, session]);
+    }, [prompt, runs, session]);
+
+    const primaryModels = settings.preview.primaryModels.slice(0, 3);
 
     const startRuns = () => {
         const input = prompt.trim();
-        const selections = settings.preview.primaryModels.slice(0, 3);
+        const selections = primaryModels;
         const unavailable = selections.find(
             (config) => !isProviderReady(settings, config.provider),
         );
@@ -318,12 +354,12 @@ export const PreviewWorkspace: FC = () => {
             return;
         }
         if (selections.length === 0) {
-            setConfigurationError("Add at least one preview model in Settings > Experimental.");
+            setConfigurationError("Add at least one preview model.");
             return;
         }
         if (unavailable) {
             setConfigurationError(
-                `Connect ${unavailable.provider} before starting this preview.`,
+                `Connect ${PROVIDER_DEFAULTS[unavailable.provider]?.name ?? unavailable.provider} before starting this preview.`,
             );
             return;
         }
@@ -332,16 +368,18 @@ export const PreviewWorkspace: FC = () => {
             !isProviderReady(settings, settings.preview.fusionModel.provider)
         ) {
             setConfigurationError(
-                `Connect ${settings.preview.fusionModel.provider} before using the fusion model.`,
+                `Connect ${PROVIDER_DEFAULTS[settings.preview.fusionModel.provider]?.name ?? settings.preview.fusionModel.provider} before using the fusion model.`,
             );
             return;
         }
 
         const id = `preview_${Date.now()}`;
+        const now = Date.now();
         const primaryRuns = selections.map((config, index): PreviewRun => ({
             id: `${id}_model_${index + 1}`,
             kind: "primary",
-            label: modelLabel(config),
+            slotIndex: index,
+            label: shortModelName(config.model),
             prompt: input,
             config: resolveConfig(config),
             status: "running",
@@ -350,6 +388,7 @@ export const PreviewWorkspace: FC = () => {
             uploadNotice: files.some((file) => !fileSupportedForRun(file, config))
                 ? "Some files were skipped because this model does not support their modality."
                 : undefined,
+            startedAt: now,
         }));
 
         setConfigurationError(null);
@@ -362,7 +401,7 @@ export const PreviewWorkspace: FC = () => {
             fusionStarted: false,
         });
         setRuns(primaryRuns);
-        setActiveTab(primaryRuns[0]?.id ?? null);
+        setFusionOpen(true);
     };
 
     const addFiles = async (selected: FileList | null) => {
@@ -375,7 +414,13 @@ export const PreviewWorkspace: FC = () => {
         setRuns((current) =>
             current.map((run) =>
                 run.id === runId
-                    ? { ...run, status: "complete", output: responseText(messages), messages }
+                    ? {
+                          ...run,
+                          status: "complete",
+                          output: responseText(messages),
+                          messages,
+                          finishedAt: Date.now(),
+                      }
                     : run,
             ),
         );
@@ -385,10 +430,35 @@ export const PreviewWorkspace: FC = () => {
         setRuns((current) =>
             current.map((run) =>
                 run.id === runId
-                    ? { ...run, status: "error", error: error.message }
+                    ? {
+                          ...run,
+                          status: "error",
+                          error: error.message,
+                          finishedAt: Date.now(),
+                      }
                     : run,
             ),
         );
+    };
+
+    const markStopped = (runId: string) => {
+        setRuns((current) =>
+            current.map((run) =>
+                run.id === runId && run.status === "running"
+                    ? { ...run, status: "stopped", finishedAt: Date.now() }
+                    : run,
+            ),
+        );
+    };
+
+    const stopRun = (runId: string) => {
+        stopMap.current.get(runId)?.();
+    };
+
+    const stopAll = () => {
+        for (const run of runs) {
+            if (run.status === "running") stopRun(run.id);
+        }
     };
 
     useEffect(() => {
@@ -410,202 +480,339 @@ export const PreviewWorkspace: FC = () => {
             "",
             ...primaryRuns.map(
                 (run) =>
-                    `### ${run.label}\n${run.output || `No completed output${run.error ? ` (${run.error})` : ""}.`}`,
+                    `### ${run.label}\n${run.output || `No completed output${run.error ? ` (${run.error})` : run.status === "stopped" ? " (stopped)" : ""}.`}`,
             ),
         ].join("\n");
         const fusionRun: PreviewRun = {
             id: `preview_fusion_${Date.now()}`,
             kind: "fusion",
-            label: modelLabel(session.fusionConfig, true),
+            label: shortModelName(session.fusionConfig.model),
             prompt: fusionPrompt,
             config: session.fusionConfig,
             status: "running",
             output: "",
             files: [],
+            startedAt: Date.now(),
         };
         setSession((current) =>
             current ? { ...current, fusionStarted: true } : current,
         );
         setRuns((current) => [...current, fusionRun]);
-        setActiveTab(fusionRun.id);
+        setFusionOpen(true);
     }, [runs, session]);
 
-    const closeRun = (runId: string) => {
-        const run = runs.find((candidate) => candidate.id === runId);
-        if (!run || run.status === "running") return;
-        const remaining = runs.filter((candidate) => candidate.id !== runId);
-        setRuns(remaining);
-        if (run.kind === "primary" && session && !session.fusionStarted) {
-            setSession({
-                ...session,
-                primaryCount: Math.max(0, session.primaryCount - 1),
-            });
-        }
-        if (activeTab === runId) {
-            setActiveTab(remaining[0]?.id ?? null);
-        }
-    };
-
-    const running = runs.some((run) => run.status === "running");
-    const draftSlots: DraftSlot[] = [
-        ...settings.preview.primaryModels
-            .slice(0, 3)
-            .map((_, index) => `primary:${index}` as DraftSlot),
-        ...(settings.preview.fusionModel ? ["fusion" as const] : []),
-    ];
-    const activeDraftConfig =
-        activeSlot === "fusion"
-            ? settings.preview.fusionModel
-            : settings.preview.primaryModels[Number(activeSlot.split(":")[1])];
-    const updateDraftConfig = (patch: Partial<PreviewModelConfig>) => {
-        if (!activeDraftConfig) return;
-        if (activeSlot === "fusion") {
-            updateSettings({
-                preview: {
-                    ...settings.preview,
-                    fusionModel: { ...activeDraftConfig, ...patch },
-                },
-            });
-            return;
-        }
-        const index = Number(activeSlot.split(":")[1]);
+    const updatePrimaryConfig = (index: number, patch: Partial<PreviewModelConfig>) => {
+        const current = primaryModels[index];
+        if (!current) return;
         updateSettings({
             preview: {
                 ...settings.preview,
-                primaryModels: settings.preview.primaryModels.map((config, current) =>
-                    current === index ? { ...config, ...patch } : config,
+                primaryModels: settings.preview.primaryModels.map((config, i) =>
+                    i === index ? { ...config, ...patch } : config,
                 ),
             },
         });
     };
+
+    const updateFusionConfig = (patch: Partial<PreviewModelConfig>) => {
+        if (!settings.preview.fusionModel) return;
+        updateSettings({
+            preview: {
+                ...settings.preview,
+                fusionModel: { ...settings.preview.fusionModel, ...patch },
+            },
+        });
+    };
+
     const addDraftModel = () => {
         if (settings.preview.primaryModels.length >= 3) return;
         updateSettings({
             preview: {
                 ...settings.preview,
-                primaryModels: [
-                    ...settings.preview.primaryModels,
-                    {
-                        provider: settings.chat.provider,
-                        model: settings.chat.model,
-                        reasoningEffort: settings.chat.reasoningEffort,
-                    },
-                ],
+                primaryModels: [...settings.preview.primaryModels, seedConfig()],
             },
         });
-        setActiveSlot(`primary:${settings.preview.primaryModels.length}`);
     };
+
     const addFusionModel = () => {
         if (settings.preview.fusionModel) return;
         updateSettings({
             preview: {
                 ...settings.preview,
-                fusionModel: {
-                    provider: settings.chat.provider,
-                    model: settings.chat.model,
-                    reasoningEffort: settings.chat.reasoningEffort,
-                },
+                fusionModel: seedConfig(),
             },
         });
-        setActiveSlot("fusion");
+        setFusionOpen(true);
     };
-    const closeDraftSlot = (slot: DraftSlot) => {
-        if (slot === "fusion") {
+
+    const closePrimarySlot = (index: number) => {
+        const primaryModelsNext = settings.preview.primaryModels.filter(
+            (_, i) => i !== index,
+        );
+        if (primaryModelsNext.length === 0 && !settings.preview.fusionModel) {
             updateSettings({
-                preview: { ...settings.preview, fusionModel: null },
+                preview: { ...settings.preview, primaryModels: [seedConfig()] },
             });
-            setActiveSlot(
-                settings.preview.primaryModels.length > 0 ? "primary:0" : "fusion",
+            setRuns((current) => current.filter((run) => run.kind !== "primary"));
+            return;
+        }
+        updateSettings({
+            preview: { ...settings.preview, primaryModels: primaryModelsNext },
+        });
+        setRuns((current) =>
+            current
+                .filter(
+                    (run) =>
+                        !(run.kind === "primary" && run.slotIndex === index) &&
+                        run.kind !== "fusion",
+                )
+                .map((run) =>
+                    run.kind === "primary" && (run.slotIndex ?? 0) > index
+                        ? { ...run, slotIndex: (run.slotIndex ?? 0) - 1 }
+                        : run,
+                ),
+        );
+        if (session && !session.fusionStarted) {
+            setSession({
+                ...session,
+                primaryCount: Math.max(0, session.primaryCount - 1),
+            });
+        }
+        setFocusedColumn((current) => Math.max(0, Math.min(current, primaryModelsNext.length - 1)));
+    };
+
+    const closeFusion = () => {
+        const fusion = runs.find((run) => run.kind === "fusion");
+        if (fusion?.status === "running") stopRun(fusion.id);
+        updateSettings({
+            preview: { ...settings.preview, fusionModel: null },
+        });
+        setRuns((current) => current.filter((run) => run.kind !== "fusion"));
+        setSession((current) =>
+            current ? { ...current, fusionConfig: null, fusionStarted: false } : current,
+        );
+    };
+
+    const retrySlot = (index: number) => {
+        const config = primaryModels[index];
+        const input = session?.prompt || prompt.trim();
+        if (!config || !input) return;
+        if (!isProviderReady(settings, config.provider)) {
+            setConfigurationError(
+                `Connect ${PROVIDER_DEFAULTS[config.provider]?.name ?? config.provider} before retrying.`,
             );
             return;
         }
-
-        const removedIndex = Number(slot.split(":")[1]);
-        const primaryModels = settings.preview.primaryModels.filter(
-            (_, index) => index !== removedIndex,
+        const existing = runs.find(
+            (run) => run.kind === "primary" && run.slotIndex === index,
         );
-        updateSettings({
-            preview: { ...settings.preview, primaryModels },
-        });
+        if (existing?.status === "running") stopRun(existing.id);
+        const next: PreviewRun = {
+            id: `preview_${Date.now()}_model_${index + 1}`,
+            kind: "primary",
+            slotIndex: index,
+            label: shortModelName(config.model),
+            prompt: input,
+            config: resolveConfig(config),
+            status: "running",
+            output: "",
+            files: files.filter((file) => fileSupportedForRun(file, config)),
+            startedAt: Date.now(),
+        };
+        setRuns((current) => [
+            ...current.filter(
+                (run) =>
+                    !(run.kind === "primary" && run.slotIndex === index) &&
+                    run.kind !== "fusion",
+            ),
+            next,
+        ]);
+        setSession((current) =>
+            current
+                ? {
+                      ...current,
+                      fusionStarted: false,
+                      fusionConfig: settings.preview.fusionModel
+                          ? resolveConfig(settings.preview.fusionModel)
+                          : current.fusionConfig,
+                  }
+                : current,
+        );
+        setConfigurationError(null);
+    };
 
-        if (primaryModels.length === 0) {
-            setActiveSlot(settings.preview.fusionModel ? "fusion" : "primary:0");
-        } else if (activeSlot === slot) {
-            setActiveSlot(
-                `primary:${Math.min(removedIndex, primaryModels.length - 1)}`,
-            );
-        } else if (activeSlot.startsWith("primary:")) {
-            const activeIndex = Number(activeSlot.split(":")[1]);
-            if (activeIndex > removedIndex) {
-                setActiveSlot(`primary:${activeIndex - 1}`);
-            }
+    const copyOutput = async (run: PreviewRun) => {
+        const text = run.output.trim();
+        if (!text) return;
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopiedId(run.id);
+            window.setTimeout(() => setCopiedId((id) => (id === run.id ? null : id)), 1400);
+        } catch {
+            /* clipboard can be unavailable */
         }
     };
+
     const resetPreview = () => {
+        for (const run of runs) {
+            if (run.status === "running") stopRun(run.id);
+        }
         setRuns([]);
         setSession(null);
-        setActiveTab(null);
-        setActiveSlot("primary:0");
+        setFocusedColumn(0);
         void deletePreviewSession(PREVIEW_SESSION_ID);
     };
 
+    const scrollToColumn = (index: number) => {
+        setFocusedColumn(index);
+        columnRefs.current[index]?.scrollIntoView({
+            inline: "center",
+            block: "nearest",
+            behavior: "smooth",
+        });
+    };
+
+    const running = runs.some((run) => run.status === "running");
+    const fusionRun = runs.find((run) => run.kind === "fusion") ?? null;
+    const columnCount = Math.max(1, primaryModels.length);
+
     return (
         <div className="flex h-full min-h-0 flex-col">
-            <PreviewTabs
-                runs={runs}
-                draftSlots={draftSlots}
-                settings={settings}
-                activeTab={activeTab}
-                activeSlot={activeSlot}
-                onTabChange={setActiveTab}
-                onSlotChange={setActiveSlot}
-                onAddModel={addDraftModel}
-                onAddFusion={addFusionModel}
-                onNew={resetPreview}
-                onClose={closeRun}
-                onCloseSlot={closeDraftSlot}
-            />
-            <div className="relative flex min-h-0 flex-1 flex-col">
-                {runs.length === 0 ? (
-                    <div className="flex min-h-0 flex-1 items-center justify-center p-6 text-center">
-                        <div className="max-w-sm space-y-2">
-                            <Flask size={24} className="mx-auto text-primary" />
-                            <p className="text-sm font-semibold">Experimental comparison</p>
-                            <p className="text-xs leading-relaxed text-muted-foreground">
-                                Send one prompt to the configured model tabs and inspect each model&apos;s complete work.
-                            </p>
-                        </div>
-                    </div>
-                ) : (
-                    <div className="min-h-0 flex-1">
-                        {runs.map((run) => (
-                            <div
-                                key={run.id}
-                                className={cn("h-full", activeTab === run.id ? "block" : "hidden")}
+            <div className="flex min-h-10 shrink-0 items-center gap-1 overflow-x-auto border-b border-border/70 bg-background px-3 py-1.5">
+                <div className="flex min-w-0 flex-1 items-center gap-1 md:hidden">
+                    {primaryModels.map((config, index) => {
+                        const run = runs.find(
+                            (candidate) =>
+                                candidate.kind === "primary" &&
+                                candidate.slotIndex === index,
+                        );
+                        return (
+                            <button
+                                key={`${config.provider}:${index}`}
+                                type="button"
+                                onClick={() => scrollToColumn(index)}
+                                className={cn(
+                                    "inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[11px] font-medium",
+                                    focusedColumn === index
+                                        ? "border-border bg-accent text-foreground"
+                                        : "border-transparent text-muted-foreground hover:bg-accent/60",
+                                )}
                             >
-                                <PreviewRunPanel
-                                    run={run}
-                                    active={activeTab === run.id}
-                                    onComplete={markComplete}
-                                    onError={markError}
+                                <StatusDot status={run?.status} />
+                                <ModelLogo
+                                    provider={config.provider}
+                                    modelId={config.model}
+                                    size={12}
                                 />
-                            </div>
-                        ))}
+                                <span className="max-w-24 truncate">
+                                    {shortModelName(config.model)}
+                                </span>
+                            </button>
+                        );
+                    })}
+                </div>
+                <span className="hidden flex-1 text-[11px] text-muted-foreground md:inline">
+                    {columnCount} model{columnCount === 1 ? "" : "s"}
+                    {settings.preview.fusionModel ? " · fusion" : ""}
+                </span>
+                {primaryModels.length < 3 ? (
+                    <button
+                        type="button"
+                        onClick={addDraftModel}
+                        className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
+                    >
+                        <Plus size={13} />
+                        Model
+                    </button>
+                ) : null}
+                {runs.length > 0 ? (
+                    <button
+                        type="button"
+                        onClick={resetPreview}
+                        className="shrink-0 rounded-lg px-2 py-1.5 text-[11px] font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
+                    >
+                        New compare
+                    </button>
+                ) : null}
+            </div>
+
+            <div className="relative flex min-h-0 flex-1 flex-col">
+                {session?.prompt ? (
+                    <div className="flex shrink-0 justify-center px-4 pt-3">
+                        <p className="max-w-xl truncate rounded-full border border-border/70 bg-muted/40 px-3.5 py-1.5 text-xs text-foreground/90">
+                            {session.prompt}
+                        </p>
                     </div>
-                )}
+                ) : null}
+                <div
+                    className={cn(
+                        "flex min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto md:grid md:snap-none md:overflow-hidden",
+                        session?.prompt && "pt-2",
+                        columnCount === 1 && "md:grid-cols-1",
+                        columnCount === 2 && "md:grid-cols-2",
+                        columnCount >= 3 && "md:grid-cols-2 xl:grid-cols-3",
+                    )}
+                >
+                    {primaryModels.map((config, index) => {
+                        const run = runs.find(
+                            (candidate) =>
+                                candidate.kind === "primary" &&
+                                candidate.slotIndex === index,
+                        );
+                        return (
+                            <PreviewColumn
+                                key={`column-${index}`}
+                                columnRef={(node) => {
+                                    columnRefs.current[index] = node;
+                                }}
+                                config={config}
+                                run={run ?? null}
+                                removable={primaryModels.length > 1}
+                                copied={copiedId === run?.id}
+                                onConfigChange={(patch) => updatePrimaryConfig(index, patch)}
+                                onClose={() => closePrimarySlot(index)}
+                                onCopy={() => run && void copyOutput(run)}
+                                onRetry={() => retrySlot(index)}
+                                onStop={() => run && stopRun(run.id)}
+                                onComplete={markComplete}
+                                onError={markError}
+                                onStopped={markStopped}
+                                stopMap={stopMap}
+                            />
+                        );
+                    })}
+                </div>
+
+                <FusionStrip
+                    fusionModel={settings.preview.fusionModel}
+                    run={fusionRun}
+                    open={fusionOpen}
+                    copied={copiedId === fusionRun?.id}
+                    onToggle={() => setFusionOpen((value) => !value)}
+                    onAdd={addFusionModel}
+                    onClose={closeFusion}
+                    onConfigChange={updateFusionConfig}
+                    onCopy={() => fusionRun && void copyOutput(fusionRun)}
+                    onStop={() => fusionRun && stopRun(fusionRun.id)}
+                    onComplete={markComplete}
+                    onError={markError}
+                    onStopped={markStopped}
+                    stopMap={stopMap}
+                />
+
                 <PreviewComposer
                     prompt={prompt}
                     onPromptChange={setPrompt}
                     onSubmit={startRuns}
+                    onStop={stopAll}
                     running={running}
                     configurationError={configurationError}
-                    config={activeDraftConfig}
-                    onConfigChange={updateDraftConfig}
-                    onAddModel={addDraftModel}
                     files={files}
                     onFiles={addFiles}
                     onRemoveFile={(filename) =>
-                        setFiles((current) => current.filter((file) => file.filename !== filename))
+                        setFiles((current) =>
+                            current.filter((file) => file.filename !== filename),
+                        )
                     }
                 />
             </div>
@@ -613,155 +820,352 @@ export const PreviewWorkspace: FC = () => {
     );
 };
 
-const PreviewTabs: FC<{
-    runs: PreviewRun[];
-    draftSlots: DraftSlot[];
-    settings: { preview: PreviewSettings };
-    activeTab: string | null;
-    activeSlot: DraftSlot;
-    onTabChange: (id: string) => void;
-    onSlotChange: (slot: DraftSlot) => void;
-    onAddModel: () => void;
-    onAddFusion: () => void;
-    onNew: () => void;
-    onClose: (id: string) => void;
-    onCloseSlot: (slot: DraftSlot) => void;
-}> = ({
-    runs,
-    draftSlots,
-    settings,
-    activeTab,
-    activeSlot,
-    onTabChange,
-    onSlotChange,
-    onAddModel,
-    onAddFusion,
-    onNew,
-    onClose,
-    onCloseSlot,
-}) => {
-    const hasRuns = runs.length > 0;
+function StatusDot({ status }: { status?: RunStatus }) {
     return (
-        <div className="flex min-h-10 shrink-0 items-center gap-1 overflow-x-auto border-b border-border/70 bg-background px-3 py-1.5">
-            <div className="flex min-w-0 flex-1 items-center gap-1">
-                {hasRuns
-                    ? runs.map((run) => (
-                          <div
-                              key={run.id}
-                              className={cn(
-                                  "flex max-w-60 shrink-0 items-center gap-0.5 rounded-lg px-1 py-0.5 text-xs font-medium outline-none transition-colors",
-                                  activeTab === run.id
-                                      ? "bg-accent text-foreground"
-                                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-                              )}
-                          >
-                              <button
-                                  type="button"
-                                  onClick={() => onTabChange(run.id)}
-                                  className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 py-1 outline-none"
-                                  aria-label={`Open ${run.label} tab`}
-                              >
-                                  {run.status === "running" ? (
-                                      <SpinnerGap
-                                          size={12}
-                                          className="shrink-0 animate-spin text-primary"
-                                      />
-                                  ) : run.kind === "fusion" ? (
-                                      <Sparkle size={12} className="shrink-0 text-primary" />
-                                  ) : null}
-                                  <span className="truncate">{run.label}</span>
-                              </button>
-                              <button
-                                  type="button"
-                                  disabled={run.status === "running"}
-                                  onClick={() => onClose(run.id)}
-                                  className="rounded-md p-1 text-muted-foreground outline-none hover:bg-background/70 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
-                                  aria-label={
-                                      run.status === "running"
-                                          ? `${run.label} is still running`
-                                          : `Close ${run.label} tab`
-                                  }
-                              >
-                                  <X size={12} />
-                              </button>
-                          </div>
-                      ))
-                    : draftSlots.map((slot, index) => {
-                          const config =
-                              slot === "fusion"
-                                  ? settings.preview.fusionModel
-                                  : settings.preview.primaryModels[index];
-                          if (!config) return null;
-                           return (
-                               <div
-                                   key={slot}
-                                   className={cn(
-                                       "flex max-w-60 shrink-0 items-center gap-0.5 rounded-lg px-1 py-0.5 text-xs font-medium outline-none transition-colors",
-                                       activeSlot === slot
-                                           ? "bg-accent text-foreground"
-                                           : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-                                   )}
-                               >
-                                   <button
-                                       type="button"
-                                       onClick={() => onSlotChange(slot)}
-                                       className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 py-1 outline-none"
-                                       aria-label={`Configure ${slot === "fusion" ? "fusion" : `model ${index + 1}`} tab`}
-                                   >
-                                       {slot === "fusion" ? (
-                                           <Sparkle size={12} className="shrink-0 text-primary" />
-                                       ) : null}
-                                       <span className="truncate">
-                                           {slot === "fusion"
-                                               ? `Fusion · ${config.model}`
-                                               : `${index + 1} · ${config.model}`}
-                                       </span>
-                                   </button>
-                                   <button
-                                       type="button"
-                                       onClick={() => onCloseSlot(slot)}
-                                       className="rounded-md p-1 text-muted-foreground outline-none hover:bg-background/70 hover:text-foreground"
-                                       aria-label={`Close ${slot === "fusion" ? "fusion" : `model ${index + 1}`} tab`}
-                                   >
-                                       <X size={12} />
-                                   </button>
-                               </div>
-                           );
-                      })}
-            </div>
+        <span
+            className={cn(
+                "size-1.5 shrink-0 rounded-full",
+                status === "running" && "animate-pulse bg-primary",
+                status === "complete" && "bg-emerald-500",
+                status === "error" && "bg-destructive",
+                status === "stopped" && "bg-muted-foreground",
+                !status && "bg-border",
+            )}
+        />
+    );
+}
 
-            {!hasRuns ? (
-                <>
-                    {settings.preview.primaryModels.length < 3 ? (
-                        <button
-                            type="button"
-                            onClick={onAddModel}
-                            className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
+const PreviewColumn: FC<{
+    columnRef: (node: HTMLElement | null) => void;
+    config: PreviewModelConfig;
+    run: PreviewRun | null;
+    removable: boolean;
+    copied: boolean;
+    onConfigChange: (patch: Partial<PreviewModelConfig>) => void;
+    onClose: () => void;
+    onCopy: () => void;
+    onRetry: () => void;
+    onStop: () => void;
+    onComplete: (runId: string, messages: UIMessage[]) => void;
+    onError: (runId: string, error: Error) => void;
+    onStopped: (runId: string) => void;
+    stopMap: MutableRefObject<Map<string, () => void>>;
+}> = ({
+    columnRef,
+    config,
+    run,
+    removable,
+    copied,
+    onConfigChange,
+    onClose,
+    onCopy,
+    onRetry,
+    onStop,
+    onComplete,
+    onError,
+    onStopped,
+    stopMap,
+}) => {
+    return (
+        <section
+            ref={columnRef}
+            className="flex h-full min-h-0 w-[85vw] max-w-md shrink-0 snap-center flex-col border-r border-border/70 last:border-r-0 md:w-auto md:max-w-none md:min-w-0"
+        >
+            <ColumnHeader
+                config={config}
+                run={run}
+                removable={removable}
+                copied={copied}
+                onConfigChange={onConfigChange}
+                onClose={onClose}
+                onCopy={onCopy}
+                onRetry={onRetry}
+                onStop={onStop}
+            />
+            <div className="min-h-0 flex-1 overflow-hidden">
+                {run ? (
+                    <PreviewRunPanel
+                        run={run}
+                        onComplete={onComplete}
+                        onError={onError}
+                        onStopped={onStopped}
+                        stopMap={stopMap}
+                    />
+                ) : (
+                    <div className="flex h-full items-center justify-center p-6 text-center">
+                        <p className="max-w-[16rem] text-xs leading-relaxed text-muted-foreground">
+                            Ready. Send a prompt to stream this model beside the others.
+                        </p>
+                    </div>
+                )}
+            </div>
+        </section>
+    );
+};
+
+const ColumnHeader: FC<{
+    config: PreviewModelConfig;
+    run: PreviewRun | null;
+    removable: boolean;
+    copied: boolean;
+    fusion?: boolean;
+    onConfigChange: (patch: Partial<PreviewModelConfig>) => void;
+    onClose: () => void;
+    onCopy: () => void;
+    onRetry?: () => void;
+    onStop: () => void;
+}> = ({
+    config,
+    run,
+    removable,
+    copied,
+    fusion,
+    onConfigChange,
+    onClose,
+    onCopy,
+    onRetry,
+    onStop,
+}) => {
+    const { settings } = useSettings();
+    const providerReady = isProviderReady(settings, config.provider);
+    const reasoningOptions = getReasoningEffortOptions(config.provider, config.model);
+    const duration =
+        run?.finishedAt != null ? formatDuration(run.finishedAt - run.startedAt) : null;
+    const comparing = run?.status === "running";
+
+    return (
+        <div className="flex shrink-0 flex-col gap-1.5 border-b border-border/60 bg-background/80 px-2.5 py-2">
+            <div className="flex min-w-0 items-center gap-1.5">
+                {fusion ? (
+                    <Sparkle size={14} className="shrink-0 text-primary" />
+                ) : (
+                    <ModelLogo
+                        provider={config.provider}
+                        modelId={config.model}
+                        size={14}
+                    />
+                )}
+                <span className="min-w-0 flex-1 truncate text-[12px] font-medium">
+                    {fusion ? "Fusion · " : ""}
+                    {shortModelName(config.model)}
+                </span>
+                {comparing ? (
+                    <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <SpinnerGap size={12} className="animate-spin" />
+                        Streaming
+                    </span>
+                ) : run?.status === "error" ? (
+                    <span className="text-[11px] text-destructive">Error</span>
+                ) : run?.status === "stopped" ? (
+                    <span className="text-[11px] text-muted-foreground">Stopped</span>
+                ) : duration ? (
+                    <span className="font-mono text-[11px] text-muted-foreground">
+                        {duration}
+                    </span>
+                ) : null}
+                {run?.status === "running" ? (
+                    <IconButton label="Stop this model" onClick={onStop}>
+                        <Stop size={12} weight="fill" />
+                    </IconButton>
+                ) : null}
+                {run && run.status !== "running" ? (
+                    <>
+                        <IconButton
+                            label={copied ? "Copied" : "Copy output"}
+                            onClick={onCopy}
+                            disabled={!run.output}
                         >
-                            <Plus size={13} />
-                            Model
-                        </button>
-                    ) : null}
-                    {!settings.preview.fusionModel ? (
-                        <button
-                            type="button"
-                            onClick={onAddFusion}
-                            className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
-                        >
-                            <Sparkle size={13} />
-                            Fusion
-                        </button>
-                    ) : null}
-                </>
-            ) : (
+                            <CopySimple size={12} />
+                        </IconButton>
+                        {onRetry ? (
+                            <IconButton label="Retry this model" onClick={onRetry}>
+                                <ArrowClockwise size={12} />
+                            </IconButton>
+                        ) : null}
+                    </>
+                ) : null}
+                {removable ? (
+                    <IconButton label={fusion ? "Remove fusion" : "Remove model"} onClick={onClose}>
+                        <X size={12} />
+                    </IconButton>
+                ) : null}
+            </div>
+            {comparing ? null : (
+            <div className="flex min-w-0 flex-wrap items-center gap-1">
+                <ProviderPicker
+                    value={config.provider}
+                    onChange={(provider) =>
+                        onConfigChange({
+                            provider,
+                            model: resolveModel(provider, config.model),
+                            reasoningEffort: "medium",
+                        })
+                    }
+                    compact
+                    className="max-w-[8.5rem]"
+                />
+                {providerReady ? (
+                    <ModelPicker
+                        provider={config.provider}
+                        value={config.model}
+                        onChange={(model) => onConfigChange({ model })}
+                        enabled
+                        compact
+                        className="max-w-[11rem]"
+                    />
+                ) : (
+                    <span className="text-[10px] text-destructive">Connect provider</span>
+                )}
+                {reasoningOptions.length > 0 ? (
+                    <select
+                        value={
+                            reasoningOptions.some((option) => option.id === config.reasoningEffort)
+                                ? config.reasoningEffort
+                                : reasoningOptions[0].id
+                        }
+                        onChange={(event) =>
+                            onConfigChange({
+                                reasoningEffort: event.target.value as PreviewModelConfig["reasoningEffort"],
+                            })
+                        }
+                        className="h-7 max-w-32 rounded-lg border border-border/70 bg-transparent px-2 text-[11px] font-medium outline-none"
+                        aria-label="Reasoning effort"
+                    >
+                        {reasoningOptions.map((option) => (
+                            <option key={option.id} value={option.id}>
+                                {option.label}
+                            </option>
+                        ))}
+                    </select>
+                ) : null}
+            </div>
+            )}
+        </div>
+    );
+};
+
+function IconButton({
+    label,
+    onClick,
+    disabled,
+    children,
+}: {
+    label: string;
+    onClick: () => void;
+    disabled?: boolean;
+    children: ReactNode;
+}) {
+    return (
+        <button
+            type="button"
+            aria-label={label}
+            title={label}
+            disabled={disabled}
+            onClick={onClick}
+            className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+        >
+            {children}
+        </button>
+    );
+}
+
+const FusionStrip: FC<{
+    fusionModel: PreviewModelConfig | null;
+    run: PreviewRun | null;
+    open: boolean;
+    copied: boolean;
+    onToggle: () => void;
+    onAdd: () => void;
+    onClose: () => void;
+    onConfigChange: (patch: Partial<PreviewModelConfig>) => void;
+    onCopy: () => void;
+    onStop: () => void;
+    onComplete: (runId: string, messages: UIMessage[]) => void;
+    onError: (runId: string, error: Error) => void;
+    onStopped: (runId: string) => void;
+    stopMap: MutableRefObject<Map<string, () => void>>;
+}> = ({
+    fusionModel,
+    run,
+    open,
+    copied,
+    onToggle,
+    onAdd,
+    onClose,
+    onConfigChange,
+    onCopy,
+    onStop,
+    onComplete,
+    onError,
+    onStopped,
+    stopMap,
+}) => {
+    if (!fusionModel) {
+        return (
+            <div className="shrink-0 border-t border-border/70 bg-background px-3 py-1.5">
                 <button
                     type="button"
-                    onClick={onNew}
-                    className="shrink-0 rounded-lg px-2 py-1.5 text-[11px] font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
+                    onClick={onAdd}
+                    className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
                 >
-                    New compare
+                    <Sparkle size={13} />
+                    Add fusion
                 </button>
+            </div>
+        );
+    }
+
+    return (
+        <div
+            className={cn(
+                "flex shrink-0 flex-col border-t border-border/70 bg-background",
+                open && "h-[min(42vh,22rem)] min-h-0",
             )}
+        >
+            <div className="flex items-center gap-1 px-2">
+                <button
+                    type="button"
+                    onClick={onToggle}
+                    className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
+                    aria-expanded={open}
+                    aria-label={open ? "Collapse fusion" : "Expand fusion"}
+                >
+                    <CaretDown
+                        size={14}
+                        className={cn("transition-transform", !open && "-rotate-90")}
+                    />
+                </button>
+                <div className="min-w-0 flex-1">
+                    <ColumnHeader
+                        config={fusionModel}
+                        run={run}
+                        removable
+                        copied={copied}
+                        fusion
+                        onConfigChange={onConfigChange}
+                        onClose={onClose}
+                        onCopy={onCopy}
+                        onStop={onStop}
+                    />
+                </div>
+            </div>
+            {open ? (
+                <div className="min-h-0 flex-1 overflow-hidden border-t border-border/50">
+                    {run ? (
+                        <PreviewRunPanel
+                            run={run}
+                            onComplete={onComplete}
+                            onError={onError}
+                            onStopped={onStopped}
+                            stopMap={stopMap}
+                        />
+                    ) : (
+                        <p className="px-4 py-3 text-xs text-muted-foreground">
+                            Fusion synthesizes a single answer after every comparison model finishes.
+                        </p>
+                    )}
+                </div>
+            ) : null}
         </div>
     );
 };
@@ -770,11 +1174,9 @@ const PreviewComposer: FC<{
     prompt: string;
     onPromptChange: (value: string) => void;
     onSubmit: () => void;
+    onStop: () => void;
     running: boolean;
     configurationError: string | null;
-    config: PreviewModelConfig | undefined | null;
-    onConfigChange: (patch: Partial<PreviewModelConfig>) => void;
-    onAddModel: () => void;
     files: PreviewFile[];
     onFiles: (files: FileList | null) => void;
     onRemoveFile: (filename: string) => void;
@@ -782,22 +1184,13 @@ const PreviewComposer: FC<{
     prompt,
     onPromptChange,
     onSubmit,
+    onStop,
     running,
     configurationError,
-    config,
-    onConfigChange,
     files,
     onFiles,
     onRemoveFile,
 }) => {
-    const { settings } = useSettings();
-    const providerReady = config
-        ? isProviderReady(settings, config.provider)
-        : false;
-    const reasoningOptions = config
-        ? getReasoningEffortOptions(config.provider, config.model)
-        : [];
-
     return (
         <div className="relative z-10 w-full shrink-0 bg-background px-4 pb-4 pt-2">
             <div className="mx-auto w-full max-w-(--thread-max-width) rounded-[1.25rem] border border-border bg-muted/35 p-2.5 shadow-sm">
@@ -805,12 +1198,10 @@ const PreviewComposer: FC<{
                     value={prompt}
                     onChange={(event) => onPromptChange(event.target.value)}
                     onKeyDown={(event) => {
-                        if (
-                            (event.metaKey || event.ctrlKey) &&
-                            event.key === "Enter"
-                        ) {
+                        if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
                             event.preventDefault();
-                            if (!running) onSubmit();
+                            if (running) onStop();
+                            else onSubmit();
                         }
                     }}
                     placeholder="Send a message to the selected models…"
@@ -845,69 +1236,27 @@ const PreviewComposer: FC<{
                             }}
                         />
                     </label>
-                    {config ? (
-                        <ProviderPicker
-                            value={config.provider}
-                            onChange={(provider) =>
-                                onConfigChange({
-                                    provider,
-                                    model: resolveModel(provider, config.model),
-                                    reasoningEffort: "medium",
-                                })
-                            }
-                            compact
-                            className="max-w-[9rem]"
-                        />
-                    ) : null}
-                    {config && providerReady ? (
-                        <ModelPicker
-                            provider={config.provider}
-                            value={config.model}
-                            onChange={(model) => onConfigChange({ model })}
-                            enabled
-                            compact
-                            className="max-w-[13rem]"
-                        />
-                    ) : null}
-                    {config && reasoningOptions.length > 0 ? (
-                        <select
-                            value={
-                                reasoningOptions.some(
-                                    (option) => option.id === config.reasoningEffort,
-                                )
-                                    ? config.reasoningEffort
-                                    : reasoningOptions[0].id
-                            }
-                            onChange={(event) =>
-                                onConfigChange({
-                                    reasoningEffort: event.target
-                                        .value as PreviewModelConfig["reasoningEffort"],
-                                })
-                            }
-                            className="h-7 max-w-36 rounded-lg border border-border/70 bg-transparent px-2 text-[11px] font-medium outline-none"
-                            aria-label="Reasoning effort"
-                        >
-                            {reasoningOptions.map((option) => (
-                                <option key={option.id} value={option.id}>
-                                    {option.label}
-                                </option>
-                            ))}
-                        </select>
-                    ) : null}
                     <span className="flex-1" />
-                    <button
-                        type="button"
-                        disabled={running || !prompt.trim()}
-                        onClick={onSubmit}
-                        className="inline-flex h-8 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-semibold text-primary-foreground outline-none transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        {running ? (
-                            <SpinnerGap size={14} className="animate-spin" />
-                        ) : (
+                    {running ? (
+                        <button
+                            type="button"
+                            onClick={onStop}
+                            className="inline-flex h-8 items-center gap-1.5 rounded-full bg-destructive px-3 text-xs font-semibold text-destructive-foreground outline-none transition-colors hover:bg-destructive/90"
+                        >
+                            <Stop size={13} weight="fill" />
+                            Stop
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            disabled={!prompt.trim()}
+                            onClick={onSubmit}
+                            className="inline-flex h-8 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-semibold text-primary-foreground outline-none transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
                             <Play size={13} weight="fill" />
-                        )}
-                        {running ? "Running" : "Compare"}
-                    </button>
+                            Compare
+                        </button>
+                    )}
                 </div>
                 {configurationError ? (
                     <p className="flex items-center gap-1.5 px-2 pt-2 text-[11px] text-destructive">
@@ -922,13 +1271,15 @@ const PreviewComposer: FC<{
 
 const PreviewRunPanel: FC<{
     run: PreviewRun;
-    active: boolean;
     onComplete: (runId: string, messages: UIMessage[]) => void;
     onError: (runId: string, error: Error) => void;
-}> = ({ run, active, onComplete, onError }) => {
-    const callbacksRef = useRef({ onComplete, onError });
-    callbacksRef.current = { onComplete, onError };
+    onStopped: (runId: string) => void;
+    stopMap: MutableRefObject<Map<string, () => void>>;
+}> = ({ run, onComplete, onError, onStopped, stopMap }) => {
+    const callbacksRef = useRef({ onComplete, onError, onStopped });
+    callbacksRef.current = { onComplete, onError, onStopped };
     const sentRef = useRef(false);
+    const stoppedRef = useRef(false);
     const { settings } = useSettings();
     const { addArtifact } = useCanvas();
     const settingsRef = useRef(settings);
@@ -955,42 +1306,43 @@ const PreviewRunPanel: FC<{
                     }
                     return response;
                 },
-        prepareSendMessagesRequest: async (options) => {
+                prepareSendMessagesRequest: async (options) => {
                     await assertClientUsageAllowed(
                         settingsRef.current,
                         run.config.provider as ProviderId,
                         run.config.apiKey,
                     );
-                    return { body: {
-                        ...options.body,
-                        messages: options.messages,
-                        model: run.config.model,
-                        provider: run.config.provider as ProviderId,
-                        apiKey:
-                            run.config.provider === "chatgpt"
-                                ? ""
-                                : run.config.apiKey,
-                        baseUrl: run.config.baseUrl,
-                        openAICompatible: run.config.openAICompatible,
-                        systemPrompt: run.config.systemPrompt,
-                        temperature: run.config.temperature,
-                        maxTokens: run.config.maxTokens,
-                        topP: run.config.topP,
-                        reasoningEffort: run.config.reasoningEffort as ReasoningEffort,
-                        imageSettings: {
-                            size: run.config.imageSize,
-                            count: run.config.imageCount,
+                    return {
+                        body: {
+                            ...options.body,
+                            messages: options.messages,
+                            model: run.config.model,
+                            provider: run.config.provider as ProviderId,
+                            apiKey:
+                                run.config.provider === "chatgpt"
+                                    ? ""
+                                    : run.config.apiKey,
+                            baseUrl: run.config.baseUrl,
+                            openAICompatible: run.config.openAICompatible,
+                            systemPrompt: run.config.systemPrompt,
+                            temperature: run.config.temperature,
+                            maxTokens: run.config.maxTokens,
+                            topP: run.config.topP,
+                            reasoningEffort: run.config.reasoningEffort as ReasoningEffort,
+                            imageSettings: {
+                                size: run.config.imageSize,
+                                count: run.config.imageCount,
+                            },
+                            mcpServers: run.config.mcpServers,
+                            memoryContext: memoryEnabled
+                                ? await buildLocalMemoryContext()
+                                : "",
+                            toolSettings: {
+                                ...run.config.toolSettings,
+                                memoryAvailable:
+                                    memoryEnabled && (await hasLocalMemoryEntries()),
+                            },
                         },
-                        mcpServers: run.config.mcpServers,
-                        memoryContext: memoryEnabled
-                            ? await buildLocalMemoryContext()
-                            : "",
-                        toolSettings: {
-                            ...run.config.toolSettings,
-                            memoryAvailable:
-                                memoryEnabled && await hasLocalMemoryEntries(),
-                        },
-                    },
                     };
                 },
             }),
@@ -1003,12 +1355,12 @@ const PreviewRunPanel: FC<{
         transport,
         messages: run.messages,
         onToolCall: ({ toolCall }) => {
-            if (![
-                "run_python",
-                "run_code",
-                "ask_user",
-                "memory",
-            ].includes(toolCall.toolName)) return;
+            if (
+                !["run_python", "run_code", "ask_user", "memory"].includes(
+                    toolCall.toolName,
+                )
+            )
+                return;
             pendingClientCalls.current += 1;
             const input = toolCall.input as {
                 code?: string;
@@ -1039,10 +1391,9 @@ const PreviewRunPanel: FC<{
                         for (const artifact of pythonResult.artifacts) {
                             addArtifact(
                                 {
-                                    kind:
-                                        /\.html?$/i.test(artifact.filename)
-                                            ? "html"
-                                            : "file",
+                                    kind: /\.html?$/i.test(artifact.filename)
+                                        ? "html"
+                                        : "file",
                                     title: artifact.filename,
                                     filename: artifact.filename,
                                     content: artifact.content,
@@ -1101,36 +1452,74 @@ const PreviewRunPanel: FC<{
             return true;
         },
         onFinish: ({ messages, isError }) => {
+            if (stoppedRef.current) return;
             if (!isError) callbacksRef.current.onComplete(run.id, messages);
         },
-        onError: (error) => callbacksRef.current.onError(run.id, error),
+        onError: (error) => {
+            if (stoppedRef.current) return;
+            callbacksRef.current.onError(run.id, error);
+        },
     });
     chatRef.current = chat;
+
+    useEffect(() => {
+        const stop = () => {
+            stoppedRef.current = true;
+            void chat.stop();
+            callbacksRef.current.onStopped(run.id);
+        };
+        stopMap.current.set(run.id, stop);
+        return () => {
+            stopMap.current.delete(run.id);
+        };
+    }, [chat, run.id, stopMap]);
+
     const runtime = useAISDKRuntime(chat, { adapters });
 
     useEffect(() => {
         transport.setRuntime(runtime);
     }, [transport, runtime]);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (sentRef.current || run.messages?.length) return;
         sentRef.current = true;
         void chat.sendMessage({ text: run.prompt, files: run.files });
-    }, [chat, run.messages?.length, run.prompt]);
+    }, [chat, run.files, run.messages?.length, run.prompt]);
 
     return (
-        <ChatSessionProvider value={chat}>
-            <AuiRuntimeProvider runtime={runtime}>
-                {active ? (
+        <div className="flex h-full min-h-0 flex-col">
+            <ChatSessionProvider value={chat}>
+                <AuiRuntimeProvider runtime={runtime}>
                     <ChatThreadSync threadId={null} artifactScopeId={run.id} />
-                ) : null}
-                {run.error ? (
-                    <div className="mx-4 mt-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                        {run.error}
+                    {run.error ? (
+                        <div className="mx-4 mt-3 shrink-0 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                            {run.error}
+                        </div>
+                    ) : run.uploadNotice ? (
+                        <div className="mx-4 mt-3 shrink-0 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                            {run.uploadNotice}
+                        </div>
+                    ) : null}
+                    <div className="min-h-0 flex-1">
+                        <Thread
+                            hideComposer
+                            compact
+                            components={{ Welcome: PreviewStreamingWelcome }}
+                        />
                     </div>
-                ) : null}
-                <Thread hideComposer />
-            </AuiRuntimeProvider>
-        </ChatSessionProvider>
+                </AuiRuntimeProvider>
+            </ChatSessionProvider>
+        </div>
+    );
+};
+
+function PreviewStreamingWelcome() {
+    return (
+        <div className="flex justify-start">
+            <span className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground">
+                <SpinnerGap size={14} className="animate-spin" />
+                Streaming
+            </span>
+        </div>
     );
 };

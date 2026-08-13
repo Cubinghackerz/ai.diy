@@ -1,9 +1,10 @@
 import { useEffect, useId, useState } from "react";
 import { Link } from "react-router";
-import { ArrowUpRight, List, X } from "@phosphor-icons/react";
+import { List, X } from "@phosphor-icons/react";
 import { cn } from "~/lib/utils";
 import { DOCS_URL, GITHUB_URL } from "./constants";
-import { EASE_OUT } from "./motion";
+import { LandingCta } from "./LandingCta";
+import { EASE_IN, EASE_OUT } from "./motion";
 
 const LINKS = [
     { href: "#demo", label: "Demo" },
@@ -13,7 +14,6 @@ const LINKS = [
     { href: DOCS_URL, label: "Docs", external: true },
     { href: GITHUB_URL, label: "GitHub", external: true },
 ] as const;
-// Primary CTA lives as fixed floating control on md+ (LandingShell).
 
 export function IslandNav() {
     const [open, setOpen] = useState(false);
@@ -42,10 +42,10 @@ export function IslandNav() {
 
     return (
         <>
-            <div className="pointer-events-none fixed inset-x-0 top-0 z-40 flex justify-center px-4 pt-5 sm:pt-6">
+            <div className="pointer-events-none fixed inset-x-0 top-0 z-40 flex justify-center px-4 pt-5 sm:pt-6 md:pr-[11.5rem]">
                 <nav
                     className={cn(
-                        "pointer-events-auto grid w-full max-w-4xl grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-full border border-white/[0.12] bg-black/45 px-3 py-1.5 shadow-[0_8px_40px_-20px_rgba(0,0,0,0.75)] backdrop-blur-xl transition-[border-color,background-color] duration-200 sm:px-4",
+                        "pointer-events-auto flex w-full max-w-4xl items-center justify-between gap-2 rounded-full border border-white/[0.12] bg-black/45 px-3 py-1.5 shadow-[0_8px_40px_-20px_rgba(0,0,0,0.75)] backdrop-blur-xl transition-[border-color,background-color] duration-200 sm:px-4 md:grid md:grid-cols-[1fr_auto_1fr]",
                         scrolled && "border-white/[0.16] bg-black/60",
                     )}
                     style={{ transitionTimingFunction: EASE_OUT }}
@@ -110,25 +110,17 @@ export function IslandNav() {
                                         "absolute inset-0 size-4 transition-[opacity,transform] duration-200",
                                         open ? "opacity-100" : "scale-75 opacity-0",
                                     )}
-                                    style={{ transitionTimingFunction: EASE_IN_EXIT }}
+                                    style={{ transitionTimingFunction: EASE_IN }}
                                 />
                             </span>
                         </button>
-                        <Link
-                            to="/workspace"
-                            className="group inline-flex min-h-10 items-center gap-2 rounded-full bg-white py-1.5 pl-4 pr-1.5 text-[12px] font-medium text-black transition-[transform,background-color] duration-200 hover:bg-zinc-200 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 md:hidden"
-                            style={{ transitionTimingFunction: EASE_OUT }}
-                        >
+                        <LandingCta to="/workspace" size="compact" className="md:hidden">
                             Open
-                            <span className="inline-flex size-7 items-center justify-center rounded-full bg-black/10 transition-transform duration-200 group-hover:-translate-y-px group-hover:translate-x-0.5 group-hover:scale-105">
-                                <ArrowUpRight weight="bold" className="size-3.5" />
-                            </span>
-                        </Link>
+                        </LandingCta>
                     </div>
                 </nav>
             </div>
 
-            {/* Mobile overlay — dimmed staging */}
             <div
                 id={titleId}
                 className={cn(
@@ -136,7 +128,7 @@ export function IslandNav() {
                     open ? "visible opacity-100" : "invisible opacity-0",
                 )}
                 style={{
-                    transitionTimingFunction: open ? EASE_OUT : "cubic-bezier(0.55, 0, 1, 0.45)",
+                    transitionTimingFunction: open ? EASE_OUT : EASE_IN,
                 }}
                 aria-hidden={!open}
             >
@@ -174,10 +166,15 @@ export function IslandNav() {
                             </a>
                         );
                     })}
+                    <LandingCta
+                        to="/workspace"
+                        className="mt-6"
+                        size="default"
+                    >
+                        Open workspace
+                    </LandingCta>
                 </div>
             </div>
         </>
     );
 }
-
-const EASE_IN_EXIT = "cubic-bezier(0.55, 0, 1, 0.45)";

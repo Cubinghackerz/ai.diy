@@ -16,6 +16,14 @@ export const TOKEN_MODE_LABELS: Record<TokenMode, string> = {
     full: "Full suite",
 };
 
+/** One-line blurbs for compact UI (message hover menu). */
+export const TOKEN_MODE_BLURBS: Record<TokenMode, string> = {
+    efficient: "12 steps · lean prompt & core tools",
+    balanced: "16 steps · everyday tools, compact prompt",
+    caching: "16 steps · stable cacheable prefix",
+    full: "24 steps · max tools, skills & budget",
+};
+
 export const TOKEN_MODE_DESCRIPTIONS: Record<TokenMode, string> = {
     efficient:
         "Lean prompt and core tools (12 steps). Best for everyday Q&A and light coding without bloating context.",

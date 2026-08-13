@@ -1263,11 +1263,13 @@ function TokenModeSettingsSection() {
                 <h3 className="text-xs font-semibold">Token mode</h3>
                 <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
                     Controls system-prompt size, tool suite, step budget, and
-                    optional prompt caching. Default is Balanced.
+                    optional prompt caching. Default is Balanced. You can also
+                    change this from the TTFT / t/s / tok chip on any assistant
+                    message.
                 </p>
             </div>
             <div
-                className="flex flex-col gap-1.5"
+                className="flex flex-col gap-0.5 rounded-2xl border border-border/70 bg-muted/20 p-1.5"
                 role="radiogroup"
                 aria-label="Token mode"
             >
@@ -1284,32 +1286,40 @@ function TokenModeSettingsSection() {
                                 updateSettings({ tokenMode: mode });
                             }}
                             className={cn(
-                                "rounded-xl border px-3 py-2.5 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                                "flex items-start gap-2.5 rounded-xl px-3 py-2.5 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
                                 selected
-                                    ? "border-primary bg-primary/10"
-                                    : "border-border/70 bg-background hover:bg-muted/40",
+                                    ? "bg-foreground/[0.07]"
+                                    : "hover:bg-muted/50",
                             )}
                         >
-                            <div className="flex items-center justify-between gap-2">
-                                <span className="text-xs font-semibold">
-                                    {TOKEN_MODE_LABELS[mode]}
+                            <span
+                                className={cn(
+                                    "mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-full border",
+                                    selected
+                                        ? "border-foreground/80 bg-foreground text-background"
+                                        : "border-border/80",
+                                )}
+                                aria-hidden
+                            >
+                                {selected ? (
+                                    <CheckCircle size={10} weight="fill" />
+                                ) : null}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                                <span className="flex items-center gap-1.5">
+                                    <span className="text-xs font-semibold">
+                                        {TOKEN_MODE_LABELS[mode]}
+                                    </span>
                                     {mode === "balanced" ? (
-                                        <span className="ml-1.5 text-[10px] font-medium text-muted-foreground">
+                                        <span className="rounded-full bg-muted/80 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-wide text-muted-foreground">
                                             default
                                         </span>
                                     ) : null}
                                 </span>
-                                {selected ? (
-                                    <CheckCircle
-                                        size={14}
-                                        weight="fill"
-                                        className="shrink-0 text-primary"
-                                    />
-                                ) : null}
-                            </div>
-                            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-                                {TOKEN_MODE_DESCRIPTIONS[mode]}
-                            </p>
+                                <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                                    {TOKEN_MODE_DESCRIPTIONS[mode]}
+                                </p>
+                            </span>
                         </button>
                     );
                 })}
@@ -2864,8 +2874,9 @@ function PreviewSettingsSection() {
             {preview.enabled ? (
                 <>
                     <p className="text-[11px] leading-relaxed text-muted-foreground">
-                        Preview runs are isolated from regular chat history. Each
-                        tab keeps its own tool calls, reasoning, images, and
+                        Preview runs are isolated from regular chat history.
+                        Edit models in the preview columns, or here. Each
+                        column keeps its own tool calls, reasoning, images, and
                         artifacts while it runs.
                     </p>
 

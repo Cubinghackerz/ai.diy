@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "~/lib/utils";
 import { usePrefersReducedMotion } from "./hooks";
 
@@ -21,7 +21,7 @@ export function DoubleBezel({
     return (
         <div
             className={cn(
-                "border border-white/[0.12] bg-white/[0.055] shadow-[0_24px_80px_-48px_rgba(0,0,0,0.9)]",
+                "border border-white/[0.14] bg-white/[0.055] shadow-[0_28px_80px_-40px_rgba(0,0,0,0.85)]",
                 outerRadius,
                 padding,
                 className,
@@ -51,37 +51,52 @@ export function Reveal({
 }) {
     const ref = useRef<HTMLDivElement>(null);
     const reduced = usePrefersReducedMotion();
+    const [visible, setVisible] = useState(true);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         const el = ref.current;
-        if (!el) return;
-        if (reduced) {
-            el.dataset.in = "true";
+        if (!el || reduced) {
+            setVisible(true);
             return;
         }
+
+        const reveal = () => setVisible(true);
+        const rect = el.getBoundingClientRect();
+        const alreadyInView = rect.top < window.innerHeight * 0.92 && rect.bottom > 0;
+        if (alreadyInView) {
+            reveal();
+            return;
+        }
+
+        setVisible(false);
         const io = new IntersectionObserver(
             (entries) => {
                 for (const entry of entries) {
                     if (entry.isIntersecting) {
-                        el.dataset.in = "true";
+                        reveal();
                         io.unobserve(el);
                     }
                 }
             },
-            { rootMargin: "0px 0px -8% 0px", threshold: 0.12 },
+            { rootMargin: "80px 0px", threshold: 0.01 },
         );
         io.observe(el);
-        return () => io.disconnect();
+        const failsafe = window.setTimeout(reveal, 900);
+        return () => {
+            io.disconnect();
+            window.clearTimeout(failsafe);
+        };
     }, [reduced]);
 
     return (
         <div
             ref={ref}
             className={cn(
-                "translate-y-4 opacity-0 transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:translate-y-0 motion-reduce:opacity-100 data-[in=true]:translate-y-0 data-[in=true]:opacity-100",
+                "transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:translate-y-0 motion-reduce:opacity-100",
+                visible ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0",
                 className,
             )}
-            style={delayMs && !reduced ? { transitionDelay: `${delayMs}ms` } : undefined}
+            style={delayMs && !reduced && !visible ? { transitionDelay: `${delayMs}ms` } : undefined}
         >
             {children}
         </div>

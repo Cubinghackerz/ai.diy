@@ -1,25 +1,63 @@
 /**
- * Message usage metrics + hover token-mode selector.
- * Shows TTFT, TPS, and total tokens beside the assistant action bar.
+ * Message usage metrics + token-mode selector.
+ * TOK prefers provider-reported usage (input+output). The mode menu portals
+ * above the message so content-visibility / overflow cannot clip it.
  */
 
-import { useMemo, useState, type FC } from "react";
-import { useAuiState } from "@assistant-ui/react";
-import { CheckCircle } from "@phosphor-icons/react";
+import {
+    useEffect,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
+    type CSSProperties,
+    type FC,
+} from "react";
+import { createPortal } from "react-dom";
+import { useAuiState, useMessageTiming } from "@assistant-ui/react";
+import { getThreadMessageTokenUsage } from "@assistant-ui/react-ai-sdk";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import { hapticSelect } from "~/lib/haptics";
 import {
-    TOKEN_MODE_DESCRIPTIONS,
+    TOKEN_MODE_BLURBS,
     TOKEN_MODE_LABELS,
     type TokenMode,
 } from "~/lib/token-mode";
 import { formatTokens, normalizeUsage } from "~/lib/usage";
 import { cn } from "~/lib/utils";
 
-type TimingMeta = {
+type ServerTiming = {
     ttftMs?: number;
     durationMs?: number;
 };
+
+function estimateTokensFromChars(charCount: number): number {
+    if (charCount <= 0) return 0;
+    return Math.ceil(charCount / 4);
+}
+
+function extractAssistantTextLength(message: unknown): number {
+    if (!message || typeof message !== "object") return 0;
+    const parts = (message as { parts?: unknown }).parts;
+    if (!Array.isArray(parts)) {
+        const content = (message as { content?: unknown }).content;
+        if (typeof content === "string") return content.length;
+        return 0;
+    }
+    let len = 0;
+    for (const part of parts) {
+        if (!part || typeof part !== "object") continue;
+        const type = (part as { type?: unknown }).type;
+        const text = (part as { text?: unknown }).text;
+        if (
+            (type === "text" || type === "reasoning") &&
+            typeof text === "string"
+        ) {
+            len += text.length;
+        }
+    }
+    return len;
+}
 
 function formatMs(ms: number | undefined): string {
     if (ms == null || !Number.isFinite(ms) || ms < 0) return "—";
@@ -32,147 +70,433 @@ function formatTps(tps: number | undefined): string {
     return tps >= 100 ? `${Math.round(tps)}` : tps.toFixed(1);
 }
 
+function resolveTtftMs(
+    streamStart: number | undefined,
+    firstToken: number | undefined,
+): number | undefined {
+    if (streamStart == null || firstToken == null) return undefined;
+    if (!Number.isFinite(streamStart) || !Number.isFinite(firstToken)) {
+        return undefined;
+    }
+    if (firstToken >= 0 && firstToken < streamStart) {
+        return Math.max(0, firstToken);
+    }
+    return Math.max(0, firstToken - streamStart);
+}
+
+function StatCell({
+    label,
+    value,
+    live,
+}: {
+    label: string;
+    value: string;
+    live?: boolean;
+}) {
+    return (
+        <span className="inline-flex shrink-0 items-baseline gap-1">
+            <span className="text-[9px] font-medium uppercase tracking-[0.08em] text-muted-foreground/80">
+                {label}
+            </span>
+            <span
+                className={cn(
+                    "min-w-[2.5ch] tabular-nums text-[10px] text-foreground/90",
+                    live && "animate-pulse",
+                )}
+            >
+                {value}
+            </span>
+        </span>
+    );
+}
+
 export const MessageUsageStats: FC = () => {
     const { settings, updateSettings } = useSettings();
     const [open, setOpen] = useState(false);
-    const metadata = useAuiState((s) => {
-        const msg = s.message as { metadata?: unknown };
-        return msg.metadata;
-    });
+    const [menuStyle, setMenuStyle] = useState<CSSProperties | null>(null);
+    const rootRef = useRef<HTMLDivElement>(null);
+    const buttonRef = useRef<HTMLButtonElement>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
+    const messageTiming = useMessageTiming();
+    const message = useAuiState((s) => s.message);
+    const messageId = useAuiState((s) => s.message.id);
     const isRunning = useAuiState((s) => {
         const status = (s.message as { status?: { type?: string } }).status;
         return status?.type === "running";
     });
 
+    const streamStartRef = useRef<number | null>(null);
+    const firstTextAtRef = useRef<number | null>(null);
+    const trackedIdRef = useRef<string | null>(null);
+    const [nowMs, setNowMs] = useState(() => Date.now());
+
+    const textLen = extractAssistantTextLength(message);
+
+    if (trackedIdRef.current !== messageId) {
+        trackedIdRef.current = messageId;
+        streamStartRef.current = isRunning ? Date.now() : null;
+        firstTextAtRef.current = null;
+    }
+
+    useEffect(() => {
+        if (!isRunning) return;
+        if (streamStartRef.current == null) streamStartRef.current = Date.now();
+        if (textLen > 0 && firstTextAtRef.current == null) {
+            firstTextAtRef.current = Date.now();
+        }
+    }, [isRunning, messageId, textLen]);
+
+    useEffect(() => {
+        if (!isRunning) return;
+        setNowMs(Date.now());
+        const id = window.setInterval(() => setNowMs(Date.now()), 250);
+        return () => window.clearInterval(id);
+    }, [isRunning, messageId]);
+
     const stats = useMemo(() => {
-        if (!metadata || typeof metadata !== "object") return null;
-        const record = metadata as {
-            usage?: unknown;
-            timing?: TimingMeta;
-        };
-        const usage = normalizeUsage(record.usage);
-        const timing = record.timing ?? {};
-        const ttftMs =
-            typeof timing.ttftMs === "number" ? timing.ttftMs : undefined;
-        const durationMs =
-            typeof timing.durationMs === "number" ? timing.durationMs : undefined;
-        const outputTokens = usage?.outputTokens ?? 0;
-        const genMs =
-            durationMs != null && ttftMs != null
-                ? Math.max(durationMs - ttftMs, 1)
-                : durationMs != null
-                  ? Math.max(durationMs, 1)
-                  : undefined;
-        const tps =
-            genMs != null && outputTokens > 0
-                ? (outputTokens / genMs) * 1000
+        const metadata =
+            message && typeof message === "object"
+                ? (message as { metadata?: unknown }).metadata
                 : undefined;
-        if (!usage && ttftMs == null && durationMs == null) return null;
+        const record =
+            metadata && typeof metadata === "object"
+                ? (metadata as {
+                      usage?: unknown;
+                      timing?: ServerTiming;
+                      serverTiming?: ServerTiming;
+                      custom?: {
+                          usage?: unknown;
+                          timing?: ServerTiming;
+                          serverTiming?: ServerTiming;
+                      };
+                  })
+                : undefined;
+
+        const fromNormalize =
+            normalizeUsage(record?.usage) ??
+            normalizeUsage(record?.custom?.usage);
+        const fromSdk = getThreadMessageTokenUsage(
+            message as { role?: string; metadata?: unknown },
+        );
+        const usage = fromNormalize
+            ? {
+                  inputTokens: fromNormalize.inputTokens,
+                  outputTokens: fromNormalize.outputTokens,
+                  totalTokens: fromNormalize.totalTokens,
+              }
+            : fromSdk
+              ? {
+                    inputTokens: fromSdk.inputTokens,
+                    outputTokens: fromSdk.outputTokens,
+                    totalTokens: fromSdk.totalTokens,
+                }
+              : undefined;
+
+        const providerTotal =
+            usage?.totalTokens != null && usage.totalTokens > 0
+                ? usage.totalTokens
+                : usage?.inputTokens != null || usage?.outputTokens != null
+                  ? (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0)
+                  : undefined;
+
+        const serverTiming =
+            record?.serverTiming ??
+            record?.custom?.serverTiming ??
+            (record?.timing && typeof record.timing.ttftMs === "number"
+                ? record.timing
+                : undefined) ??
+            record?.custom?.timing;
+
+        const streamStart = messageTiming?.streamStartTime;
+        const firstToken = messageTiming?.firstTokenTime;
+        const totalStream = messageTiming?.totalStreamTime;
+        const liveStart = streamStartRef.current;
+        const liveFirst = firstTextAtRef.current;
+        const estimatedOut = estimateTokensFromChars(textLen);
+
+        let ttftMs =
+            typeof serverTiming?.ttftMs === "number"
+                ? serverTiming.ttftMs
+                : resolveTtftMs(streamStart, firstToken);
+
+        if (ttftMs == null && liveStart != null) {
+            ttftMs =
+                liveFirst != null
+                    ? Math.max(0, liveFirst - liveStart)
+                    : isRunning
+                      ? Math.max(0, nowMs - liveStart)
+                      : undefined;
+        }
+
+        const durationMs =
+            typeof serverTiming?.durationMs === "number"
+                ? serverTiming.durationMs
+                : totalStream != null
+                  ? totalStream
+                  : isRunning && liveStart != null
+                    ? Math.max(0, nowMs - liveStart)
+                    : undefined;
+
+        const outputTokens =
+            usage?.outputTokens != null && usage.outputTokens > 0
+                ? usage.outputTokens
+                : isRunning && estimatedOut > 0
+                  ? estimatedOut
+                  : undefined;
+
+        const totalTokens =
+            providerTotal && providerTotal > 0
+                ? providerTotal
+                : isRunning
+                  ? estimatedOut
+                  : undefined;
+
+        const genMs =
+            liveFirst != null
+                ? Math.max(nowMs - liveFirst, 0)
+                : durationMs != null && ttftMs != null
+                  ? Math.max(durationMs - ttftMs, 0)
+                  : durationMs != null
+                    ? Math.max(durationMs, 0)
+                    : undefined;
+
+        const tpsWindowMs = genMs != null && genMs >= 300 ? genMs : undefined;
+        const tpsFromUsage =
+            tpsWindowMs != null && outputTokens != null && outputTokens > 0
+                ? (outputTokens / tpsWindowMs) * 1000
+                : undefined;
+        const tps =
+            tpsFromUsage ??
+            (!isRunning &&
+            typeof messageTiming?.tokensPerSecond === "number" &&
+            messageTiming.tokensPerSecond > 0 &&
+            !providerTotal
+                ? messageTiming.tokensPerSecond
+                : undefined);
+
         return {
             ttftMs,
             tps,
-            totalTokens: usage?.totalTokens,
+            totalTokens,
             inputTokens: usage?.inputTokens,
             outputTokens: usage?.outputTokens,
+            provider: Boolean(providerTotal && providerTotal > 0),
+            awaitingFirstToken: isRunning && textLen === 0,
         };
-    }, [metadata]);
-
-    if (isRunning || !stats) return null;
+    }, [message, messageTiming, isRunning, textLen, nowMs]);
 
     const current = (settings.tokenMode ?? "balanced") as TokenMode;
     const modes: TokenMode[] = ["efficient", "balanced", "caching", "full"];
 
+    const ttftLabel = formatMs(stats.ttftMs);
+    const tpsLabel = formatTps(stats.tps);
+    const tokLabel =
+        stats.totalTokens != null && stats.totalTokens > 0
+            ? formatTokens(stats.totalTokens)
+            : isRunning
+              ? "0"
+              : "—";
+
+    const closeMenu = () => setOpen(false);
+    const toggleMenu = () => setOpen((prev) => !prev);
+
+    const placeMenu = () => {
+        const el = buttonRef.current;
+        if (!el) return;
+        const anchor = el.getBoundingClientRect();
+        const width = 288;
+        const gap = 8;
+        const spaceAbove = Math.max(0, anchor.top - gap - 8);
+        const spaceBelow = Math.max(0, window.innerHeight - anchor.bottom - gap - 8);
+        const openAbove = spaceAbove >= 220 || spaceAbove >= spaceBelow;
+        const maxHeight = Math.max(160, openAbove ? spaceAbove : spaceBelow);
+        let left = anchor.left;
+        if (left + width > window.innerWidth - 8) {
+            left = Math.max(8, window.innerWidth - width - 8);
+        }
+        if (left < 8) left = 8;
+        setMenuStyle(
+            openAbove
+                ? {
+                      position: "fixed",
+                      left,
+                      bottom: window.innerHeight - anchor.top + gap,
+                      width,
+                      maxHeight,
+                      overflowY: "auto",
+                      zIndex: 80,
+                  }
+                : {
+                      position: "fixed",
+                      left,
+                      top: anchor.bottom + gap,
+                      width,
+                      maxHeight,
+                      overflowY: "auto",
+                      zIndex: 80,
+                  },
+        );
+    };
+
+    useLayoutEffect(() => {
+        if (!open) {
+            setMenuStyle(null);
+            return;
+        }
+        placeMenu();
+        const onReposition = () => placeMenu();
+        window.addEventListener("resize", onReposition);
+        window.addEventListener("scroll", onReposition, true);
+        return () => {
+            window.removeEventListener("resize", onReposition);
+            window.removeEventListener("scroll", onReposition, true);
+        };
+    }, [open]);
+
+    useEffect(() => {
+        if (!open) return;
+        const onPointerDown = (event: PointerEvent) => {
+            const target = event.target as Node | null;
+            if (!target) return;
+            if (rootRef.current?.contains(target)) return;
+            if (menuRef.current?.contains(target)) return;
+            closeMenu();
+        };
+        const onKey = (event: KeyboardEvent) => {
+            if (event.key === "Escape") closeMenu();
+        };
+        document.addEventListener("pointerdown", onPointerDown, true);
+        document.addEventListener("keydown", onKey);
+        return () => {
+            document.removeEventListener("pointerdown", onPointerDown, true);
+            document.removeEventListener("keydown", onKey);
+        };
+    }, [open]);
+
+    const menu =
+        open && menuStyle && typeof document !== "undefined"
+            ? createPortal(
+                  <div
+                      ref={menuRef}
+                      role="dialog"
+                      aria-label="Token mode"
+                      style={menuStyle}
+                      className={cn(
+                          "origin-bottom-left animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-1 duration-150",
+                          "rounded-2xl border border-border/70 bg-popover p-1.5 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.55)]",
+                      )}
+                  >
+                      <div className="flex items-baseline justify-between gap-2 px-2.5 pb-1.5 pt-2">
+                          <p className="text-[11px] font-semibold tracking-tight text-foreground">
+                              Token mode
+                          </p>
+                          <p className="font-mono text-[9px] tabular-nums text-muted-foreground">
+                              {stats.provider
+                                  ? `${formatTokens(stats.inputTokens ?? 0)} in · ${formatTokens(stats.outputTokens ?? 0)} out`
+                                  : isRunning
+                                    ? "streaming…"
+                                    : "no provider usage"}
+                          </p>
+                      </div>
+                      <div
+                          className="flex flex-col gap-0.5"
+                          role="radiogroup"
+                          aria-label="Token mode"
+                      >
+                          {modes.map((mode) => {
+                              const selected = current === mode;
+                              return (
+                                  <button
+                                      key={mode}
+                                      type="button"
+                                      role="radio"
+                                      aria-checked={selected}
+                                      onClick={() => {
+                                          hapticSelect();
+                                          updateSettings({ tokenMode: mode });
+                                      }}
+                                      className={cn(
+                                          "group/item flex items-start gap-2.5 rounded-xl px-2.5 py-2 text-left outline-none",
+                                          "transition-colors duration-150 ease-[cubic-bezier(0.32,0.72,0,1)]",
+                                          "focus-visible:ring-2 focus-visible:ring-ring",
+                                          selected
+                                              ? "bg-foreground/[0.07]"
+                                              : "hover:bg-muted/50",
+                                      )}
+                                  >
+                                      <span
+                                          className={cn(
+                                              "mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-full border",
+                                              selected
+                                                  ? "border-foreground bg-foreground"
+                                                  : "border-border/80 bg-transparent",
+                                          )}
+                                          aria-hidden
+                                      >
+                                          {selected ? (
+                                              <span className="size-1.5 rounded-full bg-background" />
+                                          ) : null}
+                                      </span>
+                                      <span className="min-w-0 flex-1">
+                                          <span className="flex items-center gap-1.5">
+                                              <span className="text-[12px] font-medium leading-none text-foreground">
+                                                  {TOKEN_MODE_LABELS[mode]}
+                                              </span>
+                                              {mode === "balanced" ? (
+                                                  <span className="rounded-full bg-muted/80 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-wide text-muted-foreground">
+                                                      default
+                                                  </span>
+                                              ) : null}
+                                          </span>
+                                          <span className="mt-1 block text-[10px] leading-snug text-muted-foreground">
+                                              {TOKEN_MODE_BLURBS[mode]}
+                                          </span>
+                                      </span>
+                                  </button>
+                              );
+                          })}
+                      </div>
+                  </div>,
+                  document.body,
+              )
+            : null;
+
     return (
-        <div
-            className="relative ms-1"
-            onMouseEnter={() => setOpen(true)}
-            onMouseLeave={() => setOpen(false)}
-            onFocus={() => setOpen(true)}
-            onBlur={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
-                    setOpen(false);
-                }
-            }}
-        >
+        <div ref={rootRef} className="relative ms-1 shrink-0">
             <button
+                ref={buttonRef}
                 type="button"
-                className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-0.5 rounded-full border border-border/60 bg-muted/30 px-2.5 py-1 font-mono text-[10px] tracking-wide text-muted-foreground outline-none transition-colors hover:border-border hover:bg-muted/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label="Usage stats. Hover or focus to change token mode."
+                className={cn(
+                    "group inline-flex items-center gap-2.5 whitespace-nowrap rounded-full border border-border/50 bg-background/60 px-2.5 py-1 font-mono outline-none backdrop-blur-sm",
+                    "transition-[border-color,background-color,box-shadow,color] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]",
+                    "hover:border-border hover:bg-muted/40 hover:shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset]",
+                    "focus-visible:ring-2 focus-visible:ring-ring",
+                    open && "border-border bg-muted/40",
+                )}
+                aria-label={`Usage: TTFT ${ttftLabel}, ${tpsLabel} tokens per second, ${tokLabel} tokens. Click to change token mode. Current mode ${TOKEN_MODE_LABELS[current]}.`}
                 aria-haspopup="dialog"
                 aria-expanded={open}
+                onClick={toggleMenu}
             >
-                <span>TTFT {formatMs(stats.ttftMs)}</span>
-                <span className="text-border">·</span>
-                <span>{formatTps(stats.tps)} t/s</span>
-                <span className="text-border">·</span>
-                <span>
-                    {stats.totalTokens != null
-                        ? `${formatTokens(stats.totalTokens)} tok`
-                        : "— tok"}
-                </span>
+                <StatCell
+                    label="TTFT"
+                    value={ttftLabel}
+                    live={isRunning && stats.awaitingFirstToken}
+                />
+                <span className="h-2.5 w-px shrink-0 bg-border/70" aria-hidden />
+                <StatCell
+                    label="t/s"
+                    value={tpsLabel}
+                    live={isRunning && stats.tps != null}
+                />
+                <span className="h-2.5 w-px shrink-0 bg-border/70" aria-hidden />
+                <StatCell
+                    label="tok"
+                    value={tokLabel}
+                    live={isRunning && !stats.provider}
+                />
             </button>
-
-            {open ? (
-                <div
-                    role="dialog"
-                    aria-label="Token mode"
-                    className="absolute bottom-full left-0 z-40 mb-2 w-[min(18rem,calc(100vw-2rem))] rounded-xl border border-border/80 bg-popover/95 p-2 shadow-xl backdrop-blur-md"
-                >
-                    <p className="px-2 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        Token mode
-                    </p>
-                    <div className="flex flex-col gap-1" role="radiogroup" aria-label="Token mode">
-                        {modes.map((mode) => {
-                            const selected = current === mode;
-                            return (
-                                <button
-                                    key={mode}
-                                    type="button"
-                                    role="radio"
-                                    aria-checked={selected}
-                                    onClick={() => {
-                                        hapticSelect();
-                                        updateSettings({ tokenMode: mode });
-                                    }}
-                                    className={cn(
-                                        "rounded-lg border px-2.5 py-2 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-                                        selected
-                                            ? "border-primary/40 bg-primary/10"
-                                            : "border-transparent hover:bg-muted/50",
-                                    )}
-                                >
-                                    <div className="flex items-center justify-between gap-2">
-                                        <span className="text-[11px] font-semibold text-foreground">
-                                            {TOKEN_MODE_LABELS[mode]}
-                                            {mode === "balanced" ? (
-                                                <span className="ml-1 text-[9px] font-medium text-muted-foreground">
-                                                    default
-                                                </span>
-                                            ) : null}
-                                        </span>
-                                        {selected ? (
-                                            <CheckCircle
-                                                size={12}
-                                                weight="fill"
-                                                className="shrink-0 text-primary"
-                                            />
-                                        ) : null}
-                                    </div>
-                                    <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
-                                        {TOKEN_MODE_DESCRIPTIONS[mode]}
-                                    </p>
-                                </button>
-                            );
-                        })}
-                    </div>
-                    {(stats.inputTokens != null || stats.outputTokens != null) && (
-                        <p className="mt-1 border-t border-border/60 px-2 pt-1.5 font-mono text-[9px] text-muted-foreground">
-                            {formatTokens(stats.inputTokens ?? 0)} in ·{" "}
-                            {formatTokens(stats.outputTokens ?? 0)} out
-                        </p>
-                    )}
-                </div>
-            ) : null}
+            {menu}
         </div>
     );
 };

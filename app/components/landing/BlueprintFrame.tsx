@@ -28,7 +28,7 @@ export function BlueprintFrame({
     return (
         <div
             className={cn(
-                "relative border border-white/[0.14] bg-[#17171c]/[0.78]",
+                "relative border border-white/[0.14] bg-[#17171c]/[0.82]",
                 "shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_24px_80px_-48px_rgba(0,0,0,0.9)]",
                 className,
             )}
@@ -38,7 +38,7 @@ export function BlueprintFrame({
             <Corner className="bottom-0 left-0 border-b border-l" />
             <Corner className="bottom-0 right-0 border-b border-r" />
             {label ? (
-                <div className="absolute -top-2.5 left-4 z-[1] bg-[#111114] px-2 font-mono text-[10px] tracking-[0.14em] text-zinc-300">
+                <div className="absolute -top-2.5 left-4 z-[1] bg-[#111114] px-2 font-mono text-[10px] tracking-[0.14em] text-zinc-400">
                     {label}
                 </div>
             ) : null}
@@ -58,7 +58,7 @@ export function StatusPill({
 }) {
     const dot =
         tone === "live"
-            ? "bg-emerald-400"
+            ? "bg-[var(--landing-mint,#3DFFB0)]"
             : tone === "warn"
               ? "bg-amber-400"
               : "bg-zinc-500";

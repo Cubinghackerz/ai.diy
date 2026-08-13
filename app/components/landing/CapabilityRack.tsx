@@ -63,18 +63,18 @@ export function CapabilityRack() {
                 <h2 className="max-w-[18ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
                     The workspace surface, not a chat wrapper.
                 </h2>
-                <p className="mt-3 max-w-xl text-[14px] leading-relaxed text-zinc-500 sm:text-[15px]">
+                <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-zinc-300">
                     Dense capability without a wall of feature cards — open a lane and inspect the mechanism.
                 </p>
             </Reveal>
 
             <Reveal delayMs={40} className="mt-10">
-                <BlueprintFrame label="CAPABILITY RACK" className="rounded-3xl" pad={false}>
-                    <div className="flex min-h-[28rem] flex-col md:flex-row">
+                <BlueprintFrame label="CAPABILITY RACK" className="rounded-xl" pad={false}>
+                    <div className="flex min-h-[24rem] flex-col md:flex-row">
                         <div
                             role="tablist"
                             aria-label="Capability lanes"
-                            className="flex shrink-0 gap-1.5 overflow-x-auto border-b border-white/[0.08] p-3 md:w-60 md:flex-col md:border-b-0 md:border-r md:overflow-visible"
+                            className="flex shrink-0 gap-1 overflow-x-auto border-b border-white/[0.08] p-3 md:w-56 md:flex-col md:border-b-0 md:border-r md:overflow-visible"
                         >
                             {TABS.map((t) => {
                                 const TabIcon = t.icon;
@@ -89,7 +89,7 @@ export function CapabilityRack() {
                                         aria-controls={`cap-panel-${t.id}`}
                                         onClick={() => setTab(t.id)}
                                         className={cn(
-                                            "inline-flex min-h-12 shrink-0 items-center gap-2.5 rounded-2xl px-3.5 py-3 text-left text-[14px] transition-[background-color,color,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.98]",
+                                            "inline-flex min-h-11 shrink-0 items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[14px] transition-[background-color,color,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.98]",
                                             selected
                                                 ? "bg-white/[0.1] text-white"
                                                 : "text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-100",
@@ -119,41 +119,38 @@ export function CapabilityRack() {
                             </div>
 
                             <div className="mt-6 flex items-start gap-4">
-                                <span className="mt-0.5 inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03]">
+                                <span className="mt-0.5 inline-flex size-10 shrink-0 items-center justify-center rounded-lg border border-white/[0.1] bg-white/[0.04]">
                                     <Icon weight="light" className="size-5 text-zinc-300" />
                                 </span>
                                 <div className="min-w-0">
                                     <h3 className="text-xl font-medium tracking-[-0.03em] text-white sm:text-2xl">
                                         {active.title}
                                     </h3>
-                                    <p className="mt-3 max-w-2xl text-[14px] leading-relaxed text-zinc-500 sm:text-[15px]">
+                                    <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-zinc-300">
                                         {active.body}
                                     </p>
                                 </div>
                             </div>
 
                             {active.id === "providers" ? (
-                                <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                                <ul className="mt-8 flex flex-wrap gap-x-5 gap-y-3">
                                     {PROVIDER_LOGOS.map((logo) => (
-                                        <div
+                                        <li
                                             key={logo.id}
-                                            className="flex min-h-[5.5rem] flex-col items-center justify-center gap-2.5 rounded-2xl border border-white/[0.1] bg-white/[0.04] p-4"
-                                            title={logo.label}
+                                            className="inline-flex items-center gap-2 text-[12px] font-medium text-zinc-200"
                                         >
                                             <img
                                                 src={logo.src}
-                                                alt={logo.label}
-                                                width={32}
-                                                height={32}
-                                                className="size-8 object-contain"
+                                                alt=""
+                                                width={20}
+                                                height={20}
+                                                className="size-5 object-contain"
                                                 loading="lazy"
                                             />
-                                            <span className="text-[12px] font-medium text-zinc-200">
-                                                {logo.label}
-                                            </span>
-                                        </div>
+                                            {logo.label}
+                                        </li>
                                     ))}
-                                </div>
+                                </ul>
                             ) : null}
 
                             {active.id === "tools" ? (
@@ -165,9 +162,9 @@ export function CapabilityRack() {
                                     ].map((row) => (
                                         <div
                                             key={row.k}
-                                            className="rounded-xl border border-white/[0.06] bg-black/35 px-3.5 py-3"
+                                            className="rounded-lg border border-white/[0.08] bg-black/40 px-3.5 py-3"
                                         >
-                                            <p className="font-mono text-[10px] tracking-wide text-zinc-600">
+                                            <p className="font-mono text-[10px] tracking-wide text-zinc-500">
                                                 {row.k}
                                             </p>
                                             <p className="mt-1.5 text-[12px] leading-snug text-zinc-300">
@@ -179,7 +176,7 @@ export function CapabilityRack() {
                             ) : null}
 
                             {active.id === "storage" ? (
-                                <pre className="mt-8 overflow-x-auto rounded-xl border border-white/[0.06] bg-black/50 p-4 font-mono text-[11px] leading-relaxed text-zinc-400 sm:text-[12px]">
+                                <pre className="mt-8 overflow-x-auto rounded-lg border border-white/[0.08] bg-[#0e0e11] p-4 font-mono text-[11px] leading-relaxed text-zinc-400 sm:text-[12px]">
                                     <code>
                                         {`browser/
   localStorage  → settings, provider keys
@@ -192,12 +189,12 @@ server/
                             ) : null}
 
                             {active.id === "deploy" ? (
-                                <pre className="mt-8 overflow-x-auto rounded-xl border border-white/[0.06] bg-black/50 p-4 font-mono text-[12px] leading-relaxed text-zinc-400">
+                                <pre className="mt-8 overflow-x-auto rounded-lg border border-white/[0.08] bg-[#0e0e11] p-4 font-mono text-[12px] leading-relaxed text-zinc-400">
                                     <code>
-                                        <span className="text-zinc-600">$ </span>
+                                        <span className="text-zinc-500">$ </span>
                                         npm run build && npm start
                                         {"\n"}
-                                        <span className="text-zinc-600">$ </span>
+                                        <span className="text-zinc-500">$ </span>
                                         docker compose up --build
                                     </code>
                                 </pre>

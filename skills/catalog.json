@@ -32,6 +32,26 @@
       "tools": ["web_search", "fetch_url", "run_python", "memory", "ask_user"]
     },
     {
+      "id": "prompt-engineering",
+      "name": "Prompt Engineering",
+      "version": "1.0.0",
+      "description": "Design high-quality system prompts, user prompts, tool descriptions, agent constitutions, and eval suites. Use when writing or improving prompts for products, agents, or models—not for Prismium SKILL.md authoring (use Skill Architect).",
+      "category": "developer",
+      "path": "developer/prompt-engineering/SKILL.md",
+      "popular": true,
+      "tools": ["ask_user", "fetch_url", "create_file", "memory"]
+    },
+    {
+      "id": "url-doctor",
+      "name": "URL Doctor",
+      "version": "1.1.0",
+      "description": "Audit a public webpage URL for health scores plus measured checks (security headers, TLS/HSTS/CSP, robots/sitemap, DNS SPF/DMARC, sample broken links, trackers, schema, and more). Use for URL Doctor, AuditURL, site health, or SEO/a11y audits of a pasted https URL.",
+      "category": "developer",
+      "path": "developer/url-doctor/SKILL.md",
+      "popular": false,
+      "tools": ["url_doctor", "fetch_url", "ask_user"]
+    },
+    {
       "id": "log-analysis",
       "name": "Log Analysis",
       "version": "1.0.0",

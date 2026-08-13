@@ -349,21 +349,32 @@ textarea {
     -webkit-backdrop-filter: blur(8px);
 }
 
-/* Landing contrast lift: brighter graphite blackspace. */
+/* Landing tokens — Ethereal Glass × Resend blackspace. */
 .landing-pinnacle {
-    background-color: #111114;
+    --landing-canvas: #111114;
+    --landing-surface: #17171c;
+    --landing-surface-deep: #0e0e11;
+    --landing-mint: #3dffb0;
+    --landing-border: rgba(255, 255, 255, 0.14);
+    --landing-border-strong: rgba(255, 255, 255, 0.18);
+    --landing-fill: rgba(255, 255, 255, 0.06);
+    background-color: var(--landing-canvas);
 }
 
 .landing-pinnacle .text-zinc-600 {
-    color: #b4b4bb;
+    color: #a1a1aa;
 }
 
 .landing-pinnacle .text-zinc-500 {
-    color: #d0d0d6;
+    color: #b8b8c0;
 }
 
 .landing-pinnacle .text-zinc-400 {
-    color: #e4e4e7;
+    color: #c4c4cc;
+}
+
+.landing-pinnacle .text-zinc-700 {
+    color: #8b8b93;
 }
 
 @custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));

@@ -2,68 +2,57 @@ import { Link } from "react-router";
 import { ArrowSquareOut, XLogo } from "@phosphor-icons/react";
 import { DOCS_URL, GITHUB_URL, TWITTER_URL } from "./constants";
 
+const linkClass =
+    "inline-flex min-h-10 items-center transition-colors duration-150 hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40";
+
 export function LandingFooter() {
     return (
-        <footer className="border-t border-white/[0.06]">
+        <footer className="border-t border-white/[0.1]">
             <div className="mx-auto flex max-w-6xl flex-col gap-10 px-5 py-16 sm:flex-row sm:justify-between sm:px-8">
                 <div>
                     <p className="font-mono text-[13px] text-white">ai.diy</p>
-                    <p className="mt-3 flex items-center gap-2 font-mono text-[11px] text-zinc-500">
-                        <span className="size-1.5 rounded-full bg-emerald-500/90" aria-hidden />
+                    <p className="mt-3 flex items-center gap-2 font-mono text-[11px] text-zinc-400">
+                        <span
+                            className="size-1.5 rounded-full bg-[var(--landing-mint,#3DFFB0)]"
+                            aria-hidden
+                        />
                         All systems normal
                     </p>
-                    <p className="mt-4 max-w-xs text-[12px] leading-relaxed text-zinc-600">
+                    <p className="mt-4 max-w-xs text-[13px] leading-relaxed text-zinc-400">
                         Open tools for useful thinking. MIT licensed.
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-x-14 gap-y-8 text-[13px]">
                     <div>
-                        <p className="font-mono text-[10px] tracking-wide text-zinc-600">PRODUCT</p>
-                        <ul className="mt-3 space-y-2.5 text-zinc-500">
+                        <p className="font-mono text-[10px] tracking-wide text-zinc-500">PRODUCT</p>
+                        <ul className="mt-2 space-y-0.5 text-zinc-400">
                             <li>
-                                <Link
-                                    to="/workspace"
-                                    className="transition-colors duration-150 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-                                >
+                                <Link to="/workspace" className={linkClass}>
                                     Workspace
                                 </Link>
                             </li>
                             <li>
-                                <a
-                                    href="#features"
-                                    className="transition-colors duration-150 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-                                >
+                                <a href="#features" className={linkClass}>
                                     Ownership
                                 </a>
                             </li>
                             <li>
-                                <a
-                                    href="#capabilities"
-                                    className="transition-colors duration-150 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-                                >
+                                <a href="#capabilities" className={linkClass}>
                                     Capabilities
                                 </a>
                             </li>
                             <li>
-                                <a
-                                    href="#deploy"
-                                    className="transition-colors duration-150 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-                                >
+                                <a href="#deploy" className={linkClass}>
                                     Deploy
                                 </a>
                             </li>
                         </ul>
                     </div>
                     <div>
-                        <p className="font-mono text-[10px] tracking-wide text-zinc-600">RESOURCES</p>
-                        <ul className="mt-3 space-y-2.5 text-zinc-500">
+                        <p className="font-mono text-[10px] tracking-wide text-zinc-500">RESOURCES</p>
+                        <ul className="mt-2 space-y-0.5 text-zinc-400">
                             <li>
-                                <a
-                                    href={DOCS_URL}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="transition-colors duration-150 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-                                >
+                                <a href={DOCS_URL} target="_blank" rel="noreferrer" className={linkClass}>
                                     Docs
                                 </a>
                             </li>
@@ -72,7 +61,7 @@ export function LandingFooter() {
                                     href={GITHUB_URL}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="inline-flex items-center gap-1 transition-colors duration-150 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                                    className={`${linkClass} gap-1`}
                                 >
                                     GitHub <ArrowSquareOut weight="light" className="size-3.5" />
                                 </a>
@@ -82,7 +71,7 @@ export function LandingFooter() {
                                     href={`${GITHUB_URL}/blob/main/LICENSE`}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="transition-colors duration-150 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                                    className={linkClass}
                                 >
                                     MIT License
                                 </a>
@@ -92,7 +81,7 @@ export function LandingFooter() {
                                     href={TWITTER_URL}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="inline-flex items-center gap-1.5 transition-colors duration-150 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                                    className={`${linkClass} gap-1.5`}
                                 >
                                     <XLogo weight="light" className="size-3.5" />
                                     X / @HeckingHacker
@@ -101,21 +90,15 @@ export function LandingFooter() {
                         </ul>
                     </div>
                     <div>
-                        <p className="font-mono text-[10px] tracking-wide text-zinc-600">LEGAL</p>
-                        <ul className="mt-3 space-y-2.5 text-zinc-500">
+                        <p className="font-mono text-[10px] tracking-wide text-zinc-500">LEGAL</p>
+                        <ul className="mt-2 space-y-0.5 text-zinc-400">
                             <li>
-                                <Link
-                                    to="/privacy"
-                                    className="transition-colors duration-150 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-                                >
+                                <Link to="/privacy" className={linkClass}>
                                     Privacy
                                 </Link>
                             </li>
                             <li>
-                                <Link
-                                    to="/terms"
-                                    className="transition-colors duration-150 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-                                >
+                                <Link to="/terms" className={linkClass}>
                                     Terms
                                 </Link>
                             </li>
@@ -123,8 +106,8 @@ export function LandingFooter() {
                     </div>
                 </div>
             </div>
-            <div className="border-t border-white/[0.04] px-5 py-4 sm:px-8">
-                <p className="mx-auto max-w-6xl font-mono text-[11px] text-zinc-700">
+            <div className="border-t border-white/[0.08] px-5 py-4 sm:px-8">
+                <p className="mx-auto max-w-6xl font-mono text-[11px] text-zinc-500">
                     © {new Date().getFullYear()} ai.diy
                 </p>
             </div>

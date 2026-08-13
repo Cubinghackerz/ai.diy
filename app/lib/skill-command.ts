@@ -53,9 +53,19 @@ export const BUILTIN_FORCED_SKILLS: ForcedSkill[] = [
             "You MUST activate and follow the skill_architect contract for this request: call the create_skill tool and produce a complete SKILL.md with job charter, activation boundaries, inputs, workflow, decision rules, tool rules, output contract, validation, failure handling, and positive/negative evaluation cases. Do not answer before calling create_skill.",
     },
     {
+        name: "Prompt Architect",
+        content:
+            "You MUST activate and follow the prompt-engineering skill for this request: call prompt_architect (or create_prompt) first with structured fields (goal, promptType, audience, tools, constraints, tone, riskLevel, mustInclude, mustAvoid, format). Prefer passing a refined draft when you have one. Produce a production-quality prompt with design rationale and eval suite; never paste third-party leaked system prompts; hand off Prismium SKILL.md requests to create_skill. Do not answer before calling prompt_architect.",
+    },
+    {
         name: "Subagent",
         content:
             "You MUST use subagents for this request. Call spawn_subagents (preferred for 1–3 independent slices) or spawn_subagent for one focused slice BEFORE answering. The browser will pause for user approval, then run each subagent to completion; you MUST wait for that tool result (do not keep answering as if it finished early). After results return, synthesize Status: complete outputs; for Status: declined/cancelled/error, continue yourself or note the gap — never invent what a failed subagent would have said.",
+    },
+    {
+        name: "URL Doctor",
+        content:
+            "You MUST activate URL Doctor for this request: call url_doctor first with the public http(s) URL the user wants audited (AuditURL). Present the returned Overall Health and category scores (Security, Performance, SEO, Accessibility, Privacy/Tracking, Links, Conversion, Reputation/risk) with findings. Do not invent Lighthouse/Lab timings or reputation feeds that were not measured. Do not answer before calling url_doctor.",
     },
 ];
 
@@ -68,7 +78,24 @@ const SKILL_MENU_ALIASES: Record<string, string[]> = {
     "python file creation": ["python file creation", "python", "file"],
     "word document": ["word document", "word", "docx"],
     "skill architect": ["skill architect", "skill", "architect"],
+    "prompt architect": [
+        "prompt architect",
+        "prompt",
+        "prompts",
+        "prompt engineering",
+        "system prompt",
+        "prompt engineer",
+    ],
     subagent: ["subagent", "subagents", "delegate", "fanout", "fan-out", "parallel"],
+    "url doctor": [
+        "url doctor",
+        "auditurl",
+        "audit url",
+        "url audit",
+        "site audit",
+        "seo audit",
+        "page health",
+    ],
 };
 
 /** Whether a skill should appear for the current `/query` filter. */
@@ -91,11 +118,19 @@ const SKILL_TOOL_BY_NAME: Record<string, string> = {
     "python file creation": "python_file_creation_skill",
     "word document": "word_document_skill",
     "skill architect": "create_skill",
+    "prompt architect": "prompt_architect",
+    "prompt engineering": "prompt_architect",
+    "prompt-engineering": "prompt_architect",
     compaction: "compaction_skill",
     "context compaction": "compaction_skill",
     compress: "compaction_skill",
     subagent: "spawn_subagents",
     subagents: "spawn_subagents",
+    "url doctor": "url_doctor",
+    auditurl: "url_doctor",
+    "audit url": "url_doctor",
+    "url audit": "url_doctor",
+    "site audit": "url_doctor",
 };
 
 export function lookupForcedSkill(name: string): ForcedSkill | null {
@@ -113,7 +148,16 @@ export function toolNameForForcedSkill(skillName: string): string | null {
     // "research" in the name — map the common research cases.
     if (/\bresearch\b/.test(key)) return "research_skill";
     if (/\bcompact/.test(key) || /\bcompress\b/.test(key)) return "compaction_skill";
+    if (/\bprompt\b/.test(key) && !/\bskill\b/.test(key)) return "prompt_architect";
     if (/\bsubagents?\b/.test(key)) return "spawn_subagents";
+    if (
+        /\burl\s*doctor\b/.test(key) ||
+        /\baudit\s*url\b/.test(key) ||
+        /\burl\s*audit\b/.test(key) ||
+        /\bsite\s*audit\b/.test(key)
+    ) {
+        return "url_doctor";
+    }
     return null;
 }
 
@@ -129,8 +173,11 @@ const TOOL_TO_SKILL_LABEL: Record<string, string> = {
     word_doc_skill: "Word Document",
     create_skill: "Skill Architect",
     skill_architect: "Skill Architect",
+    prompt_architect: "Prompt Architect",
+    create_prompt: "Prompt Architect",
     spawn_subagent: "Subagent",
     spawn_subagents: "Subagent",
+    url_doctor: "URL Doctor",
 };
 
 export function skillLabelForTool(toolName: string): string | null {
@@ -243,6 +290,48 @@ export function ensureResearchSkill(
     if (!detectResearchIntent(userText)) return next;
     const research = lookupForcedSkill("Research");
     if (research) next.unshift(research);
+    return next;
+}
+
+/** Detect URL Doctor / site-audit asks (paste URL + health/SEO/audit language). */
+export function detectUrlDoctorIntent(text: string | undefined | null): boolean {
+    const raw = (text ?? "").trim();
+    if (!raw || raw.length < 8) return false;
+    const t = raw.toLowerCase();
+    const hasUrl = /https?:\/\/[^\s]+/i.test(raw);
+    if (
+        /\b(url\s*doctor|audit\s*url|auditurl|url\s*audit|site\s*audit|page\s*health|website\s*health)\b/.test(
+            t,
+        )
+    ) {
+        return true;
+    }
+    if (
+        hasUrl &&
+        /\b(audit|doctor|health\s*score|seo|accessibility|a11y|performance|privacy|tracking|conversion|reputation)\b/.test(
+            t,
+        )
+    ) {
+        return true;
+    }
+    return false;
+}
+
+/** Merge URL Doctor when an audit intent (or /URL Doctor) is detected. */
+export function ensureUrlDoctorSkill(
+    skills: ForcedSkill[] | undefined,
+    userText: string,
+    options: { webSearchEnabled?: boolean } = {},
+): ForcedSkill[] {
+    const next = [...(skills ?? [])];
+    const hasDoctor = next.some(
+        (skill) => toolNameForForcedSkill(skill.name) === "url_doctor",
+    );
+    if (hasDoctor) return next;
+    if (options.webSearchEnabled === false) return next;
+    if (!detectUrlDoctorIntent(userText)) return next;
+    const doctor = lookupForcedSkill("URL Doctor");
+    if (doctor) next.unshift(doctor);
     return next;
 }
 

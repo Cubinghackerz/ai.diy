@@ -121,45 +121,7 @@ export async function initLandingAnimations(
             });
         });
 
-        const reveal = gsap.utils.toArray<HTMLElement>("[data-landing-reveal]", scope);
-        reveal.forEach((element) => {
-            gsap.fromTo(
-                element,
-                { y: 28, opacity: 0.001, filter: "blur(4px)" },
-                {
-                    y: 0,
-                    opacity: 1,
-                    filter: "blur(0px)",
-                    duration: 0.75,
-                    immediateRender: false,
-                    ease: "power3.out",
-                    clearProps: "filter",
-                    scrollTrigger: {
-                        trigger: element,
-                        start: "top 88%",
-                        toggleActions: "play none none none",
-                    },
-                },
-            );
-        });
-
-        // Section gates fade
-        gates.forEach((gate) => {
-            if (gate.dataset.animGate === "hero") return;
-            gsap.fromTo(
-                gate,
-                { opacity: 0.55 },
-                {
-                    opacity: 1,
-                    duration: 0.5,
-                    scrollTrigger: {
-                        trigger: gate,
-                        start: "top 85%",
-                        toggleActions: "play none none reverse",
-                    },
-                },
-            );
-        });
+        // Scroll reveals are owned by <Reveal>; hero / constellation / closing floaters stay here.
     }, scope);
 
     return () => {

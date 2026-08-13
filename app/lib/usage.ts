@@ -31,31 +31,91 @@ export const EMPTY_USAGE: UsageTokens = {
 };
 
 function asNumber(value: unknown): number | undefined {
-    return typeof value === "number" && Number.isFinite(value) && value >= 0
-        ? value
-        : undefined;
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+        return value;
+    }
+    if (typeof value === "string" && value.trim()) {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+    }
+    return undefined;
+}
+
+function nestedTotal(value: unknown): number | undefined {
+    const direct = asNumber(value);
+    if (direct != null) return direct;
+    if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+    const rec = value as Record<string, unknown>;
+    return (
+        asNumber(rec.total) ??
+        asNumber(rec.totalTokens) ??
+        asNumber(rec.count) ??
+        asNumber(rec.tokenCount)
+    );
+}
+
+function nestedField(value: unknown, key: string): number | undefined {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+    return asNumber((value as Record<string, unknown>)[key]);
 }
 
 /** Normalize the AI SDK usage shape (or provider raw usage) to counts. */
 export function normalizeUsage(usage: unknown): UsageTokens | null {
     if (!usage || typeof usage !== "object" || Array.isArray(usage)) return null;
     const record = usage as Record<string, unknown>;
-    const input = asNumber(record.inputTokens) ?? asNumber(record.promptTokens);
+    const raw =
+        record.raw && typeof record.raw === "object" && !Array.isArray(record.raw)
+            ? (record.raw as Record<string, unknown>)
+            : undefined;
+    const input =
+        nestedTotal(record.inputTokens) ??
+        asNumber(record.promptTokens) ??
+        asNumber(record.input_tokens) ??
+        asNumber(record.prompt_tokens) ??
+        asNumber(record.promptTokenCount) ??
+        asNumber(record.prompt_token_count) ??
+        asNumber(raw?.promptTokenCount);
     const output =
-        asNumber(record.outputTokens) ?? asNumber(record.completionTokens);
-    const reasoning = asNumber(record.reasoningTokens);
+        nestedTotal(record.outputTokens) ??
+        asNumber(record.completionTokens) ??
+        asNumber(record.output_tokens) ??
+        asNumber(record.completion_tokens) ??
+        asNumber(record.candidatesTokenCount) ??
+        asNumber(record.candidates_token_count) ??
+        asNumber(raw?.candidatesTokenCount);
+    const reasoning =
+        asNumber(record.reasoningTokens) ??
+        asNumber(record.reasoning_tokens) ??
+        asNumber(record.thoughtsTokenCount) ??
+        nestedField(record.outputTokens, "reasoning") ??
+        nestedField(record.outputTokenDetails, "reasoningTokens") ??
+        asNumber(raw?.thoughtsTokenCount);
     const cached =
-        asNumber(record.cachedInputTokens) ?? asNumber(record.cachedInput);
-    if (input == null && output == null) return null;
+        asNumber(record.cachedInputTokens) ??
+        asNumber(record.cachedInput) ??
+        asNumber(record.cached_input_tokens) ??
+        asNumber(record.cache_read_input_tokens) ??
+        asNumber(record.cachedContentTokenCount) ??
+        nestedField(record.inputTokens, "cacheRead") ??
+        nestedField(record.inputTokenDetails, "cacheReadTokens") ??
+        asNumber(raw?.cachedContentTokenCount);
+    const totalOnly =
+        asNumber(record.totalTokens) ??
+        asNumber(record.total_tokens) ??
+        asNumber(record.totalTokenCount) ??
+        asNumber(record.total_token_count) ??
+        asNumber(raw?.totalTokenCount);
+    if (input == null && output == null && totalOnly == null) return null;
     const inTokens = input ?? 0;
     const outTokens = output ?? 0;
-    const total = asNumber(record.totalTokens) ?? inTokens + outTokens;
+    const total = totalOnly ?? inTokens + outTokens;
+    if (total <= 0 && inTokens <= 0 && outTokens <= 0) return null;
     return {
         inputTokens: inTokens,
         outputTokens: outTokens,
         reasoningTokens: reasoning ?? 0,
         cachedInputTokens: cached ?? 0,
-        totalTokens: total ?? inTokens + outTokens,
+        totalTokens: total,
     };
 }
 

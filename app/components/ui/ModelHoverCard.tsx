@@ -4,6 +4,7 @@
  */
 
 import { createPortal } from "react-dom";
+import type { CSSProperties } from "react";
 import {
     Brain,
     Eye,
@@ -24,22 +25,61 @@ import { cn } from "~/lib/utils";
 export function ModelHoverCard({
     anchor,
     model,
+    placement = "auto",
 }: {
     anchor: { top: number; bottom: number; left: number; right: number };
     model: MergedModelInfo;
+    /** above = tooltip over trigger (composer). side = next to list rows. */
+    placement?: "auto" | "above" | "side";
 }) {
     const width = 288;
     const gap = 8;
-    let left = anchor.right + gap;
-    if (left + width > window.innerWidth - 8) {
-        left = anchor.left - width - gap;
+    const estimatedHeight = 200;
+    const spaceBelow = window.innerHeight - anchor.bottom;
+    const spaceAbove = anchor.top;
+    const spaceRight = window.innerWidth - anchor.right;
+
+    const useSide =
+        placement === "side" ||
+        (placement === "auto" &&
+            spaceRight >= width + gap &&
+            spaceBelow < estimatedHeight + gap &&
+            spaceAbove < estimatedHeight + gap);
+
+    const preferAbove =
+        placement === "above" ||
+        (!useSide && spaceBelow < estimatedHeight + gap && spaceAbove >= spaceBelow);
+
+    let style: CSSProperties;
+
+    if (useSide) {
+        let left = anchor.right + gap;
+        if (left + width > window.innerWidth - 8) {
+            left = Math.max(8, anchor.left - width - gap);
+        }
+        const anchorMid = (anchor.top + anchor.bottom) / 2;
+        let top = anchorMid - estimatedHeight / 2;
+        top = Math.max(8, Math.min(top, window.innerHeight - estimatedHeight - 8));
+        style = { position: "fixed", top, left, width, zIndex: 120, pointerEvents: "none" };
+    } else if (preferAbove) {
+        // Anchor with `bottom` so unknown content height still sits flush above the pill.
+        const bottom = Math.max(8, window.innerHeight - anchor.top + gap);
+        let left = anchor.left;
+        if (left + width > window.innerWidth - 8) {
+            left = window.innerWidth - width - 8;
+        }
+        if (left < 8) left = 8;
+        style = { position: "fixed", bottom, left, width, zIndex: 120, pointerEvents: "none" };
+    } else {
+        let top = anchor.bottom + gap;
+        top = Math.max(8, Math.min(top, window.innerHeight - estimatedHeight - 8));
+        let left = anchor.left;
+        if (left + width > window.innerWidth - 8) {
+            left = window.innerWidth - width - 8;
+        }
+        if (left < 8) left = 8;
+        style = { position: "fixed", top, left, width, zIndex: 120, pointerEvents: "none" };
     }
-    if (left < 8) left = 8;
-    const estimatedHeight = 260;
-    const top = Math.min(
-        Math.max(8, anchor.top),
-        Math.max(8, window.innerHeight - estimatedHeight - 8),
-    );
 
     const badges: { label: string; icon: typeof Wrench; active: boolean }[] = [
         { label: "Tools", icon: Wrench, active: model.supportsTools === true },
@@ -75,14 +115,7 @@ export function ModelHoverCard({
     return createPortal(
         <div
             role="tooltip"
-            style={{
-                position: "fixed",
-                top,
-                left,
-                width,
-                zIndex: 120,
-                pointerEvents: "none",
-            }}
+            style={style}
             className="rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-xl shadow-black/20"
         >
             <div className="flex items-center justify-between gap-2">

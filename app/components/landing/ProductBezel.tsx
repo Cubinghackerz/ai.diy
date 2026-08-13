@@ -74,7 +74,7 @@ export function ProductBezel({ className }: { className?: string }) {
                     <button
                         type="button"
                         onClick={() => setOpen(true)}
-                        className="absolute inset-0 flex items-center justify-center bg-black/20 text-white transition-colors duration-200 hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/70"
+                        className="absolute inset-0 flex items-center justify-center bg-black/0 text-white opacity-0 transition-[opacity,background-color] duration-200 hover:bg-black/25 hover:opacity-100 focus-visible:bg-black/25 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/70 group-hover:bg-black/25 group-hover:opacity-100 group-focus-within:bg-black/25 group-focus-within:opacity-100"
                         aria-label="Play the ai.diy workspace demo fullscreen"
                         style={{ transitionTimingFunction: EASE_OUT }}
                     >

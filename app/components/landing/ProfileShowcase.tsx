@@ -176,17 +176,16 @@ export function ProfileShowcase() {
             aria-label="Builder profile"
         >
             <Reveal>
-                <p className="font-mono text-[11px] text-zinc-600">Built in public</p>
-                <h2 className="mt-2 text-2xl font-medium tracking-tight text-white sm:text-3xl">
+                <h2 className="text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
                     From Cubinghackerz
                 </h2>
-                <p className="mt-2 max-w-lg text-[14px] leading-relaxed text-zinc-500">
+                <p className="mt-4 max-w-lg text-[15px] leading-relaxed text-zinc-300">
                     Live stats for the{" "}
                     <a
                         href={GITHUB_URL}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-zinc-300 underline-offset-4 transition-colors hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                        className="text-zinc-100 underline-offset-4 transition-colors hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                     >
                         ai.diy
                     </a>{" "}
@@ -196,8 +195,8 @@ export function ProfileShowcase() {
 
             <Reveal delayMs={40} className="mt-8">
                 <DoubleBezel
-                    outerRadius="rounded-[1.75rem]"
-                    innerRadius="rounded-[calc(1.75rem-0.375rem)]"
+                    outerRadius="rounded-xl"
+                    innerRadius="rounded-[10px]"
                 >
                     <div className="flex flex-col gap-6 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-7">
                         <a

@@ -4,8 +4,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { useAui } from "@assistant-ui/react";
-import { useSearchParams, type MetaFunction } from "react-router";
+import type { MetaFunction } from "react-router";
 import { AssistantRuntimeProvider } from "~/components/assistant-ui/AssistantRuntimeProvider";
 import { ChatLifecycle } from "~/components/assistant-ui/ChatLifecycle";
 import { ChatErrorBanner } from "~/components/assistant-ui/ChatThreadSync";
@@ -42,24 +41,8 @@ export default function Home() {
     );
 }
 
-function LandingPromptHandoff() {
-    const aui = useAui();
-    const [searchParams, setSearchParams] = useSearchParams();
-    const prompt = searchParams.get("prompt")?.trim();
-
-    useEffect(() => {
-        if (!prompt) return;
-        aui.composer.setText(prompt.slice(0, 8_000));
-        const next = new URLSearchParams(searchParams);
-        next.delete("prompt");
-        setSearchParams(next, { replace: true });
-    }, [aui, prompt, searchParams, setSearchParams]);
-
-    return null;
-}
-
 function HomeInner() {
-    const { loaded, settings } = useSettings();
+    const { loaded, settings, updateSettings } = useSettings();
     const {
         threads,
         activeThreadId,
@@ -200,7 +183,7 @@ function HomeInner() {
 
                 <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
                     <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border/70 px-3">
-                        <div className="flex min-w-0 items-center gap-2">
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
                             <button
                                 type="button"
                                 onClick={() => {
@@ -222,6 +205,23 @@ function HomeInner() {
                                     : activeThread?.title || "New Chat"}
                             </span>
                         </div>
+                        {settings.preview.enabled ? (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    hapticSelect();
+                                    updateSettings({
+                                        preview: {
+                                            ...settings.preview,
+                                            enabled: false,
+                                        },
+                                    });
+                                }}
+                                className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground"
+                            >
+                                Exit preview
+                            </button>
+                        ) : null}
                     </header>
 
                     <div className="relative flex min-h-0 flex-1">
@@ -230,7 +230,6 @@ function HomeInner() {
                                 <PreviewWorkspace />
                             ) : (
                                 <>
-                                    <LandingPromptHandoff />
                                     <ChatLifecycle
                                         threadId={activeThreadId}
                                         threadTitle={activeThread?.title}

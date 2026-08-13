@@ -1,52 +1,33 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
-  <title id="title">ai.diy — Bring your own keys.</title>
-  <desc id="desc">A local-first AI workspace for cloud and local models on a cinematic orange, iris, and cyan technical field.</desc>
+  <title id="title">ai.diy — The open-source AI workspace you own.</title>
+  <desc id="desc">Local-first, bring-your-own-key AI chat with web search, tools, Canvas artifacts, and cloud or local providers.</desc>
   <defs>
-    <filter id="blur" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="72"/>
-    </filter>
-    <linearGradient id="flux" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#ff5e1f"/>
-      <stop offset="0.54" stop-color="#6366f1"/>
-      <stop offset="1" stop-color="#02b8cc"/>
-    </linearGradient>
-    <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0.45" stop-color="#040506" stop-opacity="0"/>
-      <stop offset="1" stop-color="#040506"/>
-    </linearGradient>
-    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
-      <path d="M32 0H0V32" fill="none" stroke="#fff" stroke-opacity="0.035" stroke-width="0.5"/>
+    <radialGradient id="atmosphere" cx="50%" cy="0%" r="80%">
+      <stop offset="0" stop-color="#27272a" stop-opacity="0.75"/>
+      <stop offset="0.56" stop-color="#050505" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="72" height="72" patternUnits="userSpaceOnUse">
+      <path d="M72 0H0V72" fill="none" stroke="#fff" stroke-opacity="0.055"/>
     </pattern>
+    <linearGradient id="rule" x1="0" x2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
   </defs>
-  <rect width="1200" height="630" fill="#040506"/>
-  <g filter="url(#blur)" opacity="0.78">
-    <ellipse cx="295" cy="275" rx="330" ry="175" fill="#ff5e1f"/>
-    <ellipse cx="650" cy="245" rx="380" ry="200" fill="#6366f1"/>
-    <ellipse cx="1010" cy="310" rx="300" ry="185" fill="#02b8cc"/>
+  <rect width="1200" height="630" fill="#050505"/>
+  <rect width="1200" height="630" fill="url(#atmosphere)"/>
+  <rect width="1200" height="630" fill="url(#grid)" opacity="0.5"/>
+  <path d="M72 92H1128" stroke="#fff" stroke-opacity="0.1"/>
+  <text x="72" y="74" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700" letter-spacing="-0.5">ai.diy</text>
+  <text x="1128" y="74" text-anchor="end" fill="#71717a" font-family="Courier New, monospace" font-size="13" letter-spacing="1.4">OPEN TOOLS FOR USEFUL THINKING</text>
+  <text x="72" y="259" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="70" font-weight="600" letter-spacing="-3">The open-source AI</text>
+  <text x="72" y="340" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="70" font-weight="600" letter-spacing="-3">workspace you own.</text>
+  <path d="M72 388H548" stroke="url(#rule)" stroke-width="2"/>
+  <text x="72" y="439" fill="#a1a1aa" font-family="Arial, Helvetica, sans-serif" font-size="24">Local-first. Bring your own key. Self-host it.</text>
+  <text x="72" y="505" fill="#71717a" font-family="Courier New, monospace" font-size="14" letter-spacing="1.2">BYOK   /   17 PROVIDERS   /   BROWSER-PERSISTED DATA</text>
+  <g transform="translate(980 470)">
+    <rect width="148" height="76" rx="20" fill="#fff"/>
+    <path d="M34 20h80v12H50v10h48v12H50v8h64v12H34z" fill="#050505"/>
+    <circle cx="118" cy="20" r="6" fill="#71717a"/>
   </g>
-  <path d="M-40 350 1240 145v140L-40 492Z" fill="url(#flux)" opacity="0.17"/>
-  <rect width="1200" height="630" fill="url(#grid)"/>
-  <rect width="1200" height="630" fill="url(#fade)"/>
-  <g transform="translate(64 42)" fill="none" stroke="#fff" stroke-width="1.4">
-    <path d="M0 6.5 11 0l11 6.5v13L11 26 0 19.5Z"/>
-    <path d="m.7 6.9 10.3 6 10.3-6M11 13v13"/>
-  </g>
-  <text x="100" y="62" fill="#fff" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="600" letter-spacing="-0.4">ai.diy</text>
-  <g transform="translate(1000 37)">
-    <rect width="136" height="38" rx="19" fill="#040506" fill-opacity="0.56" stroke="#fff" stroke-opacity="0.3"/>
-    <text x="68" y="24" text-anchor="middle" fill="#d0d6e0" font-family="Courier New, monospace" font-size="11" letter-spacing="1">LOCAL-FIRST</text>
-  </g>
-  <text x="600" y="260" text-anchor="middle" fill="#fff" font-family="Inter, Arial, sans-serif" font-size="88" font-weight="600" letter-spacing="-4">Bring your own keys.</text>
-  <text x="600" y="316" text-anchor="middle" fill="#eef1f5" fill-opacity="0.82" font-family="Inter, Arial, sans-serif" font-size="23">One local-first workspace for cloud and local models.</text>
-  <g transform="translate(270 366)">
-    <rect width="660" height="70" rx="12" fill="#040506" fill-opacity="0.68" stroke="#fff" stroke-opacity="0.35"/>
-    <path d="M32 26h18M41 17v18" stroke="#a5a7aa" stroke-linecap="round"/>
-    <text x="66" y="43" fill="#a5a7aa" font-family="Inter, Arial, sans-serif" font-size="16">What do you want to work on?</text>
-    <rect x="602" y="10" width="50" height="50" rx="8" fill="#d0d6e0"/>
-    <path d="m620 35 14-14m-9 0h9v9" fill="none" stroke="#303235" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  </g>
-  <text x="600" y="492" text-anchor="middle" fill="#a5a7aa" font-family="Courier New, monospace" font-size="12" letter-spacing="2">BYOK  |  17 PROVIDERS  |  BROWSER-PERSISTED DATA  |  MIT</text>
-  <path d="M64 554H1136" stroke="#fff" stroke-opacity="0.14" stroke-width="0.5"/>
-  <text x="64" y="586" fill="#77797c" font-family="Courier New, monospace" font-size="11" letter-spacing="1.4">OPEN TOOLS FOR USEFUL THINKING</text>
-  <text x="1136" y="586" text-anchor="end" fill="#77797c" font-family="Courier New, monospace" font-size="11" letter-spacing="1.4">NODE / DOCKER / YOUR PROVIDERS</text>
 </svg>

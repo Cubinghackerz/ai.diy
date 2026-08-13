@@ -19,6 +19,7 @@ import {
     ensureCompactionSkill,
     ensureFrontendSkill,
     ensureResearchSkill,
+    ensureUrlDoctorSkill,
     lastUserTextFromMessages,
     resolveRequiredSkillTools,
     type ForcedSkill,
@@ -28,6 +29,7 @@ import {
     estimateTokensFromText,
     resolveModelContextWindow,
 } from "~/lib/server/context-compaction";
+import { normalizeUsage } from "~/lib/usage";
 import {
     buildReasoningProviderOptions,
     type ReasoningEffort,
@@ -512,14 +514,20 @@ export async function action({ request }: ActionFunctionArgs) {
             /^mcp_(?:parallel_search_mcp_(?:web_search|web_fetch)|firecrawl_keyless_firecrawl_(?:search|scrape|parse))$/i.test(name),
         );
 
-        // Slash-selected skills + auto Research / Frontend when intent is clear.
+        // Slash-selected skills + auto Research / Frontend / URL Doctor when intent is clear.
         const userText = lastUserTextFromMessages(body.messages);
         const activeSkills: ForcedSkill[] = ensureCompactionSkill(
-            ensureFrontendSkill(
-                ensureResearchSkill(body.customSkills, userText, {
-                    webSearchEnabled: body.toolSettings?.webSearchEnabled,
-                }),
+            ensureUrlDoctorSkill(
+                ensureFrontendSkill(
+                    ensureResearchSkill(body.customSkills, userText, {
+                        webSearchEnabled: body.toolSettings?.webSearchEnabled,
+                    }),
+                    userText,
+                ),
                 userText,
+                {
+                    webSearchEnabled: body.toolSettings?.webSearchEnabled,
+                },
             ),
             userText,
         );
@@ -760,10 +768,10 @@ export async function action({ request }: ActionFunctionArgs) {
                 // used for this request to the assistant message metadata so
                 // the client can persist and aggregate it (usage analytics).
                 messageMetadata: ({ part }) => {
+                    // TTFT = first visible model text/reasoning, not tool wiring.
                     if (
                         (part.type === "text-delta" ||
-                            part.type === "reasoning-delta" ||
-                            part.type === "tool-input-start") &&
+                            part.type === "reasoning-delta") &&
                         firstTokenAt == null
                     ) {
                         firstTokenAt = Date.now();
@@ -774,10 +782,19 @@ export async function action({ request }: ActionFunctionArgs) {
                         firstTokenAt != null
                             ? Math.max(0, firstTokenAt - streamStartedAt)
                             : Math.max(0, finishedAt - streamStartedAt);
+                    const rawUsage =
+                        part.totalUsage ?? (part as { usage?: unknown }).usage;
+                    const usage = normalizeUsage(rawUsage) ?? rawUsage;
                     return {
-                        usage: part.totalUsage,
+                        usage,
                         model: body.model,
                         provider: body.provider,
+                        // Use serverTiming (not timing) so assistant-ui's
+                        // MessageTiming merge does not overwrite TTFT/duration.
+                        serverTiming: {
+                            ttftMs,
+                            durationMs: Math.max(0, finishedAt - streamStartedAt),
+                        },
                         timing: {
                             ttftMs,
                             durationMs: Math.max(0, finishedAt - streamStartedAt),
