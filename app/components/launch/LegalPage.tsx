@@ -25,6 +25,7 @@ export function LegalPage({
                 </Link>
                 <Link
                     to="/workspace"
+                    reloadDocument
                     className="group inline-flex min-h-10 items-center gap-2 rounded-full bg-white py-1.5 pl-4 pr-1.5 text-[12px] font-medium text-black transition-[transform,background-color] duration-200 hover:bg-zinc-200 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                 >
                     Enter Workspace

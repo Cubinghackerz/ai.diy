@@ -45,6 +45,11 @@ import {
 import { localProviderKey } from "~/lib/provider-credentials";
 import { assertClientUsageAllowed } from "~/lib/usage-ledger.client";
 import { runBrowserPython } from "~/lib/pyodide";
+import {
+    executeLinuxClientTool,
+    isLinuxClientTool,
+    linuxGenerationAborted,
+} from "~/lib/cheerpx";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 
 export type SubagentSessionStatus =
@@ -628,6 +633,7 @@ function SubagentRun({
                                 webSearchEnabled: s.webSearchEnabled,
                                 calculatorEnabled: s.calculatorEnabled,
                                 pythonEnabled: s.pythonEnabled,
+                                linuxEnvironment: s.linuxEnvironment,
                                 webSearchEngine: s.webSearchEngine,
                                 searxngUrl: s.searxngUrl,
                                 skillsEnabled: s.skillsEnabled,
@@ -650,17 +656,29 @@ function SubagentRun({
         transport,
         onToolCall: ({ toolCall }) => {
             if (
-                !["run_python", "run_code", "memory", "ask_user"].includes(
-                    toolCall.toolName,
-                )
+                ![
+                    "run_python",
+                    "run_code",
+                    "run_command",
+                    "read_file",
+                    "linux_run_command",
+                    "linux_read_file",
+                    "memory",
+                    "ask_user",
+                ].includes(toolCall.toolName)
             ) {
                 return;
             }
             pendingClientCalls.current += 1;
             const input = toolCall.input as {
                 code?: string;
+                command?: string;
+                cwd?: string;
+                path?: string;
+                maxBytes?: number;
                 query?: string;
             };
+            const linuxScopeId = `subagent-${sessionId}`;
             const taskPromise =
                 toolCall.toolName === "ask_user"
                     ? Promise.resolve(
@@ -670,6 +688,12 @@ function SubagentRun({
                       ? settingsRef.current.memoryEnabled !== false
                           ? readLocalMemory(input.query)
                           : Promise.resolve("Memory is disabled for this subagent.")
+                      : isLinuxClientTool(toolCall.toolName)
+                        ? executeLinuxClientTool(
+                              toolCall.toolName,
+                              input,
+                              linuxScopeId,
+                          )
                       : runBrowserPython(input.code ?? "");
             void taskPromise.then(
                 (result) => {
@@ -678,9 +702,12 @@ function SubagentRun({
                     const pythonResult =
                         typeof result === "string" ? null : result;
                     if (pythonResult) {
+                        const sourcePrefix = isLinuxClientTool(toolCall.toolName)
+                            ? "linux"
+                            : "python";
                         for (const artifact of pythonResult.artifacts) {
                             const mimeType = inferArtifactMimeType(artifact.filename);
-                            const sourceKey = `python:${artifact.filename}:${artifact.contentEncoding}:${artifact.content.length}:${artifactContentHash(artifact.content)}`;
+                            const sourceKey = `${sourcePrefix}:${artifact.filename}:${artifact.contentEncoding}:${artifact.content.length}:${artifactContentHash(artifact.content)}`;
                             const kind =
                                 /\.html?$/i.test(artifact.filename) || /text\/html/i.test(mimeType)
                                     ? ("html" as const)
@@ -749,12 +776,18 @@ function SubagentRun({
                         errorText:
                             error instanceof Error
                                 ? error.message
+                                : isLinuxClientTool(toolCall.toolName)
+                                  ? "Linux environment execution failed"
                                 : "Pyodide execution failed",
                     });
                 },
             );
         },
         sendAutomaticallyWhen: ({ messages }) => {
+            if (linuxGenerationAborted()) {
+                pendingClientCalls.current = 0;
+                return false;
+            }
             if (pendingClientCalls.current === 0) return false;
             if (!lastAssistantMessageIsCompleteWithToolCalls({ messages })) {
                 return false;

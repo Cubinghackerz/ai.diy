@@ -21,6 +21,14 @@ import { createAttachmentAdapter } from "~/lib/attachments";
 import { getModelModalities } from "~/lib/model-modalities";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { runBrowserPython } from "~/lib/pyodide";
+import {
+    cheerpxAvailable,
+    executeLinuxClientTool,
+    isLinuxClientTool,
+    linuxGenerationAborted,
+    prefetchCheerpX,
+    prewarmCheerpX,
+} from "~/lib/cheerpx";
 import { artifactContentHash, inferArtifactMimeType } from "~/lib/artifacts";
 import { persistArtifactForScope } from "~/lib/artifact-persist.client";
 import { useCanvas } from "~/lib/canvas";
@@ -73,6 +81,13 @@ export function AssistantRuntimeProvider({
     settingsRef.current = settings;
     const projectInstructionsRef = useRef(projectInstructions ?? "");
     projectInstructionsRef.current = projectInstructions ?? "";
+
+    useEffect(() => {
+        if (settings.linuxEnvironment === false) return;
+        if (typeof window === "undefined" || !cheerpxAvailable()) return;
+        prefetchCheerpX();
+        void prewarmCheerpX(threadId ?? "draft").catch(() => undefined);
+    }, [settings.linuxEnvironment, threadId]);
 
     const transport = useMemo(
         () =>
@@ -166,6 +181,7 @@ export function AssistantRuntimeProvider({
                                 webSearchEnabled: s.webSearchEnabled,
                                 calculatorEnabled: s.calculatorEnabled,
                                 pythonEnabled: s.pythonEnabled,
+                                linuxEnvironment: s.linuxEnvironment,
                                 webSearchEngine: s.webSearchEngine,
                                 searxngUrl: s.searxngUrl,
                                 skillsEnabled: s.skillsEnabled,
@@ -196,6 +212,10 @@ export function AssistantRuntimeProvider({
             if (![
                 "run_python",
                 "run_code",
+                "run_command",
+                "read_file",
+                "linux_run_command",
+                "linux_read_file",
                 "ask_user",
                 "memory",
                 "knowledge_search",
@@ -206,6 +226,10 @@ export function AssistantRuntimeProvider({
             pendingClientCalls.current += 1;
             const input = toolCall.input as {
                 code?: string;
+                command?: string;
+                cwd?: string;
+                path?: string;
+                maxBytes?: number;
                 question?: string;
                 questionType?: "single" | "multiple" | "short";
                 options?: string[];
@@ -249,6 +273,12 @@ export function AssistantRuntimeProvider({
                             ? settingsRef.current.knowledgeEnabled !== false
                                 ? readLocalKnowledge(input.query)
                                 : Promise.resolve("Knowledge base is disabled.")
+                            : isLinuxClientTool(toolCall.toolName)
+                              ? executeLinuxClientTool(
+                                    toolCall.toolName,
+                                    input,
+                                    threadId ?? "draft",
+                                )
                             : runBrowserPython(input.code ?? "");
             void task.then(
                 (result) => {
@@ -257,9 +287,12 @@ export function AssistantRuntimeProvider({
                     const pythonResult =
                         typeof result === "string" ? null : result;
                     if (pythonResult) {
+                        const sourcePrefix = isLinuxClientTool(toolCall.toolName)
+                            ? "linux"
+                            : "python";
                         for (const artifact of pythonResult.artifacts) {
                             const mimeType = inferArtifactMimeType(artifact.filename);
-                            const sourceKey = `python:${artifact.filename}:${artifact.contentEncoding}:${artifact.content.length}:${artifactContentHash(artifact.content)}`;
+                            const sourceKey = `${sourcePrefix}:${artifact.filename}:${artifact.contentEncoding}:${artifact.content.length}:${artifactContentHash(artifact.content)}`;
                             const kind =
                                 /\.html?$/i.test(artifact.filename) || /text\/html/i.test(mimeType)
                                     ? ("html" as const)
@@ -315,6 +348,8 @@ export function AssistantRuntimeProvider({
                             ? error.message
                             : isSubagent
                               ? "Subagent run failed"
+                              : isLinuxClientTool(toolCall.toolName)
+                                ? "Linux environment execution failed"
                               : "Pyodide execution failed";
                     // Always resume the main chat — never leave spawn_* hanging.
                     const addToolOutput = chatRef.current
@@ -338,14 +373,18 @@ export function AssistantRuntimeProvider({
                         addToolOutput?.({
                             tool: toolCall.toolName,
                             toolCallId: toolCall.toolCallId,
-                            state: "output-error",
-                            errorText,
+                            state: "output-available",
+                            output: errorText,
                         });
                     }
                 },
             );
         },
         sendAutomaticallyWhen: ({ messages }) => {
+            if (linuxGenerationAborted()) {
+                pendingClientCalls.current = 0;
+                return false;
+            }
             if (pendingClientCalls.current === 0) return false;
             if (!lastAssistantMessageIsCompleteWithToolCalls({ messages })) {
                 return false;

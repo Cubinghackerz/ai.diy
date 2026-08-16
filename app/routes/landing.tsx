@@ -16,7 +16,8 @@ import { LandingShell } from "~/components/landing/LandingShell";
 import { OwnershipStage } from "~/components/landing/OwnershipStage";
 import { ProviderMarquee } from "~/components/landing/ProviderMarquee";
 import { UseCases } from "~/components/landing/UseCases";
-import { BUILD_ID, versionedAsset } from "~/lib/build";
+import { versionedAsset } from "~/lib/build";
+import { PUBLIC_DOCUMENT_HEADERS } from "~/lib/http-headers";
 import {
     SITE_DESCRIPTION,
     SITE_IMAGE_URL,
@@ -26,10 +27,7 @@ import {
     SITE_URL,
 } from "~/lib/site";
 
-export const headers: HeadersFunction = () => ({
-    "Cache-Control": "no-store, max-age=0",
-    "X-AI-DIY-Build": BUILD_ID,
-});
+export const headers: HeadersFunction = () => PUBLIC_DOCUMENT_HEADERS;
 
 export const meta: MetaFunction = () => [
     { title: SITE_TITLE },
@@ -42,6 +40,8 @@ export const meta: MetaFunction = () => [
     { property: "og:description", content: SITE_DESCRIPTION },
     { property: "og:url", content: `${SITE_URL}/` },
     { property: "og:image", content: SITE_IMAGE_URL },
+    { property: "og:image:type", content: "image/png" },
+    { property: "og:image:secure_url", content: SITE_IMAGE_URL },
     { property: "og:image:width", content: "1200" },
     { property: "og:image:height", content: "630" },
     { property: "og:image:alt", content: SITE_TITLE },
@@ -93,19 +93,37 @@ export default function LandingPage() {
                 dangerouslySetInnerHTML={{
                     __html: JSON.stringify({
                         "@context": "https://schema.org",
-                        "@type": "SoftwareApplication",
-                        name: SITE_NAME,
-                        applicationCategory: "ProductivityApplication",
-                        operatingSystem: "Web browser",
-                        description: SITE_DESCRIPTION,
-                        url: SITE_URL,
-                        image: SITE_IMAGE_URL,
-                        logo: `${SITE_URL}${versionedAsset("/ai-diy-new-logo-white.png")}`,
-                        isAccessibleForFree: true,
-                        license: "https://opensource.org/license/mit/",
-                        sameAs: [
-                            "https://github.com/Cubinghackerz/ai.diy",
-                            "https://x.com/HeckingHacker",
+                        "@graph": [
+                            {
+                                "@type": "SoftwareApplication",
+                                name: SITE_NAME,
+                                applicationCategory: "ProductivityApplication",
+                                operatingSystem: "Web browser",
+                                description: SITE_DESCRIPTION,
+                                url: SITE_URL,
+                                image: SITE_IMAGE_URL,
+                                logo: `${SITE_URL}${versionedAsset("/ai-diy-new-logo-white.png")}`,
+                                isAccessibleForFree: true,
+                                license: "https://opensource.org/license/mit/",
+                                sameAs: [
+                                    "https://github.com/Cubinghackerz/ai.diy",
+                                    "https://x.com/HeckingHacker",
+                                ],
+                            },
+                            {
+                                "@type": "WebSite",
+                                name: SITE_NAME,
+                                url: SITE_URL,
+                                inLanguage: "en-US",
+                            },
+                            {
+                                "@type": "VideoObject",
+                                name: "ai.diy workspace demo",
+                                description: SITE_DESCRIPTION,
+                                thumbnailUrl: `${SITE_URL}/workspace-demo.png`,
+                                uploadDate: "2026-08-16",
+                                contentUrl: `${SITE_URL}/AI-DIY_DEMO.mp4`,
+                            },
                         ],
                     }),
                 }}

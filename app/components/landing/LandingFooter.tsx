@@ -28,7 +28,7 @@ export function LandingFooter() {
                         <p className="font-mono text-[10px] tracking-wide text-zinc-500">PRODUCT</p>
                         <ul className="mt-2 space-y-0.5 text-zinc-400">
                             <li>
-                                <Link to="/workspace" className={linkClass}>
+                                <Link to="/workspace" reloadDocument className={linkClass}>
                                     Workspace
                                 </Link>
                             </li>

@@ -4,8 +4,9 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import type { MetaFunction } from "react-router";
+import type { HeadersFunction, MetaFunction } from "react-router";
 import { AssistantRuntimeProvider } from "~/components/assistant-ui/AssistantRuntimeProvider";
+import { useChatGenerating } from "~/components/assistant-ui/ChatSessionContext";
 import { ChatLifecycle } from "~/components/assistant-ui/ChatLifecycle";
 import { ChatErrorBanner } from "~/components/assistant-ui/ChatThreadSync";
 import { PreviewWorkspace } from "~/components/assistant-ui/PreviewWorkspace";
@@ -17,11 +18,14 @@ import { AppSidebar } from "~/components/sidebar/AppSidebar";
 import { SetupGate, useNeedsSetup } from "~/components/setup/SetupGate";
 import { CanvasProvider } from "~/lib/canvas";
 import { haptic, hapticSelect } from "~/lib/haptics";
+import { WORKSPACE_DOCUMENT_HEADERS } from "~/lib/http-headers";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import { useThreads } from "~/lib/hooks/useThreads";
 import { useProjects } from "~/lib/hooks/useProjects";
 import { Sidebar as SidebarIcon } from "@phosphor-icons/react";
 import { cn } from "~/lib/utils";
+
+export const headers: HeadersFunction = () => WORKSPACE_DOCUMENT_HEADERS;
 
 export const meta: MetaFunction = () => [
     { title: "Workspace - ai.diy" },
@@ -67,7 +71,6 @@ function HomeInner() {
     const [sidebarPanel, setSidebarPanel] = useState<"chats" | "settings">(
         "chats",
     );
-
     const handleTitleChange = useCallback(
         (threadId: string, title: string) => {
             void updateThreadTitle(threadId, title);
@@ -84,22 +87,6 @@ function HomeInner() {
         },
         [createNewThread],
     );
-
-    useEffect(() => {
-        const onKey = (e: KeyboardEvent) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-                e.preventDefault();
-                handleNewChat();
-            } else if ((e.metaKey || e.ctrlKey) && e.key === ",") {
-                e.preventDefault();
-                setSidebarOpen(true);
-                setSidebarPanel("settings");
-                setMobileSidebarOpen(true);
-            }
-        };
-        window.addEventListener("keydown", onKey);
-        return () => window.removeEventListener("keydown", onKey);
-    }, [handleNewChat]);
 
     const activeThread = threads.find((t) => t.id === activeThreadId);
     const activeProject = activeThread?.projectId
@@ -158,6 +145,14 @@ function HomeInner() {
 
     const appShell = (
         <div className="flex h-full w-full overflow-hidden bg-background text-foreground">
+                <WorkspaceHotkeys
+                    onNewChat={handleNewChat}
+                    onOpenSettings={() => {
+                        setSidebarOpen(true);
+                        setSidebarPanel("settings");
+                        setMobileSidebarOpen(true);
+                    }}
+                />
                 <aside
                     className={cn(
                         "hidden flex-col border-r border-border/80 bg-sidebar transition-[width] duration-200 md:flex",
@@ -266,4 +261,31 @@ function HomeInner() {
             </AssistantRuntimeProvider>
         </SubagentProvider>
     );
+}
+
+function WorkspaceHotkeys({
+    onNewChat,
+    onOpenSettings,
+}: {
+    onNewChat: () => void;
+    onOpenSettings: () => void;
+}) {
+    const generating = useChatGenerating();
+
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+                e.preventDefault();
+                if (generating) return;
+                onNewChat();
+            } else if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+                e.preventDefault();
+                onOpenSettings();
+            }
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [generating, onNewChat, onOpenSettings]);
+
+    return null;
 }

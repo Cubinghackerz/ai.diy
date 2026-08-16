@@ -113,12 +113,14 @@ function loadPyodide(): Promise<PyodideRuntime> {
             "script[data-prismium-pyodide]",
         );
         if (existing) {
+            existing.crossOrigin = "anonymous";
             if ((window as PyodideWindow).loadPyodide) finish();
             else existing.addEventListener("load", finish, { once: true });
             return;
         }
 
         const script = document.createElement("script");
+        script.crossOrigin = "anonymous";
         script.src = `${PYODIDE_BASE}pyodide.js`;
         script.async = true;
         script.dataset.prismiumPyodide = "true";

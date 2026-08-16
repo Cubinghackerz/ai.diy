@@ -57,6 +57,8 @@ export interface TokenModePolicy {
     skillSuite: boolean;
     generateFile: boolean;
     connectorsMeta: boolean;
+    /** In-browser Linux VM tools (`linux_run_command` / `linux_read_file`). */
+    linuxEnvironment: boolean;
     compactToolDescriptions: boolean;
     /** Default / injected search hit count when the model omits a limit. */
     defaultSearchResults: number;
@@ -89,6 +91,7 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
                 skillSuite: false,
                 generateFile: false,
                 connectorsMeta: false,
+                linuxEnvironment: true,
                 compactToolDescriptions: true,
                 // Quality: enough ranked hits to pick a source, not a dump.
                 defaultSearchResults: 8,
@@ -110,6 +113,7 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
                 skillSuite: false,
                 generateFile: true,
                 connectorsMeta: true,
+                linuxEnvironment: true,
                 compactToolDescriptions: true,
                 defaultSearchResults: 8,
                 maxSearchResults: 12,
@@ -130,6 +134,7 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
                 skillSuite: true,
                 generateFile: true,
                 connectorsMeta: true,
+                linuxEnvironment: true,
                 compactToolDescriptions: false,
                 defaultSearchResults: 16,
                 maxSearchResults: 24,
@@ -151,6 +156,7 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
                 skillSuite: false,
                 generateFile: true,
                 connectorsMeta: true,
+                linuxEnvironment: true,
                 compactToolDescriptions: true,
                 // High-signal default: model can raise maxResults when needed.
                 defaultSearchResults: 8,

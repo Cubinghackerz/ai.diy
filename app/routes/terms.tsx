@@ -1,14 +1,41 @@
-import type { LinksFunction, MetaFunction } from "react-router";
+import type { HeadersFunction, LinksFunction, MetaFunction } from "react-router";
 import { LegalPage, LegalSection, LegalList } from "~/components/launch/LegalPage";
-import { SITE_URL } from "~/lib/site";
+import { PUBLIC_DOCUMENT_HEADERS } from "~/lib/http-headers";
+import {
+    SITE_IMAGE_URL,
+    SITE_NAME,
+    SITE_TWITTER_HANDLE,
+    SITE_URL,
+} from "~/lib/site";
+
+const PAGE_TITLE = "Terms - ai.diy";
+const PAGE_DESCRIPTION =
+    "Terms for using the open-source ai.diy workspace and hosted demo.";
+
+export const headers: HeadersFunction = () => PUBLIC_DOCUMENT_HEADERS;
 
 export const meta: MetaFunction = () => [
-    { title: "Terms - ai.diy" },
-    {
-        name: "description",
-        content: "Terms for using the open-source ai.diy workspace and hosted demo.",
-    },
+    { title: PAGE_TITLE },
+    { name: "description", content: PAGE_DESCRIPTION },
+    { name: "color-scheme", content: "dark light" },
     { name: "robots", content: "index, follow" },
+    { property: "og:type", content: "website" },
+    { property: "og:site_name", content: SITE_NAME },
+    { property: "og:title", content: PAGE_TITLE },
+    { property: "og:description", content: PAGE_DESCRIPTION },
+    { property: "og:url", content: `${SITE_URL}/terms` },
+    { property: "og:image", content: SITE_IMAGE_URL },
+    { property: "og:image:width", content: "1200" },
+    { property: "og:image:height", content: "630" },
+    { property: "og:image:alt", content: PAGE_TITLE },
+    { property: "og:locale", content: "en_US" },
+    { name: "twitter:card", content: "summary_large_image" },
+    { name: "twitter:site", content: SITE_TWITTER_HANDLE },
+    { name: "twitter:creator", content: SITE_TWITTER_HANDLE },
+    { name: "twitter:title", content: PAGE_TITLE },
+    { name: "twitter:description", content: PAGE_DESCRIPTION },
+    { name: "twitter:image", content: SITE_IMAGE_URL },
+    { name: "twitter:image:alt", content: PAGE_TITLE },
 ];
 
 export const links: LinksFunction = () => [

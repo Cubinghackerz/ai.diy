@@ -28,7 +28,7 @@ import "~/styles/app.css";
 
 const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem('prismium-lite:theme');var theme=t||(localStorage.getItem('prismium-lite:settings')?(JSON.parse(localStorage.getItem('prismium-lite:settings')).theme||'system'):'system');if(theme==='dark'||(theme==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){}})();`;
 
-// Cross-origin isolation is removed (no WebContainers); keep the build marker.
+// App routes stay no-store. /workspace restores COOP/COEP (see home.tsx) for CheerpX.
 const HEADERS: Record<string, string> = {
     "Cache-Control": "no-store, max-age=0",
     "X-AI-DIY-Build": BUILD_ID,
@@ -46,6 +46,8 @@ export const meta: MetaFunction = () => [
     { property: "og:description", content: SITE_DESCRIPTION },
     { property: "og:url", content: `${SITE_URL}/` },
     { property: "og:image", content: SITE_IMAGE_URL },
+    { property: "og:image:type", content: "image/png" },
+    { property: "og:image:secure_url", content: SITE_IMAGE_URL },
     { property: "og:image:width", content: "1200" },
     { property: "og:image:height", content: "630" },
     { property: "og:image:alt", content: SITE_TITLE },

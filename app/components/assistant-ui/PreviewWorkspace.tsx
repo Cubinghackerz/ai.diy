@@ -40,6 +40,12 @@ import { ProviderPicker } from "~/components/ui/ProviderPicker";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { assertClientUsageAllowed } from "~/lib/usage-ledger.client";
 import { runBrowserPython } from "~/lib/pyodide";
+import {
+    abortLinuxExecution,
+    executeLinuxClientTool,
+    isLinuxClientTool,
+    linuxGenerationAborted,
+} from "~/lib/cheerpx";
 import { artifactContentHash, inferArtifactMimeType } from "~/lib/artifacts";
 import { useCanvas } from "~/lib/canvas";
 import {
@@ -77,6 +83,7 @@ type ResolvedConfig = PreviewModelConfig & {
         webSearchEnabled: boolean;
         calculatorEnabled: boolean;
         pythonEnabled: boolean;
+        linuxEnvironment: boolean;
         webSearchEngine: "duckduckgo" | "searxng";
         searxngUrl: string;
         skillsEnabled: boolean;
@@ -239,6 +246,7 @@ export const PreviewWorkspace: FC = () => {
                 webSearchEnabled: settings.webSearchEnabled,
                 calculatorEnabled: settings.calculatorEnabled,
                 pythonEnabled: settings.pythonEnabled,
+                linuxEnvironment: settings.linuxEnvironment,
                 webSearchEngine: settings.webSearchEngine,
                 searxngUrl: settings.searxngUrl,
                 skillsEnabled: settings.skillsEnabled,
@@ -452,6 +460,7 @@ export const PreviewWorkspace: FC = () => {
     };
 
     const stopRun = (runId: string) => {
+        abortLinuxExecution();
         stopMap.current.get(runId)?.();
     };
 
@@ -1356,14 +1365,25 @@ const PreviewRunPanel: FC<{
         messages: run.messages,
         onToolCall: ({ toolCall }) => {
             if (
-                !["run_python", "run_code", "ask_user", "memory"].includes(
-                    toolCall.toolName,
-                )
+                ![
+                    "run_python",
+                    "run_code",
+                    "run_command",
+                    "read_file",
+                    "linux_run_command",
+                    "linux_read_file",
+                    "ask_user",
+                    "memory",
+                ].includes(toolCall.toolName)
             )
                 return;
             pendingClientCalls.current += 1;
             const input = toolCall.input as {
                 code?: string;
+                command?: string;
+                cwd?: string;
+                path?: string;
+                maxBytes?: number;
                 question?: string;
                 questionType?: "single" | "multiple" | "short";
                 options?: string[];
@@ -1380,6 +1400,8 @@ const PreviewRunPanel: FC<{
                       ? settingsRef.current.memoryEnabled !== false
                           ? readLocalMemory(input.query)
                           : Promise.resolve("Memory is disabled for this chat.")
+                      : isLinuxClientTool(toolCall.toolName)
+                        ? executeLinuxClientTool(toolCall.toolName, input, run.id)
                       : runBrowserPython(input.code ?? "");
             void task.then(
                 (result) => {
@@ -1388,6 +1410,9 @@ const PreviewRunPanel: FC<{
                     const pythonResult =
                         typeof result === "string" ? null : result;
                     if (pythonResult) {
+                        const sourcePrefix = isLinuxClientTool(toolCall.toolName)
+                            ? "linux"
+                            : "python";
                         for (const artifact of pythonResult.artifacts) {
                             addArtifact(
                                 {
@@ -1399,7 +1424,7 @@ const PreviewRunPanel: FC<{
                                     content: artifact.content,
                                     contentEncoding: artifact.contentEncoding,
                                     mimeType: inferArtifactMimeType(artifact.filename),
-                                    sourceKey: `python:${artifact.filename}:${artifact.contentEncoding}:${artifact.content.length}:${artifactContentHash(artifact.content)}`,
+                                    sourceKey: `${sourcePrefix}:${artifact.filename}:${artifact.contentEncoding}:${artifact.content.length}:${artifactContentHash(artifact.content)}`,
                                 },
                                 { scopeId: run.id },
                             );
@@ -1438,12 +1463,18 @@ const PreviewRunPanel: FC<{
                         errorText:
                             error instanceof Error
                                 ? error.message
+                                : isLinuxClientTool(toolCall.toolName)
+                                  ? "Linux environment execution failed"
                                 : "Pyodide execution failed",
                     });
                 },
             );
         },
         sendAutomaticallyWhen: ({ messages }) => {
+            if (linuxGenerationAborted()) {
+                pendingClientCalls.current = 0;
+                return false;
+            }
             if (pendingClientCalls.current === 0) return false;
             if (!lastAssistantMessageIsCompleteWithToolCalls({ messages })) {
                 return false;

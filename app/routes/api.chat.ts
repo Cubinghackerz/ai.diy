@@ -19,6 +19,7 @@ import { buildChatSystemPromptParts } from "~/lib/server/prompt";
 import {
     ensureCompactionSkill,
     ensureFrontendSkill,
+    ensureLinuxSkill,
     ensureResearchSkill,
     ensureUrlDoctorSkill,
     lastUserTextFromMessages,
@@ -87,6 +88,7 @@ interface ChatRequestBody {
         webSearchEnabled?: boolean;
         calculatorEnabled?: boolean;
         pythonEnabled?: boolean;
+        linuxEnvironment?: boolean;
         webSearchEngine?: "duckduckgo" | "searxng";
         searxngUrl?: string;
         skillsEnabled?: boolean;
@@ -517,20 +519,24 @@ export async function action({ request }: ActionFunctionArgs) {
 
         // Slash-selected skills + auto Research / Frontend / URL Doctor when intent is clear.
         const userText = lastUserTextFromMessages(body.messages);
-        const activeSkills: ForcedSkill[] = ensureCompactionSkill(
-            ensureUrlDoctorSkill(
-                ensureFrontendSkill(
-                    ensureResearchSkill(body.customSkills, userText, {
-                        webSearchEnabled: body.toolSettings?.webSearchEnabled,
-                    }),
+        const activeSkills: ForcedSkill[] = ensureLinuxSkill(
+            ensureCompactionSkill(
+                ensureUrlDoctorSkill(
+                    ensureFrontendSkill(
+                        ensureResearchSkill(body.customSkills, userText, {
+                            webSearchEnabled: body.toolSettings?.webSearchEnabled,
+                        }),
+                        userText,
+                    ),
                     userText,
+                    {
+                        webSearchEnabled: body.toolSettings?.webSearchEnabled,
+                    },
                 ),
                 userText,
-                {
-                    webSearchEnabled: body.toolSettings?.webSearchEnabled,
-                },
             ),
             userText,
+            { linuxEnvironment: body.toolSettings?.linuxEnvironment },
         );
         const requiredSkillTools = resolveRequiredSkillTools(activeSkills);
 
@@ -543,6 +549,7 @@ export async function action({ request }: ActionFunctionArgs) {
                 subagentMode: body.subagentMode === true,
                 suppressWebSearch: mcpSearchAvailable,
                 messages: body.messages,
+                provider: body.provider,
             },
         );
         const tools: Record<string, Tool> =

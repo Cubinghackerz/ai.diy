@@ -28,6 +28,7 @@ import { Button } from "~/components/ui/button";
 import { ARTIFACT_MARKER, decodeArtifactContent, type ArtifactContentEncoding } from "~/lib/artifacts";
 import { useCanvas, type ArtifactKind } from "~/lib/canvas";
 import { skillLabelForTool } from "~/lib/skill-command";
+import { isLinuxClientTool } from "~/lib/cheerpx";
 
 const ANIMATION_DURATION = 200;
 
@@ -40,6 +41,10 @@ const pressable = "active:scale-[0.98]";
 const AUTO_EXECUTED_CLIENT_TOOL_NAMES = new Set([
   "run_python",
   "run_code",
+  "run_command",
+  "read_file",
+  "linux_run_command",
+  "linux_read_file",
   "memory",
   "knowledge_search",
   "knowledge_list",
@@ -196,14 +201,41 @@ function ToolFallbackDuration({
   );
 }
 
+function parseToolArgs(argsText?: string): Record<string, unknown> | null {
+  if (!argsText) return null;
+  try {
+    const parsed = JSON.parse(argsText) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function linuxCardTitle(toolName: string, args: Record<string, unknown> | null): string | null {
+  if (toolName === "linux_environment_skill") return "Linux environment";
+  if (!isLinuxClientTool(toolName)) return null;
+  const description =
+    typeof args?.description === "string" ? args.description.trim() : "";
+  if (description) return description;
+  if (toolName === "linux_read_file" || toolName === "read_file") {
+    const path = typeof args?.path === "string" ? args.path.trim() : "";
+    return path ? `Read ${path}` : "Read VM file";
+  }
+  return "Run command";
+}
+
 function ToolFallbackTrigger({
   toolName,
   status,
+  title,
   className,
   ...props
 }: React.ComponentProps<typeof CollapsibleTrigger> & {
   toolName: string;
   status?: ToolCallMessagePartStatus;
+  title?: string;
 }) {
   const statusType = status?.type ?? "complete";
   const isRunning = statusType === "running";
@@ -218,8 +250,10 @@ function ToolFallbackTrigger({
       : "Cancelled tool"
     : skillLabel
       ? "Used skill"
-      : "Used tool";
-  const displayName = skillLabel ?? toolName;
+      : title
+        ? ""
+        : "Used tool";
+  const displayName = title ?? skillLabel ?? toolName;
 
   return (
     <CollapsibleTrigger
@@ -246,7 +280,8 @@ function ToolFallbackTrigger({
         )}
       >
         <span>
-          {kindLabel}: <b>{displayName}</b>
+          {kindLabel ? `${kindLabel}: ` : null}
+          <b>{displayName}</b>
         </span>
         {isRunning && (
           <span
@@ -254,7 +289,8 @@ function ToolFallbackTrigger({
             data-slot="tool-fallback-trigger-shimmer"
             className="aui-tool-fallback-trigger-shimmer shimmer pointer-events-none absolute inset-0 motion-reduce:animate-none"
           >
-            {kindLabel}: <b>{displayName}</b>
+            {kindLabel ? `${kindLabel}: ` : null}
+            <b>{displayName}</b>
           </span>
         )}
       </span>
@@ -310,12 +346,26 @@ function ToolFallbackContent({
 
 function ToolFallbackArgs({
   argsText,
+  toolName,
   className,
   ...props
 }: React.ComponentProps<"div"> & {
   argsText?: string;
+  toolName?: string;
 }) {
   if (!argsText) return null;
+  const args = parseToolArgs(argsText);
+  const command =
+    toolName && isLinuxClientTool(toolName) && typeof args?.command === "string"
+      ? args.command
+      : null;
+  const path =
+    toolName &&
+    (toolName === "linux_read_file" || toolName === "read_file") &&
+    typeof args?.path === "string"
+      ? args.path
+      : null;
+  const display = command ?? (path ? `read ${path}` : argsText);
 
   return (
     <div
@@ -324,7 +374,7 @@ function ToolFallbackArgs({
       {...props}
     >
       <pre className="aui-tool-fallback-args-value bg-muted/50 text-foreground/90 rounded-md p-2.5 text-xs whitespace-pre-wrap">
-        {argsText}
+        {display}
       </pre>
     </div>
   );
@@ -690,22 +740,48 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   const isRequiresAction =
     status?.type === "requires-action" &&
     !AUTO_EXECUTED_CLIENT_TOOL_NAMES.has(toolName);
+  const isWaiting =
+    status?.type === "running" ||
+    (status?.type === "requires-action" &&
+      AUTO_EXECUTED_CLIENT_TOOL_NAMES.has(toolName));
 
-  const [open, setOpen] = useState(isRequiresAction);
+  const [open, setOpen] = useState(isRequiresAction || isWaiting);
   const [prevRequiresAction, setPrevRequiresAction] =
     useState(isRequiresAction);
   if (isRequiresAction !== prevRequiresAction) {
     setPrevRequiresAction(isRequiresAction);
     if (isRequiresAction) setOpen(true);
   }
+  const [prevWaiting, setPrevWaiting] = useState(isWaiting);
+  if (isWaiting !== prevWaiting) {
+    setPrevWaiting(isWaiting);
+    if (isWaiting) setOpen(true);
+  }
+  const linuxTitle = linuxCardTitle(toolName, parseToolArgs(argsText));
+  const waitingLabel = isLinuxClientTool(toolName)
+    ? "Waiting for Linux VM…"
+    : toolName === "linux_environment_skill"
+      ? "Loading Linux guide…"
+      : "Waiting for tool result…";
 
   return (
     <ToolFallbackRoot open={open} onOpenChange={setOpen}>
-      <ToolFallbackTrigger toolName={toolName} status={status} />
+      <ToolFallbackTrigger
+        toolName={toolName}
+        status={status}
+        title={linuxTitle ?? undefined}
+      />
       <ToolFallbackContent>
+        {isWaiting ? (
+          <p className="flex items-center gap-2 text-xs text-muted-foreground">
+            <LoaderIcon className="size-3.5 animate-spin [animation-duration:0.6s]" />
+            {waitingLabel}
+          </p>
+        ) : null}
         <ToolFallbackError status={status} />
         <ToolFallbackArgs
           argsText={argsText}
+          toolName={toolName}
           className={cn(isCancelled && "opacity-60")}
         />
         {isRequiresAction && (

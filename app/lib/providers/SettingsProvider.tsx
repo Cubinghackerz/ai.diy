@@ -83,6 +83,7 @@ function mergeLoadedSettings(parsed: Partial<AppSettings>): AppSettings {
         agentModeEnabled: parsed.agentModeEnabled ?? false,
         subagentsEnabled: parsed.subagentsEnabled ?? false,
         chatgptLoginEnabled: parsed.chatgptLoginEnabled ?? false,
+        linuxEnvironment: parsed.linuxEnvironment ?? true,
         tokenMode:
             parsed.tokenMode === "efficient" ||
             parsed.tokenMode === "balanced" ||

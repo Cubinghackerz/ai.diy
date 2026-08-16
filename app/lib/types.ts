@@ -146,6 +146,10 @@ export interface AppSettings {
     webSearchEngine: "duckduckgo" | "searxng";
     searxngUrl: string;
     pythonEnabled: boolean;
+    /**
+     * In-browser Linux VM (CheerpX). The settings toggle is the only gate.
+     */
+    linuxEnvironment: boolean;
     calculatorEnabled: boolean;
     memoryEnabled: boolean;
     /** Private on-device knowledge base (WASM embeddings + local vector search). */
@@ -466,6 +470,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     webSearchEngine: "duckduckgo",
     searxngUrl: "",
     pythonEnabled: true,
+    linuxEnvironment: true,
     calculatorEnabled: true,
     memoryEnabled: true,
     knowledgeEnabled: true,

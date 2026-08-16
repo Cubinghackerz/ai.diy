@@ -18,6 +18,7 @@ import {
     type ConnectConnectorEntryLite,
 } from "~/lib/connect-api";
 import { testProviderKey } from "~/lib/key-test";
+import { useChatGenerating } from "~/components/assistant-ui/ChatSessionContext";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import { isLocalProvider, isProviderReady } from "~/lib/setup";
 import {
@@ -309,6 +310,7 @@ function ChatsPanel({
     const [projectDraftName, setProjectDraftName] = useState("");
     const [projectDraftColor, setProjectDraftColor] = useState<string>(PROJECT_COLORS[0]);
     const [projectDraftInstructions, setProjectDraftInstructions] = useState("");
+    const generating = useChatGenerating();
     const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
     const [movingId, setMovingId] = useState<string | null>(null);
     const [exportMenu, setExportMenu] = useState<{
@@ -538,7 +540,14 @@ function ChatsPanel({
                 <Button
                     type="button"
                     variant="outline"
+                    disabled={generating}
+                    title={
+                        generating
+                            ? "Wait until the current reply finishes"
+                            : "New thread"
+                    }
                     onClick={() => {
+                        if (generating) return;
                         haptic();
                         onNewChat();
                     }}
@@ -708,12 +717,18 @@ function ChatsPanel({
                                 <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 hover:opacity-100 group-hover:opacity-100">
                                     <button
                                         type="button"
+                                        disabled={generating}
                                         onClick={() => {
+                                            if (generating) return;
                                             hapticSelect();
                                             onNewChat(project.id);
                                         }}
-                                        className="rounded-md p-1 text-muted-foreground outline-none hover:text-foreground"
-                                        title="New chat in this project"
+                                        className="rounded-md p-1 text-muted-foreground outline-none hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+                                        title={
+                                            generating
+                                                ? "Wait until the current reply finishes"
+                                                : "New chat in this project"
+                                        }
                                         aria-label={`New chat in ${project.name}`}
                                     >
                                         <Plus size={12} />
@@ -3170,6 +3185,12 @@ function SubagentsSettingsSection() {
     const { settings, updateSettings } = useSettings();
     return (
         <div className="flex flex-col gap-3">
+            <ToolToggle
+                title="Linux environment"
+                description="In-browser Debian VM (CheerpX) for bash, python3, gcc, and node. No network by default."
+                checked={settings.linuxEnvironment !== false}
+                onChange={(enabled) => updateSettings({ linuxEnvironment: enabled })}
+            />
             <ChatGPTLoginSettings />
             <ToolToggle
                 title="Agent Mode"

@@ -19,6 +19,9 @@ Available tools:
 - read_url / fetch_url: Fetch a public webpage or PDF and extract clean readable content. Never access private networks, localhost, metadata endpoints, or unsupported oversized downloads.
 - calculate / calculator: Evaluate arithmetic, percentages, units, dates, and scientific expressions deterministically.
 - run_python / run_code: Execute Python in browser Pyodide for analysis, file processing, charts, and document generation. Libraries auto-load on import (never manage installation with micropip or pip) and top-level await is supported (never asyncio.run, since Pyodide runs inside an event loop). Includes numpy, pandas, matplotlib, scipy, sympy, scikit-learn, pillow, networkx, BeautifulSoup, lxml, regex, python-dateutil, pyyaml, openpyxl/xlsxwriter (Excel), python-docx (Word), python-pptx (PowerPoint), reportlab/fpdf2 (PDF), jinja2, and requests. Always use these real libraries for file creation, never hand-rolled zip/XML. For charts, use matplotlib with the Agg backend (already forced) and savefig to a PNG or SVG in the working directory (e.g. chart.png); do not build interactive matplotlib HTML/toolbars. Save generated files in the current working directory: up to four new files of 2 MiB each are captured as Canvas artifacts (images display inline; other binaries are downloadable) and persisted with the chat in local browser storage. When the tool reports created artifacts, do not call create_file or copy/Base64 their bytes again. Wait for the result before answering.
+- linux_environment_skill: Call before using the in-browser Linux VM. It defines the CheerpX Debian contract (tools, no network, writable paths, recovery).
+- linux_run_command (alias run_command): Execute bash in the in-browser Linux VM (CheerpX Debian). python3, gcc, node, and apt are available. There is no outbound network by default, so network package installs fail. Files persist per conversation. Use linux_read_file to attach a VM file to Canvas (2 MiB). Prefer run_python for Pyodide analysis.
+- linux_read_file (alias read_file): Read a file from the in-browser Linux VM into a Canvas artifact. Mention the filename in backticks.
 - python_file_creation_skill / file_creation_skill: Call before substantial Python-driven file creation. It defines verified library choices, direct Canvas delivery, validation, size limits, and recovery steps.
 - word_document_skill / word_doc_skill: Call before creating a Word (.docx) document — report, proposal, resume, cover letter, brief, manual, or article. It defines the beautiful-document design contract (cover page, typography, restrained color, heading structure, page numbers, tables) and the python-docx implementation and validation protocol.
 - get_current_time: Return an ISO timestamp for a requested IANA timezone.
@@ -43,7 +46,7 @@ Guidelines:
 5. For real-time information, news, current events, releases, pricing, availability, laws, documentation, or model capabilities, call research_skill before answering. Keep research questions and search queries short (keywords / site: filters); do not invent years, vendors, or scope. When mcp_* search tools are present, use the most relevant Parallel or Firecrawl MCP search/fetch tool directly and do not substitute DuckDuckGo or web_search. Cite retrieved sources and state the retrieval date when useful. If retrieval fails, say so; do not fill from training data.
 6. If a configured search connector or MCP search tool fails, immediately use web_search as the fallback. If live research is unavailable, say that clearly and do not guess or present cutoff knowledge as current. Verify quoted figures, dates, and quotes by reading the cited page with read_url before using them, and never cite a URL you did not retrieve.
 7. When performing calculations or Python data analysis, use the calculator or run_python tools for exact result verification.
-8. Before substantial Python-driven file creation, call python_file_creation_skill. When the user asks for a Word document (report, proposal, resume, cover letter, brief, manual, or .docx), call word_document_skill first and follow its design contract. For files created by run_python, save in the current working directory and rely on direct Canvas capture; never call create_file or generate_file for the same binary/image artifact. Use create_file for text/code/HTML artifacts that were not created by run_python.
+8. Before substantial Python-driven file creation, call python_file_creation_skill. When the user asks for a Word document (report, proposal, resume, cover letter, brief, manual, or .docx), call word_document_skill first and follow its design contract. For files created by run_python, save in the current working directory and rely on direct Canvas capture; never call create_file or generate_file for the same binary/image artifact. Use create_file for text/code/HTML artifacts that were not created by run_python. Before bash/gcc/node work in the in-browser Linux VM, call linux_environment_skill, then linux_run_command / linux_read_file.
 9. When the user asks to define, audit, or improve a reusable workflow or set of instructions (e.g. "create a skill for..."), use skill_architect to produce a SKILL.md document.
 10. When the user asks to write, rewrite, or improve a system prompt, user prompt, tool description, agent constitution, or prompt eval suite (not a Prismium SKILL.md), use prompt_architect / create_prompt and return the Canvas artifact.
 11. When the user asks for frontend design guidance, component structure, responsive layout, or accessibility recommendations, use the frontend_design_skill tool to produce a detailed design brief.
@@ -61,6 +64,7 @@ Tools (use only when needed — see ACTIVE TOOLS THIS TURN):
 - Search/fetch: prefer enabled mcp_* search tools; otherwise web_search / fetch_url (or connector search). Cite URLs you retrieved. Search listings are short on purpose (title/URL/snippet); fetch a page before asserting numbers or dates.
 - compaction_skill: when /Compaction is selected or the user asks to compact context, call it.
 - calculator / run_python: exact math and analysis. Libraries auto-import in Pyodide; save files in cwd for Canvas capture — do not re-upload binary artifacts.
+- linux_environment_skill, then linux_run_command / linux_read_file: in-browser Linux (no network by default); persist files per chat; linux_read_file for Canvas.
 - create_file / generate_file: Canvas or downloadable text/code artifacts.
 - ask_user, memory, get_current_time, list_connections when required.
 - File uploads in the user message are already available — inspect them directly.
@@ -107,6 +111,11 @@ const TOOL_BLURBS: Record<string, string> = {
     read_url: "fetch one public page for verification",
     run_python: "run Python in-browser (Pyodide) for analysis/files",
     run_code: "run Python in-browser (Pyodide)",
+    linux_environment_skill: "Linux VM contract before bash/gcc/node work",
+    linux_run_command: "run bash in the in-browser Linux VM",
+    linux_read_file: "read a VM file into a Canvas artifact",
+    run_command: "run bash in the in-browser Linux VM",
+    read_file: "read a VM file into a Canvas artifact",
     calculator: "exact math",
     calculate: "exact math",
     create_file: "create a Canvas artifact",

@@ -9,7 +9,7 @@
 
 Local-first, bring-your-own-key chat for Node or Docker. No server-side LLM credentials. Your keys, chats, memory, knowledge base, and Canvas artifacts stay in the browser.
 
-Built with React Router, assistant-ui, the Vercel AI SDK, Tailwind CSS, and browser-side Pyodide.
+Built with React Router, assistant-ui, the Vercel AI SDK, Tailwind CSS, browser-side Pyodide, and CheerpX (in-browser Linux).
 
 ![ai.diy workspace demo](./public/workspace-demo.gif)
 
@@ -47,7 +47,7 @@ docker run -p 3000:3000 ai-diy
 
 Features marked **available** are wired. **Planned** items are not claimed as working.
 
-- **Available:** landing, chat, 17 providers, model discovery, local persistence, files, browser Python (Canvas capture + IndexedDB persistence for generated images/binaries), search + connectors, remote MCP, artifacts, memory, on-device knowledge RAG, usage ledger with soft spend/token/RPM caps, server rate-limit hooks, voice dictation (Web Speech), multi-model Preview, import/export, client-side S3/WebDAV/Google Drive backup, portable skills catalog + install, slash commands (`/Research`, `/Compaction`, `/Subagent`, …), Agent Mode, subagents (approve → wait → synthesize), encrypted browser settings, Vercel Connect (Beta: token-backed MCP servers + `connect_request`)
+- **Available:** landing, chat, 17 providers, model discovery, local persistence, files, browser Python (Canvas capture + IndexedDB persistence for generated images/binaries), in-browser Linux environment (CheerpX/WebVM: bash, python3, gcc, node, apt; no outbound network by default), search + connectors, remote MCP, artifacts, memory, on-device knowledge RAG, usage ledger with soft spend/token/RPM caps, server rate-limit hooks, voice dictation (Web Speech), multi-model Preview, import/export, client-side S3/WebDAV/Google Drive backup, portable skills catalog + install, slash commands (`/Research`, `/Compaction`, `/Subagent`, …), Agent Mode, subagents (approve → wait → synthesize), encrypted browser settings, Vercel Connect (Beta: token-backed MCP servers + `connect_request`)
 - **Coming soon:** direct GitHub/Supabase/PostgreSQL adapters, custom-provider capability probing
 
 ## What You Own
@@ -55,7 +55,7 @@ Features marked **available** are wired. **Planned** items are not claimed as wo
 | Component | Location |
 | --- | --- |
 | Chat UI, settings, history, Canvas artifacts, memory, knowledge base, usage events, Preview | Browser (localStorage + IndexedDB) |
-| Dictation and Python | Browser (Web Speech + Pyodide) |
+| Dictation, Python, and Linux VM | Browser (Web Speech + Pyodide + CheerpX) |
 | LLM relay, model discovery, search, MCP, optional RPM rate limit | Node server |
 | Provider API keys | Browser only; relayed per request |
 
@@ -65,7 +65,7 @@ Settings are not encrypted at rest today. Protect the browser profile. Treat hos
 
 Portable skill packages live in [`skills/`](./skills/). Install from **Settings → Skills** (search → Install → available via `/` in the composer).
 
-Built-in slash commands force matching tools for the next send — including **`/Subagent`** (spawns approved subagents; the main chat waits for results before continuing), `/Research`, `/Compaction`, and design/file-creation skills. Skill tool calls appear in chat as **Used skill: …**.
+Built-in slash commands force matching tools for the next send — including **`/Linux Environment`** (in-browser Debian VM), **`/Subagent`** (spawns approved subagents; the main chat waits for results before continuing), `/Research`, `/Compaction`, and design/file-creation skills. Skill tool calls appear in chat as **Used skill: …**.
 
 Flagship starters include Deep Research, Code Review, GitHub Repository Analysis, PDF Analysis, Incident Investigator, and **General Task Solver** (understand → select skills → execute → verify → synthesize).
 
@@ -93,9 +93,11 @@ OpenAI, Anthropic, Gemini, Groq, OpenRouter, xAI, DeepSeek, Bedrock, Azure, Vert
 
 ### Tools
 
-Web search (DuckDuckGo + connectors), URL fetch, calculator, browser Python, files/artifacts, research and design skills, local time, memory, knowledge search, ask user, remote MCP (Firecrawl + Parallel bundled keyless), subagents.
+Web search (DuckDuckGo + connectors), URL fetch, calculator, browser Python, in-browser Linux (`linux_run_command` / `linux_read_file`), files/artifacts, research and design skills, local time, memory, knowledge search, ask user, remote MCP (Firecrawl + Parallel bundled keyless), subagents.
 
 Python saves generated files in the working directory; the browser captures up to four files (≤2 MiB each) into Canvas and persists them with the chat when under the client size cap.
+
+The Linux environment is a client-side Debian VM (CheerpX/WebVM) with bash, python3, gcc, node, and apt. Enable it under **Settings → Linux environment**. There is no outbound network (apt/pip/curl/git that need the internet fail). Files persist per chat in IndexedDB. First boot can take up to two minutes; later commands reuse the warm VM. Commands time out at 90s. `/workspace` is cross-origin isolated (required for SharedArrayBuffer). While a reply or VM command is running, send and new-chat are locked; **Stop** aborts the wait.
 
 Global custom instructions live under **Settings → Instructions**. They append to ai.diy's defaults rather than replacing core tool, safety, and active-skill instructions.
 
@@ -119,6 +121,7 @@ ChatGPT, Claude, ShareGPT, Markdown, ai.diy JSON. Client-side backup to S3-compa
 - Optional server `RATE_LIMIT_RPM` (enable before public exposure; see `.env.example`)
 - Client soft usage caps in Settings → Usage & cost
 - Do not log request bodies or credentials
+- In-browser Linux (CheerpX) runs entirely in the tab: Safari is supported; there is no outbound network. A corrupt disk overlay is wiped and retried automatically. The CheerpX runtime is loaded from Leaning Technologies' CDN under the [CheerpX Community License](https://cheerpx.io/) (free for FOSS such as this MIT project). Commercial use or self-hosting the runtime requires a license from Leaning Technologies — do not vendor `cx.esm.js`.
 
 See [DEPLOYMENT.md](./DEPLOYMENT.md) and `.env.example`.
 

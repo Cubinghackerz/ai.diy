@@ -50,6 +50,7 @@ export type ToolSettings = {
     webSearchEnabled?: boolean;
     calculatorEnabled?: boolean;
     pythonEnabled?: boolean;
+    linuxEnvironment?: boolean;
     webSearchEngine?: SearchEngine;
     searxngUrl?: string;
     skillsEnabled?: boolean;
@@ -721,6 +722,45 @@ Create real, downloadable files with browser-side Pyodide. Use this skill before
 - Keep binary file bytes out of chat text and out of saved memory.`;
 }
 
+function linuxEnvironmentSkill(input: { task?: string }): string {
+    return `# Linux Environment Skill
+
+Task: ${input.task?.trim() || "Use the in-browser Debian VM (CheerpX) correctly."}
+
+## Purpose
+This is a real x86 Debian 10 VM in the browser (CheerpX / WebVM). It is not Pyodide and not the host machine. Load this contract before any linux_run_command / linux_read_file work.
+
+## What is actually there
+- User: \`user\` (uid 1000). Home: \`/home/user\`. Writable scratch: \`/tmp\`.
+- Tools on the image: \`bash\`, \`python3\` (Debian 3.7 — no pandas/numpy), \`gcc\`, \`g++\`, \`make\`, \`node\`, \`apt\`.
+- No outbound network by default. \`apt install\`, \`pip install\`, \`npm install\`, curl, and git clone will fail. Do not retry them.
+- Files persist per conversation in IndexedDB. Commands time out at 90s. Combined stdout/stderr is capped at 32KB. First boot may take up to 2 minutes while the disk streams.
+
+## Tools
+- \`linux_run_command\` (alias \`run_command\` on non-ChatGPT providers): \`command\` (required), \`cwd\` (default \`/home/user\`), \`description\` (short card title, e.g. "Check compiler versions").
+- \`linux_read_file\` (alias \`read_file\` on non-ChatGPT): \`path\`, optional \`maxBytes\` (cap 2 MiB). Attaches a Canvas artifact. Mention the filename in backticks.
+- Prefer \`run_python\` for analysis, charts, pandas, and document generation. Use this VM for gcc, node, bash, and system tools.
+
+## Workflow
+1. Call this skill once, then run a short probe if versions matter: \`uname -srm; python3 --version; gcc --version | head -n1; node --version\`.
+2. One job per command. Pass a human \`description\`. Prefer several small calls over one huge script.
+3. Write files with a heredoc or printf into \`/home/user\` or \`/tmp\`. Compile with \`gcc -o hello hello.c && ./hello\`.
+4. After creating a file the user should see, call \`linux_read_file\`. Do not copy bytes into \`create_file\`.
+5. Report real stdout/stderr and the exit code. Never invent compiler output.
+
+## Hard limits (do not fight them)
+- Do not use GNU \`timeout\`, \`stdbuf\`, or other i386-fragile wrappers — they can abort with "stack smashing detected".
+- If a write returns Permission denied, retry under \`/tmp\` (or \`mkdir -p /tmp/work && cd /tmp/work\`). Do not keep retrying \`/home/user\` after one failure.
+- If a binary stack-smashes, drop it and use a simpler command. Do not loop the same crashing binary.
+- Do not claim pandas/matplotlib in this VM. That is Pyodide (\`run_python\`).
+- Do not use \`create_file\` to fake VM results.
+
+## Delivery
+- Quote measured versions and exit codes.
+- Cite Canvas artifacts as \`filename.ext\`.
+- If the VM is unavailable (not cross-origin isolated), say so and stop.`;
+}
+
 function wordDocumentSkill(input: { task?: string }): string {
     return `# Beautiful Word Document Skill
 
@@ -837,6 +877,8 @@ export async function buildChatTools(
         suppressWebSearch?: boolean;
         /** Current thread messages — used by compaction_skill. */
         messages?: CompactableMessage[];
+        /** When `chatgpt`, omit Codex-reserved Linux tool aliases. */
+        provider?: string;
     } = {},
 ) {
     const subagentMode = options.subagentMode === true;
@@ -854,7 +896,8 @@ export async function buildChatTools(
         forcedTools.has("prompt_architect") ||
         forcedTools.has("create_prompt") ||
         forcedTools.has("python_file_creation_skill") ||
-        forcedTools.has("word_document_skill");
+        forcedTools.has("word_document_skill") ||
+        forcedTools.has("linux_environment_skill");
     const enableResearch =
         settings.webSearchEnabled !== false &&
         (policy.researchSkill || forceResearch);
@@ -864,6 +907,10 @@ export async function buildChatTools(
     // Python is a client-side tool. The browser executes it in Pyodide and
     // sends the result back before the model continues.
     const enablePython = settings.pythonEnabled !== false;
+    // Toggle is the only gate. Token efficiency used to hide these tools
+    // even when Linux environment was on, so every provider reported them
+    // missing. ChatGPT/Codex also reserves `run_command` / `read_file`.
+    const enableLinux = settings.linuxEnvironment !== false;
     const enableSkillSuite =
         settings.skillsEnabled !== false && (policy.skillSuite || forceSkillSuite);
 
@@ -1271,6 +1318,46 @@ export async function buildChatTools(
             }),
         });
         tools.run_code = tools.run_python;
+    }
+
+    if (enableLinux) {
+        // Client-side tools. The browser boots CheerpX and addToolOutput
+        // before the model continues. No server executor.
+        // Canonical names avoid Codex/ChatGPT reserved `run_command` / `read_file`.
+        const linuxRun = tool({
+            description: policy.compactToolDescriptions
+                ? "Run bash in the browser Linux VM (Debian: apt/python3/gcc/node). No outbound network by default. Persist files per chat; use linux_read_file for Canvas. Call linux_environment_skill first. This is the tool if the user asks for run_command."
+                : "Execute a bash command in the in-browser Linux environment (CheerpX/WebVM): a full x86 Debian VM running client-side. python3, gcc, node, and apt are on the image. There is no outbound network by default, so apt/pip/npm installs that need the network will fail unless the operator later enables networking. Filesystem changes persist per conversation in IndexedDB. Capture stdout/stderr and the exit code; commands are killed after 90s and output is capped at 32KB. First boot may take up to 2 minutes. Use linux_read_file to bring a VM file into Canvas (2 MiB cap). Prefer this for gcc/node/system tools; use run_python for in-browser Pyodide analysis. Call linux_environment_skill before non-trivial use. Call this when the user asks for run_command.",
+            inputSchema: z.object({
+                command: z.string(),
+                cwd: z.string().optional(),
+                description: z.string().optional(),
+            }),
+        });
+        const linuxRead = tool({
+            description: policy.compactToolDescriptions
+                ? "Read a file from the browser Linux VM into a Canvas artifact (2 MiB cap). This is the tool if the user asks for read_file."
+                : "Read a file from the in-browser Linux VM and attach it as a Canvas artifact. Optional maxBytes (default and hard cap 2 MiB). Use after linux_run_command creates or modifies a file. Mention the filename in backticks. Call this when the user asks for read_file.",
+            inputSchema: z.object({
+                path: z.string(),
+                maxBytes: z.number().int().positive().optional(),
+            }),
+        });
+        tools.linux_run_command = linuxRun;
+        tools.linux_read_file = linuxRead;
+        // Short aliases for non-Codex providers. ChatGPT's Codex backend
+        // drops custom functions that collide with native computer tools.
+        if (options.provider !== "chatgpt") {
+            tools.run_command = linuxRun;
+            tools.read_file = linuxRead;
+        }
+        const linuxSkill = tool({
+            description:
+                "Callable Linux environment skill. Invoke before bash, gcc, node, or VM file work. It defines the CheerpX Debian contract: tools on the image, no network, writable paths, linux_run_command / linux_read_file usage, and recovery for permission or stack-smash failures.",
+            inputSchema: z.object({ task: z.string().optional() }),
+            execute: async (input) => linuxEnvironmentSkill(input),
+        });
+        tools.linux_environment_skill = linuxSkill;
     }
 
     if (enablePython && enableSkillSuite) {

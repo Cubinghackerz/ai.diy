@@ -63,6 +63,8 @@ import {
     type FC,
     type PropsWithChildren,
 } from "react";
+import { useChatGenerating } from "~/components/assistant-ui/ChatSessionContext";
+import { abortLinuxExecution } from "~/lib/cheerpx";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import {
     BUILTIN_FORCED_SKILLS,
@@ -409,8 +411,12 @@ const ComposerInput: FC = () => {
         minRows={1}
         maxRows={8}
         value={value}
-        disabled={disabled}
-        placeholder="Send a message... (type / to use a command or a skill)"
+        disabled={disabled || isRunning}
+        placeholder={
+          isRunning
+            ? "Wait until the current reply finishes…"
+            : "Send a message... (type / to use a command or a skill)"
+        }
         className="aui-composer-input caret-foreground placeholder:text-muted-foreground/70 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none ring-0 shadow-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
         autoFocus
         enterKeyHint="send"
@@ -486,7 +492,9 @@ const Composer: FC = () => {
     send: composerSend,
     canSend: storeCanSend,
   } = unstable_useComposerInput();
-  const isRunning = useAuiState((s) => s.thread.isRunning);
+  const streamRunning = useAuiState((s) => s.thread.isRunning);
+  const chatGenerating = useChatGenerating();
+  const isRunning = streamRunning || chatGenerating;
   const [appliedSkills, setAppliedSkills] = useState<ForcedSkill[]>([]);
 
   const canSend = storeCanSend && !isRunning;
@@ -501,6 +509,7 @@ const Composer: FC = () => {
   };
 
   const stop = () => {
+    abortLinuxExecution();
     aui.thread.cancelRun();
   };
 
@@ -541,9 +550,18 @@ const ComposerSendButton: FC = () => {
         type="button"
         variant="default"
         size="icon"
-        className="aui-composer-cancel size-7 rounded-full"
+        className="aui-composer-cancel relative z-10 size-7 rounded-full pointer-events-auto"
         aria-label="Stop generating"
-        onClick={stop}
+        onPointerDown={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          stop();
+        }}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          stop();
+        }}
       >
         <SquareIcon className="aui-composer-cancel-icon size-3.5 fill-current" />
       </TooltipIconButton>

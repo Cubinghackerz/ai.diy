@@ -43,6 +43,7 @@ export function LaunchFallback({
                             <div className="mt-9 flex flex-wrap items-center gap-3">
                                 <Link
                                     to="/workspace"
+                                    reloadDocument
                                     className="group inline-flex min-h-11 items-center gap-2 rounded-full bg-white py-2 pl-5 pr-2 text-[13px] font-medium text-black transition-[transform,background-color] duration-200 hover:bg-zinc-200 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                                 >
                                     Open Workspace

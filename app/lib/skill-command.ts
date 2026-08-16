@@ -82,6 +82,11 @@ export const BUILTIN_FORCED_SKILLS: ForcedSkill[] = [
         content:
             "You MUST activate URL Doctor for this request: call url_doctor first with the public http(s) URL the user wants audited (AuditURL). Present the returned Overall Health and category scores (Security, Performance, SEO, Accessibility, Privacy/Tracking, Links, Conversion, Reputation/risk) with findings. Do not invent Lighthouse/Lab timings or reputation feeds that were not measured. Do not answer before calling url_doctor.",
     },
+    {
+        name: "Linux Environment",
+        content:
+            "You MUST activate and follow the linux_environment_skill for this request before using the in-browser Linux VM: call linux_environment_skill first, then use only linux_run_command / linux_read_file (or run_command / read_file when those aliases are listed). Do not invent exit codes, Canvas files, or compiler output. Do not answer before calling linux_environment_skill.",
+    },
 ];
 
 /** Search aliases for the slash skill menu (name + shortcuts). */
@@ -110,6 +115,15 @@ const SKILL_MENU_ALIASES: Record<string, string[]> = {
         "site audit",
         "seo audit",
         "page health",
+    ],
+    "linux environment": [
+        "linux environment",
+        "linux",
+        "cheerpx",
+        "webvm",
+        "bash",
+        "gcc",
+        "sandbox",
     ],
 };
 
@@ -146,6 +160,10 @@ const SKILL_TOOL_BY_NAME: Record<string, string> = {
     "audit url": "url_doctor",
     "url audit": "url_doctor",
     "site audit": "url_doctor",
+    "linux environment": "linux_environment_skill",
+    linux: "linux_environment_skill",
+    cheerpx: "linux_environment_skill",
+    webvm: "linux_environment_skill",
 };
 
 export function lookupForcedSkill(name: string): ForcedSkill | null {
@@ -173,6 +191,13 @@ export function toolNameForForcedSkill(skillName: string): string | null {
     ) {
         return "url_doctor";
     }
+    if (
+        /\blinux\s*environment\b/.test(key) ||
+        /\bcheerpx\b/.test(key) ||
+        /\bwebvm\b/.test(key)
+    ) {
+        return "linux_environment_skill";
+    }
     return null;
 }
 
@@ -193,6 +218,7 @@ const TOOL_TO_SKILL_LABEL: Record<string, string> = {
     spawn_subagent: "Subagent",
     spawn_subagents: "Subagent",
     url_doctor: "URL Doctor",
+    linux_environment_skill: "Linux Environment",
 };
 
 export function skillLabelForTool(toolName: string): string | null {
@@ -443,6 +469,50 @@ export function ensureCompactionSkill(
     if (hasCompaction) return next;
     if (!detectCompactionIntent(userText)) return next;
     const skill = lookupForcedSkill("Compaction");
+    if (skill) next.unshift(skill);
+    return next;
+}
+
+/** Detect in-browser Linux / CheerpX / compile-in-VM asks. */
+export function detectLinuxIntent(text: string | undefined | null): boolean {
+    const raw = (text ?? "").trim();
+    if (!raw || raw.length < 6) return false;
+    const t = raw.toLowerCase();
+    if (
+        /\b(linux\s*environment|cheerpx|webvm|in-?browser\s+linux|browser\s+linux|linux\s+vm|debian\s+vm|linux\s+sandbox)\b/.test(
+            t,
+        )
+    ) {
+        return true;
+    }
+    if (/\b(linux_run_command|linux_read_file|run_command)\b/.test(t)) {
+        return true;
+    }
+    if (
+        /\b(use|using|in|with)\b.{0,24}\b(linux|bash|the\s+vm|your\s+linux)\b/.test(t)
+    ) {
+        return true;
+    }
+    if (/\b(gcc|g\+\+|compile)\b/.test(t) && /\b(\.c\b|hello\.c|c\s+file)\b/.test(t)) {
+        return true;
+    }
+    return false;
+}
+
+/** Merge Linux Environment when the user asks for the in-browser VM. */
+export function ensureLinuxSkill(
+    skills: ForcedSkill[] | undefined,
+    userText: string,
+    options: { linuxEnvironment?: boolean } = {},
+): ForcedSkill[] {
+    const next = [...(skills ?? [])];
+    const hasLinux = next.some(
+        (skill) => toolNameForForcedSkill(skill.name) === "linux_environment_skill",
+    );
+    if (hasLinux) return next;
+    if (options.linuxEnvironment === false) return next;
+    if (!detectLinuxIntent(userText)) return next;
+    const skill = lookupForcedSkill("Linux Environment");
     if (skill) next.unshift(skill);
     return next;
 }

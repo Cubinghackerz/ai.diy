@@ -401,3 +401,14 @@ textarea {
         }
     }
 }
+
+/* CheerpX / xterm environment drawer */
+.aidiy-environment-term .xterm {
+    height: 100%;
+}
+.aidiy-environment-term .xterm-viewport {
+    background-color: transparent !important;
+}
+.aidiy-environment-term .xterm-screen {
+    height: 100% !important;
+}

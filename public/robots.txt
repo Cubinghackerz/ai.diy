@@ -1,4 +1,6 @@
 User-agent: *
 Allow: /
+Disallow: /workspace
+Disallow: /api/
 
 Sitemap: https://ai-diy-demo.vercel.app/sitemap.xml
