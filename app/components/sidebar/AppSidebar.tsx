@@ -1779,6 +1779,51 @@ function ConnectAuthControl({ connectorId }: { connectorId: string }) {
     );
 }
 
+const CONNECT_ENABLE_STEPS: string[] = [
+    "Enable Vercel Connect for your team: open vercel.com → dashboard → Connect and request access if it is still gated there.",
+    "Attach a connector to this project — Vercel dashboard → Connect, or run `npx vercel connect create <provider>` in this repo — and link it to the project and environment.",
+    "On Vercel: nothing else needed; deployments receive the OIDC token automatically. Locally / self-hosted: run `vercel env pull` once (writes .env.local, incl. a short-lived dev token) or set VERCEL_TOKEN.",
+    "Declare connectors this app can use: CONNECT_CONNECTOR_<KEY>=<connector id or UID>, optionally CONNECT_BASE_URL_<KEY> (API root for connect_request calls) and CONNECT_SCOPES_<KEY> (space-separated app scopes).",
+    "Restart the server, then come back here: Test each connector, and Authorize each one once as the operator (opens the provider consent).",
+];
+
+function ConnectEnableGuide({ showEnvConfig = false }: { showEnvConfig?: boolean }) {
+    const [open, setOpen] = useState(false);
+
+    return (
+        <div className="flex flex-col gap-1.5 rounded-xl border border-primary/20 bg-primary/5 p-2.5">
+            <button
+                type="button"
+                onClick={() => {
+                    hapticSelect();
+                    setOpen((value) => !value);
+                }}
+                className="flex items-center justify-between gap-2 text-left outline-none"
+            >
+                <span className="text-[11px] font-semibold text-foreground">
+                    How to enable Vercel Connect
+                </span>
+                <CaretRight
+                    size={12}
+                    className={cn(
+                        "shrink-0 text-muted-foreground transition-transform",
+                        open && "rotate-90",
+                    )}
+                />
+            </button>
+            {open || showEnvConfig ? (
+                <ol className="flex list-decimal flex-col gap-1.5 pl-1 text-[10px] leading-relaxed text-muted-foreground">
+                    {CONNECT_ENABLE_STEPS.map((step, index) => (
+                        <li key={index} className="pl-1">
+                            {step}
+                        </li>
+                    ))}
+                </ol>
+            ) : null}
+        </div>
+    );
+}
+
 function ConnectedAppsSection() {
     const [available, setAvailable] = useState<boolean | null>(null);
     const [connectors, setConnectors] = useState<ConnectConnectorEntryLite[]>([]);
@@ -1857,24 +1902,32 @@ function ConnectedAppsSection() {
 
     if (!available) {
         return (
-            <div className="flex flex-col gap-1.5 rounded-xl border border-border/70 p-2.5 text-[11px] leading-relaxed text-muted-foreground">
-                <span className="font-semibold text-foreground">Vercel Connect is not configured here</span>
-                Deployed on Vercel: tokens are injected automatically (OIDC). Self-hosted:
-                set <code className="rounded bg-muted px-1 text-[10px]">VERCEL_TOKEN</code> and declare
-                connectors via <code className="rounded bg-muted px-1 text-[10px]">CONNECT_CONNECTOR_&lt;KEY&gt;</code>.
-                {messages._global ? <span className="text-destructive">{messages._global}</span> : null}
+            <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-1.5 rounded-xl border border-border/70 p-2.5 text-[11px] leading-relaxed text-muted-foreground">
+                    <span className="font-semibold text-foreground">
+                        Vercel Connect is not configured here
+                    </span>
+                    No Vercel OIDC token or <code className="rounded bg-muted px-1 text-[10px]">VERCEL_TOKEN</code>{" "}
+                    was found, so token-backed MCP servers and the{" "}
+                    <code className="rounded bg-muted px-1 text-[10px]">connect_request</code> tool are disabled.
+                    {messages._global ? (
+                        <span className="text-destructive">{messages._global}</span>
+                    ) : null}
+                </div>
+                <ConnectEnableGuide showEnvConfig />
             </div>
         );
     }
 
     if (connectors.length === 0) {
         return (
-            <div className="flex flex-col gap-1.5 rounded-xl border border-border/70 p-2.5 text-[11px] leading-relaxed text-muted-foreground">
-                <span className="font-semibold text-foreground">No connectors configured</span>
-                Add <code className="rounded bg-muted px-1 text-[10px]">CONNECT_CONNECTOR_&lt;KEY&gt;=scl_…</code> to your
-                environment (optionally <code className="rounded bg-muted px-1 text-[10px]">CONNECT_BASE_URL_&lt;KEY&gt;</code>{" "}
-                and <code className="rounded bg-muted px-1 text-[10px]">CONNECT_SCOPES_&lt;KEY&gt;</code>), then restart.
-                You can also use a connector directly on an MCP server (Settings → MCP Beta).
+            <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-1.5 rounded-xl border border-border/70 p-2.5 text-[11px] leading-relaxed text-muted-foreground">
+                    <span className="font-semibold text-foreground">No connectors configured</span>
+                    Vercel Connect is available, but no connector keys are declared, so there is
+                    nothing for the app to request tokens for yet. Add at least one, then restart.
+                </div>
+                <ConnectEnableGuide showEnvConfig />
             </div>
         );
     }
@@ -1886,6 +1939,7 @@ function ConnectedAppsSection() {
                 connector once, then the model can act on the service and protected
                 MCP servers can request tokens automatically.
             </p>
+            <ConnectEnableGuide />
             {connectors.map((entry) => (
                 <div
                     key={entry.key}
