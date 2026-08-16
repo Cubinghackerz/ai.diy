@@ -97,7 +97,7 @@ Web search (DuckDuckGo + connectors), URL fetch, calculator, browser Python, in-
 
 Python saves generated files in the working directory; the browser captures up to four files (≤2 MiB each) into Canvas and persists them with the chat when under the client size cap.
 
-The Linux environment is a client-side Debian VM (CheerpX/WebVM) with bash, python3, gcc, node, and apt. Enable it under **Settings → Linux environment**. There is no outbound network (apt/pip/curl/git that need the internet fail). Files persist per chat in IndexedDB. First boot can take up to two minutes; later commands reuse the warm VM. Commands time out at 90s. `/workspace` is cross-origin isolated (required for SharedArrayBuffer). While a reply or VM command is running, send and new-chat are locked; **Stop** aborts the wait.
+The Linux environment is a client-side Debian VM (CheerpX/WebVM) with bash, python3, gcc, node, and apt. Enable it under **Settings → Linux environment**. There is no outbound network (apt/pip/curl/git that need the internet fail). The VM stays warm in the tab after the first boot. Commands time out at 90s. `/workspace` is cross-origin isolated (required for SharedArrayBuffer). While a reply or VM command is running, send and new-chat are locked; **Stop** aborts the wait and unlocks the composer. A corrupt disk overlay is discarded and the VM retries once instead of hanging.
 
 Global custom instructions live under **Settings → Instructions**. They append to ai.diy's defaults rather than replacing core tool, safety, and active-skill instructions.
 

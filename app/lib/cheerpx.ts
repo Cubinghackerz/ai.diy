@@ -75,14 +75,15 @@ type CheerpXWindow = Window & {
 /** Latest 1.x on the Leaning CDN (npm `cheerpx@1.3.7`, 2026-07-30). Docs examples still show 1.2.8; majors are the compatibility boundary. */
 export const CHEERPX_VERSION = "1.3.7";
 export const CHEERPX_LOADER_URL = `https://cxrtnc.leaningtech.com/${CHEERPX_VERSION}/cx.esm.js`;
-/** Official WebVM debian_large image from CheerpX getting-started + webvm README. */
+/** Official WebVM CloudDevice image (WebSocket block store — no GitHub/CORS). */
 export const CHEERPX_DISK_IMAGE_URL =
     "wss://disks.webvm.io/debian_large_20230522_5044875331.ext2";
+const OVERLAY_DB_BASE = "aidiy-cx-v3";
 
 const COMMAND_TIMEOUT_MS = 90_000;
 const COMMAND_TIMEOUT_SEC = 90;
-const BOOT_TIMEOUT_MS = 120_000;
-const HOME_TIMEOUT_MS = 45_000;
+const BOOT_TIMEOUT_MS = 60_000;
+const HOME_TIMEOUT_MS = 12_000;
 const MAX_OUTPUT_BYTES = 32 * 1024;
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const DEFAULT_CWD = "/home/user";
@@ -121,6 +122,8 @@ let faultWatchInstalled = false;
 let runtimePhase: LinuxRuntimePhase = "idle";
 let overlayEpoch = 0;
 let generationAbort: AbortController | null = null;
+let bootFail: ((error: Error) => void) | null = null;
+let consoleWatchInstalled = false;
 const outputListeners = new Set<OutputListener>();
 const phaseListeners = new Set<PhaseListener>();
 let hiddenConsole: HTMLPreElement | null = null;
@@ -226,9 +229,8 @@ function throwIfStopped(): void {
     }
 }
 
-function overlayDbName(scopeId: string): string {
-    const base = `aidiy-vm-${sanitizeScopeId(scopeId)}`;
-    return overlayEpoch > 0 ? `${base}-${overlayEpoch}` : base;
+function overlayDbName(_scopeId?: string): string {
+    return overlayEpoch > 0 ? `${OVERLAY_DB_BASE}-${overlayEpoch}` : OVERLAY_DB_BASE;
 }
 
 function deleteIndexedDb(name: string): Promise<void> {
@@ -244,9 +246,7 @@ function deleteIndexedDb(name: string): Promise<void> {
 }
 
 async function wipeOverlay(scopeId: string): Promise<void> {
-    const name = overlayDbName(scopeId);
-    await deleteIndexedDb(name);
-    overlayEpoch += 1;
+    await deleteIndexedDb(overlayDbName(scopeId));
 }
 
 /** Abort a boot or command so Stop works while "Waiting for Linux VM…". */
@@ -264,18 +264,44 @@ function failCurrentProcess(error: Error): void {
     failLiveProcess?.(error);
 }
 
+function failBoot(error: Error): void {
+    bootFail?.(error);
+    failCurrentProcess(error);
+}
+
+function installConsoleWatch(): void {
+    if (typeof console === "undefined" || consoleWatchInstalled) return;
+    consoleWatchInstalled = true;
+    const original = console.error.bind(console);
+    console.error = (...args: unknown[]) => {
+        original(...args);
+        const text = args
+            .map((value) =>
+                value instanceof Error ? value.message : String(value ?? ""),
+            )
+            .join(" ");
+        if (
+            /invalid disk image|could not mount|initialization failed|access-control-allow-origin|failed to load resource/i.test(
+                text,
+            )
+        ) {
+            failBoot(new Error("Linux disk failed to mount."));
+        }
+    };
+}
+
 function installFaultWatch(): void {
     if (typeof window === "undefined" || faultWatchInstalled) return;
     faultWatchInstalled = true;
     const onFault = (message: string) => {
         if (
-            !/cx\.esm|cheerpx|j\[.+\] is not a function|Fault addr/i.test(message)
+            !/cx\.esm|cheerpx|j\[.+\] is not a function|Fault addr|invalid disk image|initialization failed/i.test(
+                message,
+            )
         ) {
             return;
         }
-        failCurrentProcess(
-            new Error("Linux VM crashed. Retry with a simpler command."),
-        );
+        failBoot(new Error("Linux VM crashed. Retry the command."));
         resetRuntime();
         setRuntimePhase("error");
     };
@@ -414,7 +440,7 @@ async function loadCheerpX(): Promise<CheerpXNamespace> {
     return cheerpxModulePromise;
 }
 
-async function getCloudDevice(CX: CheerpXNamespace): Promise<CheerpXDevice> {
+async function getBaseDevice(CX: CheerpXNamespace): Promise<CheerpXDevice> {
     if (!cloudDevicePromise) {
         cloudDevicePromise = CX.CloudDevice.create(CHEERPX_DISK_IMAGE_URL).catch(
             (error) => {
@@ -428,25 +454,38 @@ async function getCloudDevice(CX: CheerpXNamespace): Promise<CheerpXDevice> {
 
 async function createLinux(scopeId: string): Promise<CheerpXLinux> {
     const CX = await loadCheerpX();
-    const cloudDevice = await getCloudDevice(CX);
+    const baseDevice = await getBaseDevice(CX);
     const idbDevice = await CX.IDBDevice.create(overlayDbName(scopeId));
-    const overlayDevice = await CX.OverlayDevice.create(cloudDevice, idbDevice);
-    return CX.Linux.create({
-        mounts: [
-            { type: "ext2", path: "/", dev: overlayDevice },
-            { type: "devs", path: "/dev" },
-            { type: "devpts", path: "/dev/pts" },
-            { type: "proc", path: "/proc" },
-        ],
+    const overlayDevice = await CX.OverlayDevice.create(baseDevice, idbDevice);
+    return new Promise<CheerpXLinux>((resolve, reject) => {
+        bootFail = (error) => reject(error);
+        void CX.Linux.create({
+            mounts: [
+                { type: "ext2", path: "/", dev: overlayDevice },
+                { type: "devs", path: "/dev" },
+                { type: "devpts", path: "/dev/pts" },
+                { type: "proc", path: "/proc" },
+            ],
+        }).then(resolve, reject).finally(() => {
+            if (bootFail) bootFail = null;
+        });
     });
+}
+
+async function recoverOverlay(scopeId: string): Promise<void> {
+    const stale = overlayDbName(scopeId);
+    overlayEpoch += 1;
+    await deleteIndexedDb(stale).catch(() => undefined);
+    resetRuntime();
 }
 
 async function bootCheerpXInner(scopeId: string): Promise<CheerpXLinux> {
     installFaultWatch();
+    installConsoleWatch();
     if (!cheerpxAvailable()) {
         throw new Error(UNAVAILABLE_MESSAGE);
     }
-    if (booted?.scopeId === scopeId) return booted.cx;
+    if (booted) return booted.cx;
     setRuntimePhase("booting");
     const bootOnce = () =>
         withDeadline(
@@ -462,11 +501,7 @@ async function bootCheerpXInner(scopeId: string): Promise<CheerpXLinux> {
             cx = await bootOnce();
         } catch (error) {
             if (isStoppedError(error)) throw error;
-            if (error instanceof Error && /timed out/i.test(error.message)) {
-                throw error;
-            }
-            await wipeOverlay(scopeId);
-            resetRuntime();
+            await recoverOverlay(scopeId);
             setRuntimePhase("booting");
             cx = await bootOnce();
         }
@@ -479,7 +514,7 @@ async function bootCheerpXInner(scopeId: string): Promise<CheerpXLinux> {
         return cx;
     } catch (error) {
         if (!isStoppedError(error)) {
-            resetRuntime();
+            await recoverOverlay(scopeId).catch(() => undefined);
             setRuntimePhase("error");
         }
         throw error;
@@ -621,9 +656,7 @@ async function ensureWritableHome(cx: CheerpXLinux): Promise<void> {
 }
 
 const HOME_BOOTSTRAP = `mkdir -p /home/user /tmp /var/tmp
-chown -R 1000:1000 /home/user
-chmod 755 /home/user
-chmod 1777 /tmp /var/tmp`;
+chmod 1777 /home/user /tmp /var/tmp`;
 
 export async function runCommand(
     cx: CheerpXLinux,
@@ -759,7 +792,7 @@ function formatCommandOutput(result: LinuxCommandResult): string {
 export function prefetchCheerpX(): void {
     if (typeof window === "undefined" || !cheerpxAvailable()) return;
     void loadCheerpX()
-        .then((CX) => getCloudDevice(CX))
+        .then((CX) => getBaseDevice(CX))
         .catch(() => undefined);
 }
 

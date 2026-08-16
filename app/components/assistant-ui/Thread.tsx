@@ -63,8 +63,12 @@ import {
     type FC,
     type PropsWithChildren,
 } from "react";
-import { useChatGenerating } from "~/components/assistant-ui/ChatSessionContext";
-import { abortLinuxExecution } from "~/lib/cheerpx";
+import {
+    clearGenerationStopUi,
+    stopChatGeneration,
+    useChatGenerating,
+    useChatSession,
+} from "~/components/assistant-ui/ChatSessionContext";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import {
     BUILTIN_FORCED_SKILLS,
@@ -499,8 +503,11 @@ const Composer: FC = () => {
 
   const canSend = storeCanSend && !isRunning;
 
+  const { chat } = useChatSession();
+
   const send = () => {
     if (!canSend) return;
+    clearGenerationStopUi();
     // Keep forced skills in the module store until the transport reads them.
     // Clearing here raced prepareSendMessagesRequest and dropped every skill.
     forcedSkillStore.current = appliedSkills;
@@ -509,7 +516,7 @@ const Composer: FC = () => {
   };
 
   const stop = () => {
-    abortLinuxExecution();
+    stopChatGeneration(chat);
     aui.thread.cancelRun();
   };
 
@@ -544,19 +551,13 @@ const ComposerSendButton: FC = () => {
 
   if (isRunning) {
     return (
-      <TooltipIconButton
-        tooltip="Stop generating"
-        side="bottom"
+      <Button
         type="button"
         variant="default"
         size="icon"
-        className="aui-composer-cancel relative z-10 size-7 rounded-full pointer-events-auto"
+        className="aui-composer-cancel relative z-10 size-7 rounded-full"
         aria-label="Stop generating"
-        onPointerDown={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          stop();
-        }}
+        title="Stop generating"
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -564,7 +565,7 @@ const ComposerSendButton: FC = () => {
         }}
       >
         <SquareIcon className="aui-composer-cancel-icon size-3.5 fill-current" />
-      </TooltipIconButton>
+      </Button>
     );
   }
 
