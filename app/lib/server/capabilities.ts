@@ -48,7 +48,7 @@ For files, use real libraries such as pandas, matplotlib, openpyxl, python-docx,
 
 Call \`linux_run_command\` (or \`run_command\` when that alias is listed) with \`command\` and optional \`cwd\` (default \`/home/user\`). It runs in a client-side Debian VM (CheerpX). python3, gcc, node, and apt are available. There is no outbound network by default — package installs that need the network will fail.
 
-Commands time out after 90 seconds and output is capped at 32KB. First VM boot may take up to 2 minutes. Files persist per conversation in IndexedDB. Use \`linux_read_file\` to bring a VM file into Canvas (2 MiB). Prefer \`run_python\` for Pyodide analysis; use this for gcc, node, system tools, and shell workflows.`,
+Commands time out after 90 seconds and output is capped at 32KB. First VM boot has a 60s startup cap. Files persist in the browser's IndexedDB overlay. If the VM reports an error, do not retry Linux tools in that turn. Use \`linux_read_file\` to bring a VM file into Canvas (2 MiB). Prefer \`run_python\` for Pyodide analysis; use this for gcc, node, system tools, and shell workflows.`,
     },
     linux_read_file: {
         summary: "read a file from the in-browser Linux VM into Canvas",

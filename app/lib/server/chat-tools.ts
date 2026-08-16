@@ -734,7 +734,7 @@ This is a real x86 Debian 10 VM in the browser (CheerpX / WebVM). It is not Pyod
 - User: \`user\` (uid 1000). Home: \`/home/user\`. Writable scratch: \`/tmp\`.
 - Tools on the image: \`bash\`, \`python3\` (Debian 3.7 — no pandas/numpy), \`gcc\`, \`g++\`, \`make\`, \`node\`, \`apt\`.
 - No outbound network by default. \`apt install\`, \`pip install\`, \`npm install\`, curl, and git clone will fail. Do not retry them.
-- Files persist per conversation in IndexedDB. Commands time out at 90s. Combined stdout/stderr is capped at 32KB. First boot may take up to 2 minutes while the disk streams.
+- Files persist in the browser's IndexedDB overlay. Commands time out at 90s. Combined stdout/stderr is capped at 32KB. First boot has a 60s startup cap; do not retry a reported VM failure in the same turn.
 
 ## Tools
 - \`linux_run_command\` (alias \`run_command\` on non-ChatGPT providers): \`command\` (required), \`cwd\` (default \`/home/user\`), \`description\` (short card title, e.g. "Check compiler versions").
@@ -1327,7 +1327,7 @@ export async function buildChatTools(
         const linuxRun = tool({
             description: policy.compactToolDescriptions
                 ? "Run bash in the browser Linux VM (Debian: apt/python3/gcc/node). No outbound network by default. Persist files per chat; use linux_read_file for Canvas. Call linux_environment_skill first. This is the tool if the user asks for run_command."
-                : "Execute a bash command in the in-browser Linux environment (CheerpX/WebVM): a full x86 Debian VM running client-side. python3, gcc, node, and apt are on the image. There is no outbound network by default, so apt/pip/npm installs that need the network will fail unless the operator later enables networking. Filesystem changes persist per conversation in IndexedDB. Capture stdout/stderr and the exit code; commands are killed after 90s and output is capped at 32KB. First boot may take up to 2 minutes. Use linux_read_file to bring a VM file into Canvas (2 MiB cap). Prefer this for gcc/node/system tools; use run_python for in-browser Pyodide analysis. Call linux_environment_skill before non-trivial use. Call this when the user asks for run_command.",
+                : "Execute a bash command in the in-browser Linux environment (CheerpX/WebVM): a full x86 Debian VM running client-side. python3, gcc, node, and apt are on the image. There is no outbound network by default, so apt/pip/npm installs that need the network will fail unless the operator later enables networking. Filesystem changes persist in the browser's IndexedDB overlay. Capture stdout/stderr and the exit code; commands are killed after 90s and output is capped at 32KB. First boot has a 60s startup cap. If the VM reports an error, do not retry Linux tools in that turn. Use linux_read_file to bring a VM file into Canvas (2 MiB cap). Prefer this for gcc/node/system tools; use run_python for in-browser Pyodide analysis. Call linux_environment_skill before non-trivial use. Call this when the user asks for run_command.",
             inputSchema: z.object({
                 command: z.string(),
                 cwd: z.string().optional(),

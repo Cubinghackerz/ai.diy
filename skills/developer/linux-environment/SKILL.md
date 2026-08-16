@@ -59,7 +59,7 @@ Run real commands in the in-browser x86 Debian VM (CheerpX / WebVM). Measure ver
 ## Tool rules
 
 - `linux_environment_skill`: required first call.
-- `linux_run_command` / `run_command`: bash only. 90s / 32KB cap. First boot may take up to 2 minutes while the disk streams.
+- `linux_run_command` / `run_command`: bash only. 90s / 32KB cap. First boot has a 60s startup cap. After a VM error, do not retry Linux tools in that turn.
 - `linux_read_file` / `read_file`: Canvas attach, 2 MiB cap.
 - `run_python`: hand off data/chart/document work.
 

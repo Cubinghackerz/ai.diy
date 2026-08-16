@@ -83,10 +83,10 @@ const OVERLAY_DB_BASE = "aidiy-cx-v3";
 const COMMAND_TIMEOUT_MS = 90_000;
 const COMMAND_TIMEOUT_SEC = 90;
 const BOOT_TIMEOUT_MS = 60_000;
-const HOME_TIMEOUT_MS = 12_000;
 const MAX_OUTPUT_BYTES = 32 * 1024;
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const DEFAULT_CWD = "/home/user";
+const LINUX_FAILURE_COOLDOWN_MS = 20_000;
 
 const DEFAULT_ENV = [
     "HOME=/home/user",
@@ -124,6 +124,8 @@ let overlayEpoch = 0;
 let generationAbort: AbortController | null = null;
 let bootFail: ((error: Error) => void) | null = null;
 let consoleWatchInstalled = false;
+let linuxUnavailableUntil = 0;
+let lastLinuxFailure = "";
 const outputListeners = new Set<OutputListener>();
 const phaseListeners = new Set<PhaseListener>();
 let hiddenConsole: HTMLPreElement | null = null;
@@ -640,23 +642,12 @@ async function runProcess(
 
 async function ensureWritableHome(cx: CheerpXLinux): Promise<void> {
     if (homeReady) return;
-    const result = await runProcess(cx, ["-lc", HOME_BOOTSTRAP], "/", {
-        uid: 0,
-        gid: 0,
-        timeoutMs: HOME_TIMEOUT_MS,
-    });
-    if (result.timedOut || result.status !== 0) {
-        throw new Error(
-            result.timedOut
-                ? "Linux home setup timed out."
-                : `Linux home setup failed (exit ${result.status}).`,
-        );
-    }
+    // WebVM's image already contains /home/user and /tmp. Mutating permissions
+    // here used to launch chmod as root before every first command; on some
+    // CheerpX builds that faulted and left the chat waiting forever.
+    void cx;
     homeReady = true;
 }
-
-const HOME_BOOTSTRAP = `mkdir -p /home/user /tmp /var/tmp
-chmod 1777 /home/user /tmp /var/tmp`;
 
 export async function runCommand(
     cx: CheerpXLinux,
@@ -817,6 +808,12 @@ export async function executeLinuxClientTool(
     if (!cheerpxAvailable()) {
         return { output: UNAVAILABLE_MESSAGE, artifacts: [] };
     }
+    if (Date.now() < linuxUnavailableUntil) {
+        return {
+            output: `Linux environment is temporarily unavailable after a VM failure: ${lastLinuxFailure || "startup failed"}. Do not retry Linux tools in this turn; use browser Python or answer without execution.`,
+            artifacts: [],
+        };
+    }
     generationAbort = new AbortController();
     return withCommandLock(async () => {
         try {
@@ -836,6 +833,8 @@ export async function executeLinuxClientTool(
                     if (result.exitCode === 130) {
                         return { output: "Stopped by user.", artifacts: [] };
                     }
+                    linuxUnavailableUntil = 0;
+                    lastLinuxFailure = "";
                     return { output: formatCommandOutput(result), artifacts: [] };
                 })(),
                 COMMAND_TIMEOUT_MS + BOOT_TIMEOUT_MS,
@@ -850,10 +849,12 @@ export async function executeLinuxClientTool(
             if (isCorruptImageError(error)) {
                 await wipeOverlay(scopeId).catch(() => undefined);
             }
+            linuxUnavailableUntil = Date.now() + LINUX_FAILURE_COOLDOWN_MS;
+            lastLinuxFailure = reason.slice(0, 240);
             resetRuntime();
             setRuntimePhase("error");
             return {
-                output: `Linux environment error: ${reason.slice(0, 800)}`,
+                output: `Linux environment error: ${reason.slice(0, 800)}\n\nDo not retry Linux tools in this turn. The VM is cooling down; use browser Python or continue without execution.`,
                 artifacts: [],
             };
         }
