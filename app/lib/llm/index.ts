@@ -17,12 +17,16 @@ import { BedrockProvider } from "./bedrock";
 import { AzureProvider } from "./azure";
 import { VertexProvider } from "./vertex";
 import { GatewayProvider } from "./gateway";
+import { CohereProvider } from "./cohere";
+import { NoDiscoveryProvider } from "./no-discovery";
 
 const providers = new Map<ProviderId, LLMProvider>();
 
 // OpenAI-compatible API surface
 providers.set("openai", new OpenAIProvider("openai"));
 providers.set("groq", new OpenAIProvider("groq"));
+providers.set("cerebras", new OpenAIProvider("cerebras"));
+providers.set("fireworks", new OpenAIProvider("fireworks"));
 providers.set("openrouter", new OpenAIProvider("openrouter"));
 providers.set("xai", new OpenAIProvider("xai"));
 providers.set("deepseek", new OpenAIProvider("deepseek"));
@@ -41,6 +45,8 @@ providers.set("bedrock", new BedrockProvider());
 providers.set("azure", new AzureProvider());
 providers.set("vertex", new VertexProvider());
 providers.set("gateway", new GatewayProvider());
+providers.set("perplexity", new NoDiscoveryProvider("perplexity"));
+providers.set("cohere", new CohereProvider());
 
 export function getProvider(id: ProviderId): LLMProvider {
     const provider = providers.get(id);

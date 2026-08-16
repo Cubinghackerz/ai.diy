@@ -12,6 +12,10 @@ export type ProviderId =
     | "anthropic"
     | "gemini"
     | "groq"
+    | "cerebras"
+    | "fireworks"
+    | "perplexity"
+    | "cohere"
     | "openrouter"
     | "deepseek"
     | "bedrock"
@@ -362,6 +366,26 @@ export const PROVIDER_DEFAULTS: Record<ProviderId, Omit<ProviderConfig, "apiKey"
         name: "Groq",
         baseUrl: "https://api.groq.com/openai/v1",
     },
+    cerebras: {
+        id: "cerebras",
+        name: "Cerebras",
+        baseUrl: "https://api.cerebras.ai/v1",
+    },
+    fireworks: {
+        id: "fireworks",
+        name: "Fireworks AI",
+        baseUrl: "https://api.fireworks.ai/inference/v1",
+    },
+    perplexity: {
+        id: "perplexity",
+        name: "Perplexity",
+        baseUrl: "https://api.perplexity.ai",
+    },
+    cohere: {
+        id: "cohere",
+        name: "Cohere",
+        baseUrl: "https://api.cohere.com/v2",
+    },
     openrouter: {
         id: "openrouter",
         name: "OpenRouter",
@@ -436,6 +460,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
         anthropic: { ...PROVIDER_DEFAULTS.anthropic, apiKey: "", enabled: false },
         gemini: { ...PROVIDER_DEFAULTS.gemini, apiKey: "", enabled: false },
         groq: { ...PROVIDER_DEFAULTS.groq, apiKey: "", enabled: false },
+        cerebras: { ...PROVIDER_DEFAULTS.cerebras, apiKey: "", enabled: false },
+        fireworks: { ...PROVIDER_DEFAULTS.fireworks, apiKey: "", enabled: false },
+        perplexity: { ...PROVIDER_DEFAULTS.perplexity, apiKey: "", enabled: false },
+        cohere: { ...PROVIDER_DEFAULTS.cohere, apiKey: "", enabled: false },
         openrouter: { ...PROVIDER_DEFAULTS.openrouter, apiKey: "", enabled: false },
         deepseek: { ...PROVIDER_DEFAULTS.deepseek, apiKey: "", enabled: false },
         bedrock: { ...PROVIDER_DEFAULTS.bedrock, apiKey: "", enabled: false },
@@ -552,6 +580,30 @@ export const DEFAULT_MODELS: Record<ProviderId, ModelInfo[]> = {
     groq: [
         { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B", provider: "groq", contextWindow: 131072, supportsTools: true },
         { id: "mixtral-8x7b-32768", name: "Mixtral 8x7B", provider: "groq", contextWindow: 32768, supportsTools: true },
+    ],
+    cerebras: [
+        { id: "gpt-oss-120b", name: "GPT OSS 120B", provider: "cerebras", contextWindow: 131072, supportsTools: true, supportsReasoning: true },
+        { id: "zai-glm-4.7", name: "GLM 4.7", provider: "cerebras", contextWindow: 131072, supportsTools: true, supportsReasoning: true },
+        { id: "gemma-4-31b", name: "Gemma 4 31B", provider: "cerebras", contextWindow: 131072, supportsTools: true, supportsVision: true, supportsReasoning: true },
+    ],
+    fireworks: [
+        { id: "accounts/fireworks/models/kimi-k2p6", name: "Kimi K2.6", provider: "fireworks", contextWindow: 262144, supportsTools: true, supportsReasoning: true },
+        { id: "accounts/fireworks/models/minimax-m2", name: "MiniMax M2", provider: "fireworks", contextWindow: 196608, supportsTools: true, supportsReasoning: true },
+        { id: "accounts/fireworks/models/llama-v3p3-70b-instruct", name: "Llama 3.3 70B", provider: "fireworks", contextWindow: 131072, supportsTools: true },
+        { id: "accounts/fireworks/models/qwen2p5-coder-32b-instruct", name: "Qwen 2.5 Coder 32B", provider: "fireworks", contextWindow: 32768, supportsTools: true },
+        { id: "accounts/fireworks/models/flux-1-schnell-fp8", name: "FLUX.1 Schnell", provider: "fireworks", supportsImageGeneration: true },
+    ],
+    perplexity: [
+        { id: "sonar", name: "Sonar", provider: "perplexity", contextWindow: 127072, supportsTools: true },
+        { id: "sonar-pro", name: "Sonar Pro", provider: "perplexity", contextWindow: 127072, supportsTools: true },
+        { id: "sonar-reasoning-pro", name: "Sonar Reasoning Pro", provider: "perplexity", contextWindow: 127072, supportsTools: true, supportsReasoning: true },
+        { id: "sonar-deep-research", name: "Sonar Deep Research", provider: "perplexity", contextWindow: 127072, supportsTools: true, supportsReasoning: true },
+    ],
+    cohere: [
+        { id: "command-a-plus-05-2026", name: "Command A+", provider: "cohere", contextWindow: 256000, supportsTools: true },
+        { id: "command-a-reasoning-08-2025", name: "Command A Reasoning", provider: "cohere", contextWindow: 256000, supportsTools: true, supportsReasoning: true },
+        { id: "command-a-vision-07-2025", name: "Command A Vision", provider: "cohere", contextWindow: 128000, supportsTools: true, supportsVision: true },
+        { id: "command-r7b-12-2024", name: "Command R7B", provider: "cohere", contextWindow: 128000, supportsTools: true },
     ],
     openrouter: [
         { id: "openai/gpt-4o", name: "GPT-4o (OpenRouter)", provider: "openrouter", supportsTools: true },

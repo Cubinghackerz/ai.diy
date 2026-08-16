@@ -40,6 +40,10 @@ const OLLAMA_EFFORTS: ReasoningEffort[] = ["off", "low", "medium", "high"];
 const DEEPSEEK_EFFORTS: ReasoningEffort[] = ["off", "low", "medium", "high"];
 const BEDROCK_EFFORTS: ReasoningEffort[] = ["off", "low", "medium", "high"];
 const MISTRAL_EFFORTS: ReasoningEffort[] = ["off", "high"];
+const CEREBRAS_EFFORTS: ReasoningEffort[] = ["low", "medium", "high"];
+const FIREWORKS_EFFORTS: ReasoningEffort[] = ["off", "low", "medium", "high"];
+const PERPLEXITY_EFFORTS: ReasoningEffort[] = ["minimal", "low", "medium", "high"];
+const COHERE_EFFORTS: ReasoningEffort[] = ["off", "low", "medium", "high"];
 /** Providers that expose no reasoning-effort knob via providerOptions. */
 const NO_EFFORT_PROVIDERS: ProviderId[] = [
     "vertex",
@@ -61,6 +65,18 @@ export function getReasoningEffortOptions(
         case "groq":
         case "lmstudio":
             ids = OPENAI_EFFORTS;
+            break;
+        case "cerebras":
+            ids = CEREBRAS_EFFORTS;
+            break;
+        case "fireworks":
+            ids = FIREWORKS_EFFORTS;
+            break;
+        case "perplexity":
+            ids = PERPLEXITY_EFFORTS;
+            break;
+        case "cohere":
+            ids = COHERE_EFFORTS;
             break;
         case "xai":
             ids = XAI_EFFORTS;
@@ -138,6 +154,14 @@ export function modelSupportsReasoning(
         return true;
     }
 
+    if (
+        /gpt-oss|zai-glm|gemma-4|kimi-k2|k2p6|minimax-m2|sonar-(reasoning|deep-research)|command-a-reasoning/.test(
+            id,
+        )
+    ) {
+        return true;
+    }
+
     // Local / custom endpoints often expose reasoning models under short names
     if (
         (provider === "ollama" ||
@@ -197,6 +221,15 @@ export function buildReasoningProviderOptions(
         }
         if (provider === "mistral") {
             return { mistral: { reasoningEffort: "none" } };
+        }
+        if (provider === "fireworks") {
+            return { fireworks: { thinking: { type: "disabled" } } };
+        }
+        if (provider === "cohere") {
+            return { cohere: { thinking: { type: "disabled" } } };
+        }
+        if (provider === "cerebras" || provider === "perplexity") {
+            return undefined;
         }
         // ollama / custom / gemini: omit => provider defaults
         return undefined;
@@ -261,6 +294,34 @@ export function buildReasoningProviderOptions(
         case "mistral":
             // Mistral only accepts none | high.
             return { mistral: { reasoningEffort: "high" } };
+        case "cerebras":
+            return {
+                cerebras: {
+                    reasoningEffort: effort === "minimal" ? "low" : effort,
+                },
+            };
+        case "fireworks":
+            return {
+                fireworks: {
+                    thinking: {
+                        type: "enabled",
+                        budgetTokens:
+                            effort === "low" ? 2048 : effort === "high" ? 16000 : 8000,
+                    },
+                },
+            };
+        case "perplexity":
+            return { perplexity: { reasoning_effort: effort } };
+        case "cohere":
+            return {
+                cohere: {
+                    thinking: {
+                        type: "enabled",
+                        tokenBudget:
+                            effort === "low" ? 2048 : effort === "high" ? 16000 : 8000,
+                    },
+                },
+            };
         default:
             return undefined;
     }

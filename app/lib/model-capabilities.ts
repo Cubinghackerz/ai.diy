@@ -135,7 +135,7 @@ export function enrichModelInfo(model: ModelInfo): ModelInfo {
         supportsReasoning,
         supportsStructuredOutputs:
             model.supportsStructuredOutputs ??
-            (supportsTools && /gpt-|claude|gemini|qwen|mistral|llama/.test(id)),
+            (supportsTools && /gpt-|claude|gemini|qwen|mistral|llama|command|sonar/.test(id)),
         supportsAudio:
             model.supportsAudio ?? inferModelSupportsAudioOutput(model.id, model.provider),
         supportsImageGeneration:
@@ -172,7 +172,7 @@ export function inferModelSupportsVision(
         return false;
     }
     if (
-        /gpt-4o|gpt-4\.1|gpt-5|chatgpt|o[1-4]|claude|gemini|llava|bakllava|moondream|minicpm-v|vision|pixtral|qwen.*vl|llama-4|grok.*vision/.test(
+        /gpt-4o|gpt-4\.1|gpt-5|chatgpt|o[1-4]|claude|gemini|gemma-4|llava|bakllava|moondream|minicpm-v|vision|pixtral|qwen.*vl|llama-4|grok.*vision|command-a-vision/.test(
             id,
         )
     ) {

@@ -44,6 +44,12 @@ export function getImageGenerationSettings(
                 counts: [1, 2, 4],
                 sizeMode: "default",
             };
+        case "fireworks":
+            return {
+                sizes: IMAGE_SIZE_OPTIONS.map((option) => option.id),
+                counts: [1],
+                sizeMode: "aspect-ratio",
+            };
         case "bedrock":
             return {
                 sizes: ["1024x1024"],

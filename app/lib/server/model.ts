@@ -10,6 +10,10 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createXai } from "@ai-sdk/xai";
+import { createCerebras } from "@ai-sdk/cerebras";
+import { createFireworks } from "@ai-sdk/fireworks";
+import { createPerplexity } from "@ai-sdk/perplexity";
+import { createCohere } from "@ai-sdk/cohere";
 import { createChatGPTProxyProvider } from "@opencoredev/loginwithchatgpt-ai";
 import type { ImageModel, SpeechModel } from "ai";
 import { experimental_generateVideo } from "ai";
@@ -65,6 +69,30 @@ export function createChatModel(body: ModelRequest) {
             return createGoogleGenerativeAI({ apiKey: key })(model);
         case "groq":
             return createOpenAI({ apiKey: key, baseURL: resolvedBaseUrl || "https://api.groq.com/openai/v1", headers: compatibleHeaders }).chat(model);
+        case "cerebras":
+            return createCerebras({
+                apiKey: key,
+                baseURL: resolvedBaseUrl,
+                headers: compatibleHeaders,
+            })(model);
+        case "fireworks":
+            return createFireworks({
+                apiKey: key,
+                baseURL: resolvedBaseUrl,
+                headers: compatibleHeaders,
+            })(model);
+        case "perplexity":
+            return createPerplexity({
+                apiKey: key,
+                baseURL: resolvedBaseUrl,
+                headers: compatibleHeaders,
+            })(model);
+        case "cohere":
+            return createCohere({
+                apiKey: key,
+                baseURL: resolvedBaseUrl,
+                headers: compatibleHeaders,
+            })(model);
         case "xai":
             return createXai({ apiKey: key, baseURL: resolvedBaseUrl || "https://api.x.ai/v1" }).chat(model);
         case "openrouter":
@@ -225,6 +253,12 @@ export function createImageModel(body: ModelRequest): ImageModel {
                 apiKey: key,
                 baseURL: resolvedBaseUrl,
             }).imageModel(model);
+        case "fireworks":
+            return createFireworks({
+                apiKey: key,
+                baseURL: resolvedBaseUrl,
+                headers: compatibleHeaders,
+            }).image(model);
         default:
             throw new Error(
                 `${provider} does not expose an image-generation model through its SDK.`,

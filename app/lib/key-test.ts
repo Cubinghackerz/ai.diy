@@ -30,6 +30,15 @@ export function looksLikeApiKey(provider: ProviderId, key: string): boolean {
     if (provider === "groq") {
         return k.startsWith("gsk_") && k.length > 20;
     }
+    if (provider === "cerebras") {
+        return k.startsWith("csk-") || k.length >= 16;
+    }
+    if (provider === "fireworks") {
+        return k.startsWith("fw_") || k.length >= 16;
+    }
+    if (provider === "perplexity") {
+        return k.startsWith("pplx-") || k.length >= 16;
+    }
     if (provider === "anthropic") {
         return k.startsWith("sk-ant-") && k.length > 20;
     }

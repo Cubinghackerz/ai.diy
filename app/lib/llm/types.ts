@@ -1,8 +1,8 @@
 /**
  * LLM Provider Abstraction Layer
  * 
- * Defines the interface for streaming chat completions across 5 providers:
- * OpenAI, Anthropic, Google Gemini, Groq, OpenRouter
+ * Defines the interface used by the provider registry. Chat streaming itself
+ * is handled by the AI SDK route; adapters also provide live model discovery.
  */
 
 import type { ProviderId } from "~/lib/types";

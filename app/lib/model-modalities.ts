@@ -35,7 +35,7 @@ export function inferModelSupportsVision(
     }
 
     if (
-        /gpt-4o|gpt-4\.1|gpt-5|chatgpt|o[1-4]|claude|gemini|llava|bakllava|moondream|minicpm-v|vision|pixtral|qwen[^/]*vl|llama-4|grok-2-vision|nova-(?:lite|pro)/.test(
+        /gpt-4o|gpt-4\.1|gpt-5|chatgpt|o[1-4]|claude|gemini|gemma-4|llava|bakllava|moondream|minicpm-v|vision|pixtral|qwen[^/]*vl|llama-4|grok-2-vision|nova-(?:lite|pro)|command-a-vision/.test(
             id,
         )
     ) {

@@ -4,6 +4,8 @@ import type { ProviderId } from "~/lib/types";
 const OPENAI_COMPATIBLE_PROVIDERS = new Set<ProviderId>([
     "openai",
     "groq",
+    "cerebras",
+    "fireworks",
     "openrouter",
     "xai",
     "deepseek",
