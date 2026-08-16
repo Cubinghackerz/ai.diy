@@ -28,7 +28,7 @@ export function UseCases() {
         >
             <Reveal>
                 <h2 className="max-w-[16ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
-                    Built for work you would not send to a hosted chat.
+                    Private AI workflows for code, documents, and Canvas.
                 </h2>
             </Reveal>
             <Reveal delayMs={40} className="mt-10">

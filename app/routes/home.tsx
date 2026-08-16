@@ -33,7 +33,8 @@ export const meta: MetaFunction = () => [
         name: "description",
         content: "A local-first, bring-your-own-key AI workspace for useful thinking.",
     },
-    { name: "robots", content: "noindex, nofollow" },
+    { name: "robots", content: "noindex, nofollow, noarchive" },
+    { name: "googlebot", content: "noindex, nofollow, noarchive" },
 ];
 
 export default function Home() {

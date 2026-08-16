@@ -15,6 +15,7 @@ export function Hero() {
 
     return (
         <section
+            aria-labelledby="hero-heading"
             data-anim-gate="hero"
             className="relative px-4 pb-10 pt-24 sm:px-6 sm:pt-28 lg:px-8 lg:pb-16"
         >
@@ -48,13 +49,14 @@ export function Hero() {
                     </div>
 
                     <h1
+                        id="hero-heading"
                         className={cn(
                             "max-w-[16ch] text-[clamp(2.25rem,6.5vw,4.75rem)] font-medium leading-[1.05] tracking-[-0.04em] text-white",
                             !reduced && "landing-hero-step opacity-0",
                         )}
                         data-hero-step="2"
                     >
-                        The open-source AI workspace you own.
+                        ai.diy: the open-source AI workspace you own.
                     </h1>
 
                     <p
@@ -64,8 +66,9 @@ export function Hero() {
                         )}
                         data-hero-step="3"
                     >
-                        Bring your own keys. Keep chats, Canvas, memory, and knowledge in the
-                        browser. Run Node or Docker — zero server-side LLM credentials.
+                        ai.diy is a local-first, bring-your-own-key (BYOK) AI chat workspace. Keep
+                        keys, chats, Canvas, memory, and knowledge in the browser. Self-host with
+                        Node or Docker - no server-side LLM credentials.
                     </p>
 
                     <div

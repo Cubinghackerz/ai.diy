@@ -1,6 +1,11 @@
 {
   "name": "ai.diy",
   "short_name": "ai.diy",
+  "description": "Open-source, self-hosted AI workspace for BYOK chat.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
   "icons": [
     {
       "src": "/android-chrome-192x192.png",
@@ -15,5 +20,6 @@
   ],
   "theme_color": "#ffffff",
   "background_color": "#ffffff",
-  "display": "standalone"
+  "display": "standalone",
+  "prefer_related_applications": false
 }

@@ -51,7 +51,7 @@ export function CapabilityRack() {
         >
             <Reveal>
                 <h2 className="max-w-[18ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
-                    The workspace surface, not a chat wrapper.
+                    Tools and storage for a self-hosted AI workspace.
                 </h2>
                 <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-zinc-300">
                     Dense capability without a wall of feature cards — open a lane and inspect the mechanism.

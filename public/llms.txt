@@ -1,0 +1,31 @@
+# ai.diy
+
+> ai.diy is an open-source, self-hosted AI workspace for bring-your-own-key (BYOK) chat.
+
+## Canonical site
+
+- https://ai-diy-demo.vercel.app/
+- Workspace: https://ai-diy-demo.vercel.app/workspace
+- Source code: https://github.com/Cubinghackerz/ai.diy
+- Privacy: https://ai-diy-demo.vercel.app/privacy
+- Terms: https://ai-diy-demo.vercel.app/terms
+
+## Product summary
+
+Users connect their own cloud or local AI providers and keep chats, files, Canvas artifacts, memory, knowledge-base chunks, usage events, and preview sessions in browser storage. Provider keys are stored in the browser and relayed per request. The Node server does not need LLM credentials.
+
+## Supported providers
+
+OpenAI, Anthropic, Google Gemini, Groq, OpenRouter, DeepSeek, xAI, Ollama, Mistral, Hugging Face, Amazon Bedrock, Azure, Vertex, Vercel Gateway, Together, LM Studio, and custom OpenAI-compatible endpoints.
+
+## Capabilities
+
+- Streaming AI chat, reasoning controls, files, image and video generation models
+- Web search, URL fetch, calculator, browser Python, memory, on-device knowledge search, MCP, skills, and approved subagents
+- Canvas previews for HTML, code, images, and generated files
+- Client-side import, export, and optional S3, WebDAV, or Google Drive backup
+- Node.js, Docker Compose, or Vercel preview deployment
+
+## Important boundaries
+
+ai.diy does not provide model credits or replace an AI provider. Provider costs, quotas, availability, and data policies remain controlled by each provider. A hosted instance operator can observe request traffic in transit; self-host for infrastructure control. The source is MIT licensed.

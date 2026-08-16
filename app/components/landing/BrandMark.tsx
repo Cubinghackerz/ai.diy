@@ -17,6 +17,7 @@ export function BrandMark({
         <img
             src={src}
             alt="ai.diy"
+            width={Math.round(height * 1.5)}
             height={height}
             className={cn("w-auto object-contain object-left", className)}
             style={{ height }}

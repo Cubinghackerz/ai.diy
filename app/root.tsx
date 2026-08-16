@@ -16,14 +16,8 @@ import { SettingsProvider } from "~/lib/providers/SettingsProvider";
 import { TooltipProvider } from "~/components/ui/tooltip";
 import { LaunchFallback } from "~/components/launch/LaunchFallback";
 import { BUILD_ID } from "~/lib/build";
-import {
-    SITE_DESCRIPTION,
-    SITE_IMAGE_URL,
-    SITE_NAME,
-    SITE_TITLE,
-    SITE_TWITTER_HANDLE,
-    SITE_URL,
-} from "~/lib/site";
+import { pageMeta } from "~/lib/seo";
+import { SITE_TITLE, SITE_URL } from "~/lib/site";
 import "~/styles/app.css";
 
 const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem('prismium-lite:theme');var theme=t||(localStorage.getItem('prismium-lite:settings')?(JSON.parse(localStorage.getItem('prismium-lite:settings')).theme||'system'):'system');if(theme==='dark'||(theme==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){}})();`;
@@ -35,35 +29,8 @@ const HEADERS: Record<string, string> = {
 };
 export const headers: HeadersFunction = () => HEADERS;
 
-export const meta: MetaFunction = () => [
-    { title: SITE_TITLE },
-    { name: "description", content: SITE_DESCRIPTION },
-    { name: "color-scheme", content: "dark light" },
-    {
-        name: "google-site-verification",
-        content: "DxCjy8rLi-HJ6YDrVoN9UWiBR0cBDZlY0F2rDtEKyII",
-    },
-    { name: "robots", content: "index, follow" },
-    { property: "og:type", content: "website" },
-    { property: "og:site_name", content: SITE_NAME },
-    { property: "og:title", content: SITE_TITLE },
-    { property: "og:description", content: SITE_DESCRIPTION },
-    { property: "og:url", content: `${SITE_URL}/` },
-    { property: "og:image", content: SITE_IMAGE_URL },
-    { property: "og:image:type", content: "image/png" },
-    { property: "og:image:secure_url", content: SITE_IMAGE_URL },
-    { property: "og:image:width", content: "1200" },
-    { property: "og:image:height", content: "630" },
-    { property: "og:image:alt", content: SITE_TITLE },
-    { property: "og:locale", content: "en_US" },
-    { name: "twitter:card", content: "summary_large_image" },
-    { name: "twitter:site", content: SITE_TWITTER_HANDLE },
-    { name: "twitter:creator", content: SITE_TWITTER_HANDLE },
-    { name: "twitter:title", content: SITE_TITLE },
-    { name: "twitter:description", content: SITE_DESCRIPTION },
-    { name: "twitter:image", content: SITE_IMAGE_URL },
-    { name: "twitter:image:alt", content: SITE_TITLE },
-];
+export const meta: MetaFunction = () =>
+    pageMeta({ title: SITE_TITLE, url: `${SITE_URL}/` });
 
 export const links: LinksFunction = () => [
     { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -81,7 +48,7 @@ export const links: LinksFunction = () => [
 
 export function Layout({ children }: { children: React.ReactNode }) {
     return (
-        <html className="h-full" suppressHydrationWarning>
+        <html lang="en" className="h-full" suppressHydrationWarning>
             <head>
                 <meta charSet="utf-8" />
                 <meta name="ai-diy-build" content={BUILD_ID} />

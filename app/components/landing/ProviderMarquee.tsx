@@ -12,7 +12,7 @@ export function ProviderMarquee() {
             <Reveal>
                 <div className="mx-auto max-w-3xl px-5 text-center sm:px-8">
                     <h2 className="text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
-                        One workspace. Every model you already pay for.
+                        One workspace. Every AI model provider.
                     </h2>
                     <p className="mt-4 text-[15px] leading-relaxed text-zinc-300">
                         Seventeen cloud and local providers, plus custom OpenAI-compatible

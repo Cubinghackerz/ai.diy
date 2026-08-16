@@ -1,5 +1,18 @@
 {
   "buildCommand": "npm run build",
   "installCommand": "npm install",
-  "devCommand": "npm run dev"
+  "devCommand": "npm run dev",
+  "redirects": [
+    {
+      "source": "/:path*",
+      "destination": "https://ai-diy-demo.vercel.app/:path*",
+      "permanent": true,
+      "has": [
+        {
+          "type": "host",
+          "value": "ai.diy.vercel.app"
+        }
+      ]
+    }
+  ]
 }

@@ -21,7 +21,7 @@ export function DeployTerminal() {
             <Reveal>
                 <div>
                     <h2 className="text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
-                        Deploy in one command
+                        Self-host ai.diy with Node or Docker
                     </h2>
                     <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-zinc-300">
                         Node production build, Docker Compose, or a Vercel preview. Click
