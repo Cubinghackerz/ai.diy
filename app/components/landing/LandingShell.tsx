@@ -1,6 +1,5 @@
 import { type ReactNode, useEffect, useRef } from "react";
 import { cn } from "~/lib/utils";
-import { LandingCta } from "./LandingCta";
 import { LANDING } from "./tokens";
 
 export function LandingShell({ children }: { children: ReactNode }) {
@@ -64,14 +63,6 @@ export function LandingShell({ children }: { children: ReactNode }) {
                         "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
                 }}
             />
-
-            <LandingCta
-                to="/workspace"
-                size="compact"
-                className="fixed right-4 top-5 z-50 hidden shadow-[0_10px_40px_-12px_rgba(255,255,255,0.35)] sm:right-6 sm:top-6 md:inline-flex"
-            >
-                Open workspace
-            </LandingCta>
 
             <div className="relative z-[2]">{children}</div>
         </div>

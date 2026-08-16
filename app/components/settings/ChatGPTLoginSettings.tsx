@@ -110,8 +110,8 @@ export function ChatGPTLoginSettings() {
                     </p>
                     <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
                         Uses your ChatGPT plan through this server (HttpOnly session).
-                        Prompts and attachments pass through ai.diy. Not an official OpenAI
-                        product and not an API key. Disconnect anytime.
+                        Local restarts keep you signed in. Multi-instance hosts need
+                        LWC_SECRET. Not an official OpenAI product. Disconnect anytime.
                     </p>
                 </div>
                 <label className="inline-flex shrink-0 cursor-pointer items-center gap-2">

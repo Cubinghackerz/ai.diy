@@ -13,11 +13,10 @@ import { Hero } from "~/components/landing/Hero";
 import { IslandNav } from "~/components/landing/IslandNav";
 import { LandingFooter } from "~/components/landing/LandingFooter";
 import { LandingShell } from "~/components/landing/LandingShell";
-import { OwnershipSplit } from "~/components/landing/OwnershipSplit";
 import { OwnershipStage } from "~/components/landing/OwnershipStage";
-import { ProfileShowcase } from "~/components/landing/ProfileShowcase";
 import { ProviderMarquee } from "~/components/landing/ProviderMarquee";
-import { WorkflowStage } from "~/components/landing/WorkflowStage";
+import { UseCases } from "~/components/landing/UseCases";
+import { BUILD_ID, versionedAsset } from "~/lib/build";
 import {
     SITE_DESCRIPTION,
     SITE_IMAGE_URL,
@@ -28,7 +27,8 @@ import {
 } from "~/lib/site";
 
 export const headers: HeadersFunction = () => ({
-    "Cache-Control": "public, s-maxage=300, stale-while-revalidate=86400",
+    "Cache-Control": "no-store, max-age=0",
+    "X-AI-DIY-Build": BUILD_ID,
 });
 
 export const meta: MetaFunction = () => [
@@ -57,6 +57,12 @@ export const meta: MetaFunction = () => [
 
 export const links: LinksFunction = () => [
     { rel: "canonical", href: `${SITE_URL}/` },
+    {
+        rel: "preload",
+        as: "image",
+        href: versionedAsset("/ai-diy-mark-white.png"),
+        type: "image/png",
+    },
     {
         rel: "preload",
         as: "image",
@@ -94,7 +100,7 @@ export default function LandingPage() {
                         description: SITE_DESCRIPTION,
                         url: SITE_URL,
                         image: SITE_IMAGE_URL,
-                        logo: `${SITE_URL}/ai-diy.png`,
+                        logo: `${SITE_URL}${versionedAsset("/ai-diy-new-logo-white.png")}`,
                         isAccessibleForFree: true,
                         license: "https://opensource.org/license/mit/",
                         sameAs: [
@@ -109,10 +115,8 @@ export default function LandingPage() {
                 <Hero />
                 <OwnershipStage />
                 <ProviderMarquee />
+                <UseCases />
                 <CapabilityRack />
-                <OwnershipSplit />
-                <WorkflowStage />
-                <ProfileShowcase />
                 <DeployTerminal />
                 <ClosingBand />
             </main>

@@ -3,7 +3,7 @@
  * Uses `idb` package to persist threads and chat messages client-side.
  */
 
-import { openDB, type DBSchema, type IDBPDatabase } from "idb";
+import { openDB, type DBSchema, type IDBPDatabase, type StoreNames } from "idb";
 import type { ThreadData, MessageData, MemoryEntry, Project } from "~/lib/types";
 import type { Artifact } from "~/lib/canvas";
 import type { UsageEvent } from "~/lib/usage";
@@ -60,10 +60,16 @@ interface PrismiumDB extends DBSchema {
         value: KbChunk;
         indexes: { "by-document": string };
     };
+    cryptoKeys: {
+        key: string;
+        value: { id: string; key: CryptoKey };
+    };
 }
 
 const DB_NAME = "prismium-lite-db";
-const DB_VERSION = 10;
+const DB_VERSION = 14;
+const CRYPTO_KEYS_STORE = "cryptoKeys";
+const SETTINGS_KEY_ID = "settings-envelope-v1";
 
 let dbPromise: Promise<IDBPDatabase<PrismiumDB>> | null = null;
 
@@ -132,10 +138,60 @@ function getDB() {
                     });
                     kbChunks.createIndex("by-document", "documentId");
                 }
+                // Obsolete WebContainer-era stores (removed feature slice).
+                // These never existed in the current schema, so widen to the
+                // store-name union only for the legacy cleanup check.
+                for (const storeName of [
+                    "websiteProjects",
+                    "websiteFiles",
+                    "workspaces",
+                    "workspaceFiles",
+                ]) {
+                    const legacyStore = storeName as StoreNames<PrismiumDB>;
+                    if (db.objectStoreNames.contains(legacyStore)) {
+                        db.deleteObjectStore(legacyStore);
+                    }
+                }
+                if (!db.objectStoreNames.contains(CRYPTO_KEYS_STORE)) {
+                    db.createObjectStore(CRYPTO_KEYS_STORE, { keyPath: "id" });
+                }
             },
         });
     }
     return dbPromise;
+}
+
+/** AES-GCM envelope key used to encrypt settings at rest (see settings-crypto). */
+export async function getSettingsCryptoKey(): Promise<CryptoKey | null> {
+    const db = await getDB();
+    if (!db) return null;
+    try {
+        const entry = await db.get(CRYPTO_KEYS_STORE, SETTINGS_KEY_ID);
+        return entry?.key ?? null;
+    } catch {
+        return null;
+    }
+}
+
+export async function saveSettingsCryptoKey(key: CryptoKey): Promise<boolean> {
+    const db = await getDB();
+    if (!db) return false;
+    try {
+        await db.put(CRYPTO_KEYS_STORE, { id: SETTINGS_KEY_ID, key });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+export async function deleteSettingsCryptoKey(): Promise<void> {
+    const db = await getDB();
+    if (!db) return;
+    try {
+        await db.delete(CRYPTO_KEYS_STORE, SETTINGS_KEY_ID);
+    } catch {
+        // Ignore — key missing is the same end state.
+    }
 }
 
 export async function getAllThreads(): Promise<ThreadData[]> {

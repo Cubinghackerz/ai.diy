@@ -4,12 +4,14 @@ import { Play, X } from "@phosphor-icons/react";
 import { cn } from "~/lib/utils";
 import { DoubleBezel } from "./DoubleBezel";
 import { EASE_OUT } from "./motion";
+import { usePrefersReducedMotion } from "./hooks";
 
 const DEMO_VIDEO_SRC = "/AI-DIY_DEMO.mp4";
 
 export function ProductBezel({ className }: { className?: string }) {
     const [open, setOpen] = useState(false);
     const [mounted, setMounted] = useState(false);
+    const reduced = usePrefersReducedMotion();
     const modalVideoRef = useRef<HTMLVideoElement>(null);
     const closeRef = useRef<HTMLButtonElement>(null);
     const titleId = useId();
@@ -66,9 +68,9 @@ export function ProductBezel({ className }: { className?: string }) {
                         height={800}
                         className="block h-auto w-full object-cover"
                         preload="metadata"
-                        autoPlay
+                        autoPlay={!reduced}
                         muted
-                        loop
+                        loop={!reduced}
                         playsInline
                     />
                     <button

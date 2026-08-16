@@ -19,6 +19,16 @@ import { connectorSearch } from "~/lib/search/connectors";
 import type { ConnectorConfig } from "~/lib/types";
 import { assertPublicHttpUrl } from "~/lib/server/ssrf";
 import {
+    connectAvailable,
+    inspectConnectConnector,
+    listConnectConnectors,
+    requestConnectToken,
+    resolveConnectConnector,
+    startConnectAuthorization,
+} from "~/lib/server/connect";
+import { assertConfiguredHttpUrl } from "~/lib/server/provider-url";
+import { compactMcpToolResult } from "~/lib/server/mcp-tools";
+import {
     formatUrlDoctorReport,
     runUrlDoctor,
 } from "~/lib/server/url-doctor";
@@ -946,6 +956,133 @@ export async function buildChatTools(
                 connector: z.string().optional(),
             }),
             execute: async () => connectorGuide(settings.connectors ?? []),
+        });
+    }
+
+    if (connectAvailable()) {
+        tools.connect_request = tool({
+            description:
+                "Vercel Connect: act on third-party apps using app-scoped operator-installed connectors. `list` shows available connectors; `inspect` shows connector + token state; `authorize` starts the one-time operator consent flow; `call` mints a token and performs an HTTPS API request against the connector's service (the connector base URL is set via CONNECT_BASE_URL_<KEY>; absolute URLs are allowed). Scopes are the operator-configured app scopes — only act within them.",
+            needsApproval: false,
+            inputSchema: z.object({
+                action: z.enum(["list", "inspect", "authorize", "call"]),
+                connector: z
+                    .string()
+                    .optional()
+                    .describe("Connector key or Vercel Connect id/UID, as shown by `list`"),
+                method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).optional(),
+                path: z
+                    .string()
+                    .optional()
+                    .describe("Absolute https URL, or a path resolved against the connector base URL"),
+                body: z.record(z.string(), z.unknown()).optional(),
+                headers: z.record(z.string(), z.string()).optional(),
+            }),
+            execute: async ({ action, connector, method, path, body, headers }) => {
+                try {
+                    if (action === "list") {
+                        const entries = listConnectConnectors();
+                        if (entries.length === 0) {
+                            return "No Vercel Connect connectors are configured. The operator adds CONNECT_CONNECTOR_<KEY>=<connectorId> environment variables (plus optional CONNECT_BASE_URL_<KEY> and CONNECT_SCOPES_<KEY>), then grants consent. Tell the user how to configure this and stop.";
+                        }
+                        return [
+                            "Available Vercel Connect connectors:",
+                            ...entries.map((entry) => {
+                                const lines = [
+                                    `- key=${entry.key}`,
+                                    `  connector=${entry.connectorId}`,
+                                ];
+                                if (entry.baseUrl) lines.push(`  baseUrl=${entry.baseUrl}`);
+                                if (entry.scopes?.length)
+                                    lines.push(`  scopes=${entry.scopes.join(" ")}`);
+                                return lines.join("\n");
+                            }),
+                        ].join("\n");
+                    }
+
+                    const entry = resolveConnectConnector(connector);
+                    if (!entry) {
+                        return "A `connector` is required — use a key from `list`.";
+                    }
+
+                    if (action === "inspect") {
+                        const inspection = await inspectConnectConnector(entry.connectorId);
+                        if (!inspection.ok) {
+                            return `Inspect failed: ${inspection.error} If this is an authorization problem, run the authorize action.`;
+                        }
+                        return [
+                            `Connector: ${inspection.name} (${inspection.uid})`,
+                            `Type: ${inspection.type} · Service: ${inspection.service || "unknown"}`,
+                            inspection.clientUrl ? `Client URL: ${inspection.clientUrl}` : "",
+                            `Token valid until ${new Date(inspection.token.expiresAt).toISOString()}`,
+                            inspection.token.externalSubject
+                                ? `Authenticated as: ${inspection.token.externalSubject}`
+                                : "",
+                            inspection.token.tenantId
+                                ? `Tenant: ${inspection.token.tenantId}`
+                                : "",
+                        ]
+                            .filter(Boolean)
+                            .join("\n");
+                    }
+
+                    if (action === "authorize") {
+                        const started = await startConnectAuthorization(entry.connectorId, entry.scopes);
+                        if (!started.ok) return `Could not start authorization: ${started.error}`;
+                        return `Open this URL in a new tab and complete the consent as the operator, then retry (authorize URL): ${started.url}`;
+                    }
+
+                    if (action === "call") {
+                        if (!path?.trim()) {
+                            return "`path` is required for `call`: an absolute https URL or a path like /user resolved against the connector base URL.";
+                        }
+                        let target: URL;
+                        const raw = path.trim();
+                        if (/^https?:\/\//i.test(raw)) {
+                            target = assertConfiguredHttpUrl(raw);
+                        } else {
+                            if (!entry.baseUrl) {
+                                return `A relative path was given but no CONNECT_BASE_URL_${entry.key} is configured for this connector. Pass an absolute https URL instead.`;
+                            }
+                            const base = entry.baseUrl.endsWith("/") ? entry.baseUrl : `${entry.baseUrl}/`;
+                            target = assertConfiguredHttpUrl(new URL(raw, base).toString());
+                        }
+                        const tokenResult = await requestConnectToken(entry.connectorId, entry.scopes);
+                        if (!tokenResult.ok) {
+                            if (tokenResult.kind === "authorization-required") {
+                                return `Authorization required before API calls. Ask the user to complete the consent:\n${tokenResult.authorizeUrl ?? "open Settings → Connect Beta"}\nThen retry.`;
+                            }
+                            return `Token unavailable (${tokenResult.kind}): ${tokenResult.message}`;
+                        }
+                        const callHeaders: Record<string, string> = {
+                            Authorization: `Bearer ${tokenResult.token}`,
+                            Accept: "application/json",
+                            ...(headers ?? {}),
+                        };
+                        const callMethod = method ?? "GET";
+                        const hasBody = body && Object.keys(body).length > 0;
+                        if (hasBody) {
+                            callHeaders["Content-Type"] = "application/json";
+                        }
+                        const response = await fetch(target.toString(), {
+                            method: callMethod,
+                            headers: callHeaders,
+                            redirect: "error",
+                            body: hasBody ? JSON.stringify(body) : undefined,
+                            signal: AbortSignal.timeout(30_000),
+                        });
+                        const text = await response.text();
+                        const truncated = compactMcpToolResult(text, 8_000, {
+                            maxBodyChars: 4_000,
+                        }) as string;
+                        return `${callMethod} ${target.toString()} → ${response.status} ${response.statusText}\n\n${truncated}`;
+                    }
+
+                    return "Unknown action.";
+                } catch (err) {
+                    return `connect_request failed: ${err instanceof Error ? err.message : String(err)}`;
+                }
+            },
         });
     }
 

@@ -55,8 +55,8 @@ export function ClosingBand() {
                         Build without lock-in.
                     </h2>
                     <p className="mt-4 max-w-md text-[15px] leading-relaxed text-zinc-300">
-                        Open the workspace, drop in a key, and keep every conversation on your
-                        machine. Or clone the repo and self-host in one command.
+                        Open the workspace, drop in a key, and keep chats in this browser.
+                        Or clone the repo and self-host in one command.
                     </p>
                     <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
                         <LandingCta to="/workspace">Open workspace</LandingCta>

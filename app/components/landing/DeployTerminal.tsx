@@ -19,18 +19,14 @@ export function DeployTerminal() {
             data-anim-gate="deploy"
         >
             <Reveal>
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                    <div>
-                        <h2 className="text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
-                            Deploy in one command
-                        </h2>
-                        <p className="mt-3 text-[15px] leading-relaxed text-zinc-300">
-                            Node production build, Docker Compose, or a Vercel preview.
-                        </p>
-                    </div>
-                    <LandingCta href={VERCEL_DEPLOY_URL} external size="compact">
-                        Deploy to Vercel
-                    </LandingCta>
+                <div>
+                    <h2 className="text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
+                        Deploy in one command
+                    </h2>
+                    <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-zinc-300">
+                        Node production build, Docker Compose, or a Vercel preview. Click
+                        the terminal to copy.
+                    </p>
                 </div>
             </Reveal>
 
@@ -57,27 +53,46 @@ export function DeployTerminal() {
                                 {t.label}
                             </button>
                         ))}
-                        <button
-                            type="button"
-                            onClick={() => void copy()}
-                            className="ml-auto mb-1 mr-1 inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-white/[0.1] px-3 py-1.5 font-mono text-[11px] text-zinc-400 transition-[border-color,color,transform] duration-200 hover:border-white/20 hover:text-zinc-200 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-                            style={{ transitionTimingFunction: EASE_OUT }}
-                            aria-label={copied ? "Copied" : "Copy command"}
-                        >
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => void copy()}
+                        className="group relative block w-full overflow-x-auto bg-[#0A0A0A] p-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/40"
+                        aria-label={copied ? "Command copied" : "Copy command"}
+                    >
+                        <pre className="font-mono text-[12px] leading-relaxed text-zinc-300 sm:text-[13px]">
+                            <code>
+                                {active.command.split("\n").map((line, index) => (
+                                    <span key={`${line}-${index}`} className="block">
+                                        <span className="text-zinc-500">$ </span>
+                                        {line}
+                                    </span>
+                                ))}
+                            </code>
+                        </pre>
+                        <span className="absolute right-4 top-4 inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-white/[0.12] bg-black/50 px-2.5 font-mono text-[11px] text-zinc-300">
                             {copied ? (
                                 <Check weight="bold" className="size-3.5" />
                             ) : (
                                 <CopySimple weight="light" className="size-3.5" />
                             )}
                             {copied ? "Copied" : "Copy"}
+                        </span>
+                    </button>
+                    <div className="flex flex-wrap items-center gap-2 border-t border-white/[0.08] bg-[#0e0e11] px-3 py-3">
+                        <LandingCta href={VERCEL_DEPLOY_URL} external size="compact">
+                            Deploy to Vercel
+                        </LandingCta>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setTab("docker");
+                            }}
+                            className="inline-flex min-h-10 items-center rounded-full border border-white/25 bg-white/[0.08] px-4 text-[12px] font-medium text-zinc-100 transition-colors hover:border-white/45 hover:bg-white/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                        >
+                            Docker Compose
                         </button>
                     </div>
-                    <pre className="overflow-x-auto bg-[#0A0A0A] p-5 font-mono text-[12px] leading-relaxed text-zinc-300 sm:text-[13px]">
-                        <code>
-                            <span className="text-zinc-500">$ </span>
-                            {active.command}
-                        </code>
-                    </pre>
                 </DoubleBezel>
             </Reveal>
         </section>

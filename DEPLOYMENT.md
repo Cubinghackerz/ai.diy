@@ -60,15 +60,18 @@ RATE_LIMIT_RPM=60                  # per API key or IP, sliding 1-minute window
 # Login with ChatGPT (Experimental BETA) — signs the session cookie and encrypts
 # subscription tokens at rest. Required for stable sessions across restarts.
 # LWC_SECRET=$(openssl rand -hex 32)
+# LWC_SESSION_DAYS=180              # optional, accepted range: 1-365
 ```
 
 **Login with ChatGPT notes**
 
 - Enable under **Settings → Experimental**, then sign in with the consent widget.
-- Tokens stay server-side (HttpOnly cookie). The default session store is **in-memory** (fine for single-node Docker/local). Multi-instance / serverless hosts need a shared `sessionStore` (Redis/KV) before you rely on it in production.
-- Set `LWC_SECRET` so sessions survive restarts. Without it, restarts log everyone out.
+- Tokens stay server-side (HttpOnly cookie). Local/single-node hosts persist sessions in `.data/` and generate a cookie secret at `.data/lwc-secret` so ChatGPT login survives `npm start` restarts. Sessions default to 180 days and renew while used.
+- Docker Compose mounts `.data/` in the named `ai-diy-data` volume, so rebuilding or replacing the container does not require another login.
+- Multi-instance / serverless hosts must set a shared `LWC_SECRET` and a shared session store (Redis/KV). The local `.data` files are not shared across replicas.
 - This is a community SDK path, not an official OpenAI product. Users spend their own ChatGPT plan; disconnect via the widget or [ChatGPT security settings](https://chatgpt.com/#settings/Security).
 - GPT Live WebRTC voice is **not** included in this BETA.
+
 ## Public deployment
 
 1. Push this repo to any Node-capable host (VPS, Docker, PaaS).
@@ -107,6 +110,34 @@ npx vercel
 ```
 
 Do not attach a production domain or use `npx vercel --prod` for this beta workspace. No server-side LLM env vars are required.
+
+## Vercel Connect (Optional, Beta)
+
+App-scoped third-party integrations: protected MCP servers get `Authorization` bearer tokens automatically, and the `connect_request` tool can act on connected services (GitHub, Slack, SaaS…). Requires a Vercel account — Vercel remains the authorization hub and mints tokens. Feature is inert when nothing is configured.
+
+**On Vercel:** nothing to set up. Each deployment receives `VERCEL_OIDC_TOKEN`; the SDK uses it automatically. Connectors must be linked to this project's environment (Vercel dashboard or `npx vercel connect create <provider>`).
+
+**Local dev / self-hosted Node/Docker:** `vercel link` once (already done in this repo), then either
+
+```bash
+vercel env pull        # writes .env.local incl. a short-lived dev VERCEL_OIDC_TOKEN
+# or, for long-running local instances, set a Vercel access token instead:
+VERCEL_TOKEN=<access token for the team owning the connectors>
+```
+
+Declare connectors in `.env.local` or the shell:
+
+```bash
+CONNECT_CONNECTOR_GITHUB=scl_xxx          # connector id or UID
+CONNECT_BASE_URL_GITHUB=https://api.github.com   # optional, for connect_request
+CONNECT_SCOPES_GITHUB=repo                 # optional, space-separated app scopes
+```
+
+The bundled production server loads `.env` / `.env.local` automatically (`npm start`); dev mode does too via Vite. Real environment variables always win over `.env` / `.env.local`.
+
+**Usage:** Settings → Connect Beta lists configured connectors; authorize each connector once as the operator (opens the consent URL), then `Test` to confirm token minting. MCP Beta → add a server with a "Vercel Connect connector" to have the app send its token as the Authorization header. The `connect_request` chat tool handles `list` / `inspect` / `authorize` / `call`.
+
+Notes: app-subject tokens carry the operator-configured scopes (no per-user consent without an identity layer); keep scopes minimal. Connect access is per project + environment — replicate envs if you change hosts. Beta usage may be metered by Vercel; check your dashboard.
 
 ## Privacy
 

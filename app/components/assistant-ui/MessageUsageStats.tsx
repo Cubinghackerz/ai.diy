@@ -23,7 +23,15 @@ import {
     TOKEN_MODE_LABELS,
     type TokenMode,
 } from "~/lib/token-mode";
-import { formatTokens, normalizeUsage } from "~/lib/usage";
+import {
+    estimateCost,
+    formatCost,
+    formatTokens,
+    normalizeUsage,
+    type UsageTokens,
+} from "~/lib/usage";
+import { lookupInCatalog, useModelCatalog } from "~/lib/model-catalog-cache";
+import type { ProviderId } from "~/lib/types";
 import { cn } from "~/lib/utils";
 
 type ServerTiming = {
@@ -57,6 +65,31 @@ function extractAssistantTextLength(message: unknown): number {
         }
     }
     return len;
+}
+
+/** Live estimate of tool-call tokens (model-written args + tool results). */
+function estimateToolCallTokens(message: unknown): number {
+    if (!message || typeof message !== "object") return 0;
+    const parts = (message as { parts?: unknown }).parts;
+    if (!Array.isArray(parts)) return 0;
+    let chars = 0;
+    for (const part of parts) {
+        if (!part || typeof part !== "object") continue;
+        const p = part as { type?: unknown; argsText?: unknown; result?: unknown };
+        if (p.type !== "tool-call") continue;
+        if (typeof p.argsText === "string") chars += p.argsText.length;
+        const result = p.result;
+        if (typeof result === "string") {
+            chars += result.length;
+        } else if (result != null) {
+            try {
+                chars += JSON.stringify(result)?.length ?? 0;
+            } catch {
+                // Unserializable result — skip.
+            }
+        }
+    }
+    return estimateTokensFromChars(chars);
 }
 
 function formatMs(ms: number | undefined): string {
@@ -112,6 +145,7 @@ function StatCell({
 
 export const MessageUsageStats: FC = () => {
     const { settings, updateSettings } = useSettings();
+    const catalog = useModelCatalog();
     const [open, setOpen] = useState(false);
     const [menuStyle, setMenuStyle] = useState<CSSProperties | null>(null);
     const rootRef = useRef<HTMLDivElement>(null);
@@ -164,6 +198,8 @@ export const MessageUsageStats: FC = () => {
                       usage?: unknown;
                       timing?: ServerTiming;
                       serverTiming?: ServerTiming;
+                      model?: unknown;
+                      provider?: unknown;
                       custom?: {
                           usage?: unknown;
                           timing?: ServerTiming;
@@ -178,17 +214,21 @@ export const MessageUsageStats: FC = () => {
         const fromSdk = getThreadMessageTokenUsage(
             message as { role?: string; metadata?: unknown },
         );
-        const usage = fromNormalize
+        const usage: UsageTokens | undefined = fromNormalize
             ? {
                   inputTokens: fromNormalize.inputTokens,
                   outputTokens: fromNormalize.outputTokens,
+                  reasoningTokens: fromNormalize.reasoningTokens,
+                  cachedInputTokens: fromNormalize.cachedInputTokens,
                   totalTokens: fromNormalize.totalTokens,
               }
             : fromSdk
               ? {
-                    inputTokens: fromSdk.inputTokens,
-                    outputTokens: fromSdk.outputTokens,
-                    totalTokens: fromSdk.totalTokens,
+                    inputTokens: fromSdk.inputTokens ?? 0,
+                    outputTokens: fromSdk.outputTokens ?? 0,
+                    reasoningTokens: fromSdk.reasoningTokens ?? 0,
+                    cachedInputTokens: fromSdk.cachedInputTokens ?? 0,
+                    totalTokens: fromSdk.totalTokens ?? 0,
                 }
               : undefined;
 
@@ -198,6 +238,24 @@ export const MessageUsageStats: FC = () => {
                 : usage?.inputTokens != null || usage?.outputTokens != null
                   ? (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0)
                   : undefined;
+
+        const model =
+            typeof record?.model === "string" && record.model
+                ? record.model
+                : undefined;
+        const provider = typeof record?.provider === "string"
+            ? (record.provider as ProviderId)
+            : undefined;
+        const entry =
+            model && providerTotal && providerTotal > 0
+                ? lookupInCatalog(catalog, provider ?? ("custom" as ProviderId), model)
+                : undefined;
+        const costUsd =
+            usage &&
+            providerTotal &&
+            providerTotal > 0
+                ? estimateCost(usage, entry)
+                : null;
 
         const serverTiming =
             record?.serverTiming ??
@@ -213,6 +271,8 @@ export const MessageUsageStats: FC = () => {
         const liveStart = streamStartRef.current;
         const liveFirst = firstTextAtRef.current;
         const estimatedOut = estimateTokensFromChars(textLen);
+        const estimatedToolTokens = estimateToolCallTokens(message);
+        const estimatedTotal = estimatedOut + estimatedToolTokens;
 
         let ttftMs =
             typeof serverTiming?.ttftMs === "number"
@@ -247,8 +307,8 @@ export const MessageUsageStats: FC = () => {
         const totalTokens =
             providerTotal && providerTotal > 0
                 ? providerTotal
-                : isRunning
-                  ? estimatedOut
+                : estimatedTotal > 0
+                  ? estimatedTotal
                   : undefined;
 
         const genMs =
@@ -280,10 +340,14 @@ export const MessageUsageStats: FC = () => {
             totalTokens,
             inputTokens: usage?.inputTokens,
             outputTokens: usage?.outputTokens,
-            provider: Boolean(providerTotal && providerTotal > 0),
+            reasoningTokens: usage?.reasoningTokens,
+            providerReported: Boolean(providerTotal && providerTotal > 0),
+            costUsd,
+            model,
+            provider,
             awaitingFirstToken: isRunning && textLen === 0,
         };
-    }, [message, messageTiming, isRunning, textLen, nowMs]);
+    }, [message, messageTiming, isRunning, textLen, nowMs, catalog]);
 
     const current = (settings.tokenMode ?? "balanced") as TokenMode;
     const modes: TokenMode[] = ["efficient", "balanced", "caching", "full"];
@@ -292,10 +356,11 @@ export const MessageUsageStats: FC = () => {
     const tpsLabel = formatTps(stats.tps);
     const tokLabel =
         stats.totalTokens != null && stats.totalTokens > 0
-            ? formatTokens(stats.totalTokens)
+            ? `${stats.providerReported ? "" : "~"}${formatTokens(stats.totalTokens)}`
             : isRunning
               ? "0"
               : "—";
+    const costLabel = formatCost(stats.costUsd);
 
     const closeMenu = () => setOpen(false);
     const toggleMenu = () => setOpen((prev) => !prev);
@@ -391,12 +456,22 @@ export const MessageUsageStats: FC = () => {
                               Token mode
                           </p>
                           <p className="font-mono text-[9px] tabular-nums text-muted-foreground">
-                              {stats.provider
-                                  ? `${formatTokens(stats.inputTokens ?? 0)} in · ${formatTokens(stats.outputTokens ?? 0)} out`
+                              {stats.providerReported
+                                  ? `${formatTokens(stats.inputTokens ?? 0)} in · ${formatTokens(stats.outputTokens ?? 0)} out${stats.reasoningTokens ? ` · ${formatTokens(stats.reasoningTokens)} think` : ""}`
                                   : isRunning
                                     ? "streaming…"
-                                    : "no provider usage"}
+                                    : "provider usage only (est. tokens)"}
                           </p>
+                          {stats.costUsd != null ? (
+                              <p className="mt-1 flex items-baseline justify-between gap-2 px-2.5 pb-1.5">
+                                  <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/80">
+                                      Est. cost{stats.model ? ` · ${stats.model}` : ""}
+                                  </span>
+                                  <span className="font-mono text-[10px] tabular-nums text-foreground/90">
+                                      {costLabel}
+                                  </span>
+                              </p>
+                          ) : null}
                       </div>
                       <div
                           className="flex flex-col gap-0.5"
@@ -473,7 +548,7 @@ export const MessageUsageStats: FC = () => {
                     "focus-visible:ring-2 focus-visible:ring-ring",
                     open && "border-border bg-muted/40",
                 )}
-                aria-label={`Usage: TTFT ${ttftLabel}, ${tpsLabel} tokens per second, ${tokLabel} tokens. Click to change token mode. Current mode ${TOKEN_MODE_LABELS[current]}.`}
+                aria-label={`Usage: TTFT ${ttftLabel}, ${tpsLabel} tokens per second, ${tokLabel} tokens${stats.costUsd != null ? `, estimated cost ${costLabel}` : ""}. Click to change token mode. Current mode ${TOKEN_MODE_LABELS[current]}.`}
                 aria-haspopup="dialog"
                 aria-expanded={open}
                 onClick={toggleMenu}
@@ -493,8 +568,18 @@ export const MessageUsageStats: FC = () => {
                 <StatCell
                     label="tok"
                     value={tokLabel}
-                    live={isRunning && !stats.provider}
+                    live={isRunning && !stats.providerReported}
                 />
+                {stats.costUsd != null ? (
+                    <>
+                        <span className="h-2.5 w-px shrink-0 bg-border/70" aria-hidden />
+                        <StatCell
+                            label="cost"
+                            value={costLabel}
+                            live={isRunning && stats.providerReported}
+                        />
+                    </>
+                ) : null}
             </button>
             {menu}
         </div>

@@ -8,13 +8,14 @@ export const VERCEL_DEPLOY_URL =
 /** Featured provider marks for landing shelves (no infinite marquee). */
 export const PROVIDER_LOGOS: Array<{ src: string; label: string; id: string }> = [
     { id: "openai", src: "/landing-logos/openai-mark.png", label: "OpenAI" },
-    { id: "gemini", src: "/landing-logos/gemini.png", label: "Google Gemini" },
-    { id: "groq", src: "/landing-logos/groq.png", label: "Groq" },
     { id: "anthropic", src: "/landing-logos/anthropic-mark.png", label: "Anthropic" },
+    { id: "gemini", src: "/landing-logos/gemini.png", label: "Gemini" },
+    { id: "groq", src: "/landing-logos/groq.png", label: "Groq" },
     { id: "openrouter", src: "/landing-logos/openrouter-lobe.png", label: "OpenRouter" },
     { id: "deepseek", src: "/landing-logos/deepseek-lobe.png", label: "DeepSeek" },
     { id: "xai", src: "/landing-logos/xai-lobe.png", label: "xAI" },
     { id: "ollama", src: "/landing-logos/ollama-lobe.png", label: "Ollama" },
+    { id: "mistral", src: "/landing-logos/mistral-download.png", label: "Mistral" },
 ];
 
 /** Top four newest Downloads marks — used on ownership constellation nodes. */

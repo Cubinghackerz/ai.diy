@@ -11,10 +11,11 @@ import {
     ScrollRestoration,
     useRouteError,
 } from "react-router";
-import type { LinksFunction, MetaFunction } from "react-router";
+import type { HeadersFunction, LinksFunction, MetaFunction } from "react-router";
 import { SettingsProvider } from "~/lib/providers/SettingsProvider";
 import { TooltipProvider } from "~/components/ui/tooltip";
 import { LaunchFallback } from "~/components/launch/LaunchFallback";
+import { BUILD_ID } from "~/lib/build";
 import {
     SITE_DESCRIPTION,
     SITE_IMAGE_URL,
@@ -25,7 +26,14 @@ import {
 } from "~/lib/site";
 import "~/styles/app.css";
 
-const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem('prismium-lite:settings');var theme=t?JSON.parse(t).theme:'system';if(theme==='dark'||(theme==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){}})();`;
+const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem('prismium-lite:theme');var theme=t||(localStorage.getItem('prismium-lite:settings')?(JSON.parse(localStorage.getItem('prismium-lite:settings')).theme||'system'):'system');if(theme==='dark'||(theme==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){}})();`;
+
+// Cross-origin isolation is removed (no WebContainers); keep the build marker.
+const HEADERS: Record<string, string> = {
+    "Cache-Control": "no-store, max-age=0",
+    "X-AI-DIY-Build": BUILD_ID,
+};
+export const headers: HeadersFunction = () => HEADERS;
 
 export const meta: MetaFunction = () => [
     { title: SITE_TITLE },
@@ -70,9 +78,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <html className="h-full" suppressHydrationWarning>
             <head>
                 <meta charSet="utf-8" />
+                <meta name="ai-diy-build" content={BUILD_ID} />
                 <meta
                     name="viewport"
-                    content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
+                    content="width=device-width, initial-scale=1, viewport-fit=cover"
                 />
                 <meta
                     name="theme-color"

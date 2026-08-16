@@ -1,6 +1,11 @@
 import { createMCPClient } from "@ai-sdk/mcp";
 import type { ToolSet } from "ai";
 import type { McpServerConfig } from "~/lib/types";
+import {
+    connectAvailable,
+    connectCredentialHint,
+    requestConnectToken,
+} from "~/lib/server/connect";
 import { assertConfiguredHttpUrl } from "~/lib/server/provider-url";
 import type { TokenModePolicy } from "~/lib/token-mode";
 import {
@@ -532,11 +537,39 @@ async function connectMcpServer(
     if (!server.url?.trim()) return null;
     const url = assertConfiguredHttpUrl(server.url);
     const type = server.kind === "http" ? "http" : "sse";
+    let headers = sanitizeHeaders(server.headers);
+    if (server.vercelAuth) {
+        if (!connectAvailable()) {
+            console.warn(
+                `[mcp] ${server.name}: vercelAuth configured but Vercel Connect is unavailable — ${connectCredentialHint()}. Skipping.`,
+            );
+            return null;
+        }
+        const result = await requestConnectToken(
+            server.vercelAuth.connectorId,
+            server.vercelAuth.scopes,
+        );
+        if (!result.ok) {
+            if (result.kind === "authorization-required") {
+                console.warn(
+                    `[mcp] ${server.name}: Vercel Connect authorization pending. Open ${
+                        result.authorizeUrl ?? "the Connected apps settings"
+                    } and complete the consent, then request again. Skipping this server.`,
+                );
+            } else {
+                console.warn(
+                    `[mcp] ${server.name}: Vercel Connect token unavailable (${result.kind}): ${result.message}. Skipping.`,
+                );
+            }
+            return null;
+        }
+        headers = { ...(headers ?? {}), Authorization: `Bearer ${result.token}` };
+    }
     const client = await createMCPClient({
         transport: {
             type,
             url: url.toString(),
-            headers: sanitizeHeaders(server.headers),
+            headers,
             redirect: "error",
         },
         clientName: `prismium-${slugify(server.name)}`,

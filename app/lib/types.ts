@@ -187,6 +187,16 @@ export interface McpServerConfig {
     env?: Record<string, string>;
     /** Additional request headers for authenticated HTTP/SSE MCP servers. */
     headers?: Record<string, string>;
+    /**
+     * Optional Vercel Connect auth: mint an app-subject token for the given
+     * connector id/UID and send it as the `Authorization` bearer header
+     * (overrides any user-supplied Authorization header).
+     */
+    vercelAuth?: {
+        connectorId: string;
+        /** Scopes to request; omit for the connector's default app scopes. */
+        scopes?: string[];
+    };
     enabled: boolean;
 }
 

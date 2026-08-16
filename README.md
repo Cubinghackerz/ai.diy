@@ -1,4 +1,4 @@
-# ai.diy <sup>BETA</sup>
+# ai.diy
 
 [![Clone repository](https://img.shields.io/badge/Clone-GitHub-181717?logo=github)](https://github.com/Cubinghackerz/ai.diy)
 [![Deploy a preview](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FCubinghackerz%2Fai.diy&project-name=ai-diy-preview)
@@ -45,10 +45,10 @@ docker run -p 3000:3000 ai-diy
 
 ## Status
 
-Beta. Features marked **available** are wired. **Planned** items are not claimed as working.
+Features marked **available** are wired. **Planned** items are not claimed as working.
 
-- **Available:** landing, chat, 17 providers, model discovery, local persistence, files, browser Python (Canvas capture + IndexedDB persistence for generated images/binaries), search + connectors, remote MCP, artifacts, memory, on-device knowledge RAG, usage ledger with soft spend/token/RPM caps, server rate-limit hooks, voice dictation (Web Speech), multi-model Preview, import/export, client-side S3/WebDAV/Google Drive backup, portable skills catalog + install, slash commands (`/Research`, `/Compaction`, `/Subagent`, …), Agent Mode, subagents (approve → wait → synthesize)
-- **Coming soon:** direct GitHub/Supabase/PostgreSQL adapters, encrypted browser settings, custom-provider capability probing, MCP OAuth
+- **Available:** landing, chat, 17 providers, model discovery, local persistence, files, browser Python (Canvas capture + IndexedDB persistence for generated images/binaries), search + connectors, remote MCP, artifacts, memory, on-device knowledge RAG, usage ledger with soft spend/token/RPM caps, server rate-limit hooks, voice dictation (Web Speech), multi-model Preview, import/export, client-side S3/WebDAV/Google Drive backup, portable skills catalog + install, slash commands (`/Research`, `/Compaction`, `/Subagent`, …), Agent Mode, subagents (approve → wait → synthesize), encrypted browser settings, Vercel Connect (Beta: token-backed MCP servers + `connect_request`)
+- **Coming soon:** direct GitHub/Supabase/PostgreSQL adapters, custom-provider capability probing
 
 ## What You Own
 
@@ -96,6 +96,14 @@ OpenAI, Anthropic, Gemini, Groq, OpenRouter, xAI, DeepSeek, Bedrock, Azure, Vert
 Web search (DuckDuckGo + connectors), URL fetch, calculator, browser Python, files/artifacts, research and design skills, local time, memory, knowledge search, ask user, remote MCP (Firecrawl + Parallel bundled keyless), subagents.
 
 Python saves generated files in the working directory; the browser captures up to four files (≤2 MiB each) into Canvas and persists them with the chat when under the client size cap.
+
+Global custom instructions live under **Settings → Instructions**. They append to ai.diy's defaults rather than replacing core tool, safety, and active-skill instructions.
+
+### Token modes & on-demand tool guides
+
+**Token mode** (Settings → Token mode, or the token/TTFT chip above any assistant message) controls system-prompt size, tool suite, step budget, and prompt caching: **Efficient**, **Balanced** (default), **Prompt caching**, and **Full suite**.
+
+Outside **Full suite**, optional capabilities are registered compactly and their full instructions are served on demand: the model calls `load_tool_guide` and reads the exact guide for Python, files, URL Doctor, knowledge, memory, skills, and subagents only when a turn actually needs them. Enabled skills appear in the on-demand catalog by name instead of being injected into every prompt. Web search and URL fetch stay always available; the bundled Firecrawl/Parallel MCP schemas are only discovered on turns that ask for live web research.
 
 ### Import / Export / Backup
 

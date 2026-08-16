@@ -1,32 +1,22 @@
 import { useState } from "react";
 import {
-    Brain,
     HardDrives,
     PlugsConnected,
     TerminalWindow,
 } from "@phosphor-icons/react";
 import { BlueprintFrame, StatusPill } from "./BlueprintFrame";
 import { Reveal } from "./DoubleBezel";
-import { PROVIDER_LOGOS } from "./constants";
 import { EASE_OUT } from "./motion";
 import { cn } from "~/lib/utils";
 
 const TABS = [
     {
-        id: "providers" as const,
-        label: "Providers",
-        icon: Brain,
-        title: "Seventeen providers. One thread.",
-        body: "OpenAI, Anthropic, Gemini, Groq, OpenRouter, xAI, DeepSeek, Bedrock, Azure, Vertex, Vercel Gateway, Together, Mistral, Hugging Face, Ollama, LM Studio, and custom OpenAI-compatible endpoints. Switch mid-conversation; context stays put.",
-        chips: ["Cloud + local", "BYOK only", "models.dev pricing"],
-    },
-    {
         id: "tools" as const,
         label: "Tools",
         icon: PlugsConnected,
         title: "Search, skills, MCP, subagents.",
-        body: "DuckDuckGo plus Firecrawl and Parallel MCP ship keyless. URL fetch, calculator, browser Python via Pyodide, on-device knowledge RAG, memory, remote MCP, slash skills, and approved subagents.",
-        chips: ["Keyless search", "Remote MCP", "Agent Mode"],
+        body: "DuckDuckGo plus Firecrawl and Parallel MCP ship keyless. URL fetch, calculator, browser Python, on-device knowledge RAG, memory, remote MCP, slash skills, approved subagents, and experimental website presets.",
+        chips: ["Keyless search", "Website presets", "Agent Mode"],
     },
     {
         id: "storage" as const,
@@ -49,7 +39,7 @@ const TABS = [
 type TabId = (typeof TABS)[number]["id"];
 
 export function CapabilityRack() {
-    const [tab, setTab] = useState<TabId>("providers");
+    const [tab, setTab] = useState<TabId>("tools");
     const active = TABS.find((t) => t.id === tab) ?? TABS[0];
     const Icon = active.icon;
 
@@ -131,27 +121,6 @@ export function CapabilityRack() {
                                     </p>
                                 </div>
                             </div>
-
-                            {active.id === "providers" ? (
-                                <ul className="mt-8 flex flex-wrap gap-x-5 gap-y-3">
-                                    {PROVIDER_LOGOS.map((logo) => (
-                                        <li
-                                            key={logo.id}
-                                            className="inline-flex items-center gap-2 text-[12px] font-medium text-zinc-200"
-                                        >
-                                            <img
-                                                src={logo.src}
-                                                alt=""
-                                                width={20}
-                                                height={20}
-                                                className="size-5 object-contain"
-                                                loading="lazy"
-                                            />
-                                            {logo.label}
-                                        </li>
-                                    ))}
-                                </ul>
-                            ) : null}
 
                             {active.id === "tools" ? (
                                 <div className="mt-8 grid gap-2 sm:grid-cols-3">

@@ -14,6 +14,7 @@ export default [
     route("api/models", "routes/api.models.ts"),
     route("api/search", "routes/api.search.ts"),
     route("api/connectors", "routes/api.connectors.ts"),
+    route("api/connect", "routes/api.connect.ts"),
     route("api/title", "routes/api.title.ts"),
     route("privacy", "routes/privacy.tsx"),
     route("terms", "routes/terms.tsx"),

@@ -56,14 +56,24 @@ export function StatusPill({
     tone?: "neutral" | "live" | "warn";
     pulse?: boolean;
 }) {
-    const dot =
-        tone === "live"
-            ? "bg-[var(--landing-mint,#3DFFB0)]"
-            : tone === "warn"
-              ? "bg-amber-400"
-              : "bg-zinc-500";
+    const live = tone === "live";
+    const warn = tone === "warn";
+    const dot = live
+        ? "bg-[var(--landing-mint,#3DFFB0)]"
+        : warn
+          ? "bg-amber-400"
+          : "bg-zinc-400";
     return (
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.14] bg-white/[0.06] px-2.5 py-1 font-mono text-[10px] tracking-wide text-zinc-300">
+        <span
+            className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[10px] tracking-wide",
+                live
+                    ? "border-[rgba(61,255,176,0.35)] bg-[rgba(61,255,176,0.1)] text-[#d8ffe9]"
+                    : warn
+                      ? "border-amber-400/30 bg-amber-400/10 text-amber-100"
+                      : "border-white/[0.2] bg-white/[0.08] text-zinc-100",
+            )}
+        >
             <span className="relative flex size-1.5">
                 {pulse ? (
                     <span

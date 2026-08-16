@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { List, X } from "@phosphor-icons/react";
 import { cn } from "~/lib/utils";
 import { DOCS_URL, GITHUB_URL } from "./constants";
+import { BrandMark } from "./BrandMark";
 import { LandingCta } from "./LandingCta";
 import { EASE_IN, EASE_OUT } from "./motion";
 
@@ -11,20 +12,29 @@ const LINKS = [
     { href: "#features", label: "Ownership" },
     { href: "#capabilities", label: "Capabilities" },
     { href: "#deploy", label: "Deploy" },
-    { href: DOCS_URL, label: "Docs", external: true },
-    { href: GITHUB_URL, label: "GitHub", external: true },
+] as const;
+
+const EXTERNAL = [
+    { href: DOCS_URL, label: "Docs" },
+    { href: GITHUB_URL, label: "GitHub" },
 ] as const;
 
 export function IslandNav() {
     const [open, setOpen] = useState(false);
     const [scrolled, setScrolled] = useState(false);
-    const titleId = useId();
+    const menuId = useId();
 
     useEffect(() => {
-        const onScroll = () => setScrolled(window.scrollY > 12);
+        const scroller =
+            document.querySelector<HTMLElement>(".overflow-y-auto") ??
+            document.scrollingElement;
+        const onScroll = () =>
+            setScrolled(
+                (scroller instanceof HTMLElement ? scroller.scrollTop : window.scrollY) > 12,
+            );
         onScroll();
-        window.addEventListener("scroll", onScroll, { passive: true });
-        return () => window.removeEventListener("scroll", onScroll);
+        scroller?.addEventListener("scroll", onScroll, { passive: true });
+        return () => scroller?.removeEventListener("scroll", onScroll);
     }, []);
 
     useEffect(() => {
@@ -32,67 +42,70 @@ export function IslandNav() {
         const onKey = (e: KeyboardEvent) => {
             if (e.key === "Escape") setOpen(false);
         };
+        const prev = document.body.style.overflow;
         document.body.style.overflow = "hidden";
         window.addEventListener("keydown", onKey);
         return () => {
-            document.body.style.overflow = "";
+            document.body.style.overflow = prev;
             window.removeEventListener("keydown", onKey);
         };
     }, [open]);
 
     return (
         <>
-            <div className="pointer-events-none fixed inset-x-0 top-0 z-40 flex justify-center px-4 pt-5 sm:pt-6 md:pr-[11.5rem]">
+            <div className="pointer-events-none fixed inset-x-0 top-0 z-40 flex justify-center px-4 pt-4 sm:px-6 sm:pt-5">
                 <nav
                     className={cn(
-                        "pointer-events-auto flex w-full max-w-4xl items-center justify-between gap-2 rounded-full border border-white/[0.12] bg-black/45 px-3 py-1.5 shadow-[0_8px_40px_-20px_rgba(0,0,0,0.75)] backdrop-blur-xl transition-[border-color,background-color] duration-200 sm:px-4 md:grid md:grid-cols-[1fr_auto_1fr]",
-                        scrolled && "border-white/[0.16] bg-black/60",
+                        "pointer-events-auto flex w-full max-w-5xl items-center gap-3 rounded-full border px-2 py-1.5 pl-4 shadow-[0_12px_48px_-24px_rgba(0,0,0,0.9)] backdrop-blur-2xl transition-[border-color,background-color,box-shadow] duration-200",
+                        scrolled
+                            ? "border-white/[0.16] bg-black/70"
+                            : "border-white/[0.1] bg-black/40",
                     )}
                     style={{ transitionTimingFunction: EASE_OUT }}
                     aria-label="Primary"
                 >
-                    <div className="justify-self-start">
-                        <Link
-                            to="/"
-                            className="inline-flex min-h-10 items-center font-mono text-[13px] font-medium tracking-tight text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-                        >
-                            ai.diy
-                        </Link>
+                    <Link
+                        to="/"
+                        className="inline-flex min-h-10 shrink-0 items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                    >
+                        <BrandMark height={20} />
+                    </Link>
+
+                    <div className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 lg:flex">
+                        {LINKS.map((link) => (
+                            <a
+                                key={link.label}
+                                href={link.href}
+                                className="inline-flex min-h-9 items-center rounded-full px-3 text-[13px] text-zinc-400 transition-[color,background-color] duration-200 hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                                style={{ transitionTimingFunction: EASE_OUT }}
+                            >
+                                {link.label}
+                            </a>
+                        ))}
                     </div>
 
-                    <div className="hidden items-center justify-center gap-0.5 md:flex">
-                        {LINKS.map((link) =>
-                            "external" in link && link.external ? (
-                                <a
-                                    key={link.label}
-                                    href={link.href}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="inline-flex min-h-10 items-center rounded-full px-3 text-[13px] text-zinc-300 transition-[color,background-color] duration-200 hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-                                    style={{ transitionTimingFunction: EASE_OUT }}
-                                >
-                                    {link.label}
-                                </a>
-                            ) : (
-                                <a
-                                    key={link.label}
-                                    href={link.href}
-                                    className="inline-flex min-h-10 items-center rounded-full px-3 text-[13px] text-zinc-300 transition-[color,background-color] duration-200 hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-                                    style={{ transitionTimingFunction: EASE_OUT }}
-                                >
-                                    {link.label}
-                                </a>
-                            ),
-                        )}
-                    </div>
-
-                    <div className="flex items-center justify-self-end gap-1.5">
+                    <div className="ml-auto flex items-center gap-1.5">
+                        {EXTERNAL.map((link) => (
+                            <a
+                                key={link.label}
+                                href={link.href}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="hidden min-h-9 items-center rounded-full px-3 text-[13px] text-zinc-400 transition-[color,background-color] duration-200 hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 md:inline-flex"
+                                style={{ transitionTimingFunction: EASE_OUT }}
+                            >
+                                {link.label}
+                            </a>
+                        ))}
+                        <LandingCta to="/workspace" size="compact">
+                            Open workspace
+                        </LandingCta>
                         <button
                             type="button"
-                            className="inline-flex size-10 items-center justify-center rounded-full text-zinc-300 transition-[color,background-color,transform] duration-200 hover:bg-white/[0.08] hover:text-white active:scale-[0.96] md:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                            className="inline-flex size-10 items-center justify-center rounded-full text-zinc-300 transition-[color,background-color,transform] duration-200 hover:bg-white/[0.08] hover:text-white active:scale-[0.96] lg:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                             aria-label={open ? "Close menu" : "Open menu"}
                             aria-expanded={open}
-                            aria-controls={titleId}
+                            aria-controls={menuId}
                             onClick={() => setOpen((v) => !v)}
                         >
                             <span className="relative size-4">
@@ -114,26 +127,21 @@ export function IslandNav() {
                                 />
                             </span>
                         </button>
-                        <LandingCta to="/workspace" size="compact" className="md:hidden">
-                            Open
-                        </LandingCta>
                     </div>
                 </nav>
             </div>
 
             <div
-                id={titleId}
+                id={menuId}
                 className={cn(
-                    "fixed inset-0 z-30 bg-black/80 backdrop-blur-3xl transition-[opacity,visibility] duration-200 md:hidden",
+                    "fixed inset-0 z-30 bg-black/82 backdrop-blur-3xl transition-[opacity,visibility] duration-200 lg:hidden",
                     open ? "visible opacity-100" : "invisible opacity-0",
                 )}
-                style={{
-                    transitionTimingFunction: open ? EASE_OUT : EASE_IN,
-                }}
+                style={{ transitionTimingFunction: open ? EASE_OUT : EASE_IN }}
                 aria-hidden={!open}
             >
-                <div className="flex h-full flex-col justify-center gap-2 px-8 pt-16">
-                    {LINKS.map((link, i) => {
+                <div className="flex h-full flex-col justify-center gap-1 px-8 pt-16">
+                    {[...LINKS, ...EXTERNAL].map((link, i) => {
                         const className = cn(
                             "block rounded-xl px-3 py-3 text-2xl font-medium text-zinc-100 transition-[opacity,transform] duration-200",
                             open ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0",
@@ -142,22 +150,13 @@ export function IslandNav() {
                             transitionTimingFunction: EASE_OUT,
                             transitionDelay: open ? `${80 + i * 40}ms` : "0ms",
                         };
-                        return "external" in link && link.external ? (
+                        const external = "href" in link && /^https?:/.test(link.href);
+                        return (
                             <a
                                 key={link.label}
                                 href={link.href}
-                                target="_blank"
-                                rel="noreferrer"
-                                className={className}
-                                style={style}
-                                onClick={() => setOpen(false)}
-                            >
-                                {link.label}
-                            </a>
-                        ) : (
-                            <a
-                                key={link.label}
-                                href={link.href}
+                                target={external ? "_blank" : undefined}
+                                rel={external ? "noreferrer" : undefined}
                                 className={className}
                                 style={style}
                                 onClick={() => setOpen(false)}
@@ -166,13 +165,6 @@ export function IslandNav() {
                             </a>
                         );
                     })}
-                    <LandingCta
-                        to="/workspace"
-                        className="mt-6"
-                        size="default"
-                    >
-                        Open workspace
-                    </LandingCta>
                 </div>
             </div>
         </>

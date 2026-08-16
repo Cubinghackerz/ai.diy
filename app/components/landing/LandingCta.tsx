@@ -70,7 +70,12 @@ export function LandingCta({
 
     if ("to" in rest && rest.to) {
         return (
-            <Link to={rest.to} className={classNames} style={style}>
+            <Link
+                to={rest.to}
+                reloadDocument={rest.to === "/workspace"}
+                className={classNames}
+                style={style}
+            >
                 {content}
             </Link>
         );

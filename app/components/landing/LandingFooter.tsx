@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { ArrowSquareOut, XLogo } from "@phosphor-icons/react";
+import { BrandMark } from "./BrandMark";
 import { DOCS_URL, GITHUB_URL, TWITTER_URL } from "./constants";
 
 const linkClass =
@@ -10,7 +11,7 @@ export function LandingFooter() {
         <footer className="border-t border-white/[0.1]">
             <div className="mx-auto flex max-w-6xl flex-col gap-10 px-5 py-16 sm:flex-row sm:justify-between sm:px-8">
                 <div>
-                    <p className="font-mono text-[13px] text-white">ai.diy</p>
+                    <BrandMark height={22} />
                     <p className="mt-3 flex items-center gap-2 font-mono text-[11px] text-zinc-400">
                         <span
                             className="size-1.5 rounded-full bg-[var(--landing-mint,#3DFFB0)]"

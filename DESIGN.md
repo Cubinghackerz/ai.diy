@@ -2,7 +2,7 @@
 
 ## Direction
 
-The landing page is **Ethereal Glass × Resend blackspace**, elevated with **Cloudflare-scale structure**: luminous full-bleed panels, dotted stage rails, ownership constellation, static provider shelf, workflow telemetry, and a closing CTA band. Zinc/white light only — never Cloudflare orange, never purple AI glow. Mint `#3DFFB0` is reserved for live status and route indicators.
+The landing page is **Ethereal Glass × Resend blackspace**, elevated with a **Local Data Plane**: an asymmetric first viewport makes the browser → transit-only Node relay → selected provider trust boundary visible, followed by real workspace proof, provider freedom, compact capability evidence, deployment, and a closing CTA band. Zinc/white light only — never Cloudflare orange, never purple AI glow. Mint `#3DFFB0` is reserved for live status and route indicators.
 
 ## Mode
 
@@ -39,21 +39,19 @@ Persuade. Understand BYOK local-first ownership → open `/workspace` or deploy.
 ## Composition
 
 1. Island nav + floating CTA
-2. Luminous hero panel → product demo
-3. Domain: Device constellation + ownership surface
-4. Provider shelf
-5. Capability rack (tabs)
-6. Hosted vs owned split
-7. Workflow telemetry + white ownership panel
-8. Profile showcase
-9. Deploy terminal
-10. Closing luminous band
-11. Footer
+2. Asymmetric hero + Local Data Plane trust boundary
+3. Real workspace demo
+4. Domain: Device ownership surface
+5. Provider shelf
+6. Capability rack (tabs)
+7. Deploy terminal
+8. Closing luminous band
+9. Footer
 
 ## Motion
 
 - Custom ease `cubic-bezier(0.32, 0.72, 0, 1)` / GSAP power3
-- Hero: blur-up stagger + panel scale settle
+- Hero: blur-up stagger + panel scale settle; one request packet traverses the data plane
 - Constellation: slow orbital rotation (icons counter-rotate upright)
 - Closing floaters: sine yoyo
 - Scroll reveals: y + blur clear (`Reveal`)

@@ -1,4 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import type { Tool, ToolSet } from "ai";
 import {
     streamText,
     generateText,
@@ -493,7 +494,7 @@ export async function action({ request }: ActionFunctionArgs) {
         }
     }
 
-    let mcpTools = {};
+    let mcpTools: ToolSet = {};
     let mcpClients: Awaited<ReturnType<typeof loadMcpTools>>["clients"] = [];
     let mcpClosed = false;
     const closeLoadedMcp = async () => {
@@ -544,7 +545,7 @@ export async function action({ request }: ActionFunctionArgs) {
                 messages: body.messages,
             },
         );
-        const tools =
+        const tools: Record<string, Tool> =
             body.openAICompatible?.capabilityOverrides?.tools === false
                 ? {}
                 : { ...builtIn, ...mcpTools };

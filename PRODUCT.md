@@ -48,7 +48,7 @@ Confirmed functionality (from README and code):
 
 Known constraints:
 - `npm run dev` has a known composer input regression; production build (`npm run build && npm start`) is the supported local path.
-- Settings are not encrypted at rest in the browser today.
+- Settings are encrypted at rest with AES-GCM (envelope key in IndexedDB; see `app/lib/settings-crypto.ts`).
 - Subagents require browser approval and wait for each nested session to finish before the main chat continues.
 - Very large binary artifacts may skip IndexedDB persistence when over the client size cap; download remains available in-session.
 - Security posture: LLM keys proxied in transit only, private-network URL rejection, no stdio MCP, redirects rejected; configure `RATE_LIMIT_*` before public exposure.

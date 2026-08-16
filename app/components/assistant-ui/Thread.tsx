@@ -10,18 +10,12 @@ import { ComposerModelControls } from "~/components/assistant-ui/ComposerModelCo
 import { ThreadFollowupSuggestions } from "~/components/assistant-ui/follow-up-suggestions";
 import { MarkdownText } from "~/components/assistant-ui/markdown-text";
 import { MessageUsageStats } from "~/components/assistant-ui/MessageUsageStats";
-import {
-  ReasoningContent,
-  ReasoningRoot,
-  ReasoningText,
-  ReasoningTrigger,
-} from "~/components/assistant-ui/reasoning";
 import { ToolFallback } from "~/components/assistant-ui/tool-fallback";
+import { ToolGroup } from "~/components/assistant-ui/tool-group";
 import {
-  ToolGroupContent,
-  ToolGroupRoot,
-  ToolGroupTrigger,
-} from "~/components/assistant-ui/tool-group";
+  ReasoningWorkSummary,
+  ToolCallsWorkSummary,
+} from "~/components/assistant-ui/work-summary";
 import { TooltipIconButton } from "~/components/assistant-ui/tooltip-icon-button";
 import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
@@ -34,7 +28,9 @@ import {
   ErrorPrimitive,
   groupPartByType,
   MessagePrimitive,
+  PartByIndexProvider,
   ThreadPrimitive,
+  type EnrichedPartState,
   type ToolCallMessagePartComponent,
   unstable_useComposerInput,
   useAui,
@@ -70,7 +66,9 @@ import {
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import {
     BUILTIN_FORCED_SKILLS,
+    dedupeForcedSkills,
     forcedSkillStore,
+    normalizeForcedSkillName,
     skillMatchesSlashQuery,
     type ForcedSkill,
 } from "~/lib/skill-command";
@@ -159,7 +157,7 @@ const ThreadRoot: FC<{
         ["--thread-max-width" as string]: compact ? "100%" : "44rem",
         ["--composer-bg" as string]:
           "color-mix(in oklab, var(--color-muted) 55%, var(--color-background))",
-        ["--composer-radius" as string]: "1.25rem",
+        ["--composer-radius" as string]: "1.5rem",
         ["--composer-padding" as string]: "10px",
       }}
     >
@@ -342,11 +340,11 @@ const ComposerInput: FC = () => {
       .filter((skill) => skill.enabled)
       .map((skill) => ({ name: skill.name, content: skill.content }));
     const selectedNames = new Set(
-      appliedSkills.map((skill) => skill.name.toLowerCase()),
+      appliedSkills.map((skill) => normalizeForcedSkillName(skill.name)),
     );
     // Builtins first so Compaction / Research are not pushed off by custom skills.
-    const all = [...BUILTIN_FORCED_SKILLS, ...custom].filter(
-      (skill) => !selectedNames.has(skill.name.toLowerCase()),
+    const all = dedupeForcedSkills([...BUILTIN_FORCED_SKILLS, ...custom]).filter(
+      (skill) => !selectedNames.has(normalizeForcedSkillName(skill.name)),
     );
     const matches = query
       ? all.filter((skill) => skillMatchesSlashQuery(skill.name, query))
@@ -363,8 +361,15 @@ const ComposerInput: FC = () => {
   }, [value]);
 
   const applySkill = (skill: ForcedSkill) => {
-    if (appliedSkills.some((item) => item.name === skill.name)) return;
-    const nextSkills = [...appliedSkills, skill];
+    if (
+      appliedSkills.some(
+        (item) =>
+          normalizeForcedSkillName(item.name) ===
+          normalizeForcedSkillName(skill.name),
+      )
+    )
+      return;
+    const nextSkills = dedupeForcedSkills([...appliedSkills, skill]);
     forcedSkillStore.current = nextSkills;
     setAppliedSkills(nextSkills);
     setText("");
@@ -599,10 +604,29 @@ const MessageError: FC = () => {
   );
 };
 
+/**
+ * One tool call rendered inside the collapsed "Tool calls" disclosure.
+ * Module-level (never defined inside a render) so streaming part updates do
+ * not remount the row and reset its expanded state.
+ */
+const ToolCallAtIndex: FC<{
+  index: number;
+  ToolFallback: NonNullable<ThreadComponents["ToolFallback"]>;
+}> = ({ index, ToolFallback: ToolFallbackComponent }) => {
+  const part = useAuiState(
+    (state) => state.message.parts[index],
+  ) as EnrichedPartState | undefined;
+  if (!part || part.type !== "tool-call") return null;
+  return (
+    <PartByIndexProvider index={index}>
+      {part.toolUI ?? <ToolFallbackComponent {...part} />}
+    </PartByIndexProvider>
+  );
+};
+
 const AssistantMessage: FC = () => {
   const {
     ToolFallback: ToolFallbackComponent = ToolFallback,
-    ToolGroup,
     ReasoningGroup,
   } = useContext(ThreadComponentsContext);
   const { compact } = useContext(ThreadLayoutContext);
@@ -610,6 +634,25 @@ const AssistantMessage: FC = () => {
   const ACTION_BAR_PT = "pt-1.5";
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
   const ACTION_BAR_HEIGHT = `min-h-7.5 ${ACTION_BAR_PT}`;
+
+  // All reasoning parts in this message, merged into a single summary card.
+  // Suppresses per-group ReasoningRoots so multiple reasoning runs never
+  // stack separate cards.
+  const messageParts = useAuiState((s) => s.message.parts);
+  const reasoningIndices = useMemo(() => {
+    const indices: number[] = [];
+    for (let index = 0; index < messageParts.length; index++) {
+      if (messageParts[index]?.type === "reasoning") indices.push(index);
+    }
+    return indices;
+  }, [messageParts]);
+  const toolIndices = useMemo(() => {
+    const indices: number[] = [];
+    for (let index = 0; index < messageParts.length; index++) {
+      if (messageParts[index]?.type === "tool-call") indices.push(index);
+    }
+    return indices;
+  }, [messageParts]);
 
   return (
     <MessagePrimitive.Root
@@ -625,6 +668,16 @@ const AssistantMessage: FC = () => {
         data-slot="aui_assistant-message-content"
         className="text-foreground px-2 leading-relaxed wrap-break-word"
       >
+        <ReasoningWorkSummary indices={reasoningIndices} />
+        <ToolCallsWorkSummary indices={toolIndices}>
+          {toolIndices.map((index) => (
+            <ToolCallAtIndex
+              key={index}
+              index={index}
+              ToolFallback={ToolFallbackComponent}
+            />
+          ))}
+        </ToolCallsWorkSummary>
         <MessagePrimitive.GroupedParts
           groupBy={groupPartByType({
             reasoning: ["group-chainOfThought", "group-reasoning"],
@@ -637,34 +690,13 @@ const AssistantMessage: FC = () => {
               case "group-chainOfThought":
                 return <div data-slot="aui_chain-of-thought">{children}</div>;
               case "group-tool":
-                if (ToolGroup) {
-                  return <ToolGroup group={part}>{children}</ToolGroup>;
-                }
-                return (
-                  <ToolGroupRoot variant="ghost">
-                    <ToolGroupTrigger
-                      count={part.indices.length}
-                      active={part.status.type === "running"}
-                    />
-                    <ToolGroupContent>{children}</ToolGroupContent>
-                  </ToolGroupRoot>
-                );
-              case "group-reasoning": {
+                return null;
+              case "group-reasoning":
                 if (ReasoningGroup) {
-                  return (
-                    <ReasoningGroup group={part}>{children}</ReasoningGroup>
-                  );
+                  return <ReasoningGroup group={part}>{children}</ReasoningGroup>;
                 }
-                const running = part.status.type === "running";
-                return (
-                  <ReasoningRoot streaming={running}>
-                    <ReasoningTrigger active={running} />
-                    <ReasoningContent aria-busy={running}>
-                      <ReasoningText>{children}</ReasoningText>
-                    </ReasoningContent>
-                  </ReasoningRoot>
-                );
-              }
+                // Rendered once, merged, by ReasoningWorkSummary above.
+                return null;
               case "text":
                 return <MarkdownText />;
               case "reasoning":
@@ -672,7 +704,7 @@ const AssistantMessage: FC = () => {
                 // second ReasoningRoot here creates nested reasoning panels.
                 return <MarkdownText />;
               case "tool-call":
-                return part.toolUI ?? <ToolFallbackComponent {...part} />;
+                return null;
               case "file":
                 return part.mimeType.startsWith("image/") ? (
                   <figure className="my-3 max-w-2xl overflow-hidden rounded-2xl border border-border/70 bg-muted/30 shadow-sm">

@@ -11,6 +11,12 @@ import { ProviderPicker } from "~/components/ui/ProviderPicker";
 import { ModelLogo } from "~/components/ui/ModelLogo";
 import { ChatGPTLoginSettings } from "~/components/settings/ChatGPTLoginSettings";
 import { haptic, hapticConfirm, hapticSelect } from "~/lib/haptics";
+import {
+    connectAuthorize,
+    connectList,
+    connectTest,
+    type ConnectConnectorEntryLite,
+} from "~/lib/connect-api";
 import { testProviderKey } from "~/lib/key-test";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import { isLocalProvider, isProviderReady } from "~/lib/setup";
@@ -56,12 +62,14 @@ import {
     useModelCatalog,
 } from "~/lib/model-catalog-cache";
 import { cn } from "~/lib/utils";
+import { versionedAsset } from "~/lib/build";
 import { localProviderKey } from "~/lib/provider-credentials";
 import {
     CaretRight,
     ChatCircleDots,
     CheckCircle,
     Desktop,
+    ChatText,
     Brain,
     Books,
     ChartBar,
@@ -80,6 +88,7 @@ import {
     Plus,
     Pencil,
     Plug,
+    PlugsConnected,
     SpinnerGap,
     Sun,
     Trash,
@@ -136,9 +145,11 @@ import {
 type SidebarPanel = "chats" | "settings";
 type SettingsSection =
     | "keys"
+    | "instructions"
     | "tokens"
     | "tools"
     | "mcp"
+    | "connect"
     | "experimental"
     | "memory"
     | "knowledge"
@@ -189,11 +200,15 @@ export function AppSidebar({
             <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-2">
                 <div className="flex items-center gap-2 min-w-0">
                     <img
-                        src="/ai-diy.png"
-                        alt=""
-                        className="size-7 shrink-0 rounded-lg object-cover"
+                        src={versionedAsset("/ai-diy-mark.png")}
+                        alt="ai.diy"
+                        className="h-5 w-auto max-w-[7.5rem] object-contain object-left dark:hidden"
                     />
-                    <span className="truncate text-sm font-semibold tracking-tight">ai.diy</span>
+                    <img
+                        src={versionedAsset("/ai-diy-mark-white.png")}
+                        alt="ai.diy"
+                        className="hidden h-5 w-auto max-w-[7.5rem] object-contain object-left dark:block"
+                    />
                     <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-primary">
                         Beta
                     </span>
@@ -889,6 +904,7 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
     const [mcpUrl, setMcpUrl] = useState("");
     const [mcpKind, setMcpKind] = useState<McpServerConfig["kind"]>("http");
     const [mcpHeaders, setMcpHeaders] = useState("");
+    const [mcpConnectorId, setMcpConnectorId] = useState("");
     const [mcpError, setMcpError] = useState<string | null>(null);
 
     const sections: {
@@ -897,9 +913,11 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
         icon: typeof Key;
     }[] = [
         { id: "keys", label: "API Keys", icon: Key },
+        { id: "instructions", label: "Instructions", icon: ChatText },
         { id: "tokens", label: "Tokens", icon: Lightning },
         { id: "tools", label: "Tools", icon: Globe },
         { id: "mcp", label: "MCP Beta", icon: Plug },
+        { id: "connect", label: "Connect Beta", icon: PlugsConnected },
         { id: "experimental", label: "Experimental", icon: Flask },
         { id: "memory", label: "Memory Beta", icon: Brain },
         { id: "knowledge", label: "Knowledge Base", icon: Books },
@@ -937,12 +955,16 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
             kind: mcpKind,
             url: mcpUrl.trim(),
             headers,
+            vercelAuth: mcpConnectorId.trim()
+                ? { connectorId: mcpConnectorId.trim() }
+                : undefined,
             enabled: true,
         };
         addMcpServer(newServer);
         setMcpName("");
         setMcpUrl("");
         setMcpHeaders("");
+        setMcpConnectorId("");
         setMcpError(null);
     };
 
@@ -974,6 +996,8 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
             </div>
 
             {section === "keys" && <KeysSection />}
+
+            {section === "instructions" && <CustomInstructionsSection />}
 
             {section === "tokens" && <TokenModeSettingsSection />}
 
@@ -1118,6 +1142,12 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
                             className="h-9 rounded-xl text-xs"
                         />
                         <Input
+                            value={mcpConnectorId}
+                            onChange={(event) => setMcpConnectorId(event.target.value)}
+                            placeholder="Vercel Connect connector (optional, e.g. scl_…)"
+                            className="h-9 rounded-xl text-xs"
+                        />
+                        <Input
                             value={mcpUrl}
                             onChange={(e) => setMcpUrl(e.target.value)}
                             placeholder="https://…/sse or /mcp"
@@ -1150,6 +1180,11 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
                                     <div className="truncate text-[10px] text-muted-foreground">
                                         {s.kind.toUpperCase()} · {s.url}{s.headers && Object.keys(s.headers).length > 0 ? " · headers" : ""}
                                     </div>
+                                    {s.vercelAuth ? (
+                                        <ConnectAuthControl
+                                            connectorId={s.vercelAuth.connectorId}
+                                        />
+                                    ) : null}
                                 </div>
                                 <div className="flex items-center gap-1">
                                     <button
@@ -1182,6 +1217,8 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
                     )}
                 </div>
             )}
+
+            {section === "connect" && <ConnectedAppsSection />}
 
             {section === "experimental" && (
                 <div className="flex flex-col gap-3">
@@ -1248,6 +1285,53 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
             >
                 Reset all settings
             </button>
+        </div>
+    );
+}
+
+function CustomInstructionsSection() {
+    const { settings, updateChat } = useSettings();
+    const value = settings.chat.systemPrompt ?? "";
+    const maxChars = 4_000;
+
+    return (
+        <div className="flex flex-col gap-3">
+            <div>
+                <h3 className="text-xs font-semibold">Custom instructions</h3>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                    These supplement ai.diy&apos;s default system prompt. They do
+                    not replace tool, safety, or active skill instructions.
+                    Applied to every chat.
+                </p>
+            </div>
+            <textarea
+                value={value}
+                onChange={(event) =>
+                    updateChat({
+                        systemPrompt: event.target.value.slice(0, maxChars),
+                    })
+                }
+                placeholder="e.g. Prefer concise answers. Always cite retrieved URLs. Address me as Nirneet."
+                rows={8}
+                maxLength={maxChars}
+                className="h-auto min-h-32 w-full resize-y rounded-xl border border-border bg-background px-3 py-2 text-xs leading-relaxed outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Custom system instructions"
+            />
+            <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] tabular-nums text-muted-foreground">
+                    {value.length.toLocaleString()} / {maxChars.toLocaleString()}
+                </p>
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={!value.trim()}
+                    onClick={() => updateChat({ systemPrompt: "" })}
+                    className="rounded-lg"
+                >
+                    Clear
+                </Button>
+            </div>
         </div>
     );
 }
@@ -1607,6 +1691,246 @@ const FREE_SEARCH_MCP_DETAILS: Record<
         tools: "firecrawl_search · firecrawl_scrape · firecrawl_parse",
     },
 };
+
+function ConnectAuthControl({ connectorId }: { connectorId: string }) {
+    const [state, setState] = useState<
+        "idle" | "checking" | "ok" | "needs-auth" | "error"
+    >("idle");
+    const [detail, setDetail] = useState("");
+    const [busy, setBusy] = useState(false);
+
+    const check = async () => {
+        setState("checking");
+        setDetail("");
+        try {
+            const result = await connectTest(connectorId);
+            if (result.ok) {
+                setState("ok");
+            } else if (result.kind === "authorization-required") {
+                setState("needs-auth");
+                setDetail("");
+            } else {
+                setState("error");
+                setDetail(result.message || "Token minting failed.");
+            }
+        } catch (err) {
+            setState("error");
+            setDetail(err instanceof Error ? err.message : "Check failed.");
+        }
+    };
+
+    const authorize = async () => {
+        setBusy(true);
+        try {
+            const result = await connectAuthorize(connectorId);
+            if (result.ok) {
+                window.open(result.url, "_blank", "noopener,noreferrer,width=640,height=760");
+                setState("needs-auth");
+                setDetail("");
+            } else {
+                setState("error");
+                setDetail(result.error);
+            }
+        } catch (err) {
+            setState("error");
+            setDetail(err instanceof Error ? err.message : "Authorization failed.");
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <div className="flex flex-wrap items-center gap-1 pt-1">
+            <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+                <PlugsConnected size={10} />
+                Connect · {connectorId}
+            </span>
+            {state === "ok" ? (
+                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-medium text-emerald-500">
+                    <CheckCircle size={10} />
+                    Authorized
+                </span>
+            ) : null}
+            {state === "needs-auth" ? (
+                <button
+                    type="button"
+                    onClick={() => void authorize()}
+                    disabled={busy}
+                    className="rounded-md bg-primary px-1.5 py-0.5 text-[9px] font-semibold text-primary-foreground outline-none disabled:opacity-50"
+                >
+                    {busy ? "Opening…" : "Authorize"}
+                </button>
+            ) : null}
+            {state === "error" ? (
+                <span className="rounded-md bg-destructive/10 px-1.5 py-0.5 text-[9px] font-medium text-destructive">
+                    Error
+                </span>
+            ) : null}
+            <button
+                type="button"
+                onClick={() => void check()}
+                disabled={state === "checking"}
+                className="rounded-md bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground disabled:opacity-50"
+            >
+                {state === "checking" ? "Checking…" : "Test"}
+            </button>
+            {detail ? <span className="text-[9px] text-muted-foreground">{detail}</span> : null}
+        </div>
+    );
+}
+
+function ConnectedAppsSection() {
+    const [available, setAvailable] = useState<boolean | null>(null);
+    const [connectors, setConnectors] = useState<ConnectConnectorEntryLite[]>([]);
+    const [busy, setBusy] = useState<string | null>(null);
+    const [messages, setMessages] = useState<Record<string, string>>({});
+
+    const load = useCallback(async () => {
+        try {
+            const result = await connectList();
+            setAvailable(result.available);
+            setConnectors(result.connectors);
+        } catch (err) {
+            setAvailable(false);
+            setMessages({
+                _global:
+                    err instanceof Error ? err.message : "Could not load Vercel Connect status.",
+            });
+        }
+    }, []);
+
+    useEffect(() => {
+        void load();
+    }, [load]);
+
+    const test = async (entry: ConnectConnectorEntryLite) => {
+        setBusy(entry.key);
+        try {
+            const result = await connectTest(entry.connectorId, entry.scopes);
+            setMessages({
+                ...messages,
+                [entry.key]: result.ok
+                    ? `OK — token valid until ${new Date(result.expiresAt).toLocaleString()}.`
+                    : `${result.message}${result.authorizeUrl ? " Authorization URL ready — click Authorize." : ""}`,
+            });
+        } catch (err) {
+            setMessages({
+                ...messages,
+                [entry.key]: err instanceof Error ? err.message : "Test failed.",
+            });
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    const authorize = async (entry: ConnectConnectorEntryLite) => {
+        setBusy(entry.key);
+        try {
+            const result = await connectAuthorize(entry.connectorId, entry.scopes);
+            if (result.ok) {
+                window.open(result.url, "_blank", "noopener,noreferrer,width=640,height=760");
+                setMessages({
+                    ...messages,
+                    [entry.key]: "Consent window opened — complete it, then run Test.",
+                });
+            } else {
+                setMessages({ ...messages, [entry.key]: result.error });
+            }
+        } catch (err) {
+            setMessages({
+                ...messages,
+                [entry.key]: err instanceof Error ? err.message : "Authorization failed.",
+            });
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    if (available === null) {
+        return (
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <SpinnerGap size={12} className="animate-spin" />
+                Checking Vercel Connect…
+            </div>
+        );
+    }
+
+    if (!available) {
+        return (
+            <div className="flex flex-col gap-1.5 rounded-xl border border-border/70 p-2.5 text-[11px] leading-relaxed text-muted-foreground">
+                <span className="font-semibold text-foreground">Vercel Connect is not configured here</span>
+                Deployed on Vercel: tokens are injected automatically (OIDC). Self-hosted:
+                set <code className="rounded bg-muted px-1 text-[10px]">VERCEL_TOKEN</code> and declare
+                connectors via <code className="rounded bg-muted px-1 text-[10px]">CONNECT_CONNECTOR_&lt;KEY&gt;</code>.
+                {messages._global ? <span className="text-destructive">{messages._global}</span> : null}
+            </div>
+        );
+    }
+
+    if (connectors.length === 0) {
+        return (
+            <div className="flex flex-col gap-1.5 rounded-xl border border-border/70 p-2.5 text-[11px] leading-relaxed text-muted-foreground">
+                <span className="font-semibold text-foreground">No connectors configured</span>
+                Add <code className="rounded bg-muted px-1 text-[10px]">CONNECT_CONNECTOR_&lt;KEY&gt;=scl_…</code> to your
+                environment (optionally <code className="rounded bg-muted px-1 text-[10px]">CONNECT_BASE_URL_&lt;KEY&gt;</code>{" "}
+                and <code className="rounded bg-muted px-1 text-[10px]">CONNECT_SCOPES_&lt;KEY&gt;</code>), then restart.
+                You can also use a connector directly on an MCP server (Settings → MCP Beta).
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex flex-col gap-2">
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+                App-scoped connectors declared in the environment. Authorize each
+                connector once, then the model can act on the service and protected
+                MCP servers can request tokens automatically.
+            </p>
+            {connectors.map((entry) => (
+                <div
+                    key={entry.key}
+                    className="flex flex-col gap-1.5 rounded-xl border border-border/70 p-2.5"
+                >
+                    <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                            <div className="truncate text-xs font-semibold">
+                                {entry.key}
+                            </div>
+                            <div className="truncate text-[10px] text-muted-foreground">
+                                {entry.connectorId}
+                                {entry.baseUrl ? ` · ${entry.baseUrl}` : ""}
+                                {entry.scopes?.length ? ` · scopes: ${entry.scopes.join(" ")}` : ""}
+                            </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                            <button
+                                type="button"
+                                onClick={() => void test(entry)}
+                                disabled={busy === entry.key}
+                                className="rounded-md bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground disabled:opacity-50"
+                            >
+                                {busy === entry.key ? "Testing…" : "Test"}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void authorize(entry)}
+                                disabled={busy === entry.key}
+                                className="rounded-md bg-primary px-2 py-1 text-[10px] font-semibold text-primary-foreground outline-none hover:opacity-90 disabled:opacity-50"
+                            >
+                                {busy === entry.key ? "Working…" : "Authorize"}
+                            </button>
+                        </div>
+                    </div>
+                    {messages[entry.key] ? (
+                        <p className="text-[10px] leading-relaxed text-muted-foreground">
+                            {messages[entry.key]}
+                        </p>
+                    ) : null}
+                </div>
+            ))}
+        </div>
+    );
+}
 
 function FreeSearchMcpSection() {
     const { settings, addMcpServer, removeMcpServer } = useSettings();

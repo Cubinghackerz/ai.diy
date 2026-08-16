@@ -12,33 +12,7 @@ export async function initLandingAnimations(
         return () => {};
     }
 
-    const [{ default: gsap }, { default: ScrollTrigger }] = await Promise.all([
-        import("gsap"),
-        import("gsap/ScrollTrigger"),
-    ]);
-    gsap.registerPlugin(ScrollTrigger);
-
-    const gates = Array.from(scope.querySelectorAll<HTMLElement>("[data-anim-gate]"));
-    const observer =
-        "IntersectionObserver" in window
-            ? new IntersectionObserver(
-                  (entries) => {
-                      for (const entry of entries) {
-                          entry.target.classList.toggle(
-                              "landing-anim-active",
-                              entry.isIntersecting,
-                          );
-                      }
-                  },
-                  { rootMargin: "140px 0px" },
-              )
-            : null;
-
-    if (observer) {
-        gates.forEach((gate) => observer.observe(gate));
-    } else {
-        gates.forEach((gate) => gate.classList.add("landing-anim-active"));
-    }
+    const { default: gsap } = await import("gsap");
 
     const syncDocumentVisibility = () => {
         scope.classList.toggle("landing-tab-hidden", document.hidden);
@@ -80,36 +54,6 @@ export async function initLandingAnimations(
             );
         }
 
-        // Constellation gentle rotate
-        const constellation = scope.querySelector<HTMLElement>(".landing-constellation");
-        if (constellation) {
-            gsap.to(constellation.querySelectorAll(".landing-orbit-node"), {
-                rotation: 360,
-                transformOrigin: "50% 50%",
-                duration: 48,
-                ease: "none",
-                repeat: -1,
-                modifiers: {
-                    // keep icons upright relative to page — rotate container instead
-                },
-            });
-            // Prefer orbiting the whole ring via CSS-less path: subtle pulse
-            gsap.to(constellation, {
-                rotate: 360,
-                duration: 80,
-                ease: "none",
-                repeat: -1,
-                transformOrigin: "50% 50%",
-            });
-            gsap.to(constellation.querySelectorAll(".landing-orbit-node img, .landing-orbit-node"), {
-                rotate: -360,
-                duration: 80,
-                ease: "none",
-                repeat: -1,
-                transformOrigin: "50% 50%",
-            });
-        }
-
         // Floating icons on closing band
         gsap.utils.toArray<HTMLElement>(".landing-floater", scope).forEach((el, i) => {
             gsap.to(el, {
@@ -121,14 +65,12 @@ export async function initLandingAnimations(
             });
         });
 
-        // Scroll reveals are owned by <Reveal>; hero / constellation / closing floaters stay here.
+        // Scroll reveals are owned by <Reveal>; hero and closing floaters stay here.
     }, scope);
 
     return () => {
-        observer?.disconnect();
         document.removeEventListener("visibilitychange", syncDocumentVisibility);
         context.revert();
         scope.classList.remove("landing-tab-hidden");
-        gates.forEach((gate) => gate.classList.remove("landing-anim-active"));
     };
 }

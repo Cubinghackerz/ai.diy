@@ -11,6 +11,21 @@ export type ForcedSkill = {
     content: string;
 };
 
+export function normalizeForcedSkillName(name: string): string {
+    return name.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+/** Keep the first skill definition so built-ins win over duplicate installs. */
+export function dedupeForcedSkills(skills: ForcedSkill[]): ForcedSkill[] {
+    const seen = new Set<string>();
+    return skills.filter((skill) => {
+        const key = normalizeForcedSkillName(skill.name);
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
 export const forcedSkillStore: { current: ForcedSkill[] } = {
     current: [],
 };
