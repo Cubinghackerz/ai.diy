@@ -16,8 +16,8 @@ import {
     type ChatGPTHandler,
 } from "@opencoredev/loginwithchatgpt-server";
 import {
-    FileKeyValueStore,
     resolveChatGPTSecret,
+    resolveChatGPTSessionStore,
 } from "~/lib/server/local-persist";
 
 /** Stable Codex CLI version known to expose current GPT-5.6 / 5.5 catalog. */
@@ -39,11 +39,6 @@ export function getChatGPTHandler(): ChatGPTHandler {
     if (handler) return handler;
 
     const secret = resolveChatGPTSecret();
-    if (!process.env.LWC_SECRET?.trim() && process.env.NODE_ENV === "production") {
-        console.warn(
-            "[chatgpt] Using a local .data/lwc-secret. Set LWC_SECRET for multi-instance production so every replica shares the same cookie key.",
-        );
-    }
 
     const allowedOrigins = (process.env.CORS_ORIGINS ?? "")
         .split(",")
@@ -55,7 +50,7 @@ export function getChatGPTHandler(): ChatGPTHandler {
 
     handler = createChatGPTHandler({
         secret,
-        sessionStore: new FileKeyValueStore("chatgpt-sessions.json"),
+        sessionStore: resolveChatGPTSessionStore("chatgpt-sessions.json"),
         sessionTtlMs: resolveSessionTtlMs(),
         cookieName: CHATGPT_COOKIE_NAME,
         basePath: "/api/chatgpt",

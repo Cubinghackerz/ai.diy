@@ -7,10 +7,15 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
-import type { KeyValueStore } from "@opencoredev/loginwithchatgpt-core";
+import { MemoryStore, type KeyValueStore } from "@opencoredev/loginwithchatgpt-core";
+import { Redis } from "@upstash/redis";
 
 const DATA_DIR = join(process.cwd(), ".data");
 const SECRET_PATH = join(DATA_DIR, "lwc-secret");
+
+export function isServerlessRuntime(): boolean {
+    return process.env.VERCEL === "1" || Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
+}
 
 function ensureDataDir() {
     if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
@@ -24,6 +29,12 @@ function ensureDataDir() {
 export function resolveChatGPTSecret(): string {
     const fromEnv = process.env.LWC_SECRET?.trim();
     if (fromEnv) return fromEnv;
+    if (isServerlessRuntime()) {
+        console.warn(
+            "[chatgpt] LWC_SECRET is not set on a serverless runtime. Set it in Vercel so the session cookie remains valid across instances.",
+        );
+        return randomBytes(32).toString("hex");
+    }
     try {
         ensureDataDir();
         if (existsSync(SECRET_PATH)) {
@@ -43,6 +54,69 @@ export function resolveChatGPTSecret(): string {
         );
         return randomBytes(32).toString("hex");
     }
+}
+
+/**
+ * Redis-backed KeyValueStore for serverless deployments. Upstash's REST client
+ * uses HTTP, so it works in Vercel functions without a long-lived TCP socket.
+ */
+export class RedisKeyValueStore<T> implements KeyValueStore<T> {
+    constructor(
+        private readonly redis: Redis,
+        private readonly prefix = "ai.diy:",
+    ) {}
+
+    private key(key: string): string {
+        return `${this.prefix}${key}`;
+    }
+
+    async get(key: string): Promise<T | undefined> {
+        const value = await this.redis.get<T>(this.key(key));
+        return value ?? undefined;
+    }
+
+    async set(key: string, value: T, options: { ttlMs?: number } = {}): Promise<void> {
+        if (options.ttlMs !== undefined) {
+            await this.redis.set(this.key(key), value, {
+                px: Math.max(1, Math.ceil(options.ttlMs)),
+            });
+            return;
+        }
+        await this.redis.set(this.key(key), value);
+    }
+
+    async delete(key: string): Promise<void> {
+        await this.redis.del(this.key(key));
+    }
+}
+
+/**
+ * Select storage by runtime: Redis when configured, memory on serverless
+ * without Redis (never the read-only deployment filesystem), and the durable
+ * local JSON store for Node/Docker.
+ */
+export function resolveChatGPTSessionStore<T>(filename: string): KeyValueStore<T> {
+    const redisUrl =
+        process.env.UPSTASH_REDIS_REST_URL?.trim() || process.env.KV_REST_API_URL?.trim();
+    const redisToken =
+        process.env.UPSTASH_REDIS_REST_TOKEN?.trim() || process.env.KV_REST_API_TOKEN?.trim();
+
+    if (redisUrl && redisToken) {
+        console.info("[chatgpt] Using Upstash Redis for session persistence.");
+        return new RedisKeyValueStore<T>(
+            new Redis({ url: redisUrl, token: redisToken }),
+            `ai.diy:${filename}:`,
+        );
+    }
+
+    if (isServerlessRuntime()) {
+        console.warn(
+            "[chatgpt] No Redis REST credentials found; using in-memory sessions for this serverless instance. Configure Upstash Redis for reliable logins across cold starts.",
+        );
+        return new MemoryStore<T>();
+    }
+
+    return new FileKeyValueStore<T>(filename);
 }
 
 interface FileStoreEntry<T> {

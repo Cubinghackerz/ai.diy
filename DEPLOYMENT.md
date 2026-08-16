@@ -61,6 +61,9 @@ RATE_LIMIT_RPM=60                  # per API key or IP, sliding 1-minute window
 # subscription tokens at rest. Required for stable sessions across restarts.
 # LWC_SECRET=$(openssl rand -hex 32)
 # LWC_SESSION_DAYS=180              # optional, accepted range: 1-365
+# For Vercel/serverless, also connect an Upstash Redis integration and expose:
+# UPSTASH_REDIS_REST_URL=https://<database>.upstash.io
+# UPSTASH_REDIS_REST_TOKEN=...
 ```
 
 **Login with ChatGPT notes**
@@ -68,7 +71,8 @@ RATE_LIMIT_RPM=60                  # per API key or IP, sliding 1-minute window
 - Enable under **Settings → Experimental**, then sign in with the consent widget.
 - Tokens stay server-side (HttpOnly cookie). Local/single-node hosts persist sessions in `.data/` and generate a cookie secret at `.data/lwc-secret` so ChatGPT login survives `npm start` restarts. Sessions default to 180 days and renew while used.
 - Docker Compose mounts `.data/` in the named `ai-diy-data` volume, so rebuilding or replacing the container does not require another login.
-- Multi-instance / serverless hosts must set a shared `LWC_SECRET` and a shared session store (Redis/KV). The local `.data` files are not shared across replicas.
+- Multi-instance / serverless hosts must set a shared `LWC_SECRET` and a shared session store. Vercel uses Upstash Redis when `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are present; the `KV_REST_API_URL` and `KV_REST_API_TOKEN` aliases are also accepted. The local `.data` files are not shared across replicas.
+- Without Redis credentials, serverless deployments fall back to process memory so login does not crash on the read-only filesystem, but sessions can reset on a cold start. Configure Redis for reliable ChatGPT login.
 - This is a community SDK path, not an official OpenAI product. Users spend their own ChatGPT plan; disconnect via the widget or [ChatGPT security settings](https://chatgpt.com/#settings/Security).
 - GPT Live WebRTC voice is **not** included in this BETA.
 
