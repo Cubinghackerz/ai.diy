@@ -33,6 +33,10 @@ export const meta: MetaFunction = () => [
     { title: SITE_TITLE },
     { name: "description", content: SITE_DESCRIPTION },
     { name: "color-scheme", content: "dark light" },
+    {
+        name: "google-site-verification",
+        content: "DxCjy8rLi-HJ6YDrVoN9UWiBR0cBDZlY0F2rDtEKyII",
+    },
     { name: "robots", content: "index, follow" },
     { property: "og:type", content: "website" },
     { property: "og:site_name", content: SITE_NAME },
