@@ -104,6 +104,8 @@ export interface ChatSettings {
     topP: number;
     model: string;
     provider: ProviderId;
+    /** Last model id chosen for each provider. Restored when switching back. */
+    lastModelsByProvider?: Partial<Record<ProviderId, string>>;
     /** Used only when the current model supports reasoning / thinking. */
     reasoningEffort: ReasoningEffort;
     imageSize: "1024x1024" | "1536x1024" | "1024x1536";
@@ -140,7 +142,7 @@ export interface UsageLimitsConfig {
 export interface AppSettings {
     providers: Record<ProviderId, ProviderConfig>;
     chat: ChatSettings;
-    theme: "light" | "dark" | "system";
+    theme: "light" | "dark" | "system" | "oled";
     /** Set true after the user finishes first-run key / model setup. */
     setupComplete: boolean;
     encryptionEnabled: boolean;
@@ -172,7 +174,7 @@ export interface AppSettings {
      */
     agentModeEnabled: boolean;
     /**
-     * Experimental BETA: Login with ChatGPT subscription (HttpOnly session).
+     * Login with ChatGPT subscription (HttpOnly session).
      * Not an API key — spends the signed-in user's ChatGPT plan via /api/chatgpt.
      */
     chatgptLoginEnabled: boolean;
@@ -483,8 +485,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
         temperature: 0.7,
         maxTokens: null,
         topP: 1,
-        model: "gpt-4o",
-        provider: "openai",
+        model: "gpt-5.6",
+        provider: "chatgpt",
+        lastModelsByProvider: { chatgpt: "gpt-5.6" },
         reasoningEffort: "medium",
         imageSize: "1024x1024",
         imageCount: 1,

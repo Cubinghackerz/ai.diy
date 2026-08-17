@@ -19,6 +19,7 @@ import {
     type LinuxRuntimePhase,
 } from "~/lib/cheerpx";
 import { useSettings } from "~/lib/providers/SettingsProvider";
+import { BorderBeam } from "~/components/ui/border-beam";
 import "@xterm/xterm/css/xterm.css";
 
 const MIN_WIDTH = 320;
@@ -257,10 +258,15 @@ export function EnvironmentPanel({
     return (
         <aside
             ref={panelRef}
-            className={`relative z-40 flex h-full shrink-0 flex-col border-l border-border bg-card shadow-2xl animate-slide-up ${isResizing ? "transition-none" : "transition-[width] duration-200"}`}
+            className={`relative z-40 flex h-full shrink-0 flex-col overflow-hidden border-l border-border bg-card shadow-2xl animate-slide-up ${isResizing ? "transition-none" : "transition-[width] duration-200"}`}
             style={{ width, maxWidth: "50vw" }}
             aria-label="Linux environment"
         >
+            <BorderBeam
+                active={phase === "running"}
+                className="aidiy-border-beam-on-card"
+                duration={4.5}
+            />
             <div
                 className="absolute top-0 left-0 h-full w-1.5 cursor-col-resize touch-none"
                 onMouseDown={handleResizeStart}
@@ -323,7 +329,7 @@ export function EnvironmentPanel({
                             </p>
                         ) : (
                             <p className="border-b border-border px-4 py-2 text-[11px] text-muted-foreground">
-                                No outbound network by default. Files persist with this chat.
+                                Tailscale networking is opt-in from Settings → Experimental. Files persist with this chat.
                             </p>
                         )}
                         <div

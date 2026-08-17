@@ -1,5 +1,6 @@
 import { CaretDown } from "@phosphor-icons/react";
 import { Reveal } from "./DoubleBezel";
+import { SectionIndex } from "./SectionIndex";
 
 export const FAQ_ITEMS = [
     {
@@ -43,23 +44,24 @@ export function Faq() {
             data-anim-gate="faq"
         >
             <Reveal>
+                <SectionIndex index="07" label="FAQ" />
                 <h2
                     id="faq-heading"
                     className="max-w-[18ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl"
                 >
-                    Frequently asked questions about ai.diy
+                    Frequently asked questions.
                 </h2>
-                <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-zinc-300">
+                <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-zinc-400">
                     Understand the ownership model, supported AI providers, browser storage, and
                     self-hosting path before you open the workspace.
                 </p>
             </Reveal>
 
             <Reveal delayMs={40} className="mt-8">
-                <div className="divide-y divide-white/[0.1] rounded-xl border border-white/[0.14] bg-white/[0.03] px-5 sm:px-7">
+                <div className="divide-y divide-white/[0.08] border-t border-white/[0.08]">
                     {FAQ_ITEMS.map((item) => (
                         <details key={item.question} className="group py-5 first:pt-1 last:pb-1">
-                            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-5 py-4 text-left text-[15px] font-medium text-white outline-none transition-colors marker:hidden hover:text-zinc-200 focus-visible:text-zinc-200 [&::-webkit-details-marker]:hidden">
+                            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-5 py-4 text-left text-[16px] font-medium text-white outline-none transition-colors marker:hidden hover:text-zinc-200 focus-visible:text-zinc-200 [&::-webkit-details-marker]:hidden">
                                 {item.question}
                                 <CaretDown
                                     weight="light"

@@ -59,7 +59,7 @@ import {
     hasLocalMemoryEntries,
     readLocalMemory,
 } from "~/lib/memory";
-import { askUserInBrowser } from "~/lib/client-tools";
+import { askUserInChat } from "~/lib/ask-user";
 import {
     deletePreviewSession,
     loadPreviewSession,
@@ -1446,7 +1446,7 @@ const PreviewRunPanel: FC<{
             };
             const task =
                 toolCall.toolName === "ask_user"
-                    ? askUserInBrowser({
+                    ? askUserInChat(toolCall.toolCallId, {
                           question: input.question ?? "Please provide more information.",
                           questionType: input.questionType,
                           options: input.options,

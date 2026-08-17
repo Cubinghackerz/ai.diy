@@ -329,7 +329,7 @@ export function classifyProviderError(
                 : `Your ${label} API key was rejected or lacks permission.`;
         parts.fix =
             options?.provider === "chatgpt"
-                ? "Reconnect under Settings → Experimental → Login with ChatGPT."
+                ? "Reconnect under Settings → API Keys → ChatGPT subscription."
                 : `Update the key in Settings or select another provider.`;
     } else if (kind === "credits") {
         parts.what = `${label} has insufficient credits`;

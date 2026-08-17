@@ -7,6 +7,11 @@ import {
   UserMessageAttachments,
 } from "~/components/assistant-ui/attachment";
 import { ComposerModelControls } from "~/components/assistant-ui/ComposerModelControls";
+import {
+    SubagentDock,
+    useSubagentOptional,
+} from "~/components/assistant-ui/subagents";
+import { BorderBeam } from "~/components/ui/border-beam";
 import { ThreadFollowupSuggestions } from "~/components/assistant-ui/follow-up-suggestions";
 import { MarkdownText } from "~/components/assistant-ui/markdown-text";
 import { MessageUsageStats } from "~/components/assistant-ui/MessageUsageStats";
@@ -170,7 +175,7 @@ const ThreadRoot: FC<{
       <ThreadPrimitive.Viewport
         turnAnchor="top"
         data-slot="aui_thread-viewport"
-        className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth"
+         className="relative flex flex-1 flex-col overflow-x-hidden overflow-y-scroll scroll-smooth"
       >
         <div
           className={cn(
@@ -201,6 +206,7 @@ const ThreadRoot: FC<{
             >
               <ThreadScrollToBottom />
               <ThreadFollowupSuggestions />
+              <SubagentDock />
               <Composer />
               {isEmpty && composerEmpty ? <ThreadSuggestions /> : null}
             </ThreadPrimitive.ViewportFooter>
@@ -296,7 +302,7 @@ const ThreadSuggestions: FC = () => {
             key={suggestion.label}
             prompt={suggestion.prompt}
             method="replace"
-            className="aui-thread-welcome-suggestion text-foreground hover:bg-muted border-border/60 h-auto rounded-full border px-3.5 py-1.5 text-sm font-normal whitespace-nowrap transition-colors"
+            className="aui-thread-welcome-suggestion text-foreground hover:bg-muted border-border/60 h-auto rounded-full border px-3.5 py-1.5 text-sm font-normal whitespace-nowrap transition-[background-color,border-color,box-shadow]"
           >
             {suggestion.label}
           </ThreadPrimitive.Suggestion>
@@ -498,7 +504,14 @@ const Composer: FC = () => {
   } = unstable_useComposerInput();
   const streamRunning = useAuiState((s) => s.thread.isRunning);
   const chatGenerating = useChatGenerating();
-  const isRunning = streamRunning || chatGenerating;
+  const subagents = useSubagentOptional();
+  const subagentBusy = Boolean(
+    subagents?.sessions.some(
+      (session) =>
+        session.status === "awaiting-approval" || session.status === "running",
+    ),
+  );
+  const isRunning = streamRunning || chatGenerating || subagentBusy;
   const [appliedSkills, setAppliedSkills] = useState<ForcedSkill[]>([]);
 
   const canSend = storeCanSend && !isRunning;
@@ -524,24 +537,34 @@ const Composer: FC = () => {
     <ComposerDraftContext.Provider
       value={{ value, setText, send, canSend, isRunning, stop, appliedSkills, setAppliedSkills }}
     >
-      <ComposerPrimitive.Root
-        className="aui-composer-root relative flex w-full flex-col"
+       <ComposerPrimitive.Root
+         className="aui-composer-root relative flex w-full flex-col"
         onSubmit={(e) => {
           e.preventDefault();
           if (isRunning) return;
           send();
         }}
-      >
-        <div
-          data-slot="aui_composer-shell"
-          className="border-border/70 flex w-full flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding)"
-        >
-          <ComposerAttachments />
-          <ComposerAttachmentGuard />
-          <ComposerInput />
-          <ComposerAction />
-        </div>
-      </ComposerPrimitive.Root>
+       >
+         <ComposerPrimitive.AttachmentDropzone
+           disabled={isRunning}
+           className="aidiy-composer-dropzone relative w-full"
+         >
+           <div
+             data-slot="aui_composer-shell"
+             className="relative flex w-full flex-col gap-2 rounded-(--composer-radius) border border-border/70 bg-(--composer-bg) p-(--composer-padding) shadow-sm transition-[border-color,box-shadow] focus-within:border-primary/35 focus-within:shadow-md"
+           >
+             <BorderBeam
+               active={isRunning}
+               className="aidiy-border-beam-on-composer"
+               duration={5}
+             />
+             <ComposerAttachments />
+             <ComposerAttachmentGuard />
+             <ComposerInput />
+             <ComposerAction />
+           </div>
+         </ComposerPrimitive.AttachmentDropzone>
+       </ComposerPrimitive.Root>
     </ComposerDraftContext.Provider>
   );
 };
@@ -848,7 +871,7 @@ const UserMessage: FC = () => {
       <UserMessageAttachments />
 
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
-        <div className="aui-user-message-content peer bg-muted text-foreground rounded-xl px-4 py-2 wrap-break-word empty:hidden">
+         <div className="aui-user-message-content peer rounded-2xl rounded-br-md border border-border/60 bg-muted/80 px-4 py-2 text-foreground shadow-sm wrap-break-word empty:hidden">
           <MessagePrimitive.Parts />
         </div>
         <div className="aui-user-action-bar-wrapper absolute start-0 top-1/2 -translate-x-full -translate-y-1/2 pe-2 peer-empty:hidden rtl:translate-x-full">

@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Check, CopySimple } from "@phosphor-icons/react";
 import { DEPLOY_TABS, VERCEL_DEPLOY_URL, type DeployTabId } from "./constants";
-import { DoubleBezel, Reveal } from "./DoubleBezel";
+import { Reveal } from "./DoubleBezel";
 import { useCopy } from "./hooks";
 import { LandingCta } from "./LandingCta";
 import { EASE_OUT } from "./motion";
+import { SectionIndex } from "./SectionIndex";
 import { cn } from "~/lib/utils";
 
 export function DeployTerminal() {
@@ -20,10 +21,11 @@ export function DeployTerminal() {
         >
             <Reveal>
                 <div>
+                    <SectionIndex index="06" label="DEPLOY" />
                     <h2 className="text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
-                        Self-host ai.diy with Node or Docker
+                        Self-host in one command.
                     </h2>
-                    <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-zinc-300">
+                    <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-zinc-400">
                         Node production build, Docker Compose, or a Vercel preview. Click
                         the terminal to copy.
                     </p>
@@ -31,11 +33,7 @@ export function DeployTerminal() {
             </Reveal>
 
             <Reveal delayMs={40} className="mt-8">
-                <DoubleBezel
-                    outerRadius="rounded-xl"
-                    innerRadius="rounded-[10px]"
-                    padding="p-1.5"
-                >
+                <div className="overflow-hidden rounded-2xl border border-white/[0.08]">
                     <div className="flex items-center gap-1 border-b border-white/[0.08] bg-[#0e0e11] px-2 pt-1.5">
                         {DEPLOY_TABS.map((t) => (
                             <button
@@ -93,7 +91,7 @@ export function DeployTerminal() {
                             Docker Compose
                         </button>
                     </div>
-                </DoubleBezel>
+                </div>
             </Reveal>
         </section>
     );

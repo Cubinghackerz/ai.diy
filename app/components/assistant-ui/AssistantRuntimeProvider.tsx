@@ -14,7 +14,10 @@ import {
 } from "@assistant-ui/react-ai-sdk";
 import { useChat } from "@ai-sdk/react";
 import { lastAssistantMessageIsCompleteWithToolCalls } from "ai";
-import { ChatSessionProvider } from "~/components/assistant-ui/ChatSessionContext";
+import {
+    ChatSessionProvider,
+    isGenerationStopRequested,
+} from "~/components/assistant-ui/ChatSessionContext";
 import { ChatThreadSync } from "~/components/assistant-ui/ChatThreadSync";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import { createAttachmentAdapter } from "~/lib/attachments";
@@ -42,7 +45,7 @@ import {
     listKnowledgeDocuments,
     readLocalKnowledge,
 } from "~/lib/knowledge/store.client";
-import { askUserInBrowser } from "~/lib/client-tools";
+import { askUserInChat } from "~/lib/ask-user";
 import { forcedSkillStore, toolNameForForcedSkill } from "~/lib/skill-command";
 import {
     applyCreditsFallback,
@@ -268,6 +271,40 @@ export function AssistantRuntimeProvider({
 
     const chatRef = useRef<ReturnType<typeof useChat> | null>(null);
     const pendingClientCalls = useRef(0);
+    const resumeTimerRef = useRef<number | null>(null);
+    const scheduleMainChatResume = () => {
+        if (typeof window === "undefined") return;
+        if (resumeTimerRef.current != null) {
+            window.clearTimeout(resumeTimerRef.current);
+        }
+        let attempts = 0;
+        const tryResume = () => {
+            const current = chatRef.current;
+            if (!current) return;
+            if (linuxGenerationAborted() || isGenerationStopRequested()) return;
+            if (
+                current.status === "submitted" ||
+                current.status === "streaming"
+            ) {
+                if (attempts++ < 120) {
+                    resumeTimerRef.current = window.setTimeout(tryResume, 50);
+                }
+                return;
+            }
+            if (!lastAssistantMessageIsCompleteWithToolCalls(current)) {
+                if (attempts++ < 120) {
+                    resumeTimerRef.current = window.setTimeout(tryResume, 50);
+                }
+                return;
+            }
+            resumeTimerRef.current = null;
+            pendingClientCalls.current = 0;
+            void current.sendMessage().catch((error) => {
+                console.error("[chat] failed to resume after tool output", error);
+            });
+        };
+        resumeTimerRef.current = window.setTimeout(tryResume, 50);
+    };
     const chat = useChat({
         id: threadId ?? "draft",
         transport,
@@ -306,7 +343,7 @@ export function AssistantRuntimeProvider({
             };
             const task =
                 toolCall.toolName === "ask_user"
-                    ? askUserInBrowser({
+                    ? askUserInChat(toolCall.toolCallId, {
                           question: input.question ?? "Please provide more information.",
                           questionType: input.questionType,
                           options: input.options,
@@ -404,6 +441,7 @@ export function AssistantRuntimeProvider({
                         state: "output-available",
                         output,
                     });
+                    scheduleMainChatResume();
                 },
                 (error) => {
                     const isSubagent =
@@ -443,6 +481,7 @@ export function AssistantRuntimeProvider({
                             output: errorText,
                         });
                     }
+                    scheduleMainChatResume();
                 },
             );
         },

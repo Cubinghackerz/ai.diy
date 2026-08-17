@@ -30,6 +30,7 @@ import { useCanvas, type ArtifactKind } from "~/lib/canvas";
 import { skillLabelForTool } from "~/lib/skill-command";
 import { isLinuxClientTool } from "~/lib/cheerpx";
 import { LinuxProcessCard } from "~/components/assistant-ui/linux-process-card";
+import { AskUserCard } from "~/components/assistant-ui/AskUserCard";
 
 const ANIMATION_DURATION = 200;
 
@@ -761,6 +762,7 @@ function ToolFallbackApproval({
 
 const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   toolName,
+  toolCallId,
   argsText,
   result,
   status,
@@ -780,17 +782,14 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
     (status?.type === "requires-action" &&
       AUTO_EXECUTED_CLIENT_TOOL_NAMES.has(toolName));
 
-  const [open, setOpen] = useState(isRequiresAction || isWaiting);
+  const [open, setOpen] = useState(
+    isRequiresAction || toolName === "ask_user",
+  );
   const [prevRequiresAction, setPrevRequiresAction] =
     useState(isRequiresAction);
   if (isRequiresAction !== prevRequiresAction) {
     setPrevRequiresAction(isRequiresAction);
     if (isRequiresAction) setOpen(true);
-  }
-  const [prevWaiting, setPrevWaiting] = useState(isWaiting);
-  if (isWaiting !== prevWaiting) {
-    setPrevWaiting(isWaiting);
-    if (isWaiting) setOpen(true);
   }
   const linuxTitle = linuxCardTitle(toolName, parseToolArgs(argsText));
   const waitingLabel = isLinuxClientTool(toolName)
@@ -807,7 +806,10 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
         title={linuxTitle ?? undefined}
       />
       <ToolFallbackContent>
-        {isWaiting ? (
+        {toolName === "ask_user" && toolCallId ? (
+          <AskUserCard toolCallId={toolCallId} />
+        ) : null}
+        {isWaiting && toolName !== "ask_user" ? (
           <p className="flex items-center gap-2 text-xs text-muted-foreground">
             <LoaderIcon className="size-3.5 animate-spin [animation-duration:0.6s]" />
             {waitingLabel}

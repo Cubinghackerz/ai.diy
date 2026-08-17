@@ -20,7 +20,7 @@ import { pageMeta } from "~/lib/seo";
 import { SITE_TITLE, SITE_URL } from "~/lib/site";
 import "~/styles/app.css";
 
-const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem('prismium-lite:theme');var theme=t||(localStorage.getItem('prismium-lite:settings')?(JSON.parse(localStorage.getItem('prismium-lite:settings')).theme||'system'):'system');if(theme==='dark'||(theme==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){}})();`;
+const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem('prismium-lite:theme');var theme=t||(localStorage.getItem('prismium-lite:settings')?(JSON.parse(localStorage.getItem('prismium-lite:settings')).theme||'system'):'system');var dark=theme==='dark'||theme==='oled'||(theme==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',dark);document.documentElement.classList.toggle('oled',dark)}catch(e){}})();`;
 
 // App routes stay no-store. /workspace restores COOP/COEP (see home.tsx) for CheerpX.
 const HEADERS: Record<string, string> = {
@@ -58,7 +58,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 />
                 <meta
                     name="theme-color"
-                    content="#0a0a0a"
+                    content="#000000"
                     media="(prefers-color-scheme: dark)"
                 />
                 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />

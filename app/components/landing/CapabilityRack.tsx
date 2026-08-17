@@ -4,9 +4,10 @@ import {
     PlugsConnected,
     TerminalWindow,
 } from "@phosphor-icons/react";
-import { BlueprintFrame, StatusPill } from "./BlueprintFrame";
 import { Reveal } from "./DoubleBezel";
 import { EASE_OUT } from "./motion";
+import { SectionIndex } from "./SectionIndex";
+import { StatusPill } from "./StatusPill";
 import { cn } from "~/lib/utils";
 
 const TABS = [
@@ -50,16 +51,14 @@ export function CapabilityRack() {
             data-anim-gate="capabilities"
         >
             <Reveal>
+                <SectionIndex index="05" label="CAPABILITIES" />
                 <h2 className="max-w-[18ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
-                    Tools and storage for a self-hosted AI workspace.
+                    Tools, storage, and deployment on your terms.
                 </h2>
-                <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-zinc-300">
-                    Dense capability without a wall of feature cards — open a lane and inspect the mechanism.
-                </p>
             </Reveal>
 
-            <Reveal delayMs={40} className="mt-10">
-                <BlueprintFrame label="CAPABILITY RACK" className="rounded-xl" pad={false}>
+            <Reveal delayMs={40} className="mt-12">
+                <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02]">
                     <div className="flex min-h-[24rem] flex-col md:flex-row">
                         <div
                             role="tablist"
@@ -116,7 +115,7 @@ export function CapabilityRack() {
                                     <h3 className="text-xl font-medium tracking-[-0.03em] text-white sm:text-2xl">
                                         {active.title}
                                     </h3>
-                                    <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-zinc-300">
+                                     <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-zinc-400">
                                         {active.body}
                                     </p>
                                 </div>
@@ -170,7 +169,7 @@ server/
                             ) : null}
                         </div>
                     </div>
-                </BlueprintFrame>
+                </div>
             </Reveal>
         </section>
     );

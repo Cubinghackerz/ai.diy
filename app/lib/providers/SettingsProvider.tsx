@@ -73,6 +73,13 @@ function mergeLoadedSettings(parsed: Partial<AppSettings>): AppSettings {
         chat: {
             ...DEFAULT_SETTINGS.chat,
             ...parsed.chat,
+            lastModelsByProvider: {
+                ...DEFAULT_SETTINGS.chat.lastModelsByProvider,
+                ...(parsed.chat?.provider && parsed.chat?.model
+                    ? { [parsed.chat.provider]: parsed.chat.model }
+                    : {}),
+                ...parsed.chat?.lastModelsByProvider,
+            },
         },
         providers: {
             ...DEFAULT_SETTINGS.providers,
@@ -230,16 +237,19 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         if (!loaded) return;
         const root = document.documentElement;
-        if (settings.theme === "dark") {
-            root.classList.add("dark");
-        } else if (settings.theme === "light") {
-            root.classList.remove("dark");
-        } else {
-            // System theme
-            const mq = window.matchMedia("(prefers-color-scheme: dark)");
-            if (mq.matches) root.classList.add("dark");
-            else root.classList.remove("dark");
-        }
+        const mq = window.matchMedia("(prefers-color-scheme: dark)");
+        const applyTheme = () => {
+            const dark =
+                settings.theme === "dark" ||
+                settings.theme === "oled" ||
+                (settings.theme === "system" && mq.matches);
+            root.classList.toggle("dark", dark);
+            root.classList.toggle("oled", dark);
+        };
+        applyTheme();
+        if (settings.theme !== "system") return;
+        mq.addEventListener("change", applyTheme);
+        return () => mq.removeEventListener("change", applyTheme);
     }, [settings.theme, loaded]);
 
     const updateSettings = useCallback((patch: Partial<AppSettings>) => {
@@ -257,10 +267,19 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const updateChat = useCallback((patch: Partial<ChatSettings>) => {
-        setSettings((prev) => ({
-            ...prev,
-            chat: { ...prev.chat, ...patch },
-        }));
+        setSettings((prev) => {
+            const chat = { ...prev.chat, ...patch };
+            const provider = chat.provider;
+            const model = chat.model?.trim();
+            if (provider && model) {
+                chat.lastModelsByProvider = {
+                    ...prev.chat.lastModelsByProvider,
+                    ...patch.lastModelsByProvider,
+                    [provider]: model,
+                };
+            }
+            return { ...prev, chat };
+        });
     }, []);
 
     const addMcpServer = useCallback((server: McpServerConfig) => {

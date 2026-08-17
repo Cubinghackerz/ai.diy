@@ -52,13 +52,10 @@ export type ReasoningRootProps = Omit<
     onOpenChange?: (open: boolean) => void;
     defaultOpen?: boolean;
     /**
-     * Whether the reasoning is currently streaming. While `true` the
-     * disclosure is held open with a bottom-pinned live preview; when
-     * streaming ends it returns to `defaultOpen`, and the first manual
-     * toggle takes over the open/close state permanently. The live preview
-     * keeps following the newest tokens while the disclosure is open during
-     * streaming, even after a manual toggle, and pauses while the reader is
-     * scrolled up.
+     * Whether the reasoning is currently streaming. The disclosure stays
+     * at `defaultOpen` unless the user toggles it. While open during
+     * streaming, the live preview follows the newest tokens and pauses
+     * if the reader scrolls up.
      */
     streaming?: boolean;
   };
@@ -81,7 +78,7 @@ function ReasoningRoot({
   const isControlled = controlledOpen !== undefined;
   const isOpen = isControlled
     ? controlledOpen
-    : (userOpen ?? (streaming || initialOpenRef.current));
+    : (userOpen ?? initialOpenRef.current);
   const isPreview = streaming === true && isOpen;
 
   const prevStreamingRef = useRef(streaming);

@@ -57,7 +57,7 @@ Run real commands in the in-browser x86 Debian VM (CheerpX / WebVM). Measure ver
 ## Decision rules
 
 - This VM’s `python3` is Debian 3.7 — no pandas/numpy. Use `run_python` for analysis libraries.
-- No outbound network. Do not retry `apt` / `pip` / `npm` / curl / git clone.
+- Networking is off until the user connects Tailscale in Settings → Experimental. Public internet additionally requires an exit node. Do not retry `apt` / `pip` / `npm` / curl / git clone before networking is connected.
 - Never mask failures: no `|| true`, no trailing `echo` hiding a failing command. Quote real exit codes and output.
 - Do not wrap commands in GNU `timeout` (i386 stack smash).
 - Stop after one crash of the same binary; simplify instead of looping.

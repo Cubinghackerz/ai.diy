@@ -1,6 +1,6 @@
 /**
- * AppSidebar — chats list + inline settings (BYOK live key test, models, tools, theme).
- * Settings live in the sidebar (no modal) — TypingMind-style operate surface.
+ * AppSidebar — chats list + controlled settings dialog (BYOK live key test,
+ * models, tools, and theme).
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -9,6 +9,18 @@ import { Input } from "~/components/ui/input";
 import { ModelPicker } from "~/components/ui/ModelPicker";
 import { ProviderPicker } from "~/components/ui/ProviderPicker";
 import { ModelLogo } from "~/components/ui/ModelLogo";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from "~/components/ui/tooltip";
+import {
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogTitle,
+} from "~/components/ui/dialog";
 import { ChatGPTLoginSettings } from "~/components/settings/ChatGPTLoginSettings";
 import { haptic, hapticConfirm, hapticSelect } from "~/lib/haptics";
 import {
@@ -66,6 +78,13 @@ import { cn } from "~/lib/utils";
 import { versionedAsset } from "~/lib/build";
 import { localProviderKey } from "~/lib/provider-credentials";
 import {
+    connectLinuxNetwork,
+    getLinuxNetworkSnapshot,
+    openLinuxNetworkLogin,
+    subscribeLinuxNetwork,
+    type LinuxNetworkSnapshot,
+} from "~/lib/cheerpx";
+import {
     CaretRight,
     ChatCircleDots,
     CheckCircle,
@@ -83,6 +102,7 @@ import {
     GearSix,
     Globe,
     HardDrives,
+    Info,
     Key,
     Lightning,
     Moon,
@@ -160,6 +180,120 @@ type SettingsSection =
     | "usage"
     | "appearance";
 
+type SettingsNavItem = {
+    id: SettingsSection;
+    label: string;
+    icon: typeof Key;
+    description: string;
+};
+
+const SETTINGS_GROUPS: { label: string; items: SettingsNavItem[] }[] = [
+    {
+        label: "Configure",
+        items: [
+            {
+                id: "keys",
+                label: "API Keys",
+                icon: Key,
+                description: "Connect providers, test API keys, and choose available models.",
+            },
+            {
+                id: "instructions",
+                label: "Instructions",
+                icon: ChatText,
+                description: "Set reusable system instructions for every chat.",
+            },
+            {
+                id: "tokens",
+                label: "Tokens",
+                icon: Lightning,
+                description: "Choose how much context and tooling each request uses.",
+            },
+            {
+                id: "tools",
+                label: "Tools",
+                icon: Globe,
+                description: "Turn web search, Python, memory, and other tools on or off.",
+            },
+        ],
+    },
+    {
+        label: "Connect",
+        items: [
+            {
+                id: "mcp",
+                label: "MCP Beta",
+                icon: Plug,
+                description: "Connect external Model Context Protocol servers.",
+            },
+            {
+                id: "connect",
+                label: "Connect Beta",
+                icon: PlugsConnected,
+                description: "Manage optional hosted connector authorizations.",
+            },
+            {
+                id: "connectors",
+                label: "Connectors Beta",
+                icon: HardDrives,
+                description: "Configure provider-backed search and service connectors.",
+            },
+            {
+                id: "cloud",
+                label: "Cloud Storage Beta",
+                icon: CloudArrowUp,
+                description: "Back up workspace data to S3, WebDAV, or Drive.",
+            },
+        ],
+    },
+    {
+        label: "Workspace",
+        items: [
+            {
+                id: "memory",
+                label: "Memory Beta",
+                icon: Brain,
+                description: "Let the assistant remember selected local facts.",
+            },
+            {
+                id: "knowledge",
+                label: "Knowledge Base",
+                icon: Books,
+                description: "Index local documents for private semantic search.",
+            },
+            {
+                id: "data",
+                label: "Import & Export",
+                icon: UploadSimple,
+                description: "Move chats and settings in or out of ai.diy.",
+            },
+            {
+                id: "usage",
+                label: "Usage & cost",
+                icon: ChartBar,
+                description: "Review token usage, estimates, and provider spend.",
+            },
+        ],
+    },
+    {
+        label: "System",
+        items: [
+            {
+                id: "experimental",
+                label: "Experimental",
+                icon: Flask,
+                description: "Try opt-in preview features and subagents.",
+            },
+            {
+                id: "appearance",
+                label: "Appearance",
+                icon: Sun,
+                description: "Choose light, dark, system, or OLED presentation.",
+            },
+        ],
+    },
+];
+
 type ThreadItem = { id: string; title: string; projectId?: string | null };
 
 export function AppSidebar({
@@ -197,8 +331,12 @@ export function AppSidebar({
     useCloudAutoBackup();
 
     return (
-        <div className="flex h-full flex-col">
-            <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-2">
+        <Dialog
+            open={panel === "settings"}
+            onOpenChange={(open) => onPanelChange(open ? "settings" : "chats")}
+        >
+            <div className="flex h-full flex-col">
+            <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-3">
                 <div className="flex items-center gap-2 min-w-0">
                     <img
                         src={versionedAsset("/ai-diy-mark.png")}
@@ -216,7 +354,7 @@ export function AppSidebar({
                 </div>
             </div>
 
-            <div className="mx-3 mb-2 grid grid-cols-2 gap-1 rounded-xl bg-muted/60 p-1">
+            <div className="mx-3 mb-3 grid grid-cols-2 gap-1 rounded-2xl border border-border/60 bg-background/35 p-1 shadow-sm">
                 <button
                     type="button"
                     onClick={() => {
@@ -224,9 +362,9 @@ export function AppSidebar({
                         onPanelChange("chats");
                     }}
                     className={cn(
-                        "flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-medium transition-colors outline-none focus-visible:bg-background/80",
+                        "flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-medium transition-[background-color,color,box-shadow] outline-none focus-visible:bg-background/80",
                         panel === "chats"
-                            ? "bg-background text-foreground shadow-sm"
+                            ? "bg-foreground text-background shadow-sm"
                             : "text-muted-foreground hover:text-foreground",
                     )}
                 >
@@ -240,9 +378,9 @@ export function AppSidebar({
                         onPanelChange("settings");
                     }}
                     className={cn(
-                        "flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-medium transition-colors outline-none focus-visible:bg-background/80",
+                        "flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-medium transition-[background-color,color,box-shadow] outline-none focus-visible:bg-background/80",
                         panel === "settings"
-                            ? "bg-background text-foreground shadow-sm"
+                            ? "bg-foreground text-background shadow-sm"
                             : "text-muted-foreground hover:text-foreground",
                     )}
                 >
@@ -251,8 +389,7 @@ export function AppSidebar({
                 </button>
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-3">
-                {panel === "chats" ? (
+                <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-3">
                     <ChatsPanel
                         threads={threads}
                         projects={projects}
@@ -266,11 +403,24 @@ export function AppSidebar({
                         onUpdateProject={onUpdateProject}
                         onDeleteProject={onDeleteProject}
                     />
-                ) : (
-                    <SettingsPanel onImportComplete={onImportComplete} />
-                )}
+                </div>
             </div>
-        </div>
+            <DialogContent
+                showCloseButton={false}
+                className="!flex h-[min(92vh,48rem)] max-w-6xl flex-col gap-0 overflow-hidden p-0 sm:!max-w-6xl"
+            >
+                <DialogTitle className="sr-only">Settings</DialogTitle>
+                <DialogDescription className="sr-only">
+                    Configure providers, tools, workspace behavior, and appearance.
+                </DialogDescription>
+                <div className="min-h-0 flex-1 overflow-hidden">
+                    <SettingsPanel
+                        scopeId={activeThreadId}
+                        onImportComplete={onImportComplete}
+                    />
+                </div>
+            </DialogContent>
+        </Dialog>
     );
 }
 
@@ -400,21 +550,29 @@ function ChatsPanel({
             role="button"
             tabIndex={0}
             onClick={() => {
-                if (movingId === thread.id) return;
+                if (generating || movingId === thread.id) return;
                 hapticSelect();
                 onSelectThread(thread.id);
             }}
             onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
+                    if (generating) return;
                     onSelectThread(thread.id);
                 }
             }}
+            aria-disabled={generating && !isActive}
+            title={
+                generating && !isActive
+                    ? "Wait until the current reply finishes"
+                    : undefined
+            }
             className={cn(
                 "group flex cursor-pointer items-center justify-between rounded-lg px-2.5 py-2 text-xs font-medium outline-none transition-colors",
                 isActive
                     ? "bg-accent text-foreground"
                     : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                generating && !isActive && "pointer-events-none opacity-40",
             )}
         >
             {editingId === thread.id ? (
@@ -904,7 +1062,13 @@ function ChatsPanel({
     );
 }
 
-function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) {
+function SettingsPanel({
+    scopeId,
+    onImportComplete,
+}: {
+    scopeId: string | null;
+    onImportComplete?: () => void;
+}) {
     const {
         settings,
         updateProvider,
@@ -915,33 +1079,13 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
         resetSettings,
     } = useSettings();
     const [section, setSection] = useState<SettingsSection>("keys");
+    const [settingsSearch, setSettingsSearch] = useState("");
     const [mcpName, setMcpName] = useState("");
     const [mcpUrl, setMcpUrl] = useState("");
     const [mcpKind, setMcpKind] = useState<McpServerConfig["kind"]>("http");
     const [mcpHeaders, setMcpHeaders] = useState("");
     const [mcpConnectorId, setMcpConnectorId] = useState("");
     const [mcpError, setMcpError] = useState<string | null>(null);
-
-    const sections: {
-        id: SettingsSection;
-        label: string;
-        icon: typeof Key;
-    }[] = [
-        { id: "keys", label: "API Keys", icon: Key },
-        { id: "instructions", label: "Instructions", icon: ChatText },
-        { id: "tokens", label: "Tokens", icon: Lightning },
-        { id: "tools", label: "Tools", icon: Globe },
-        { id: "mcp", label: "MCP Beta", icon: Plug },
-        { id: "connect", label: "Connect Beta", icon: PlugsConnected },
-        { id: "experimental", label: "Experimental", icon: Flask },
-        { id: "memory", label: "Memory Beta", icon: Brain },
-        { id: "knowledge", label: "Knowledge Base", icon: Books },
-        { id: "connectors", label: "Connectors Beta", icon: HardDrives },
-        { id: "cloud", label: "Cloud Storage Beta", icon: CloudArrowUp },
-        { id: "data", label: "Import & Export", icon: UploadSimple },
-        { id: "usage", label: "Usage & cost", icon: ChartBar },
-        { id: "appearance", label: "Theme", icon: Sun },
-    ];
 
     const handleAddMcp = () => {
         if (!mcpName.trim() || !mcpUrl.trim()) return;
@@ -983,32 +1127,173 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
         setMcpError(null);
     };
 
+    const activeNavItem = SETTINGS_GROUPS.flatMap((group) => group.items).find(
+        (item) => item.id === section,
+    );
+    const ActiveIcon = activeNavItem?.icon;
+    const searchQuery = settingsSearch.trim().toLowerCase();
+    const visibleGroups = SETTINGS_GROUPS.map((group) => ({
+        ...group,
+        items: group.items.filter((item) =>
+            `${item.label} ${item.description} ${group.label}`
+                .toLowerCase()
+                .includes(searchQuery),
+        ),
+    })).filter((group) => group.items.length > 0);
+
     return (
-        <div className="flex flex-col gap-3">
-            <div className="flex flex-wrap gap-1">
-                {sections.map((s) => {
-                    const Icon = s.icon;
-                    return (
-                        <button
-                            key={s.id}
-                            type="button"
-                            onClick={() => {
-                                hapticSelect();
-                                setSection(s.id);
-                            }}
-                            className={cn(
-                                "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium outline-none transition-colors",
-                                section === s.id
-                                    ? "border-primary/40 bg-primary/10 text-foreground"
-                                    : "border-border/70 text-muted-foreground hover:bg-accent hover:text-foreground",
-                            )}
-                        >
-                            <Icon size={12} />
-                            {s.label}
-                        </button>
-                    );
-                })}
-            </div>
+        <div className="grid min-h-0 h-full grid-cols-1 lg:grid-cols-[236px_minmax(0,1fr)]">
+            <aside className="flex min-h-0 flex-col border-b border-border/70 bg-muted/20 lg:border-b-0 lg:border-r">
+                <div className="flex items-center justify-between px-4 pb-3 pt-4">
+                    <div>
+                        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                            Workspace
+                        </p>
+                        <h2 className="mt-1 text-lg font-semibold tracking-[-0.025em]">
+                            Settings
+                        </h2>
+                    </div>
+                    <DialogClose
+                        type="button"
+                        className="flex size-9 items-center justify-center rounded-xl border border-border/80 bg-background text-muted-foreground shadow-sm outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
+                        aria-label="Close settings"
+                    >
+                        <XCircle size={18} />
+                    </DialogClose>
+                </div>
+
+                <div className="px-3 pb-3">
+                    <div className="relative">
+                        <MagnifyingGlass
+                            size={16}
+                            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                        />
+                        <Input
+                            value={settingsSearch}
+                            onChange={(event) => setSettingsSearch(event.target.value)}
+                            placeholder="Search settings"
+                            aria-label="Search settings"
+                            className="h-10 rounded-xl pl-9 text-sm"
+                        />
+                    </div>
+                </div>
+
+                <nav
+                    className="min-h-0 flex-1 overflow-y-auto px-3 pb-4"
+                    aria-label="Settings sections"
+                >
+                    {visibleGroups.length === 0 ? (
+                        <p className="px-2 py-4 text-sm text-muted-foreground">
+                            No settings match your search.
+                        </p>
+                    ) : (
+                        visibleGroups.map((group) => (
+                            <div key={group.label} className="mb-4 last:mb-0">
+                                <p className="px-2 pb-1.5 pt-2 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                                    {group.label}
+                                </p>
+                                <div className="flex flex-col gap-0.5">
+                                    {group.items.map((item) => {
+                                        const Icon = item.icon;
+                                        const selected = section === item.id;
+                                        return (
+                                            <button
+                                                key={item.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    hapticSelect();
+                                                    setSection(item.id);
+                                                }}
+                                                className={cn(
+                                                    "flex min-h-10 min-w-0 items-center gap-2.5 rounded-xl px-3 text-left text-sm font-medium outline-none transition-[background-color,color,transform] active:scale-[0.98]",
+                                                    selected
+                                                        ? "bg-accent text-foreground shadow-sm"
+                                                        : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
+                                                )}
+                                                aria-current={selected ? "page" : undefined}
+                                            >
+                                                <Icon size={17} className="shrink-0" />
+                                                <span className="min-w-0 flex-1 truncate">
+                                                    {item.label}
+                                                </span>
+                                                <Tooltip>
+                                                    <TooltipTrigger
+                                                        render={
+                                                            <span
+                                                                className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-background/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                                                                tabIndex={0}
+                                                                aria-label={`About ${item.label}`}
+                                                            />
+                                                        }
+                                                    >
+                                                        <Info size={14} weight="regular" />
+                                                    </TooltipTrigger>
+                                                    <TooltipContent
+                                                        side="right"
+                                                        align="start"
+                                                        sideOffset={8}
+                                                        className="max-w-56 leading-relaxed"
+                                                    >
+                                                        {item.description}
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </nav>
+            </aside>
+
+            <main className="min-h-0 overflow-y-auto p-5 sm:p-7 lg:p-9">
+                <div className="mx-auto max-w-3xl">
+                    <div className="border-b border-border/80 pb-5">
+                        <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-2 text-muted-foreground">
+                                    {ActiveIcon ? <ActiveIcon size={18} className="text-primary" /> : null}
+                                    <span className="text-sm font-medium">Settings</span>
+                                </div>
+                                <h3 className="mt-3 text-2xl font-semibold tracking-[-0.035em]">
+                                    {activeNavItem?.label}
+                                </h3>
+                                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                                    Private by design. Changes stay in this browser.
+                                </p>
+                            </div>
+                            <span className="shrink-0 rounded-full border border-success/25 bg-success/10 px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-success">
+                                Local
+                            </span>
+                        </div>
+                        <div className="mt-5 flex flex-wrap gap-2">
+                            <div className="rounded-lg border border-border/70 bg-muted/35 px-3 py-2">
+                                <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                                    Route
+                                </span>
+                                <span className="ml-2 text-sm font-medium">
+                                    {PROVIDER_DEFAULTS[settings.chat.provider]?.name || settings.chat.provider}
+                                </span>
+                            </div>
+                            <div className="rounded-lg border border-border/70 bg-muted/35 px-3 py-2">
+                                <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                                    Surface
+                                </span>
+                                <span className="ml-2 text-sm font-medium">
+                                    {settings.theme === "oled"
+                                        ? "OLED / pure black"
+                                        : settings.theme === "system"
+                                          ? "System"
+                                          : settings.theme === "dark"
+                                            ? "Dark"
+                                            : "Light"}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="aidiy-settings-content mt-7">
 
             {section === "keys" && <KeysSection />}
 
@@ -1237,7 +1522,7 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
 
             {section === "experimental" && (
                 <div className="flex flex-col gap-3">
-                    <SubagentsSettingsSection />
+                    <SubagentsSettingsSection scopeId={scopeId} />
                     <PreviewSettingsSection />
                 </div>
             )}
@@ -1257,12 +1542,42 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
             {section === "usage" && <UsageSection />}
 
             {section === "appearance" && (
-                <div className="grid grid-cols-3 gap-2">
+                <div className="flex flex-col gap-3">
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                        Tune the workspace for the room you are in. OLED removes the
+                        canvas glow entirely for true-black displays.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
                     {(
                         [
-                            { id: "dark", label: "Dark", icon: Moon },
-                            { id: "light", label: "Light", icon: Sun },
-                            { id: "system", label: "System", icon: Desktop },
+                            {
+                                id: "dark",
+                                label: "Dark",
+                                description: "Soft black surfaces",
+                                icon: Moon,
+                                swatch: "bg-[#0a0a0a]",
+                            },
+                            {
+                                id: "light",
+                                label: "Light",
+                                description: "Bright paper canvas",
+                                icon: Sun,
+                                swatch: "bg-[#f7f7f7]",
+                            },
+                            {
+                                id: "system",
+                                label: "System",
+                                description: "Follow device theme",
+                                icon: Desktop,
+                                swatch: "bg-[linear-gradient(135deg,#f7f7f7_50%,#0a0a0a_50%)]",
+                            },
+                            {
+                                id: "oled",
+                                label: "OLED / Pure Black",
+                                description: "True #000 canvas",
+                                icon: Lightning,
+                                swatch: "bg-black",
+                            },
                         ] as const
                     ).map((t) => {
                         const Icon = t.icon;
@@ -1276,17 +1591,50 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
                                     updateSettings({ theme: t.id });
                                 }}
                                 className={cn(
-                                    "flex flex-col items-center gap-1.5 rounded-xl border px-2 py-3 text-[11px] font-medium outline-none transition-colors",
+                                    "group flex min-w-0 flex-col items-start gap-2 rounded-2xl border p-2.5 text-left outline-none transition-[background-color,border-color,transform] active:scale-[0.98]",
                                     selected
-                                        ? "border-primary/50 bg-primary/10 text-foreground"
-                                        : "border-border text-muted-foreground hover:bg-accent",
+                                        ? "border-primary/40 bg-primary/10 text-foreground"
+                                        : "border-border/70 text-muted-foreground hover:bg-accent hover:text-foreground",
                                 )}
                             >
-                                <Icon size={18} />
-                                {t.label}
+                                <span
+                                    className={cn(
+                                        "relative flex h-10 w-full items-end justify-between overflow-hidden rounded-xl border border-black/10 p-1.5",
+                                        t.swatch,
+                                    )}
+                                >
+                                    <Icon
+                                        size={14}
+                                        className={cn(
+                                            t.id === "light"
+                                                ? "text-zinc-600"
+                                                : "text-zinc-300",
+                                        )}
+                                    />
+                                    {selected ? (
+                                        <CheckCircle
+                                            size={14}
+                                            weight="fill"
+                                            className={
+                                                t.id === "light"
+                                                    ? "text-zinc-700"
+                                                    : "text-white"
+                                            }
+                                        />
+                                    ) : null}
+                                </span>
+                                <span className="min-w-0">
+                                    <span className="block truncate text-[11px] font-semibold">
+                                        {t.label}
+                                    </span>
+                                    <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+                                        {t.description}
+                                    </span>
+                                </span>
                             </button>
                         );
                     })}
+                    </div>
                 </div>
             )}
 
@@ -1296,10 +1644,13 @@ function SettingsPanel({ onImportComplete }: { onImportComplete?: () => void }) 
                     haptic();
                     resetSettings();
                 }}
-                className="mt-auto pt-2 text-left text-[11px] text-destructive outline-none hover:underline"
+                className="mt-10 border-t border-border/70 pt-5 text-left text-sm text-destructive outline-none hover:underline"
             >
                 Reset all settings
             </button>
+                    </div>
+                </div>
+            </main>
         </div>
     );
 }
@@ -1363,7 +1714,7 @@ function TokenModeSettingsSection() {
                 <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
                     Controls system-prompt size, tool suite, step budget, and
                     optional prompt caching. Default is Balanced. You can also
-                    change this from the TTFT / t/s / tok chip on any assistant
+                    change this from the t/s / tok chip on any assistant
                     message.
                 </p>
             </div>
@@ -3181,22 +3532,25 @@ function SkillCatalogRow({
     );
 }
 
-function SubagentsSettingsSection() {
+function SubagentsSettingsSection({ scopeId }: { scopeId: string | null }) {
     const { settings, updateSettings } = useSettings();
     return (
         <div className="flex flex-col gap-3">
             <ToolToggle
                 title="Linux environment"
-                description="In-browser Debian VM (CheerpX) for bash, python3, gcc, and node. No network by default."
+                description="In-browser Debian VM (CheerpX) for bash, python3, gcc, and node. Tailscale networking is opt-in below."
                 checked={settings.linuxEnvironment !== false}
                 onChange={(enabled) => updateSettings({ linuxEnvironment: enabled })}
             />
-            <ChatGPTLoginSettings />
+            {settings.linuxEnvironment !== false ? (
+                <LinuxNetworkSection scopeId={scopeId} />
+            ) : null}
             <ToolToggle
                 title="Agent Mode"
                 description="Plan with skills and tools, then verify before the final answer. Uses General Task Solver routing when installed."
                 checked={settings.agentModeEnabled}
                 onChange={(enabled) => updateSettings({ agentModeEnabled: enabled })}
+                className={settings.agentModeEnabled ? "aidiy-agent-mode-pulse" : undefined}
             />
             {settings.agentModeEnabled ? (
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
@@ -3223,6 +3577,100 @@ function SubagentsSettingsSection() {
                     subagent before it runs, you cannot prompt it mid-run, and
                     the main model waits for its result before synthesizing the
                     answer.
+                </p>
+            ) : null}
+        </div>
+    );
+}
+
+function LinuxNetworkSection({ scopeId }: { scopeId: string | null }) {
+    const [network, setNetwork] = useState<LinuxNetworkSnapshot>(() =>
+        getLinuxNetworkSnapshot(),
+    );
+    const [connecting, setConnecting] = useState(false);
+
+    useEffect(() => subscribeLinuxNetwork(setNetwork), []);
+
+    const handleConnect = async () => {
+        setConnecting(true);
+        await connectLinuxNetwork(scopeId ?? "draft");
+        setConnecting(false);
+    };
+
+    const connected = network.status === "connected";
+    const statusLabel = connected
+        ? network.hasExitNode
+            ? "Connected · internet exit node"
+            : "Connected · Tailscale network"
+        : network.status === "login-required"
+          ? "Login required"
+          : network.status === "error"
+            ? "Connection failed"
+            : network.status === "connecting"
+              ? "Connecting…"
+              : "Offline by default";
+
+    return (
+        <div className="rounded-2xl border border-border/70 bg-background/35 p-3">
+            <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-2">
+                    <span
+                        className={cn(
+                            "mt-1 size-2 shrink-0 rounded-full",
+                            connected
+                                ? "bg-success shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-success)_15%,transparent)]"
+                                : network.status === "error"
+                                  ? "bg-destructive"
+                                  : "bg-warning",
+                        )}
+                        aria-hidden
+                    />
+                    <div className="min-w-0">
+                        <p className="text-[11px] font-semibold">VM networking</p>
+                        <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                            {statusLabel}. Tailscale supplies the browser-safe network bridge.
+                        </p>
+                    </div>
+                </div>
+                {network.ip ? (
+                    <span className="shrink-0 font-mono text-[9px] text-muted-foreground">
+                        {network.ip}
+                    </span>
+                ) : null}
+            </div>
+            <div className="mt-3 flex gap-1.5">
+                <Button
+                    type="button"
+                    size="sm"
+                    variant={connected ? "secondary" : "default"}
+                    className="h-8 flex-1 rounded-lg text-[10px]"
+                    disabled={connecting || connected}
+                    onClick={() => void handleConnect()}
+                >
+                    {connecting || network.status === "connecting"
+                        ? "Starting…"
+                        : connected
+                          ? "Network connected"
+                          : "Connect Tailscale"}
+                </Button>
+                {network.loginUrl ? (
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 rounded-lg px-2.5 text-[10px]"
+                        onClick={openLinuxNetworkLogin}
+                    >
+                        Open login
+                    </Button>
+                ) : null}
+            </div>
+            <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+                Public internet requires an exit node in your Tailscale network.
+            </p>
+            {network.error ? (
+                <p className="mt-2 text-[10px] leading-relaxed text-destructive">
+                    {network.error}
                 </p>
             ) : null}
         </div>
@@ -3434,7 +3882,7 @@ function PreviewModelRow({
 }
 
 function KeysSection() {
-    const { settings, updateProvider, updateChat, updateSettings } =
+    const { settings, updateProvider, updateSettings } =
         useSettings();
     const [active, setActive] = useState<ProviderId>(settings.chat.provider);
     const [draftName, setDraftName] = useState(
@@ -3595,12 +4043,6 @@ function KeysSection() {
             enabled: true,
             openAICompatible: custom ? draftCompatible : undefined,
         });
-        const nextModel = resolveModel(
-            active,
-            settings.chat.model,
-            (DEFAULT_MODELS[active] ?? []).map((m) => ({ ...m, provider: active })),
-        );
-        updateChat({ provider: active, model: nextModel });
         updateSettings({ setupComplete: true });
         setStatus({
             kind: "ok",
@@ -3612,9 +4054,7 @@ function KeysSection() {
         draftUrl,
         custom,
         local,
-        settings.chat.model,
         updateProvider,
-        updateChat,
         updateSettings,
     ]);
 
@@ -3631,7 +4071,6 @@ function KeysSection() {
                 enabled: true,
                 openAICompatible: { ...draftCompatible, headers },
             });
-            updateChat({ provider: active, model });
             updateSettings({ setupComplete: true });
             setStatus({ kind: "ok", message: `Saved connection — ${model}.` });
         } catch (error) {
@@ -3644,6 +4083,7 @@ function KeysSection() {
 
     return (
         <div className="flex flex-col gap-3">
+            <ChatGPTLoginSettings />
             <p className="text-[11px] leading-relaxed text-muted-foreground">
                 Keys stay in this browser. Test makes a live{" "}
                 <span className="font-medium text-foreground">/models</span>{" "}
@@ -3996,14 +4436,19 @@ function ToolToggle({
     description,
     checked,
     onChange,
+    className,
 }: {
     title: string;
     description: string;
     checked: boolean;
     onChange: (v: boolean) => void;
+    className?: string;
 }) {
     return (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-border/80 bg-background/50 px-3 py-2.5">
+        <div className={cn(
+            "flex items-center justify-between gap-3 rounded-xl border border-border/80 bg-background/50 px-3 py-2.5",
+            className,
+        )}>
             <div className="min-w-0">
                 <div className="text-xs font-semibold">{title}</div>
                 <div className="text-[11px] text-muted-foreground">

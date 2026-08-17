@@ -67,6 +67,22 @@ function extractAssistantTextLength(message: unknown): number {
     return len;
 }
 
+/** Tool input is model response activity even before visible text arrives. */
+function hasToolResponseActivity(message: unknown): boolean {
+    if (!message || typeof message !== "object") return false;
+    const parts = (message as { parts?: unknown }).parts;
+    if (!Array.isArray(parts)) return false;
+    return parts.some((part) => {
+        if (!part || typeof part !== "object") return false;
+        const type = (part as { type?: unknown }).type;
+        return (
+            type === "tool-call" ||
+            type === "dynamic-tool" ||
+            (typeof type === "string" && type.startsWith("tool-"))
+        );
+    });
+}
+
 /** Live estimate of tool-call tokens (model-written args + tool results). */
 function estimateToolCallTokens(message: unknown): number {
     if (!message || typeof message !== "object") return 0;
@@ -90,12 +106,6 @@ function estimateToolCallTokens(message: unknown): number {
         }
     }
     return estimateTokensFromChars(chars);
-}
-
-function formatMs(ms: number | undefined): string {
-    if (ms == null || !Number.isFinite(ms) || ms < 0) return "—";
-    if (ms < 1000) return `${Math.round(ms)}ms`;
-    return `${(ms / 1000).toFixed(ms < 10_000 ? 2 : 1)}s`;
 }
 
 function formatTps(tps: number | undefined): string {
@@ -160,7 +170,7 @@ export const MessageUsageStats: FC = () => {
     });
 
     const streamStartRef = useRef<number | null>(null);
-    const firstTextAtRef = useRef<number | null>(null);
+    const firstResponseAtRef = useRef<number | null>(null);
     const trackedIdRef = useRef<string | null>(null);
     const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -169,16 +179,26 @@ export const MessageUsageStats: FC = () => {
     if (trackedIdRef.current !== messageId) {
         trackedIdRef.current = messageId;
         streamStartRef.current = isRunning ? Date.now() : null;
-        firstTextAtRef.current = null;
+        firstResponseAtRef.current = null;
+    }
+
+    const hasToolActivity = hasToolResponseActivity(message);
+    const responseActivity = textLen > 0 || hasToolActivity;
+    if (
+        isRunning &&
+        responseActivity &&
+        firstResponseAtRef.current == null
+    ) {
+        firstResponseAtRef.current = Date.now();
     }
 
     useEffect(() => {
         if (!isRunning) return;
         if (streamStartRef.current == null) streamStartRef.current = Date.now();
-        if (textLen > 0 && firstTextAtRef.current == null) {
-            firstTextAtRef.current = Date.now();
+        if (responseActivity && firstResponseAtRef.current == null) {
+            firstResponseAtRef.current = Date.now();
         }
-    }, [isRunning, messageId, textLen]);
+    }, [isRunning, messageId, responseActivity]);
 
     useEffect(() => {
         if (!isRunning) return;
@@ -269,23 +289,29 @@ export const MessageUsageStats: FC = () => {
         const firstToken = messageTiming?.firstTokenTime;
         const totalStream = messageTiming?.totalStreamTime;
         const liveStart = streamStartRef.current;
-        const liveFirst = firstTextAtRef.current;
+        const liveFirst = firstResponseAtRef.current;
         const estimatedOut = estimateTokensFromChars(textLen);
         const estimatedToolTokens = estimateToolCallTokens(message);
         const estimatedTotal = estimatedOut + estimatedToolTokens;
 
-        let ttftMs =
-            typeof serverTiming?.ttftMs === "number"
-                ? serverTiming.ttftMs
-                : resolveTtftMs(streamStart, firstToken);
-
-        if (ttftMs == null && liveStart != null) {
-            ttftMs =
-                liveFirst != null
+        const liveTtft =
+            liveStart != null
+                ? liveFirst != null
                     ? Math.max(0, liveFirst - liveStart)
                     : isRunning
                       ? Math.max(0, nowMs - liveStart)
-                      : undefined;
+                      : undefined
+                : undefined;
+        const reportedTtft =
+            typeof serverTiming?.ttftMs === "number"
+                ? serverTiming.ttftMs
+                : resolveTtftMs(streamStart, firstToken);
+        let ttftMs = liveTtft ?? reportedTtft;
+        if ((ttftMs == null || ttftMs < 20) && liveTtft != null && liveTtft >= 20) {
+            ttftMs = liveTtft;
+        }
+        if (ttftMs != null && ttftMs < 20 && isRunning && liveFirst == null) {
+            ttftMs = liveTtft;
         }
 
         const durationMs =
@@ -345,14 +371,12 @@ export const MessageUsageStats: FC = () => {
             costUsd,
             model,
             provider,
-            awaitingFirstToken: isRunning && textLen === 0,
         };
-    }, [message, messageTiming, isRunning, textLen, nowMs, catalog]);
+    }, [message, messageTiming, isRunning, textLen, nowMs, catalog, responseActivity]);
 
     const current = (settings.tokenMode ?? "balanced") as TokenMode;
     const modes: TokenMode[] = ["efficient", "balanced", "caching", "full"];
 
-    const ttftLabel = formatMs(stats.ttftMs);
     const tpsLabel = formatTps(stats.tps);
     const tokLabel =
         stats.totalTokens != null && stats.totalTokens > 0
@@ -548,17 +572,11 @@ export const MessageUsageStats: FC = () => {
                     "focus-visible:ring-2 focus-visible:ring-ring",
                     open && "border-border bg-muted/40",
                 )}
-                aria-label={`Usage: TTFT ${ttftLabel}, ${tpsLabel} tokens per second, ${tokLabel} tokens${stats.costUsd != null ? `, estimated cost ${costLabel}` : ""}. Click to change token mode. Current mode ${TOKEN_MODE_LABELS[current]}.`}
+                aria-label={`Usage: ${tpsLabel} tokens per second, ${tokLabel} tokens${stats.costUsd != null ? `, estimated cost ${costLabel}` : ""}. Click to change token mode. Current mode ${TOKEN_MODE_LABELS[current]}.`}
                 aria-haspopup="dialog"
                 aria-expanded={open}
                 onClick={toggleMenu}
             >
-                <StatCell
-                    label="TTFT"
-                    value={ttftLabel}
-                    live={isRunning && stats.awaitingFirstToken}
-                />
-                <span className="h-2.5 w-px shrink-0 bg-border/70" aria-hidden />
                 <StatCell
                     label="t/s"
                     value={tpsLabel}

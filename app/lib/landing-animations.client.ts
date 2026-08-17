@@ -41,31 +41,7 @@ export async function initLandingAnimations(
             );
         }
 
-        const panel = scope.querySelector<HTMLElement>(".landing-hero-panel");
-        if (panel) {
-            gsap.fromTo(
-                panel,
-                { scale: 0.985 },
-                {
-                    scale: 1,
-                    duration: 1.1,
-                    ease: "power3.out",
-                },
-            );
-        }
-
-        // Floating icons on closing band
-        gsap.utils.toArray<HTMLElement>(".landing-floater", scope).forEach((el, i) => {
-            gsap.to(el, {
-                y: i % 2 === 0 ? -10 : 10,
-                duration: 2.8 + i * 0.25,
-                ease: "sine.inOut",
-                yoyo: true,
-                repeat: -1,
-            });
-        });
-
-        // Scroll reveals are owned by <Reveal>; hero and closing floaters stay here.
+        // Scroll reveals are owned by <Reveal>; the opening sequence stays centralized here.
     }, scope);
 
     return () => {

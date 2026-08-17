@@ -25,15 +25,6 @@ const NODES = [
     },
 ];
 
-function Corner({ className }: { className: string }) {
-    return (
-        <span
-            aria-hidden
-            className={cn("pointer-events-none absolute size-3 border-white/35", className)}
-        />
-    );
-}
-
 export function TrustBoundary({ className }: { className?: string }) {
     const reduced = usePrefersReducedMotion();
 
@@ -43,15 +34,7 @@ export function TrustBoundary({ className }: { className?: string }) {
             role="img"
             aria-label="Keys stay in the browser, the Node server relays each request, and only the selected provider receives it."
         >
-            <div className="relative overflow-hidden rounded-[1.35rem] border border-white/[0.18] bg-[#09090c] shadow-[0_40px_110px_-42px_rgba(0,0,0,0.95),inset_0_1px_0_rgba(255,255,255,0.1)]">
-                <Corner className="left-3 top-3 border-l border-t" />
-                <Corner className="right-3 top-3 border-r border-t" />
-                <Corner className="bottom-3 left-3 border-b border-l" />
-                <Corner className="bottom-3 right-3 border-b border-r" />
-                <div
-                    aria-hidden
-                    className="pointer-events-none absolute inset-0 opacity-45 [background-image:radial-gradient(rgba(255,255,255,0.16)_0.55px,transparent_0.55px)] [background-size:11px_11px]"
-                />
+            <div className="relative overflow-hidden rounded-2xl border border-white/[0.1] bg-[#08080a] shadow-[0_32px_90px_-48px_rgba(0,0,0,0.9)]">
                 <div className="relative flex items-center justify-between border-b border-white/[0.1] px-4 py-2.5 font-mono text-[10px] tracking-[0.18em] text-zinc-400">
                     <span>LOCAL DATA PLANE</span>
                     <span className="inline-flex items-center gap-1.5 tracking-normal text-[var(--landing-mint,#3DFFB0)]">

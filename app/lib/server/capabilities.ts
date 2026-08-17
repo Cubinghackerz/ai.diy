@@ -35,18 +35,18 @@ Call \`research_skill\` before substantial, current, technical, or comparison re
 Then use short keyword searches, fetch only pages that materially affect the answer, prefer primary sources, and cite only URLs retrieved this session. Do not invent dates, versions, prices, or sources. Stop once the evidence is sufficient.`,
     },
     run_python: {
-        summary: "run browser Python for analysis, charts, and real file generation",
+        summary: "run browser Python for analysis, charts, or specialized file generation",
         content: `# Browser Python guide
 
 Call \`run_python\` with \`code\` and optional \`description\`. It runs in browser Pyodide. Import supported libraries normally; do not use pip, micropip, subprocess, or asyncio.run. Top-level await is supported.
 
-For files, use real libraries such as pandas, matplotlib, openpyxl, python-docx, python-pptx, reportlab, or Pillow. Save output in the current working directory. Canvas captures up to four changed files up to 2 MiB each. Validate file existence and size before reporting success. Do not re-upload a captured binary through \`create_file\`.`,
+Use \`create_file\` for ordinary text, code, HTML, SVG, and Canvas artifacts. Use Python only when actual computation, data transformation, charting, binary output, or a specialized document library is necessary. Save specialized outputs in the current working directory; Canvas captures up to four changed files up to 2 MiB each. Validate file existence and size before reporting success. Do not re-upload a captured binary through \`create_file\`.`,
     },
     linux_run_command: {
         summary: "run bash in the in-browser Linux VM",
         content: `# Browser Linux guide
 
-Call \`linux_run_command\` (or \`run_command\` when that alias is listed) with \`command\` and optional \`cwd\` (default \`/home/user\`). It runs in a client-side Debian VM (CheerpX). python3, gcc, node, and apt are available. There is no outbound network by default — package installs that need the network will fail.
+Call \`linux_run_command\` (or \`run_command\` when that alias is listed) with \`command\` and optional \`cwd\` (default \`/home/user\`). It runs in a client-side Debian VM (CheerpX). python3, gcc, node, and apt are available. Networking is off until the user connects Tailscale in Settings → Experimental; public internet additionally requires an exit node. Package installs fail before networking is connected.
 
 Commands time out after 90 seconds by default (pass timeoutSec 1-300 to extend, e.g. for long builds) and output is capped at 32KB. First VM boot has a 60s startup cap. Files persist in the browser's IndexedDB overlay. If the VM reports an error, do not retry Linux tools in that turn. Use \`linux_read_file\` to bring a VM file into Canvas (2 MiB). Prefer \`run_python\` for Pyodide analysis; use this for gcc, node, system tools, and shell workflows.
 
@@ -84,15 +84,21 @@ Call \`linux_kill_process\` with a numeric \`pid\` to stop a process in the in-b
 
 Call \`create_file\` with \`filename\`, \`title\`, \`content\`, and \`kind\`; \`mimeType\` and \`contentEncoding\` are optional. Use \`base64\` or \`hex\` encoding only for exact binary bytes.
 
-Use it for text, code, SVG, or HTML files the user should download or preview. For binary files produced by \`run_python\`, rely on the Python Canvas capture instead. Mention completed filenames in backticks, never invent download links.`,
+Use this as the default and preferred tool for any file creation: text, code, SVG, HTML, interactive Canvas previews, and exact binary content. Do not call \`run_python\`, \`run_code\`, or \`generate_file\` just to create an ordinary file. Use those only when the task genuinely requires computation, data processing, or a specialized binary/document workflow. Mention completed filenames in backticks, never invent download links.`,
     },
     generate_file: {
         summary: "generate a downloadable text, data, or source-code file",
         content: `# File generation guide
 
-Call \`generate_file\` with \`filename\`, \`title\`, \`content\`, and \`kind\`. Use it for CSV, JSON, Markdown, TXT, SVG, HTML, and source code. For substantial data preparation, use \`run_python\` first.
+Prefer \`create_file\` instead. Use \`generate_file\` only for an explicit legacy compatibility case where the caller specifically requires its downloadable-file behavior.
 
 Do not use it to duplicate binary or image artifacts already captured from Python. State the resulting filename in backticks.`,
+    },
+    youtube_transcript: {
+        summary: "fetch a YouTube transcript for summarization",
+        content: `# YouTube transcript guide
+
+Call \`youtube_transcript\` with a YouTube watch, share, shorts, or live URL before summarizing or quoting the video. Use only the returned title, channel, and transcript or description. If captions are missing, say so and summarize only the available description.`,
     },
     url_doctor: {
         summary: "audit a public website for scored health findings",
@@ -146,15 +152,21 @@ Call \`prompt_architect\` with \`goal\` and optional prompt type, audience, tool
     },
     frontend_design_skill: {
         summary: "produce an implementation-ready frontend design brief",
-        content: `# Frontend design guide
+        content: `# HTML Craft guide (legacy alias)
 
-Call \`frontend_design_skill\` with the user \`request\` and optional \`surface\` and \`constraints\` when a design brief, structure, responsive behavior, or accessibility guidance is required. Apply the resulting hierarchy, states, accessibility, and reusable-component guidance to the answer.`,
+Call \`html_craft\` with the user \`request\` and optional \`surface\` and \`constraints\` before frontend implementation. Apply its design thesis, dials, hierarchy, states, responsive behavior, accessibility, and validation contract to the answer.`,
     },
     ultimate_frontend_ui: {
         summary: "load the design and implementation contract for substantial UI work",
-        content: `# Ultimate Frontend UI guide
+        content: `# HTML Craft guide (legacy alias)
 
-Call \`ultimate_frontend_ui\` with the user \`request\` and optional \`surface\` and \`constraints\` before building or substantially redesigning a frontend. Follow its design thesis, state map, responsive, accessibility, performance, security, and validation requirements.`,
+Call \`html_craft\` with the user \`request\` and optional \`surface\` and \`constraints\` before building or substantially redesigning a frontend. Follow its design thesis, state map, responsive, accessibility, performance, security, and validation requirements.`,
+    },
+    html_craft: {
+        summary: "load the bundled HTML Craft frontend design contract",
+        content: `# HTML Craft guide
+
+Call \`html_craft\` before building or substantially redesigning a frontend. Choose the design read and VARIANCE / MOTION / DENSITY dials, inspect the existing surface and tokens, map states, preserve the current framework, and validate responsive behavior, accessibility, reduced motion, performance, security, and realistic content lengths.`,
     },
     spawn_subagent: {
         summary: "delegate one focused task after user approval",

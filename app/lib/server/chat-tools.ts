@@ -32,6 +32,7 @@ import {
     formatUrlDoctorReport,
     runUrlDoctor,
 } from "~/lib/server/url-doctor";
+import { fetchYoutubeTranscript } from "~/lib/server/youtube";
 import {
     normalizeTokenMode,
     tokenModePolicy,
@@ -547,6 +548,54 @@ Return the completed implementation or implementation-ready brief, followed by m
     );
 }
 
+function htmlCraftSkill(input: {
+    request: string;
+    surface?: string;
+    constraints?: string;
+}) {
+    return JSON.stringify(
+        {
+            skill: "html_craft",
+            name: "HTML Craft",
+            description:
+                "A detail-oriented design and implementation contract for static HTML/CSS/JS and frontend UI work.",
+            request: input.request.trim(),
+            surface: input.surface?.trim() || "web interface",
+            constraints:
+                input.constraints?.trim() ||
+                "Preserve the existing framework and design system when modifying an app.",
+            designRead:
+                "State the page or interface kind, audience, vibe, and aesthetic direction before implementation.",
+            dials: [
+                "Choose deliberate VARIANCE, MOTION, and DENSITY positions before styling.",
+                "Use calmer, denser settings for product interfaces and dashboards; use more expressive settings only when the brief supports them.",
+            ],
+            workflow: [
+                "Read the existing surface, tokens, components, and representative visual truth before editing.",
+                "Write real copy and identify the primary task, required states, assets, constraints, and success criteria.",
+                "Choose a coherent typography, color, spacing, radius, and depth system instead of assembling defaults.",
+                "Build semantic structure, responsive layout, interaction states, motion, and accessibility in that order.",
+                "Validate desktop, tablet, and mobile layouts, keyboard access, reduced motion, realistic content lengths, and console errors.",
+            ],
+            guardrails: [
+                "Use real content and never invent metrics, testimonials, awards, compliance claims, or private data.",
+                "Keep one coherent theme and accent system; avoid generic AI-default gradients, glows, bento filler, and decorative dashboard furniture unless justified.",
+                "Support narrow screens down to 320px, prevent horizontal overflow, and make every control keyboard accessible with visible focus.",
+                "Respect prefers-reduced-motion and animate only purposeful state changes or hierarchy.",
+                "Use the existing React/component architecture when the target is a React app; do not force a static-site stack onto it.",
+            ],
+            outputContract: [
+                "Implementation-ready design thesis and layout direction",
+                "Component structure, tokens, responsive behavior, and state map",
+                "Accessibility, performance, security, and validation checklist",
+                "Concrete implementation or a concise brief when the user asked for planning only",
+            ],
+        },
+        null,
+        2,
+    );
+}
+
 function ultimateFrontendUISkill(input: {
     request: string;
     surface?: string;
@@ -730,7 +779,7 @@ function linuxEnvironmentSkill(input: { task?: string }, chatId?: string): strin
         if (linuxSkillLoadedChats.has(chatId)) {
             return `# Linux Environment Skill (already loaded)
 
-You loaded this contract earlier in this conversation. Reuse it — do not call \`linux_environment_skill\` again. Tools: \`linux_run_command\` / \`linux_read_file\` / \`linux_background_start\` / \`linux_list_processes\` / \`linux_kill_process\`. No outbound network; never mask failures with \`|| true\`; verify server readiness before continuing.`;
+You loaded this contract earlier in this conversation. Reuse it — do not call \`linux_environment_skill\` again. Tools: \`linux_run_command\` / \`linux_read_file\` / \`linux_background_start\` / \`linux_list_processes\` / \`linux_kill_process\`. Networking is off until the user connects Tailscale in Settings → Experimental; public internet also needs an exit node. Never mask failures with \`|| true\`; verify server readiness before continuing.`;
         }
         linuxSkillLoadedChats.add(chatId);
     }
@@ -743,8 +792,8 @@ This is a real x86 Debian 10 VM in the browser (CheerpX / WebVM). It is not Pyod
 
 ## What is actually there
 - User: \`user\` (uid 1000). Home: \`/home/user\` (writable). Scratch: \`/tmp\`.
-- Toolchain on the image: \`node\` v10 (Debian 10 — write Node 10-compatible code, no ESM-only packages), \`python3\` 3.7 (no pandas/numpy), \`gcc\`/\`g++\` 8, \`make\`, \`bash\`, \`apt\`. The \`npm\` frontend may be installed by the boot probe as a wrapper in \`/home/user/bin\` (already on PATH) if the image ships the npm CLI — but \`npm install\` still needs network and will fail.
-- No outbound network by default. \`apt install\`, \`pip install\`, \`npm install\`, curl, and git clone will fail. Do not retry them.
+- Toolchain on the image: \`node\` v10 (Debian 10 — write Node 10-compatible code, no ESM-only packages), \`python3\` 3.7 (no pandas/numpy), \`gcc\`/\`g++\` 8, \`make\`, \`bash\`, \`apt\`. On the first \`npm\` command, the runtime checks for the Debian npm CLI and installs a wrapper in \`/home/user/bin\` (already on PATH) when available — but \`npm install\` still needs network.
+- Networking is disabled until the user connects Tailscale in Settings → Experimental. Public internet access additionally requires a Tailscale exit node. Before that, \`apt install\`, \`pip install\`, \`npm install\`, curl, and git clone will fail; do not retry them.
 - Files persist in the browser's IndexedDB overlay. Commands time out after 90s by default; pass \`timeoutSec\` (1-300) to \`linux_run_command\` for long compiles or servers. On timeout the VM kills the command AND all of its descendants. Combined stdout/stderr is capped at 32KB. First boot has a 60s startup cap; do not retry a reported VM failure in the same turn.
 
 ## Tools
@@ -913,7 +962,11 @@ export async function buildChatTools(
     const forceResearch = forcedTools.has("research_skill");
     const forceCompaction = forcedTools.has("compaction_skill");
     const forceUrlDoctor = forcedTools.has("url_doctor");
+    const forceYoutube =
+        forcedTools.has("youtube_transcript") ||
+        forcedTools.has("summarize_youtube");
     const forceSkillSuite =
+        forcedTools.has("html_craft") ||
         forcedTools.has("ultimate_frontend_ui") ||
         forcedTools.has("frontend_design_skill") ||
         forcedTools.has("create_skill") ||
@@ -1295,7 +1348,26 @@ export async function buildChatTools(
 
     // Available even when MCP suppresses built-in web_search/fetch_url —
     // URL Doctor is a scored audit, not a generic search fallback.
-    if (settings.webSearchEnabled !== false || forceUrlDoctor) {
+    if (settings.webSearchEnabled !== false || forceUrlDoctor || forceYoutube) {
+        const youtubeTranscript = tool({
+            description:
+                "Fetch a YouTube video's title, channel, and captions/transcript so you can summarize or quote it. Pass a youtube.com, youtu.be, shorts, or live URL. Do not invent a transcript; use this tool first.",
+            needsApproval: false,
+            inputSchema: z.object({
+                url: z
+                    .string()
+                    .describe("YouTube watch, share, shorts, or live URL"),
+            }),
+            execute: async ({ url }) => {
+                try {
+                    return await fetchYoutubeTranscript(url);
+                } catch (err) {
+                    return `YouTube transcript error: ${err instanceof Error ? err.message : String(err)}`;
+                }
+            },
+        });
+        tools.youtube_transcript = youtubeTranscript;
+        tools.summarize_youtube = youtubeTranscript;
         tools.url_doctor = tool({
             description:
                 "Audit a public URL (URL Doctor / AuditURL). Fetches the page once and returns scored Overall Health plus Security, Performance, SEO, Accessibility, Privacy/Tracking, Links, Conversion, and Reputation/risk with findings. Call when the user pastes a site URL to audit, diagnose, or score. Do not invent Lab metrics; use this tool's measured scores.",
@@ -1334,8 +1406,8 @@ export async function buildChatTools(
     if (enablePython) {
         tools.run_python = tool({
             description: policy.compactToolDescriptions
-                ? "Run Python in browser Pyodide. Libraries auto-import (numpy, pandas, matplotlib, openpyxl, python-docx, etc.). Save charts with matplotlib Agg + savefig to PNG/SVG in cwd; do not emit interactive plot HTML. Rely on Canvas capture; do not re-upload binary artifacts via create_file."
-                : "Execute Python 3 in the browser with Pyodide and return stdout, stderr, or error logs. Every listed library auto-loads on first import; simply import it and never manage package installation yourself with micropip, pip, or subprocess. Top-level await is supported; do not use asyncio.run (Pyodide already runs inside an event loop), just write await at top level. Data/analysis: numpy, pandas, scipy, sympy, scikit-learn, networkx. Plotting: matplotlib (Agg is forced — use savefig to write PNG or SVG files such as chart.png; never interactive matplotlib HTML/toolbars). Parsing: BeautifulSoup, lxml, regex, python-dateutil, pyyaml. File creation: openpyxl and xlsxwriter (Excel), python-docx (Word), python-pptx (PowerPoint), reportlab and fpdf2 (PDF), pillow (images), jinja2 (templates), requests (HTTP), plus the csv, json, and zipfile standard libraries. Always use these real libraries instead of hand-rolling zip/XML files. Save generated files in the current working directory; the browser captures up to four new files of 2 MiB each as Canvas artifacts, persists them with the chat locally, and offers download. When a result reports created artifacts, do not call create_file or copy/Base64 their bytes again.",
+                ? "Run Python in browser Pyodide only when actual analysis, data transformation, charting, or specialized binary/document output is needed. Do not use it for ordinary HTML, CSS, JavaScript, Markdown, or code-file creation. Rely on Canvas capture for specialized outputs; do not re-upload binary artifacts via create_file."
+                : "Execute Python 3 in the browser with Pyodide only when the task genuinely requires computation, data processing, charts, or a specialized binary/document library. Do not use it for ordinary HTML, CSS, JavaScript, Markdown, or code-file creation; use create_file for those. Libraries auto-load on first import; never use micropip, pip, subprocess, or asyncio.run. Save specialized outputs in the current working directory; the browser captures up to four new files of 2 MiB each as Canvas artifacts. When a result reports created artifacts, do not call create_file or copy/Base64 their bytes again.",
             inputSchema: z.object({
                 code: z.string(),
                 description: z.string().optional(),
@@ -1350,8 +1422,8 @@ export async function buildChatTools(
         // Canonical names avoid Codex/ChatGPT reserved `run_command` / `read_file`.
         const linuxRun = tool({
             description: policy.compactToolDescriptions
-                ? "Run bash in the browser Linux VM (Debian: apt/python3/gcc/node). No outbound network by default. Persist files per chat; use linux_read_file for Canvas. Call linux_environment_skill first. This is the tool if the user asks for run_command."
-                : "Execute a bash command in the in-browser Linux environment (CheerpX/WebVM): a full x86 Debian VM running client-side. python3, gcc, node, and apt are on the image. There is no outbound network by default, so apt/pip/npm installs that need the network will fail unless the operator later enables networking. Filesystem changes persist in the browser's IndexedDB overlay. Capture stdout/stderr and the exit code; commands are killed after 90s by default (pass timeoutSec 1-300 to extend, e.g. for long builds) and output is capped at 32KB. First boot has a 60s startup cap. If the VM reports an error, do not retry Linux tools in that turn. Use linux_read_file to bring a VM file into Canvas (2 MiB cap). Prefer this for gcc/node/system tools; use run_python for in-browser Pyodide analysis. Call linux_environment_skill before non-trivial use. Call this when the user asks for run_command.",
+                ? "Run bash in the browser Linux VM (Debian: apt/python3/gcc/node). Networking is off until the user connects Tailscale in Settings → Experimental; public internet needs an exit node. Persist files per chat; use linux_read_file for Canvas. Call linux_environment_skill first. This is the tool if the user asks for run_command."
+                : "Execute a bash command in the in-browser Linux environment (CheerpX/WebVM): a full x86 Debian VM running client-side. python3, gcc, node, and apt are on the image. Networking is off until the user connects Tailscale in Settings → Experimental; public internet additionally requires an exit node, so apt/pip/npm installs will fail before then. Filesystem changes persist in the browser's IndexedDB overlay. Capture stdout/stderr and the exit code; commands are killed after 90s by default (pass timeoutSec 1-300 to extend, e.g. for long builds) and output is capped at 32KB. First boot has a 60s startup cap. If the VM reports an error, do not retry Linux tools in that turn. Use linux_read_file to bring a VM file into Canvas (2 MiB cap). Prefer this for gcc/node/system tools; use run_python for in-browser Pyodide analysis. Call linux_environment_skill before non-trivial use. Call this when the user asks for run_command.",
             inputSchema: z.object({
                 command: z.string(),
                 cwd: z.string().optional(),
@@ -1406,7 +1478,7 @@ export async function buildChatTools(
         }
         const linuxSkill = tool({
             description:
-                "Callable Linux environment skill. Invoke before bash, gcc, node, or VM file work. It defines the CheerpX Debian contract: tools on the image, no network, writable paths, linux_run_command / linux_read_file usage, and recovery for permission or stack-smash failures. Loads once per conversation.",
+                "Callable Linux environment skill. Invoke before bash, gcc, node, or VM file work. It defines the CheerpX Debian contract: tools on the image, Tailscale networking setup, writable paths, linux_run_command / linux_read_file usage, and recovery for permission or stack-smash failures. Loads once per conversation.",
             inputSchema: z.object({ task: z.string().optional() }),
             execute: async (input) => linuxEnvironmentSkill(input, options.chatId),
         });
@@ -1590,42 +1662,26 @@ export async function buildChatTools(
         tools.prompt_architect = createPrompt;
         tools.create_prompt = createPrompt;
 
-        tools.frontend_design_skill = tool({
+        const htmlCraftTool = tool({
             description:
-                "Activate a frontend design skill for a UI request. Returns an implementation-ready design brief covering hierarchy, responsive behavior, states, accessibility, and reusable components.",
+                "Activate the HTML Craft frontend design contract before building or substantially redesigning a UI. It defines the design read, variance/motion/density dials, typography/color/layout system, state map, responsive behavior, accessibility, performance, security, and validation preflight.",
             inputSchema: z.object({
                 request: z.string(),
                 surface: z.string().optional(),
                 constraints: z.string().optional(),
             }),
-            execute: async (input) => {
-                const brief = frontendDesignBrief(input);
-                const title = `Design Brief: ${(input.request || "").trim().slice(0, 60)}`;
-                return artifactPayload({
-                    title: title.length > 5 ? title : "Design Brief",
-                    filename: "design-brief.md",
-                    content: brief,
-                    kind: "markdown",
-                });
-            },
+            execute: async (input) => htmlCraftSkill(input),
         });
-
-        tools.ultimate_frontend_ui = tool({
-            description:
-                "Callable Ultimate Frontend UI skill. Use this before creating or substantially redesigning a frontend. It requires a design thesis, interface-mode classification, explicit states, responsive behavior, accessibility, performance, security, and validation. Return the implementation-ready skill contract and apply it to the user's request.",
-            inputSchema: z.object({
-                request: z.string(),
-                surface: z.string().optional(),
-                constraints: z.string().optional(),
-            }),
-            execute: async (input) => ultimateFrontendUISkill(input),
-        });
+        tools.html_craft = htmlCraftTool;
+        // Keep the old tool ids as aliases for persisted prompts and older chats.
+        tools.frontend_design_skill = htmlCraftTool;
+        tools.ultimate_frontend_ui = htmlCraftTool;
     }
 
     tools.create_file = tool({
         description: policy.compactToolDescriptions
-            ? "Create a Canvas file (text/code/HTML/SVG or base64/hex binary). Mention the filename in backticks, not as a markdown link."
-            : "Create a document, code file, SVG, interactive HTML preview, or downloadable binary file in the Canvas panel. For binary bytes produced by run_python, pass the exact Base64 or hex string with contentEncoding set to base64 or hex; the client decodes it before download. For interactive HTML, use in-page # anchors or absolute https:// links only—never root-relative paths like /pricing that would leave the preview. Always use this tool for a file the user asked to download and mention the resulting filename in backticks (never as a markdown link).",
+            ? "Create the requested Canvas file (text/code/HTML/SVG or base64/hex binary). This is the default file-creation tool. Mention the filename in backticks, not as a markdown link."
+            : "Create a document, code file, SVG, interactive HTML preview, or downloadable binary file in the Canvas panel. This is the preferred and default tool for file creation. Do not use run_python, run_code, or generate_file for ordinary files. For binary bytes produced by run_python, pass the exact Base64 or hex string with contentEncoding set to base64 or hex; the client decodes it before download. For interactive HTML, use in-page # anchors or absolute https:// links only—never root-relative paths like /pricing that would leave the preview. Always mention the resulting filename in backticks (never as a markdown link).",
         inputSchema: z.object({
             filename: z.string(),
             title: z.string(),
@@ -1641,8 +1697,8 @@ export async function buildChatTools(
     if (policy.generateFile) {
         tools.generate_file = tool({
             description: policy.compactToolDescriptions
-                ? "Generate a downloadable text/data/code file and mention its filename in backticks. Do not duplicate run_python binary artifacts."
-                : "Generate a downloadable text/data/code file from content and mention its filename in backticks (never as a markdown link). Use this for CSV, JSON, Markdown, TXT, SVG, HTML, or source code when the user asks for a file. Do not call this for an image or binary file already created by run_python; do not Base64-encode and duplicate a Python-created file. For data-heavy text files, use run_python first, then pass the resulting text here.",
+                ? "Legacy file-generation alias. Prefer create_file for ordinary files and Canvas previews. Do not duplicate run_python binary artifacts."
+                : "Legacy file-generation alias. Prefer create_file for CSV, JSON, Markdown, TXT, SVG, HTML, and source code. Use this only when its explicit downloadable-file behavior is required; do not call run_python first unless actual data preparation is necessary.",
             inputSchema: z.object({
                 filename: z.string(),
                 title: z.string(),

@@ -6,7 +6,7 @@ import { ModelPicker } from "~/components/ui/ModelPicker";
 import { ProviderPicker } from "~/components/ui/ProviderPicker";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import { isProviderReady } from "~/lib/setup";
-import { getModelCapabilities, resolveModel } from "~/lib/model-capabilities";
+import { getModelCapabilities, lastModelForProvider } from "~/lib/model-capabilities";
 import type { ProviderId } from "~/lib/types";
 import { type FC } from "react";
 import { VideoCamera } from "@phosphor-icons/react";
@@ -26,11 +26,10 @@ export const ComposerModelControls: FC = () => {
             <ProviderPicker
                 value={settings.chat.provider}
                 onChange={(provider: ProviderId) => {
-                    const first = resolveModel(
+                    updateChat({
                         provider,
-                        settings.chat.model,
-                    );
-                    updateChat({ provider, model: first });
+                        model: lastModelForProvider(provider, settings.chat),
+                    });
                 }}
                 align="left"
                 compact

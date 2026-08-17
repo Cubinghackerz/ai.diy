@@ -43,14 +43,9 @@ export const BUILTIN_FORCED_SKILLS: ForcedSkill[] = [
             "You MUST activate and follow the compaction_skill for this request: call the compaction_skill tool first to compress prior conversation into a faithful carry-forward brief (goals, decisions, constraints, open threads, cited URLs). Do not invent details that are not in the source turns. After compaction, continue from the brief plus the recent messages, and keep using the active tools available this turn. Do not answer before calling compaction_skill.",
     },
     {
-        name: "Ultimate Frontend UI",
+        name: "HTML Craft",
         content:
-            "You MUST activate and follow the ultimate_frontend_ui skill for this request before writing any code: call the ultimate_frontend_ui tool, then comply with its design thesis, interface-mode classification, state map, responsive/accessibility/performance/security gates, and validation contract. Do not answer before calling ultimate_frontend_ui.",
-    },
-    {
-        name: "Frontend Design",
-        content:
-            "You MUST activate and follow the frontend_design_skill for this request: call the frontend_design_skill tool and produce the implementation-ready design brief it defines (hierarchy, responsive behavior, states, accessibility, reusable components) before answering. Do not answer before calling frontend_design_skill.",
+            "You MUST activate and follow the html_craft skill for this request before writing frontend code: call the html_craft tool first, then apply its design thesis, typography and color system, layout rules, interaction states, responsive/accessibility/performance gates, and preflight validation. Adapt the contract to the existing framework when the user is working in a React app. Do not answer before calling html_craft.",
     },
     {
         name: "Python File Creation",
@@ -78,6 +73,11 @@ export const BUILTIN_FORCED_SKILLS: ForcedSkill[] = [
             "You MUST use subagents for this request. Call spawn_subagents (preferred for 1–3 independent slices) or spawn_subagent for one focused slice BEFORE answering. The browser will pause for user approval, then run each subagent to completion; you MUST wait for that tool result (do not keep answering as if it finished early). After results return, synthesize Status: complete outputs; for Status: declined/cancelled/error, continue yourself or note the gap — never invent what a failed subagent would have said.",
     },
     {
+        name: "YouTube",
+        content:
+            "You MUST activate youtube_transcript for this request: call youtube_transcript first with the YouTube URL, then summarize or quote only from the returned title, channel, and transcript/description. Do not invent captions. Do not answer before calling youtube_transcript.",
+    },
+    {
         name: "URL Doctor",
         content:
             "You MUST activate URL Doctor for this request: call url_doctor first with the public http(s) URL the user wants audited (AuditURL). Present the returned Overall Health and category scores (Security, Performance, SEO, Accessibility, Privacy/Tracking, Links, Conversion, Reputation/risk) with findings. Do not invent Lighthouse/Lab timings or reputation feeds that were not measured. Do not answer before calling url_doctor.",
@@ -93,8 +93,15 @@ export const BUILTIN_FORCED_SKILLS: ForcedSkill[] = [
 const SKILL_MENU_ALIASES: Record<string, string[]> = {
     research: ["research", "web research", "search"],
     compaction: ["compaction", "compact", "compress", "context", "shrink"],
-    "ultimate frontend ui": ["ultimate frontend ui", "frontend ui", "ui"],
-    "frontend design": ["frontend design", "design"],
+    "html craft": [
+        "html craft",
+        "html",
+        "frontend design",
+        "ultimate frontend ui",
+        "frontend ui",
+        "ui",
+        "web design",
+    ],
     "python file creation": ["python file creation", "python", "file"],
     "word document": ["word document", "word", "docx"],
     "skill architect": ["skill architect", "skill", "architect"],
@@ -107,6 +114,7 @@ const SKILL_MENU_ALIASES: Record<string, string[]> = {
         "prompt engineer",
     ],
     subagent: ["subagent", "subagents", "delegate", "fanout", "fan-out", "parallel"],
+    youtube: ["youtube", "yt", "video", "transcript", "summarize video"],
     "url doctor": [
         "url doctor",
         "auditurl",
@@ -142,8 +150,10 @@ const SKILL_TOOL_BY_NAME: Record<string, string> = {
     research: "research_skill",
     "research skill": "research_skill",
     "web research": "research_skill",
-    "ultimate frontend ui": "ultimate_frontend_ui",
-    "frontend design": "frontend_design_skill",
+    "html craft": "html_craft",
+    html: "html_craft",
+    "frontend design": "html_craft",
+    "ultimate frontend ui": "html_craft",
     "python file creation": "python_file_creation_skill",
     "word document": "word_document_skill",
     "skill architect": "create_skill",
@@ -155,6 +165,9 @@ const SKILL_TOOL_BY_NAME: Record<string, string> = {
     compress: "compaction_skill",
     subagent: "spawn_subagents",
     subagents: "spawn_subagents",
+    youtube: "youtube_transcript",
+    yt: "youtube_transcript",
+    "summarize youtube": "youtube_transcript",
     "url doctor": "url_doctor",
     auditurl: "url_doctor",
     "audit url": "url_doctor",
@@ -183,6 +196,9 @@ export function toolNameForForcedSkill(skillName: string): string | null {
     if (/\bcompact/.test(key) || /\bcompress\b/.test(key)) return "compaction_skill";
     if (/\bprompt\b/.test(key) && !/\bskill\b/.test(key)) return "prompt_architect";
     if (/\bsubagents?\b/.test(key)) return "spawn_subagents";
+    if (/\byoutube\b/.test(key) || /\byt\b/.test(key)) {
+        return "youtube_transcript";
+    }
     if (
         /\burl\s*doctor\b/.test(key) ||
         /\baudit\s*url\b/.test(key) ||
@@ -205,8 +221,9 @@ export function toolNameForForcedSkill(skillName: string): string | null {
 const TOOL_TO_SKILL_LABEL: Record<string, string> = {
     research_skill: "Research",
     compaction_skill: "Compaction",
-    ultimate_frontend_ui: "Ultimate Frontend UI",
-    frontend_design_skill: "Frontend Design",
+    html_craft: "HTML Craft",
+    ultimate_frontend_ui: "HTML Craft",
+    frontend_design_skill: "HTML Craft",
     python_file_creation_skill: "Python File Creation",
     file_creation_skill: "Python File Creation",
     word_document_skill: "Word Document",
@@ -217,6 +234,8 @@ const TOOL_TO_SKILL_LABEL: Record<string, string> = {
     create_prompt: "Prompt Architect",
     spawn_subagent: "Subagent",
     spawn_subagents: "Subagent",
+    youtube_transcript: "YouTube",
+    summarize_youtube: "YouTube",
     url_doctor: "URL Doctor",
     linux_environment_skill: "Linux Environment",
 };

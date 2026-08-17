@@ -4,7 +4,6 @@
 
 import {
     useEffect,
-    useLayoutEffect,
     useMemo,
     useRef,
     useState,
@@ -16,8 +15,8 @@ import { hapticSelect } from "~/lib/haptics";
 import { isLocalProvider } from "~/lib/setup";
 import { PROVIDER_DEFAULTS, type ProviderId } from "~/lib/types";
 import { ModelLogo } from "~/components/ui/ModelLogo";
-import { useChatGPTProviderVisible } from "~/components/settings/ChatGPTLoginSettings";
 import { cn } from "~/lib/utils";
+import { useAnchoredMenu } from "~/lib/use-anchored-menu";
 
 const PROVIDER_IDS = Object.keys(PROVIDER_DEFAULTS) as ProviderId[];
 
@@ -38,20 +37,16 @@ export function ProviderPicker({
     const rootRef = useRef<HTMLDivElement>(null);
     const triggerRef = useRef<HTMLButtonElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
-    const [menuStyle, setMenuStyle] = useState<React.CSSProperties | null>(null);
     const selected = PROVIDER_DEFAULTS[value];
-    const chatgptVisible = useChatGPTProviderVisible();
 
     const options = useMemo(
         () =>
-            PROVIDER_IDS.filter((id) => id !== "chatgpt" || chatgptVisible).map(
-                (id) => ({
-                    id,
-                    name: PROVIDER_DEFAULTS[id].name,
-                    local: isLocalProvider(id),
-                }),
-            ),
-        [chatgptVisible],
+            PROVIDER_IDS.map((id) => ({
+                id,
+                name: PROVIDER_DEFAULTS[id].name,
+                local: isLocalProvider(id),
+            })),
+        [],
     );
 
     useEffect(() => {
@@ -76,55 +71,12 @@ export function ProviderPicker({
         };
     }, [open]);
 
-    useLayoutEffect(() => {
-        if (!open) {
-            setMenuStyle(null);
-            return;
-        }
-
-        const updatePosition = () => {
-            const rect = triggerRef.current?.getBoundingClientRect();
-            if (!rect) return;
-            const menuHeight = 288;
-            const width = Math.min(288, window.innerWidth - 16);
-            const openAbove =
-                window.innerHeight - rect.bottom < menuHeight + 8 &&
-                rect.top > window.innerHeight - rect.bottom;
-            const top = openAbove
-                ? Math.max(8, rect.top - menuHeight - 6)
-                : Math.min(
-                      Math.max(8, window.innerHeight - menuHeight - 8),
-                      rect.bottom + 6,
-                  );
-            const style: React.CSSProperties = {
-                position: "fixed",
-                top,
-                width,
-                maxHeight: "min(18rem, calc(100vh - 1rem))",
-                zIndex: 100,
-            };
-            if (align === "right") {
-                style.right = Math.min(
-                    Math.max(8, window.innerWidth - rect.right),
-                    Math.max(8, window.innerWidth - width - 8),
-                );
-            } else {
-                style.left = Math.min(
-                    Math.max(8, rect.left),
-                    Math.max(8, window.innerWidth - width - 8),
-                );
-            }
-            setMenuStyle(style);
-        };
-
-        updatePosition();
-        window.addEventListener("resize", updatePosition);
-        window.addEventListener("scroll", updatePosition, true);
-        return () => {
-            window.removeEventListener("resize", updatePosition);
-            window.removeEventListener("scroll", updatePosition, true);
-        };
-    }, [align, compact, open]);
+    const menuStyle = useAnchoredMenu(open, triggerRef, menuRef, {
+        width: 288,
+        maxHeight: 288,
+        align,
+        zIndex: 100,
+    });
 
     return (
         <div ref={rootRef} className={cn("relative", className)}>

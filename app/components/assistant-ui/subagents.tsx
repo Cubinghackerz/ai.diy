@@ -57,6 +57,7 @@ import {
     notifyCreditsFallback,
 } from "~/lib/credits-fallback";
 import { detectProviderCreditError } from "~/lib/provider-errors";
+import { toolHumanLabel } from "~/components/assistant-ui/work-summary";
 
 /** Read the outgoing subagent request body without consuming it. */
 function captureSubagentRequestBody(
@@ -114,6 +115,7 @@ function formatSubagentSuccess(output: string): string {
 }
 
 type SubagentContextValue = {
+    threadId: string | null;
     sessions: SubagentSession[];
     runSubagent: (toolCallId: string, task: string) => Promise<string>;
     runSubagentsBatch: (parentToolCallId: string, tasks: string[]) => Promise<string>;
@@ -124,7 +126,36 @@ type SubagentContextValue = {
     complete: (id: string, output: string) => void;
     fail: (id: string, error: string) => void;
     dismiss: (id: string) => void;
+    abortAll: () => void;
 };
+
+const sessionListeners = new Set<() => void>();
+let latestSessions: SubagentSession[] = [];
+let abortActiveSubagentsImpl: (() => void) | null = null;
+const activeSubagentStops = new Map<string, () => void>();
+
+function notifySubagentListeners() {
+    for (const listener of sessionListeners) listener();
+}
+
+export function subscribeSubagentSessions(listener: () => void): () => void {
+    sessionListeners.add(listener);
+    return () => {
+        sessionListeners.delete(listener);
+    };
+}
+
+export function hasActiveSubagent(): boolean {
+    return latestSessions.some(
+        (session) =>
+            session.status === "awaiting-approval" ||
+            session.status === "running",
+    );
+}
+
+export function abortActiveSubagents(): void {
+    abortActiveSubagentsImpl?.();
+}
 
 const SubagentContext = createContext<SubagentContextValue | null>(null);
 
@@ -273,6 +304,7 @@ export function SubagentProvider({
 
     const complete = useCallback(
         (id: string, output: string) => {
+            if (settledRef.current.has(id)) return;
             resolveOnce(id, formatSubagentSuccess(output));
             patchSession(id, {
                 status: "complete",
@@ -285,6 +317,7 @@ export function SubagentProvider({
 
     const fail = useCallback(
         (id: string, error: string) => {
+            if (settledRef.current.has(id)) return;
             const message = formatSubagentFailure(error);
             resolveOnce(id, message);
             patchSession(id, { status: "error", error: error.trim() || "Unknown error" });
@@ -303,8 +336,44 @@ export function SubagentProvider({
         [resolveOnce],
     );
 
+    const abortAll = useCallback(() => {
+        setSessions((current) => {
+            for (const session of current) {
+                if (
+                    session.status !== "awaiting-approval" &&
+                    session.status !== "running"
+                ) {
+                    continue;
+                }
+                activeSubagentStops.get(session.id)?.();
+                resolveOnce(session.id, SUBAGENT_CANCELLED_MESSAGE);
+            }
+            return current.map((session) =>
+                session.status === "awaiting-approval" ||
+                session.status === "running"
+                    ? { ...session, status: "declined" as const }
+                    : session,
+            );
+        });
+    }, [resolveOnce]);
+
+    useEffect(() => {
+        latestSessions = sessions;
+        notifySubagentListeners();
+    }, [sessions]);
+
+    useEffect(() => {
+        abortActiveSubagentsImpl = abortAll;
+        return () => {
+            if (abortActiveSubagentsImpl === abortAll) {
+                abortActiveSubagentsImpl = null;
+            }
+        };
+    }, [abortAll]);
+
     const value = useMemo<SubagentContextValue>(
         () => ({
+            threadId,
             sessions,
             runSubagent,
             runSubagentsBatch,
@@ -315,8 +384,10 @@ export function SubagentProvider({
             complete,
             fail,
             dismiss,
+            abortAll,
         }),
         [
+            abortAll,
             approve,
             approveAll,
             complete,
@@ -327,13 +398,13 @@ export function SubagentProvider({
             runSubagent,
             runSubagentsBatch,
             sessions,
+            threadId,
         ],
     );
 
     return (
         <SubagentContext.Provider value={value}>
             {children}
-            <SubagentPopup threadId={threadId} />
         </SubagentContext.Provider>
     );
 }
@@ -342,6 +413,55 @@ export function useSubagent() {
     const ctx = useContext(SubagentContext);
     if (!ctx) throw new Error("useSubagent requires SubagentProvider");
     return ctx;
+}
+
+export function useSubagentOptional() {
+    return useContext(SubagentContext);
+}
+
+export function SubagentDock() {
+    const ctx = useSubagentOptional();
+    if (!ctx || ctx.sessions.length === 0) return null;
+    const { sessions, dismiss, approveAll, denyAll, threadId } = ctx;
+    const awaitingCount = sessions.filter(
+        (session) => session.status === "awaiting-approval",
+    ).length;
+
+    return (
+        <div className="flex w-full flex-col gap-3">
+            {awaitingCount > 1 ? (
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/70 bg-card/80 px-4 py-3">
+                    <p className="text-sm text-muted-foreground">
+                        {awaitingCount} subagents need approval
+                    </p>
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={denyAll}
+                            className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
+                        >
+                            Deny all
+                        </button>
+                        <button
+                            type="button"
+                            onClick={approveAll}
+                            className="rounded-xl bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground outline-none hover:bg-primary/90"
+                        >
+                            Approve all
+                        </button>
+                    </div>
+                </div>
+            ) : null}
+            {sessions.map((session) => (
+                <SubagentSessionCard
+                    key={session.id}
+                    session={session}
+                    threadId={threadId}
+                    onDismiss={dismiss}
+                />
+            ))}
+        </div>
+    );
 }
 
 function parseChatError(response: Response, fallback: string): Promise<string> {
@@ -374,51 +494,6 @@ const STATUS_LABEL: Record<SubagentSessionStatus, string> = {
     error: "Failed",
 };
 
-function SubagentPopup({ threadId }: { threadId: string | null }) {
-    const { sessions, dismiss, approveAll, denyAll } = useSubagent();
-    const awaitingCount = sessions.filter(
-        (session) => session.status === "awaiting-approval",
-    ).length;
-
-    if (sessions.length === 0) return null;
-
-    return (
-        <div className="fixed bottom-4 right-4 z-50 flex w-[21rem] max-w-[calc(100vw-2rem)] flex-col gap-2">
-            {awaitingCount > 1 ? (
-                <div className="overflow-hidden rounded-xl border border-border/80 bg-background px-3 py-2 shadow-lg">
-                    <p className="mb-2 text-[10px] text-muted-foreground">
-                        {awaitingCount} subagents need approval
-                    </p>
-                    <div className="flex gap-1.5">
-                        <button
-                            type="button"
-                            onClick={denyAll}
-                            className="flex-1 rounded-lg border border-border px-2 py-1.5 text-[11px] font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
-                        >
-                            Deny all
-                        </button>
-                        <button
-                            type="button"
-                            onClick={approveAll}
-                            className="flex-1 rounded-lg bg-primary px-2 py-1.5 text-[11px] font-semibold text-primary-foreground outline-none hover:bg-primary/90"
-                        >
-                            Approve all
-                        </button>
-                    </div>
-                </div>
-            ) : null}
-            {sessions.map((session) => (
-                <SubagentSessionCard
-                    key={session.id}
-                    session={session}
-                    threadId={threadId}
-                    onDismiss={dismiss}
-                />
-            ))}
-        </div>
-    );
-}
-
 function SubagentSessionCard({
     session,
     threadId,
@@ -428,11 +503,13 @@ function SubagentSessionCard({
     threadId: string | null;
     onDismiss: (id: string) => void;
 }) {
-    const { approve, deny, complete, fail } = useSubagent();
-    const [expanded, setExpanded] = useState(true);
+    const { approve, deny, complete, fail, abortAll } = useSubagent();
+    const [expanded, setExpanded] = useState(
+        session.status === "awaiting-approval",
+    );
 
     useEffect(() => {
-        if (session.status === "awaiting-approval" || session.status === "running") {
+        if (session.status === "awaiting-approval") {
             setExpanded(true);
         }
     }, [session.status]);
@@ -451,21 +528,21 @@ function SubagentSessionCard({
     const terminal = ["complete", "declined", "error"].includes(session.status);
 
     return (
-        <div className="overflow-hidden rounded-xl border border-border/80 bg-background shadow-lg">
+        <div className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
             <button
                 type="button"
                 onClick={() => setExpanded((current) => !current)}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left outline-none hover:bg-accent/50"
+                className="flex w-full items-center gap-3 px-4 py-3 text-left outline-none hover:bg-accent/40"
                 aria-expanded={expanded}
             >
                 <StatusIcon
-                    size={14}
+                    size={16}
                     className={`${cnStatus(session.status)}${session.status === "running" ? " animate-spin" : ""}`}
                 />
-                <span className="min-w-0 flex-1 truncate text-xs font-semibold">
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold">
                     Subagent
                 </span>
-                <span className="shrink-0 text-[10px] text-muted-foreground">
+                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
                     {STATUS_LABEL[session.status]}
                 </span>
                 {expanded ? (
@@ -475,30 +552,56 @@ function SubagentSessionCard({
                 )}
             </button>
 
-            {expanded ? (
-                <div className="border-t border-border/60 px-3 py-2">
-                    <p className="mb-2 line-clamp-4 whitespace-pre-wrap text-[11px] leading-relaxed text-foreground">
+            {session.status === "running" ? (
+                <div
+                    className={
+                        expanded
+                            ? "border-t border-border/60 px-4 py-3"
+                            : "hidden"
+                    }
+                >
+                    <p className="mb-3 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                        {session.task}
+                    </p>
+                    <SubagentRun
+                        sessionId={session.id}
+                        task={session.task}
+                        threadId={threadId}
+                        onComplete={(output) => complete(session.id, output)}
+                        onError={(error) => fail(session.id, error)}
+                    />
+                    <button
+                        type="button"
+                        onClick={() => abortAll()}
+                        className="mt-3 w-full rounded-xl border border-border px-3 py-2 text-sm font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
+                    >
+                        Stop subagent
+                    </button>
+                </div>
+            ) : expanded ? (
+                <div className="border-t border-border/60 px-4 py-3">
+                    <p className="mb-3 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
                         {session.task}
                     </p>
 
                     {session.status === "awaiting-approval" ? (
                         <>
-                            <p className="mb-2 text-[10px] text-muted-foreground">
+                            <p className="mb-3 text-xs text-muted-foreground">
                                 Approve to run. The main chat waits until this
-                                subagent finishes (or is denied).
+                                subagent finishes or is denied.
                             </p>
-                            <div className="flex gap-1.5">
+                            <div className="flex gap-2">
                                 <button
                                     type="button"
                                     onClick={() => deny(session.id)}
-                                    className="flex-1 rounded-lg border border-border px-2 py-1.5 text-[11px] font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
+                                    className="flex-1 rounded-xl border border-border px-3 py-2 text-sm font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
                                 >
                                     Deny
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => approve(session.id)}
-                                    className="flex-1 rounded-lg bg-primary px-2 py-1.5 text-[11px] font-semibold text-primary-foreground outline-none hover:bg-primary/90"
+                                    className="flex-1 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground outline-none hover:bg-primary/90"
                                 >
                                     Approve
                                 </button>
@@ -506,30 +609,20 @@ function SubagentSessionCard({
                         </>
                     ) : null}
 
-                    {session.status === "running" ? (
-                        <SubagentRun
-                            sessionId={session.id}
-                            task={session.task}
-                            threadId={threadId}
-                            onComplete={(output) => complete(session.id, output)}
-                            onError={(error) => fail(session.id, error)}
-                        />
-                    ) : null}
-
                     {session.status === "complete" && session.output ? (
-                        <div className="max-h-44 overflow-y-auto whitespace-pre-wrap rounded-lg bg-muted/50 px-2 py-1.5 text-[11px] leading-relaxed text-foreground">
+                        <div className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-xl bg-muted/50 px-3 py-2.5 text-sm leading-relaxed text-foreground">
                             {session.output}
                         </div>
                     ) : null}
 
                     {session.status === "error" && session.error ? (
-                        <p className="text-[11px] leading-relaxed text-destructive">
+                        <p className="text-sm leading-relaxed text-destructive">
                             {session.error}
                         </p>
                     ) : null}
 
                     {session.status === "declined" ? (
-                        <p className="text-[11px] text-muted-foreground">
+                        <p className="text-sm text-muted-foreground">
                             The main model was told the subagent was declined.
                         </p>
                     ) : null}
@@ -538,7 +631,7 @@ function SubagentSessionCard({
                         <button
                             type="button"
                             onClick={() => onDismiss(session.id)}
-                            className="mt-2 w-full rounded-lg border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
+                            className="mt-3 w-full rounded-xl border border-border px-3 py-2 text-sm font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
                         >
                             Dismiss
                         </button>
@@ -889,14 +982,28 @@ function SubagentRun({
     useEffect(() => {
         if (sentRef.current) return;
         sentRef.current = true;
-        void chat.sendMessage({ text: task }).catch((error) => {
+        const current = chatRef.current;
+        if (!current) return;
+        void current.sendMessage({ text: task }).catch((error) => {
             settleError(
                 error instanceof Error
                     ? error.message
                     : "Failed to start the subagent run.",
             );
         });
-    }, [chat, settleError, task]);
+    }, [settleError, task]);
+
+    useEffect(() => {
+        const stop = () => {
+            void chatRef.current?.stop();
+        };
+        activeSubagentStops.set(sessionId, stop);
+        return () => {
+            if (activeSubagentStops.get(sessionId) === stop) {
+                activeSubagentStops.delete(sessionId);
+            }
+        };
+    }, [sessionId]);
 
     return <SubagentActivity chat={chat} />;
 }
@@ -912,24 +1019,55 @@ function SubagentActivity({
         message.role === "assistant" ? message.parts : [],
     );
 
+    const liveTool = [...parts].reverse().find((part) => {
+        if (part.type === "dynamic-tool") {
+            return (
+                part.state === "input-streaming" ||
+                part.state === "input-available"
+            );
+        }
+        if (typeof part.type === "string" && part.type.startsWith("tool-")) {
+            const tool = part as unknown as { state?: string };
+            return (
+                tool.state === "input-streaming" ||
+                tool.state === "input-available"
+            );
+        }
+        return false;
+    }) as { toolName?: string; type?: string } | undefined;
+    const liveLabel = liveTool
+        ? toolHumanLabel(
+              liveTool.toolName ||
+                  String(liveTool.type ?? "").replace(/^tool-/, ""),
+          ).live
+        : isRunning
+          ? "Working…"
+          : null;
+
     return (
-        <div className="flex max-h-56 flex-col gap-1.5 overflow-y-auto pr-1">
+        <div className="flex max-h-72 flex-col gap-2 overflow-y-auto pr-1">
+            {liveLabel ? (
+                <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <Loader2 size={14} className="animate-spin text-primary" />
+                    {liveLabel}
+                </p>
+            ) : null}
             {parts.map((part, index) => {
                 switch (part.type) {
                     case "reasoning":
-                        return (
+                        return part.text ? (
                             <div
                                 key={`reasoning-${index}`}
-                                className="rounded-md bg-muted/60 px-2 py-1 text-[10px] italic leading-relaxed text-muted-foreground"
+                                className="rounded-xl bg-muted/60 px-3 py-2 text-xs italic leading-relaxed text-muted-foreground"
                             >
                                 {part.text}
                             </div>
-                        );
+                        ) : null;
                     case "text":
                         return part.text ? (
                             <div
                                 key={`text-${index}`}
-                                className="whitespace-pre-wrap text-xs leading-relaxed text-foreground"
+                                className="whitespace-pre-wrap text-sm leading-relaxed text-foreground"
                             >
                                 {part.text}
                             </div>
@@ -938,35 +1076,29 @@ function SubagentActivity({
                         const isActive =
                             part.state === "input-streaming" ||
                             part.state === "input-available";
-                        const argsText = JSON.stringify(part.input ?? {}).slice(
-                            0,
-                            140,
+                        const label = toolHumanLabel(
+                            part.toolName || part.type,
                         );
                         return (
                             <div
                                 key={`tool-${index}`}
-                                className="flex items-start gap-1.5 rounded-md border border-border/60 bg-background px-2 py-1"
+                                className="flex items-start gap-2 rounded-xl border border-border/60 bg-background px-3 py-2"
                             >
                                 {isActive ? (
                                     <Loader2
-                                        size={11}
+                                        size={14}
                                         className="mt-0.5 shrink-0 animate-spin text-primary"
                                     />
                                 ) : (
                                     <Check
-                                        size={11}
+                                        size={14}
                                         className="mt-0.5 shrink-0 text-success"
                                     />
                                 )}
                                 <div className="min-w-0">
-                                    <span className="font-mono text-[10px] font-semibold">
-                                        {part.toolName}
+                                    <span className="text-sm font-medium">
+                                        {isActive ? label.live : label.past}
                                     </span>
-                                    {argsText ? (
-                                        <div className="truncate font-mono text-[10px] text-muted-foreground">
-                                            {argsText}
-                                        </div>
-                                    ) : null}
                                 </div>
                             </div>
                         );
@@ -989,42 +1121,38 @@ function SubagentActivity({
                             part.type.startsWith("tool-")
                         ) {
                             const tool = part as unknown as {
-                                toolName: string;
+                                toolName?: string;
+                                type?: string;
                                 input?: unknown;
                                 state?: string;
                             };
                             const isActive =
                                 tool.state === "input-streaming" ||
                                 tool.state === "input-available";
-                            const argsText = JSON.stringify(tool.input ?? {}).slice(
-                                0,
-                                140,
+                            const label = toolHumanLabel(
+                                tool.toolName ||
+                                    String(tool.type ?? "").replace(/^tool-/, ""),
                             );
                             return (
                                 <div
                                     key={`tool-${index}`}
-                                    className="flex items-start gap-1.5 rounded-md border border-border/60 bg-background px-2 py-1"
+                                    className="flex items-start gap-2 rounded-xl border border-border/60 bg-background px-3 py-2"
                                 >
                                     {isActive ? (
                                         <Loader2
-                                            size={11}
+                                            size={14}
                                             className="mt-0.5 shrink-0 animate-spin text-primary"
                                         />
                                     ) : (
                                         <Check
-                                            size={11}
+                                            size={14}
                                             className="mt-0.5 shrink-0 text-success"
                                         />
                                     )}
                                     <div className="min-w-0">
-                                        <span className="font-mono text-[10px] font-semibold">
-                                            {tool.toolName}
+                                        <span className="text-sm font-medium">
+                                            {isActive ? label.live : label.past}
                                         </span>
-                                        {argsText ? (
-                                            <div className="truncate font-mono text-[10px] text-muted-foreground">
-                                                {argsText}
-                                            </div>
-                                        ) : null}
                                     </div>
                                 </div>
                             );
@@ -1033,9 +1161,9 @@ function SubagentActivity({
                     }
                 }
             })}
-            {isRunning ? (
-                <div className="flex items-center gap-1.5 px-1 py-0.5 text-[10px] text-muted-foreground">
-                    <Loader2 size={11} className="animate-spin" />
+            {isRunning && !liveLabel ? (
+                <div className="flex items-center gap-2 px-1 py-1 text-sm text-muted-foreground">
+                    <Loader2 size={14} className="animate-spin" />
                     Working…
                 </div>
             ) : null}

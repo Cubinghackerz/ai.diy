@@ -133,6 +133,20 @@ npx vercel
 
 Do not use `--prod` for this beta.
 
+## Credits
+
+ai.diy stands on a lot of excellent open work:
+
+- [assistant-ui](https://www.assistant-ui.com/) and [Vercel AI SDK](https://sdk.vercel.ai/)
+- [React Router](https://reactrouter.com/) and [Tailwind CSS](https://tailwindcss.com/)
+- [CheerpX / WebVM](https://cheerpx.io/) by Leaning Technologies
+- [Pyodide](https://pyodide.org/)
+- [Login with ChatGPT](https://github.com/opencoredev/loginwithchatgpt)
+- [cmdk](https://cmdk.paco.me/), [Base UI](https://base-ui.com/), [Radix UI](https://www.radix-ui.com/), [Phosphor Icons](https://phosphoricons.com/), [Lucide](https://lucide.dev/)
+- [models.dev](https://models.dev/) for model catalog data
+- [Firecrawl](https://www.firecrawl.dev/) and [Parallel](https://parallel.ai/) for the bundled keyless search MCPs
+- [xterm.js](https://xtermjs.org/) for the in-browser terminal
+
 ## License
 
 MIT. See [LICENSE](./LICENSE).

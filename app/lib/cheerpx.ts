@@ -39,6 +39,14 @@ type CheerpXDevice = {
     readFileAsBlob?: (path: string) => Promise<Blob>;
 };
 
+type CheerpXNetworkInterface = {
+    authKey?: string;
+    controlUrl?: string;
+    loginUrlCb?: (url: string) => void;
+    stateUpdateCb?: (state: number) => void;
+    netmapUpdateCb?: (map: unknown) => void;
+};
+
 type CheerpXLinux = {
     run: (
         fileName: string,
@@ -56,12 +64,14 @@ type CheerpXLinux = {
         cols: number,
         rows: number,
     ) => (keyCode: number) => void;
+    networkLogin?: () => Promise<void> | void;
 };
 
 type CheerpXNamespace = {
     Linux: {
         create: (options: {
             mounts: Array<{ type: string; path: string; dev?: CheerpXDevice }>;
+            networkInterface?: CheerpXNetworkInterface;
         }) => Promise<CheerpXLinux>;
     };
     CloudDevice: { create: (url: string) => Promise<CheerpXDevice> };
@@ -95,6 +105,7 @@ const OVERLAY_DB_BASE = "aidiy-cx-v3";
 const COMMAND_TIMEOUT_MS = 90_000;
 const MAX_COMMAND_TIMEOUT_MS = 300_000;
 const BOOT_TIMEOUT_MS = 60_000;
+const SHELL_EXIT_GRACE_MS = 250;
 const MAX_OUTPUT_BYTES = 32 * 1024;
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const DEFAULT_CWD = "/home/user";
@@ -118,6 +129,21 @@ type OutputListener = (data: Uint8Array) => void;
 export type LinuxRuntimePhase = "idle" | "booting" | "ready" | "running" | "error";
 type PhaseListener = (phase: LinuxRuntimePhase) => void;
 
+export type LinuxNetworkStatus =
+    | "disconnected"
+    | "connecting"
+    | "login-required"
+    | "connected"
+    | "error";
+
+export type LinuxNetworkSnapshot = {
+    status: LinuxNetworkStatus;
+    loginUrl: string | null;
+    ip: string | null;
+    hasExitNode: boolean;
+    error: string | null;
+};
+
 let cheerpxModulePromise: Promise<CheerpXNamespace> | null = null;
 let cloudDevicePromise: Promise<CheerpXDevice> | null = null;
 let booted: { scopeId: string; cx: CheerpXLinux } | null = null;
@@ -140,7 +166,78 @@ let linuxUnavailableUntil = 0;
 let lastLinuxFailure = "";
 const outputListeners = new Set<OutputListener>();
 const phaseListeners = new Set<PhaseListener>();
+const networkListeners = new Set<(snapshot: LinuxNetworkSnapshot) => void>();
 let hiddenConsole: HTMLPreElement | null = null;
+let linuxNetwork: LinuxNetworkSnapshot = {
+    status: "disconnected",
+    loginUrl: null,
+    ip: null,
+    hasExitNode: false,
+    error: null,
+};
+let networkLoginWindow: Window | null = null;
+
+function setLinuxNetwork(patch: Partial<LinuxNetworkSnapshot>): void {
+    linuxNetwork = { ...linuxNetwork, ...patch };
+    for (const listener of networkListeners) listener(linuxNetwork);
+}
+
+export function getLinuxNetworkSnapshot(): LinuxNetworkSnapshot {
+    return { ...linuxNetwork };
+}
+
+export function subscribeLinuxNetwork(
+    listener: (snapshot: LinuxNetworkSnapshot) => void,
+): () => void {
+    networkListeners.add(listener);
+    listener(linuxNetwork);
+    return () => networkListeners.delete(listener);
+}
+
+const CHEERPX_NETWORK_INTERFACE: CheerpXNetworkInterface = {
+    loginUrlCb: (url) => {
+        setLinuxNetwork({ status: "login-required", loginUrl: url, error: null });
+        if (networkLoginWindow && !networkLoginWindow.closed) {
+            try {
+                networkLoginWindow.location.href = url;
+            } catch {
+                // The URL remains available through the settings link.
+            }
+            networkLoginWindow = null;
+        }
+    },
+    stateUpdateCb: (state) => {
+        if (state === 6) {
+            setLinuxNetwork({
+                status: "connected",
+                loginUrl: null,
+                error: null,
+            });
+        } else if (linuxNetwork.status !== "connected") {
+            setLinuxNetwork({ status: "connecting", error: null });
+        }
+    },
+    netmapUpdateCb: (map) => {
+        if (!map || typeof map !== "object") return;
+        const value = map as {
+            self?: { addresses?: unknown };
+            peers?: unknown;
+        };
+        const addresses = value.self?.addresses;
+        const ip = Array.isArray(addresses) && typeof addresses[0] === "string"
+            ? addresses[0]
+            : null;
+        const hasExitNode = Array.isArray(value.peers) && value.peers.some(
+            (peer) =>
+                Boolean(
+                    peer &&
+                        typeof peer === "object" &&
+                        (peer as { exitNode?: unknown }).exitNode === true,
+                ),
+        );
+        setLinuxNetwork({ ip, hasExitNode });
+    },
+};
 
 function markUnavailable(): void {
     if (typeof window !== "undefined") {
@@ -491,6 +588,7 @@ async function createLinux(scopeId: string): Promise<CheerpXLinux> {
                 { type: "devpts", path: "/dev/pts" },
                 { type: "proc", path: "/proc" },
             ],
+            networkInterface: CHEERPX_NETWORK_INTERFACE,
         }).then(resolve, reject).finally(() => {
             if (bootFail) bootFail = null;
         });
@@ -562,12 +660,66 @@ export function bootedCheerpXScope(): string | null {
     return booted?.scopeId ?? null;
 }
 
+/** Start the interactive Tailscale login flow for the already-warm VM. */
+export async function connectLinuxNetwork(
+    scopeId: string,
+): Promise<LinuxNetworkSnapshot> {
+    if (!cheerpxAvailable()) {
+        setLinuxNetwork({
+            status: "error",
+            error: "The page is not cross-origin isolated, so CheerpX networking cannot start.",
+        });
+        return getLinuxNetworkSnapshot();
+    }
+
+    // Reserve a user-gesture-created window before the VM/network promises run.
+    // Tailscale may deliver its login URL asynchronously after networkLogin().
+    if (typeof window !== "undefined") {
+        networkLoginWindow = window.open("about:blank", "_blank");
+    }
+    if (!generationAbort || generationAbort.signal.aborted) {
+        generationAbort = new AbortController();
+    }
+    setLinuxNetwork({ status: "connecting", loginUrl: null, error: null });
+
+    try {
+        const cx = await bootCheerpX(scopeId);
+        if (typeof cx.networkLogin !== "function") {
+            throw new Error("This CheerpX build does not expose network login.");
+        }
+        // Do not hold the command lock while Tailscale waits for browser login.
+        void Promise.resolve(cx.networkLogin()).catch((error) => {
+            setLinuxNetwork({
+                status: "error",
+                error: error instanceof Error ? error.message : String(error),
+            });
+        });
+    } catch (error) {
+        networkLoginWindow?.close();
+        networkLoginWindow = null;
+        setLinuxNetwork({
+            status: "error",
+            error: error instanceof Error ? error.message : String(error),
+        });
+    }
+    return getLinuxNetworkSnapshot();
+}
+
+export function openLinuxNetworkLogin(): void {
+    const url = linuxNetwork.loginUrl;
+    if (!url || typeof window === "undefined") return;
+    window.open(url, "_blank", "noopener,noreferrer");
+}
+
 async function stopInteractiveShell(): Promise<void> {
     if (!shellStarted) return;
     sendCheerpXText("exit\n");
     sendCheerpXKey(4);
     if (liveProcess) {
-        await Promise.race([liveProcess.catch(() => undefined), delay(1_500)]);
+        await Promise.race([
+            liveProcess.catch(() => undefined),
+            delay(SHELL_EXIT_GRACE_MS),
+        ]);
     }
     shellStarted = false;
 }
@@ -613,6 +765,7 @@ async function runProcess(
         uid?: number;
         gid?: number;
         timeoutMs?: number;
+        maxOutputBytes?: number;
         /** Prepend a pid-emission echo and parse AIDIY_PID from the output. */
         trackPid?: boolean;
     },
@@ -625,8 +778,21 @@ async function runProcess(
 }> {
     await stopInteractiveShell();
     const chunks: Uint8Array[] = [];
+    const maxOutputBytes = opts?.maxOutputBytes;
+    let capturedOutputBytes = 0;
+    let outputTruncated = false;
     const unsubscribe = subscribeCheerpXOutput((buf) => {
-        chunks.push(buf);
+        if (!maxOutputBytes || capturedOutputBytes < maxOutputBytes) {
+            const remaining = maxOutputBytes
+                ? maxOutputBytes - capturedOutputBytes
+                : buf.byteLength;
+            const chunk = buf.byteLength > remaining ? buf.slice(0, remaining) : buf;
+            chunks.push(chunk);
+            capturedOutputBytes += chunk.byteLength;
+            if (chunk.byteLength < buf.byteLength) outputTruncated = true;
+        } else {
+            outputTruncated = true;
+        }
     });
     let timedOut = false;
     const timeoutMs = opts?.timeoutMs ?? COMMAND_TIMEOUT_MS;
@@ -660,7 +826,7 @@ async function runProcess(
                 if (failLiveProcess === reject) failLiveProcess = null;
             });
         });
-        const output = decodeBytes(chunks);
+        const output = decodeBytes(chunks) + (outputTruncated ? "\n[output truncated]" : "");
         const sentinelTimeout = /AIDIY_TIMEOUT/.test(output);
         return {
             status: result.status,
@@ -670,7 +836,7 @@ async function runProcess(
             durationMs: Date.now() - startedAt,
         };
     } catch (error) {
-        const output = decodeBytes(chunks);
+        const output = decodeBytes(chunks) + (outputTruncated ? "\n[output truncated]" : "");
         if (isStoppedError(error)) {
             return { status: 130, timedOut: false, output, durationMs: Date.now() - startedAt };
         }
@@ -741,7 +907,7 @@ done
 if [ -f /usr/share/nodejs/npm/bin/npm-cli.js ]; then
   if [ ! -x "$HOME/bin/npm" ]; then
     mkdir -p "$HOME/bin"
-    printf '%s\n' '#!/bin/bash' 'export NODE_PATH="/usr/share/nodejs:\${NODE_PATH}"' 'exec node /usr/share/nodejs/npm/bin/npm-cli.js "$@"' > "$HOME/bin/npm"
+    printf '%s\n' '#!/bin/bash' 'export NODE_PATH="/usr/share/nodejs"' 'exec node /usr/share/nodejs/npm/bin/npm-cli.js "$@"' > "$HOME/bin/npm"
     chmod +x "$HOME/bin/npm"
     echo NPM_WRAPPER_INSTALLED
   else
@@ -773,6 +939,17 @@ export function getToolchainNote(): string | null {
     return toolchainNote;
 }
 
+function resolveCommandTimeoutMs(timeoutSec?: number): number {
+    const requestedMs = Math.round(Number(timeoutSec) * 1000);
+    return Number.isFinite(requestedMs) && requestedMs > 0
+        ? Math.min(MAX_COMMAND_TIMEOUT_MS, requestedMs)
+        : COMMAND_TIMEOUT_MS;
+}
+
+function commandNeedsNpm(source: string): boolean {
+    return /(^|[\s/])npm(?:\s|$)/.test(source);
+}
+
 export async function runCommand(
     cx: CheerpXLinux,
     command: string,
@@ -783,18 +960,15 @@ export async function runCommand(
         return { stdout: "", stderr: "No command provided.", exitCode: 1, timedOut: false };
     }
     const cwd = String(opts?.cwd ?? DEFAULT_CWD).trim() || DEFAULT_CWD;
-    const requestedMs = Math.round(Number(opts?.timeoutSec) * 1000);
-    const timeoutMs =
-        Number.isFinite(requestedMs) && requestedMs > 0
-            ? Math.min(MAX_COMMAND_TIMEOUT_MS, requestedMs)
-            : COMMAND_TIMEOUT_MS;
+    if (commandNeedsNpm(source)) await ensureToolchain(cx);
+    const timeoutMs = resolveCommandTimeoutMs(opts?.timeoutSec);
     const timeoutSec = Math.round(timeoutMs / 1000);
     await ensureWritableHome(cx);
     const result = await runProcess(
         cx,
         ["-lc", source],
         cwd,
-        { trackPid: true, timeoutMs },
+        { trackPid: true, timeoutMs, maxOutputBytes: MAX_OUTPUT_BYTES },
     );
     const stdout = capOutput(
         result.output.replace(/\n?AIDIY_PID:\d+\n?/g, "").replace(/\n?AIDIY_TIMEOUT\n?/g, "").trimEnd(),
@@ -1094,8 +1268,10 @@ export async function executeLinuxClientTool(
                     }
                     if (isBackgroundTool(name)) {
                         if (name === "linux_background_start") {
-                            await ensureToolchain(cx);
-                            throwIfStopped();
+                            if (commandNeedsNpm(input.command ?? "")) {
+                                await ensureToolchain(cx);
+                                throwIfStopped();
+                            }
                             return startBackgroundProcess(
                                 cx,
                                 input.command ?? "",
@@ -1107,8 +1283,6 @@ export async function executeLinuxClientTool(
                         }
                         return killProcess(cx, input.pid);
                     }
-                    await ensureToolchain(cx);
-                    throwIfStopped();
                     const result = await runCommand(cx, input.command ?? "", {
                         cwd: input.cwd,
                         timeoutSec: input.timeoutSec,
@@ -1120,7 +1294,7 @@ export async function executeLinuxClientTool(
                     lastLinuxFailure = "";
                     return { output: formatCommandOutput(result), artifacts: [] };
                 })(),
-                COMMAND_TIMEOUT_MS + BOOT_TIMEOUT_MS,
+                BOOT_TIMEOUT_MS + resolveCommandTimeoutMs(input.timeoutSec) + 5_000,
                 "Linux environment",
                 generationAbort?.signal,
             );

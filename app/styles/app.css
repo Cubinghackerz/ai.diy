@@ -108,6 +108,7 @@
 
 /* Light theme — clean white */
 :root:not(.dark) {
+    color-scheme: light;
     --color-background: #ffffff;
     --color-foreground: #0a0a0a;
     --color-card: #ffffff;
@@ -135,6 +136,42 @@
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.04);
     --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.08);
     --shadow-lg: 0 12px 32px -4px rgb(0 0 0 / 0.1);
+    --shadow-glow: 0 0 0 transparent;
+}
+
+:root.dark {
+    color-scheme: dark;
+}
+
+/* OLED mode — true black canvas for emissive displays and low-light work. */
+:root.oled {
+    color-scheme: dark;
+    --color-background: #000000;
+    --color-foreground: #f5f5f5;
+    --color-card: #050505;
+    --color-card-foreground: #f5f5f5;
+    --color-sidebar: #000000;
+    --color-sidebar-foreground: #f5f5f5;
+    --color-popover: #090909;
+    --color-popover-foreground: #f5f5f5;
+    --color-primary: #f5f5f5;
+    --color-primary-foreground: #000000;
+    --color-secondary: #0d0d0d;
+    --color-secondary-foreground: #f5f5f5;
+    --color-muted: #080808;
+    --color-muted-foreground: #a1a1aa;
+    --color-accent: #121212;
+    --color-accent-foreground: #f5f5f5;
+    --color-destructive: #f87171;
+    --color-destructive-foreground: #000000;
+    --color-border: #1d1d1d;
+    --color-input: #222222;
+    --color-ring: #737373;
+    --color-success: #34d399;
+    --color-warning: #fbbf24;
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.8);
+    --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.8);
+    --shadow-lg: 0 12px 32px -4px rgb(0 0 0 / 0.9);
     --shadow-glow: 0 0 0 transparent;
 }
 
@@ -214,13 +251,17 @@ input:focus-visible,
     box-shadow: none !important;
 }
 
-/* Composer: no focus-within border/glow — quiet shell, caret only */
+/* Composer: a restrained focus state keeps the input easy to find without becoming a second CTA. */
 [data-slot="aui_composer-shell"] {
-    box-shadow: none !important;
+    box-shadow: 0 14px 34px -28px rgb(0 0 0 / 0.45) !important;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
 [data-slot="aui_composer-shell"]:focus-within {
-    border-color: var(--color-border) !important;
+    border-color: color-mix(in oklab, var(--color-primary) 42%, var(--color-border)) !important;
+    box-shadow:
+        0 0 0 3px color-mix(in oklab, var(--color-primary) 10%, transparent),
+        0 16px 38px -28px rgb(0 0 0 / 0.5) !important;
 }
 
 /* Prose tweaks for markdown */
@@ -307,6 +348,49 @@ textarea {
     scroll-behavior: smooth;
 }
 
+.aui-thread [data-slot="aui_message-group"] {
+    isolation: isolate;
+}
+
+.aui-thread [data-slot="aui_assistant-message-content"] {
+    font-size: 0.9375rem;
+    letter-spacing: -0.003em;
+}
+
+.aui-thread [data-slot="aui_user-message-content"] {
+    transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+}
+
+.aui-thread [data-slot="aui_user-message-content"]:hover {
+    border-color: color-mix(in oklab, var(--color-foreground) 18%, var(--color-border));
+    box-shadow: 0 10px 24px -22px rgb(0 0 0 / 0.55);
+}
+
+.aui-thread-welcome-suggestion {
+    box-shadow: 0 8px 20px -20px rgb(0 0 0 / 0.55);
+}
+
+.aui-thread-welcome-suggestion:hover {
+    border-color: color-mix(in oklab, var(--color-foreground) 20%, var(--color-border));
+    box-shadow: 0 10px 24px -20px rgb(0 0 0 / 0.65);
+}
+
+.aidiy-settings-content {
+    font-size: 0.875rem;
+}
+
+.aidiy-settings-content [class~="text-[9px]"],
+.aidiy-settings-content [class~="text-[10px]"] {
+    font-size: 0.75rem;
+    line-height: 1.4;
+}
+
+.aidiy-settings-content [class~="text-[11px]"],
+.aidiy-settings-content [class~="text-xs"] {
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}
+
 /* Typing indicator */
 .aui-typing-indicator {
     display: flex;
@@ -351,32 +435,16 @@ textarea {
     -webkit-backdrop-filter: blur(8px);
 }
 
-/* Landing tokens — Ethereal Glass × Resend blackspace. */
+/* Landing tokens - OLED editorial blackspace. */
 .landing-pinnacle {
-    --landing-canvas: #111114;
-    --landing-surface: #17171c;
-    --landing-surface-deep: #0e0e11;
+    --landing-canvas: #050505;
+    --landing-surface: #0c0c0f;
+    --landing-surface-deep: #08080a;
     --landing-mint: #3dffb0;
     --landing-border: rgba(255, 255, 255, 0.14);
     --landing-border-strong: rgba(255, 255, 255, 0.18);
     --landing-fill: rgba(255, 255, 255, 0.06);
     background-color: var(--landing-canvas);
-}
-
-.landing-pinnacle .text-zinc-600 {
-    color: #a1a1aa;
-}
-
-.landing-pinnacle .text-zinc-500 {
-    color: #b8b8c0;
-}
-
-.landing-pinnacle .text-zinc-400 {
-    color: #c4c4cc;
-}
-
-.landing-pinnacle .text-zinc-700 {
-    color: #8b8b93;
 }
 
 @custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
@@ -399,6 +467,116 @@ textarea {
   to {
     height: 0;
         }
+    }
+}
+
+@property --aidiy-beam-angle {
+    syntax: "<angle>";
+    inherits: false;
+    initial-value: 0deg;
+}
+
+@keyframes aidiy-border-beam {
+    to {
+        --aidiy-beam-angle: 360deg;
+    }
+}
+
+@keyframes aidiy-border-beam-fade {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes aidiy-artifact-beam-fade {
+    0% {
+        opacity: 0;
+    }
+    14% {
+        opacity: 0.9;
+    }
+    58% {
+        opacity: 0.9;
+    }
+    100% {
+        opacity: 0;
+    }
+}
+
+.aidiy-border-beam {
+    padding: 1px;
+    background: conic-gradient(
+        from var(--aidiy-beam-angle),
+        transparent 0 62%,
+        #7dd3fc 70%,
+        #c4b5fd 78%,
+        #fb7185 86%,
+        transparent 94% 100%
+    );
+    -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    animation:
+        aidiy-border-beam var(--aidiy-beam-duration, 7s) linear infinite,
+        aidiy-border-beam-fade 240ms ease-out both;
+}
+
+.aidiy-artifact-beam {
+    animation:
+        aidiy-border-beam var(--aidiy-beam-duration, 7s) linear infinite,
+        aidiy-artifact-beam-fade 1.8s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .aidiy-border-beam {
+        animation: none;
+        opacity: 0.55;
+    }
+}
+
+@keyframes aidiy-agent-mode-pulse {
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-primary) 0%, transparent);
+    }
+    50% {
+        box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-primary) 18%, transparent);
+    }
+}
+
+.aidiy-agent-mode-pulse {
+    animation: aidiy-agent-mode-pulse 2.8s ease-in-out infinite;
+}
+
+.aidiy-composer-dropzone[data-dragging="true"]::after {
+    content: "Drop files to attach";
+    position: absolute;
+    inset: 5px;
+    z-index: 20;
+    display: grid;
+    place-items: center;
+    border: 1px dashed color-mix(in oklab, var(--color-primary) 70%, transparent);
+    border-radius: var(--composer-radius, 1.5rem);
+    background: color-mix(in oklab, var(--color-background) 84%, var(--color-primary));
+    color: var(--color-foreground);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    box-shadow: 0 12px 30px -20px color-mix(in oklab, var(--color-primary) 60%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .aidiy-agent-mode-pulse {
+        animation: none;
     }
 }
 

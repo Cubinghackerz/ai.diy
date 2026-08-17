@@ -5,7 +5,6 @@
 import {
     useCallback,
     useEffect,
-    useLayoutEffect,
     useMemo,
     useRef,
     useState,
@@ -41,6 +40,7 @@ import { ModelHoverCard } from "~/components/ui/ModelHoverCard";
 import { ModelLogo } from "~/components/ui/ModelLogo";
 import { cn } from "~/lib/utils";
 import { localProviderKey } from "~/lib/provider-credentials";
+import { useAnchoredMenu } from "~/lib/use-anchored-menu";
 
 function ModelBadges({
     model,
@@ -213,7 +213,6 @@ export function SearchableModelSelect({
     const rootRef = useRef<HTMLDivElement>(null);
     const triggerRef = useRef<HTMLButtonElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
-    const [menuStyle, setMenuStyle] = useState<React.CSSProperties | null>(null);
     const selected = models.find((model) => model.id === value);
     const { hovered, setHovered, merged } = useHoveredModel();
     const catalog = useModelCatalog();
@@ -244,45 +243,12 @@ export function SearchableModelSelect({
         };
     }, [open]);
 
-    useLayoutEffect(() => {
-        if (!open) {
-            setMenuStyle(null);
-            return;
-        }
-        const updatePosition = () => {
-            const rect = triggerRef.current?.getBoundingClientRect();
-            if (!rect) return;
-            const menuHeight = 328;
-            const width = Math.min(360, window.innerWidth - 16);
-            const openAbove =
-                window.innerHeight - rect.bottom < menuHeight + 8 &&
-                rect.top > window.innerHeight - rect.bottom;
-            const style: React.CSSProperties = {
-                position: "fixed",
-                top: openAbove
-                    ? Math.max(8, rect.top - menuHeight - 6)
-                    : Math.min(
-                          Math.max(8, window.innerHeight - menuHeight - 8),
-                          rect.bottom + 6,
-                      ),
-                left: Math.min(
-                    Math.max(8, rect.left),
-                    Math.max(8, window.innerWidth - width - 8),
-                ),
-                width,
-                maxHeight: "min(20rem, calc(100vh - 1rem))",
-                zIndex: 100,
-            };
-            setMenuStyle(style);
-        };
-        updatePosition();
-        window.addEventListener("resize", updatePosition);
-        window.addEventListener("scroll", updatePosition, true);
-        return () => {
-            window.removeEventListener("resize", updatePosition);
-            window.removeEventListener("scroll", updatePosition, true);
-        };
-    }, [open]);
+    const menuStyle = useAnchoredMenu(open, triggerRef, menuRef, {
+        width: 360,
+        maxHeight: 320,
+        align: "left",
+        zIndex: 100,
+    });
 
     return (
         <div ref={rootRef} className={cn("relative", className)}>
@@ -459,7 +425,6 @@ export function ModelPicker({
     const rootRef = useRef<HTMLDivElement>(null);
     const triggerRef = useRef<HTMLButtonElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
-    const [menuStyle, setMenuStyle] = useState<React.CSSProperties | null>(null);
     const { hovered, setHovered, merged } = useHoveredModel();
     const catalog = useModelCatalog();
 
@@ -520,53 +485,12 @@ export function ModelPicker({
         };
     }, [open, setHovered]);
 
-    useLayoutEffect(() => {
-        if (!open) {
-            setMenuStyle(null);
-            return;
-        }
-        const updatePosition = () => {
-            const rect = triggerRef.current?.getBoundingClientRect();
-            if (!rect) return;
-            const menuHeight = 328;
-            const width = Math.min(352, window.innerWidth - 16);
-            const openAbove =
-                window.innerHeight - rect.bottom < menuHeight + 8 &&
-                rect.top > window.innerHeight - rect.bottom;
-            const top = openAbove
-                ? Math.max(8, rect.top - menuHeight - 6)
-                : Math.min(
-                      Math.max(8, window.innerHeight - menuHeight - 8),
-                      rect.bottom + 6,
-                  );
-            const style: React.CSSProperties = {
-                position: "fixed",
-                top,
-                width,
-                maxHeight: "min(20rem, calc(100vh - 1rem))",
-                zIndex: 100,
-            };
-            if (align === "right") {
-                style.right = Math.min(
-                    Math.max(8, window.innerWidth - rect.right),
-                    Math.max(8, window.innerWidth - width - 8),
-                );
-            } else {
-                style.left = Math.min(
-                    Math.max(8, rect.left),
-                    Math.max(8, window.innerWidth - width - 8),
-                );
-            }
-            setMenuStyle(style);
-        };
-        updatePosition();
-        window.addEventListener("resize", updatePosition);
-        window.addEventListener("scroll", updatePosition, true);
-        return () => {
-            window.removeEventListener("resize", updatePosition);
-            window.removeEventListener("scroll", updatePosition, true);
-        };
-    }, [align, compact, open]);
+    const menuStyle = useAnchoredMenu(open, triggerRef, menuRef, {
+        width: 352,
+        maxHeight: 320,
+        align,
+        zIndex: 100,
+    });
 
     // Do NOT auto-call onChange when the catalog loads — that was resetting
     // the user's selected model after sends / refreshes.

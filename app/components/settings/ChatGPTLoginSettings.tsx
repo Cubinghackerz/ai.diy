@@ -1,76 +1,31 @@
 /**
- * Login with ChatGPT — Experimental BETA control for Settings.
+ * Login with ChatGPT subscription for Settings and first-run setup.
  */
 
 import { LoginWithChatGPT, useLoginWithChatGPT } from "@opencoredev/loginwithchatgpt-react";
-import { useCallback, useEffect, useRef } from "react";
-import { pickLatestChatGPTModel } from "~/lib/chatgpt-models";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSettings } from "~/lib/providers/SettingsProvider";
-import { DEFAULT_MODELS } from "~/lib/types";
-
-async function fetchChatGPTModelIds(): Promise<{ ids: string[]; latest: string }> {
-    const fallback = DEFAULT_MODELS.chatgpt?.[0]?.id ?? "gpt-5.6";
-    try {
-        const res = await fetch("/api/models", {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ provider: "chatgpt" }),
-        });
-        const data = (await res.json()) as {
-            models?: Array<{ id?: string }>;
-        };
-        const ids = (data.models ?? [])
-            .map((m) => m.id)
-            .filter((id): id is string => typeof id === "string" && id.length > 0);
-        return {
-            ids,
-            latest: pickLatestChatGPTModel(ids) ?? fallback,
-        };
-    } catch {
-        return { ids: [], latest: fallback };
-    }
-}
+import { ChatGPTConnectionRefreshDialog } from "~/components/settings/ChatGPTConnectionRefreshDialog";
 
 export function ChatGPTLoginSettings() {
-    const { settings, updateSettings, updateProvider, updateChat } = useSettings();
+    const { settings, updateSettings, updateProvider } = useSettings();
     const enabled = settings.chatgptLoginEnabled === true;
     const { status, isAuthenticated, user, logout } = useLoginWithChatGPT();
     const wasAuth = useRef(false);
     const syncedModels = useRef(false);
+    const [refreshOpen, setRefreshOpen] = useState(false);
 
-    const selectLatestOnConnect = useCallback(async () => {
-        const { latest } = await fetchChatGPTModelIds();
+    const markChatGPTReady = useCallback(() => {
         updateProvider("chatgpt", { enabled: true });
-        updateChat({ provider: "chatgpt", model: latest });
         syncedModels.current = true;
-    }, [updateChat, updateProvider]);
-
-    /** Keep ChatGPT enabled; only change model if missing from account list. */
-    const syncDiscoveredModels = useCallback(async () => {
-        updateProvider("chatgpt", { enabled: true });
-        const { ids, latest } = await fetchChatGPTModelIds();
-        syncedModels.current = true;
-        if (settings.chat.provider !== "chatgpt") {
-            updateChat({ provider: "chatgpt", model: latest });
-            return;
-        }
-        if (ids.length > 0 && !ids.includes(settings.chat.model)) {
-            updateChat({ provider: "chatgpt", model: latest });
-        }
-    }, [
-        settings.chat.model,
-        settings.chat.provider,
-        updateChat,
-        updateProvider,
-    ]);
+    }, [updateProvider]);
 
     useEffect(() => {
         if (!enabled) return;
         if (isAuthenticated) {
             wasAuth.current = true;
             if (!syncedModels.current) {
-                void syncDiscoveredModels();
+                markChatGPTReady();
             }
             return;
         }
@@ -81,32 +36,19 @@ export function ChatGPTLoginSettings() {
         ) {
             wasAuth.current = false;
             updateProvider("chatgpt", { enabled: false });
-            if (settings.chat.provider === "chatgpt") {
-                updateChat({ provider: "openai", model: "gpt-4o" });
-            }
         }
-    }, [
-        enabled,
-        isAuthenticated,
-        status,
-        settings.chat.provider,
-        syncDiscoveredModels,
-        updateChat,
-        updateProvider,
-    ]);
+    }, [enabled, isAuthenticated, status, markChatGPTReady, updateProvider]);
 
     const planLabel = user?.plan?.trim() || null;
     const isFreePlan = /free/i.test(planLabel ?? "");
 
     return (
-        <div className="flex flex-col gap-3">
+        <>
+            <div className="flex flex-col gap-3">
             <div className="flex items-start justify-between gap-3 rounded-lg border border-border/60 bg-background px-3 py-2.5">
                 <div className="min-w-0">
                     <p className="text-xs font-medium">
-                        Login with ChatGPT{" "}
-                        <span className="text-[9px] uppercase tracking-wider text-primary">
-                            Beta
-                        </span>
+                        ChatGPT subscription
                     </p>
                     <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
                         Uses your ChatGPT plan through this server (HttpOnly session).
@@ -127,9 +69,6 @@ export function ChatGPTLoginSettings() {
                                 syncedModels.current = false;
                                 void logout();
                                 updateProvider("chatgpt", { enabled: false });
-                                if (settings.chat.provider === "chatgpt") {
-                                    updateChat({ provider: "openai", model: "gpt-4o" });
-                                }
                             }
                         }}
                     />
@@ -144,7 +83,8 @@ export function ChatGPTLoginSettings() {
                             continueLabel: "I understand — continue",
                         }}
                         onAuthenticated={() => {
-                            void selectLatestOnConnect();
+                            markChatGPTReady();
+                            setRefreshOpen(true);
                         }}
                     />
                     {isAuthenticated && user?.email ? (
@@ -162,13 +102,17 @@ export function ChatGPTLoginSettings() {
                     ) : null}
                 </div>
             ) : null}
-        </div>
+            </div>
+            <ChatGPTConnectionRefreshDialog
+                open={refreshOpen}
+                onOpenChange={setRefreshOpen}
+                onRefresh={() => window.location.reload()}
+            />
+        </>
     );
 }
 
 /** Whether ChatGPT (subscription) should appear in provider pickers. */
 export function useChatGPTProviderVisible(): boolean {
-    const { settings } = useSettings();
-    const { isAuthenticated } = useLoginWithChatGPT();
-    return settings.chatgptLoginEnabled === true && isAuthenticated;
+    return true;
 }

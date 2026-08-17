@@ -1,6 +1,6 @@
 import { HardDrives, Key, PlugsConnected } from "@phosphor-icons/react";
-import { BlueprintFrame } from "./BlueprintFrame";
 import { Reveal } from "./DoubleBezel";
+import { SectionIndex } from "./SectionIndex";
 import { TrustBoundary } from "./TrustBoundary";
 
 const CALLOUTS = [
@@ -29,14 +29,15 @@ export function OwnershipStage() {
             data-anim-gate="ownership-stage"
         >
             <Reveal>
+                <SectionIndex index="02" label="TRUST BOUNDARY" />
                 <div className="grid gap-8 md:grid-cols-[0.8fr_1.2fr] md:items-end">
-                    <h2 className="max-w-[10ch] text-4xl font-medium tracking-[-0.04em] text-white sm:text-5xl">
-                        Domain: Device
+                    <h2 className="max-w-[12ch] text-4xl font-medium tracking-[-0.04em] text-white sm:text-5xl">
+                        Your keys never touch the server.
                     </h2>
-                    <p className="max-w-xl text-[15px] leading-relaxed text-zinc-300 md:justify-self-end">
-                        One workspace for thinking: keys stored locally, requests
-                        relayed only in transit, and provider choice detached from the
-                        workspace that holds your context.
+                    <p className="max-w-xl text-[15px] leading-relaxed text-zinc-400 md:justify-self-end">
+                        Provider credentials live in your browser&apos;s localStorage and are
+                        relayed per request. Threads, Canvas, memory, and knowledge persist in
+                        IndexedDB. The Node server stores nothing.
                     </p>
                 </div>
             </Reveal>
@@ -46,27 +47,22 @@ export function OwnershipStage() {
             </Reveal>
 
             <Reveal delayMs={80} className="mt-10">
-                <BlueprintFrame className="rounded-xl" pad={false} label="OWNERSHIP SURFACE">
-                    <div className="grid divide-y divide-white/[0.08] md:grid-cols-3 md:divide-x md:divide-y-0">
-                        {CALLOUTS.map((item) => {
-                            const Icon = item.icon;
-                            return (
-                                <article
-                                    key={item.title}
-                                    className="min-h-[11rem] p-7 transition-colors duration-200 hover:bg-white/[0.03] sm:p-8"
-                                >
-                                    <Icon weight="light" className="size-6 text-zinc-300" />
-                                    <h3 className="mt-5 text-[16px] font-medium tracking-tight text-white">
-                                        {item.title}
-                                    </h3>
-                                    <p className="mt-2.5 text-[14px] leading-relaxed text-zinc-400">
-                                        {item.body}
-                                    </p>
-                                </article>
-                            );
-                        })}
-                    </div>
-                </BlueprintFrame>
+                <div className="grid gap-10 border-t border-white/[0.08] pt-10 md:grid-cols-3 md:gap-8">
+                    {CALLOUTS.map((item) => {
+                        const Icon = item.icon;
+                        return (
+                            <article key={item.title}>
+                                <Icon weight="light" className="size-6 text-zinc-300" />
+                                <h3 className="mt-5 text-[16px] font-medium tracking-tight text-white">
+                                    {item.title}
+                                </h3>
+                                <p className="mt-2.5 text-[14px] leading-relaxed text-zinc-400">
+                                    {item.body}
+                                </p>
+                            </article>
+                        );
+                    })}
+                </div>
             </Reveal>
         </section>
     );

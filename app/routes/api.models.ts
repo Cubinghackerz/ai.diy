@@ -74,7 +74,7 @@ export async function action({ request }: ActionFunctionArgs) {
                     request,
                     Response.json(
                         {
-                            error: "Sign in with ChatGPT under Settings → Experimental.",
+                            error: "Sign in with ChatGPT under Settings → API Keys.",
                             models: (DEFAULT_MODELS.chatgpt ?? []).map((m) =>
                                 enrichModelInfo({ ...m, provider: "chatgpt" }),
                             ),

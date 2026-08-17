@@ -1,9 +1,10 @@
 /**
- * ai.diy landing — Ethereal Glass × Resend blackspace, Cloudflare-scale structure.
- *
- * THESIS: Ownership is a mechanism you can see.
- * FORM: OLED blackspace + luminous panels + dotted stage rails + blueprint frames.
- * STORY: Grasp BYOK local-first ownership → open /workspace or deploy.
+ * THESIS: Make local-first ownership visible; reject the centered SaaS-card hero.
+ * OWN-WORLD: OLED blackspace, editorial type, hairline structure, one mint live signal.
+ * STORY: See the owned workspace and no-store relay, then open it or self-host it.
+ * FIRST VIEWPORT: Asymmetric copy and action beside a real, luminous product surface.
+ * FORM: Approved asymmetric instrumentation comp, rebuilt as responsive product proof.
+ * FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md.
  */
 import type { HeadersFunction, LinksFunction, MetaFunction } from "react-router";
 import { CapabilityRack } from "~/components/landing/CapabilityRack";

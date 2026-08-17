@@ -11,6 +11,11 @@ import {
     type ReactNode,
 } from "react";
 import { abortLinuxExecution } from "~/lib/cheerpx";
+import {
+    abortActiveSubagents,
+    hasActiveSubagent,
+    subscribeSubagentSessions,
+} from "~/components/assistant-ui/subagents";
 
 type ChatSessionValue = ReturnType<typeof useChat>;
 
@@ -57,6 +62,10 @@ export function clearGenerationStopUi(): void {
     setGenerationStoppedUi(false);
 }
 
+export function isGenerationStopRequested(): boolean {
+    return generationStoppedUi;
+}
+
 function settlePendingClientTools(chat: ChatSessionValue): void {
     const addToolOutput = chat.addToolOutput as unknown as
         | ((args: {
@@ -100,6 +109,7 @@ function settlePendingClientTools(chat: ChatSessionValue): void {
 export function stopChatGeneration(chat: ChatSessionValue): void {
     setGenerationStoppedUi(true);
     abortLinuxExecution();
+    abortActiveSubagents();
     void chat.stop();
     settlePendingClientTools(chat);
 }
@@ -130,10 +140,12 @@ export function useChatGenerating(): boolean {
     useEffect(() => {
         const sync = () => setTick((value) => value + 1);
         stopUiListeners.add(sync);
+        const unsubscribe = subscribeSubagentSessions(sync);
         return () => {
             stopUiListeners.delete(sync);
+            unsubscribe();
         };
     }, []);
-    if (!ctx) return false;
-    return isChatGenerating(ctx);
+    if (!ctx) return hasActiveSubagent();
+    return isChatGenerating(ctx) || hasActiveSubagent();
 }

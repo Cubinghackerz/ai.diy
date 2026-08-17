@@ -70,8 +70,8 @@ export interface ToolHumanLabel {
 }
 
 /** Human-friendly label for a raw tool name. */
-export function toolHumanLabel(toolName: string): ToolHumanLabel {
-    const raw = toolName.trim();
+export function toolHumanLabel(toolName?: string | null): ToolHumanLabel {
+    const raw = typeof toolName === "string" ? toolName.trim() : "";
     if (!raw) return { name: "Tool", live: "Running…", past: "Used a tool" };
     const skillName = skillLabelForTool(raw);
     if (SEARCH_PATTERN.test(raw)) {
@@ -128,6 +128,13 @@ export function toolHumanLabel(toolName: string): ToolHumanLabel {
             name: "Compaction",
             live: "Compacting context…",
             past: "Compacted context",
+        };
+    }
+    if (raw === "youtube_transcript" || raw === "summarize_youtube") {
+        return {
+            name: skillName ?? "YouTube",
+            live: "Reading the YouTube transcript…",
+            past: "Read YouTube transcript",
         };
     }
     if (raw === "url_doctor") {

@@ -59,8 +59,8 @@ export function IslandNav() {
                     className={cn(
                         "pointer-events-auto flex w-full max-w-5xl items-center gap-3 rounded-full border px-2 py-1.5 pl-4 shadow-[0_12px_48px_-24px_rgba(0,0,0,0.9)] backdrop-blur-2xl transition-[border-color,background-color,box-shadow] duration-200",
                         scrolled
-                            ? "border-white/[0.16] bg-black/70"
-                            : "border-white/[0.1] bg-black/40",
+                            ? "border-white/[0.1] bg-[#050505]/80"
+                            : "border-white/[0.08] bg-[#050505]/50",
                     )}
                     style={{ transitionTimingFunction: EASE_OUT }}
                     aria-label="Primary"

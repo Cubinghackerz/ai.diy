@@ -1,5 +1,6 @@
 import { Code, Files, SquareHalf } from "@phosphor-icons/react";
 import { Reveal } from "./DoubleBezel";
+import { SectionIndex } from "./SectionIndex";
 
 const CASES = [
     {
@@ -27,19 +28,17 @@ export function UseCases() {
             data-anim-gate="use-cases"
         >
             <Reveal>
+                <SectionIndex index="04" label="USE CASES" />
                 <h2 className="max-w-[16ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
-                    Private AI workflows for code, documents, and Canvas.
+                    Private by default. Capable by design.
                 </h2>
             </Reveal>
-            <Reveal delayMs={40} className="mt-10">
-                <ul className="grid gap-3 md:grid-cols-3">
+            <Reveal delayMs={40} className="mt-12">
+                <ul className="grid gap-10 md:grid-cols-3 md:gap-8">
                     {CASES.map((item) => {
                         const Icon = item.icon;
                         return (
-                            <li
-                                key={item.title}
-                                className="min-h-[13rem] rounded-2xl border border-white/[0.12] bg-white/[0.03] p-6"
-                            >
+                            <li key={item.title} className="border-t border-white/[0.1] pt-7">
                                 <Icon weight="light" className="size-6 text-zinc-200" />
                                 <h3 className="mt-5 text-[17px] font-medium tracking-tight text-white">
                                     {item.title}

@@ -25,6 +25,7 @@ import {
     Image as ImageIcon,
 } from "@phosphor-icons/react";
 import { useState, useRef, useEffect, useMemo } from "react";
+import { BorderBeam } from "~/components/ui/border-beam";
 
 function isImageArtifact(artifact: Artifact | undefined | null): boolean {
     if (!artifact) return false;
@@ -112,6 +113,7 @@ export function CanvasPanel() {
     const [copied, setCopied] = useState(false);
     const [downloadError, setDownloadError] = useState<string | null>(null);
     const [isResizing, setIsResizing] = useState(false);
+    const [glowingArtifactId, setGlowingArtifactId] = useState<string | null>(null);
     const panelRef = useRef<HTMLElement>(null);
     const startXRef = useRef(0);
     const startWidthRef = useRef(0);
@@ -120,6 +122,18 @@ export function CanvasPanel() {
         setViewMode("preview");
         setDownloadError(null);
         setCopied(false);
+    }, [activeArtifactId]);
+
+    useEffect(() => {
+        const artifact = artifacts.find((item) => item.id === activeArtifactId);
+        if (!artifact || Date.now() - artifact.createdAt > 10_000) return;
+        setGlowingArtifactId(artifact.id);
+        const timeout = window.setTimeout(() => {
+            setGlowingArtifactId((current) =>
+                current === artifact.id ? null : current,
+            );
+        }, 1800);
+        return () => window.clearTimeout(timeout);
     }, [activeArtifactId]);
 
     const handleResizeStart = (e: React.MouseEvent) => {
@@ -166,6 +180,7 @@ export function CanvasPanel() {
     if (!canvasOpen || !artifacts.length) return null;
 
     const activeArtifact = artifacts.find((a) => a.id === activeArtifactId) ?? artifacts[artifacts.length - 1];
+    const artifactIsFresh = glowingArtifactId === activeArtifact?.id;
     const showImagePreview = isImageArtifact(activeArtifact);
     const showHtmlPreview =
         Boolean(activeArtifact) &&
@@ -317,7 +332,15 @@ export function CanvasPanel() {
             )}
 
             {/* Body — key forces remount so iframe/image state tracks the active tab */}
-            <div key={activeArtifact?.id ?? "empty"} className="flex-1 overflow-auto bg-background p-4">
+            <div
+                key={activeArtifact?.id ?? "empty"}
+                className="relative flex-1 overflow-auto bg-background p-4"
+            >
+                <BorderBeam
+                    active={artifactIsFresh}
+                    className="aidiy-border-beam-on-card aidiy-artifact-beam"
+                    duration={3.5}
+                />
                 {downloadError ? (
                     <p className="mb-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">
                         {downloadError}

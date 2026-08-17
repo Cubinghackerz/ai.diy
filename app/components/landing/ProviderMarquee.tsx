@@ -1,48 +1,47 @@
 import { PROVIDER_LOGOS } from "./constants";
 import { Reveal } from "./DoubleBezel";
+import { SectionIndex } from "./SectionIndex";
 
 export function ProviderMarquee() {
     return (
         <section
             id="providers"
-            className="relative border-y border-white/[0.12] py-16 sm:py-20"
+            className="relative border-y border-white/[0.08] py-20 sm:py-24"
             data-anim-gate="marquee"
             aria-label="Supported providers"
         >
             <Reveal>
-                <div className="mx-auto max-w-3xl px-5 text-center sm:px-8">
-                    <h2 className="text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
-                        One workspace. Every AI model provider.
+                <div className="mx-auto max-w-3xl px-5 sm:px-8">
+                    <SectionIndex index="03" label="PROVIDERS" />
+                    <h2 className="text-center text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
+                        One workspace. Every provider.
                     </h2>
-                    <p className="mt-4 text-[15px] leading-relaxed text-zinc-300">
+                    <p className="mt-4 text-center text-[15px] leading-relaxed text-zinc-400">
                         Seventeen cloud and local providers, plus custom OpenAI-compatible
-                        endpoints. Switch mid-thread. Keys stay in the browser.
+                        endpoints. Switch models mid-thread without moving your workspace.
                     </p>
                 </div>
             </Reveal>
 
             <Reveal delayMs={40} className="mt-12">
-                <ul className="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-3 px-5 sm:px-8">
+                <ul className="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-x-10 gap-y-7 px-5 sm:px-8">
                     {PROVIDER_LOGOS.map((logo) => (
-                        <li
-                            key={logo.id}
-                            className="inline-flex items-center gap-2.5 rounded-full border border-white/[0.12] bg-white/[0.05] px-3.5 py-2 text-[13px] font-medium tracking-tight text-zinc-100"
-                        >
+                        <li key={logo.id}>
                             <img
                                 src={logo.src}
                                 alt=""
-                                width={22}
-                                height={22}
-                                className="size-[22px] object-contain opacity-95"
+                                width={28}
+                                height={28}
+                                className="h-7 w-auto object-contain opacity-50 grayscale transition-[filter,opacity] duration-300 hover:opacity-100 hover:grayscale-0"
                                 loading="lazy"
                             />
-                            {logo.label}
+                            <span className="sr-only">{logo.label}</span>
                         </li>
                     ))}
-                    <li className="inline-flex items-center rounded-full border border-dashed border-white/20 px-3.5 py-2 text-[13px] text-zinc-400">
-                        + Bedrock, Azure, Vertex, Together, Hugging Face, LM Studio
-                    </li>
                 </ul>
+                <p className="mt-9 px-5 text-center font-mono text-[10px] tracking-[0.12em] text-zinc-600 sm:text-[11px]">
+                    + BEDROCK · AZURE · VERTEX · TOGETHER · HUGGING FACE · LM STUDIO · CUSTOM ENDPOINTS
+                </p>
             </Reveal>
         </section>
     );

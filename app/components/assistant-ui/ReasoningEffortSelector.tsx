@@ -9,6 +9,8 @@ import {
 } from "~/lib/reasoning";
 import { BrainIcon, CheckIcon, ChevronDownIcon } from "lucide-react";
 import { useEffect, useRef, useState, type FC } from "react";
+import { createPortal } from "react-dom";
+import { useAnchoredMenu } from "~/lib/use-anchored-menu";
 
 export type ReasoningEffortSelectorProps = {
     className?: string;
@@ -20,6 +22,8 @@ export const ReasoningEffortSelector: FC<ReasoningEffortSelectorProps> = ({
     const { settings, updateChat } = useSettings();
     const [open, setOpen] = useState(false);
     const rootRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
     const options = getReasoningEffortOptions(
         settings.chat.provider,
         settings.chat.model,
@@ -30,7 +34,10 @@ export const ReasoningEffortSelector: FC<ReasoningEffortSelectorProps> = ({
         if (!open || options.length === 0) return;
 
         const onPointerDown = (event: PointerEvent) => {
-            if (!rootRef.current?.contains(event.target as Node)) {
+            if (
+                !rootRef.current?.contains(event.target as Node) &&
+                !menuRef.current?.contains(event.target as Node)
+            ) {
                 setOpen(false);
             }
         };
@@ -46,6 +53,13 @@ export const ReasoningEffortSelector: FC<ReasoningEffortSelectorProps> = ({
         };
     }, [open, options.length]);
 
+    const menuStyle = useAnchoredMenu(open, triggerRef, menuRef, {
+        width: 160,
+        maxHeight: 260,
+        align: "left",
+        zIndex: 100,
+    });
+
     if (options.length === 0) return null;
 
     const activeOption =
@@ -59,6 +73,7 @@ export const ReasoningEffortSelector: FC<ReasoningEffortSelectorProps> = ({
             className={cn("relative shrink-0", className)}
         >
             <button
+                ref={triggerRef}
                 type="button"
                 aria-haspopup="menu"
                 aria-expanded={open}
@@ -80,44 +95,49 @@ export const ReasoningEffortSelector: FC<ReasoningEffortSelectorProps> = ({
                 />
             </button>
 
-            {open && (
-                <div
-                    role="menu"
-                    aria-label="Reasoning effort"
-                    className="absolute bottom-full left-0 z-50 mb-2 min-w-40 rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-xl"
-                >
-                    <div className="px-2 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        Reasoning effort
-                    </div>
-                    {options.map((option) => {
-                        const active = activeOption.id === option.id;
-                        const label = option.label.replace("Think ", "");
-                        return (
-                            <button
-                                key={option.id}
-                                type="button"
-                                role="menuitemradio"
-                                aria-checked={active}
-                                onClick={() => {
-                                    hapticSelect();
-                                    updateChat({
-                                        reasoningEffort: option.id as ReasoningEffort,
-                                    });
-                                    setOpen(false);
-                                }}
-                                className={cn(
-                                    "flex w-full items-center justify-between gap-4 rounded-lg px-2.5 py-1.5 text-left text-xs outline-none transition-colors",
-                                    "hover:bg-accent focus-visible:bg-accent",
-                                    active && "bg-accent/70 text-foreground",
-                                )}
-                            >
-                                <span>{label}</span>
-                                {active ? <CheckIcon className="size-3.5" /> : null}
-                            </button>
-                        );
-                    })}
-                </div>
-            )}
+            {open && menuStyle
+                ? createPortal(
+                      <div
+                          ref={menuRef}
+                          style={menuStyle}
+                          role="menu"
+                          aria-label="Reasoning effort"
+                          className="overflow-y-auto rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-xl"
+                      >
+                          <div className="px-2 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                              Reasoning effort
+                          </div>
+                          {options.map((option) => {
+                              const active = activeOption.id === option.id;
+                              const label = option.label.replace("Think ", "");
+                              return (
+                                  <button
+                                      key={option.id}
+                                      type="button"
+                                      role="menuitemradio"
+                                      aria-checked={active}
+                                      onClick={() => {
+                                          hapticSelect();
+                                          updateChat({
+                                              reasoningEffort: option.id as ReasoningEffort,
+                                          });
+                                          setOpen(false);
+                                      }}
+                                      className={cn(
+                                          "flex w-full items-center justify-between gap-4 rounded-lg px-2.5 py-1.5 text-left text-xs outline-none transition-colors",
+                                          "hover:bg-accent focus-visible:bg-accent",
+                                          active && "bg-accent/70 text-foreground",
+                                      )}
+                                  >
+                                      <span>{label}</span>
+                                      {active ? <CheckIcon className="size-3.5" /> : null}
+                                  </button>
+                              );
+                          })}
+                      </div>,
+                      document.body,
+                  )
+                : null}
         </div>
     );
 };

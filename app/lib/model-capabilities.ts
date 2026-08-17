@@ -214,6 +214,22 @@ export function resolveModel(
     return pool[0]?.id ?? preferredId ?? "";
 }
 
+/** Prefer the user's last model for this provider; never invent a new one. */
+export function lastModelForProvider(
+    provider: ProviderId,
+    chat: {
+        provider: ProviderId;
+        model: string;
+        lastModelsByProvider?: Partial<Record<ProviderId, string>>;
+    },
+    models?: ModelInfo[],
+): string {
+    const saved = chat.lastModelsByProvider?.[provider]?.trim();
+    if (saved) return saved;
+    if (chat.provider === provider && chat.model.trim()) return chat.model;
+    return resolveModel(provider, undefined, models);
+}
+
 export function filterToolCapableModels(models: ModelInfo[]): ModelInfo[] {
     return models
         .map(enrichModelInfo)

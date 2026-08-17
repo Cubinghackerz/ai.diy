@@ -371,7 +371,7 @@ export async function action({ request }: ActionFunctionArgs) {
                 Response.json(
                     {
                         error: formatProviderError(
-                            "Sign in with ChatGPT under Settings → Experimental before using the ChatGPT (subscription) provider.",
+                            "Sign in with ChatGPT under Settings → API Keys before using the ChatGPT (subscription) provider.",
                             { provider: "chatgpt", context: "chat" },
                         ),
                     },
@@ -792,10 +792,15 @@ export async function action({ request }: ActionFunctionArgs) {
                 // used for this request to the assistant message metadata so
                 // the client can persist and aggregate it (usage analytics).
                 messageMetadata: ({ part }) => {
-                    // TTFT = first visible model text/reasoning, not tool wiring.
+                    // TTFT ends at the first model response activity: text,
+                    // reasoning, or a tool call/input stream.
                     if (
                         (part.type === "text-delta" ||
-                            part.type === "reasoning-delta") &&
+                            part.type === "reasoning-delta" ||
+                            part.type === "tool-call" ||
+                            part.type === "tool-result" ||
+                            part.type === "tool-error" ||
+                            part.type === "tool-approval-request") &&
                         firstTokenAt == null
                     ) {
                         firstTokenAt = Date.now();

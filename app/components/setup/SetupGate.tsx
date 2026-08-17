@@ -3,14 +3,18 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { LoginWithChatGPT, useLoginWithChatGPT } from "@opencoredev/loginwithchatgpt-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { SearchableModelSelect } from "~/components/ui/ModelPicker";
+import { ProviderPicker } from "~/components/ui/ProviderPicker";
+import { ChatGPTConnectionRefreshDialog } from "~/components/settings/ChatGPTConnectionRefreshDialog";
 import { haptic, hapticConfirm, hapticSelect } from "~/lib/haptics";
 import { testProviderKey } from "~/lib/key-test";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import { isLocalProvider, isProviderReady } from "~/lib/setup";
 import {
+    DEFAULT_MODELS,
     PROVIDER_DEFAULTS,
     type ModelInfo,
     type ProviderId,
@@ -18,7 +22,6 @@ import {
 import {
     ArrowRight,
     CheckCircle,
-    HardDrives,
     Key,
     ShieldCheck,
     SpinnerGap,
@@ -26,29 +29,6 @@ import {
 } from "@phosphor-icons/react";
 import { cn } from "~/lib/utils";
 import { localProviderKey } from "~/lib/provider-credentials";
-
-const CLOUD_PROVIDERS: ProviderId[] = [
-    "openai",
-    "anthropic",
-    "gemini",
-    "groq",
-    "cerebras",
-    "fireworks",
-    "perplexity",
-    "cohere",
-    "openrouter",
-    "xai",
-    "deepseek",
-    "bedrock",
-    "azure",
-    "vertex",
-    "gateway",
-    "togetherai",
-    "mistral",
-    "huggingface",
-];
-
-const LOCAL_IDS: ProviderId[] = ["ollama", "lmstudio", "custom"];
 
 const CREDENTIAL_HINTS: Partial<Record<ProviderId, string>> = {
     bedrock:
@@ -61,12 +41,10 @@ const CREDENTIAL_HINTS: Partial<Record<ProviderId, string>> = {
 export function SetupGate() {
     const { settings, loaded, updateProvider, updateChat, updateSettings } =
         useSettings();
+    const { isAuthenticated, user } = useLoginWithChatGPT();
 
     const [provider, setProvider] = useState<ProviderId>(
-        settings.chat.provider === "openai" &&
-            !settings.providers.openai?.apiKey
-            ? "openai"
-            : settings.chat.provider || "openai",
+        settings.chat.provider || "chatgpt",
     );
     const [apiKey, setApiKey] = useState(
         settings.providers[provider]?.apiKey || "",
@@ -81,6 +59,7 @@ export function SetupGate() {
     const [testing, setTesting] = useState(false);
     const [verified, setVerified] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [chatGptRefreshOpen, setChatGptRefreshOpen] = useState(false);
 
     const local = isLocalProvider(provider);
     const keyReady = local || apiKey.trim().length > 0;
@@ -153,6 +132,19 @@ export function SetupGate() {
         updateChat,
         updateSettings,
     ]);
+
+    const handleChatGPTAuthenticated = useCallback(() => {
+        const chatGptModel = DEFAULT_MODELS.chatgpt?.[0]?.id || "gpt-5.6";
+        updateSettings({ chatgptLoginEnabled: true });
+        updateProvider("chatgpt", { apiKey: "", enabled: true });
+        updateChat({ provider: "chatgpt", model: chatGptModel });
+        setChatGptRefreshOpen(true);
+    }, [updateChat, updateProvider, updateSettings]);
+
+    const refreshAfterChatGPTLogin = useCallback(() => {
+        updateSettings({ setupComplete: true });
+        window.setTimeout(() => window.location.reload(), 500);
+    }, [updateSettings]);
 
     const providerLabel = useMemo(
         () => PROVIDER_DEFAULTS[provider].name,
@@ -266,27 +258,44 @@ export function SetupGate() {
                             <label className="text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500">
                                 Provider
                             </label>
-                            <div className="flex flex-wrap gap-1.5">
-                                {CLOUD_PROVIDERS.map((id) => (
-                                    <ProviderChip
-                                        key={id}
-                                        active={provider === id}
-                                        label={PROVIDER_DEFAULTS[id].name}
-                                        onClick={() => selectProvider(id)}
-                                    />
-                                ))}
+                            <ProviderPicker
+                                value={provider}
+                                onChange={selectProvider}
+                                className="w-full [&>button]:h-11 [&>button]:w-full [&>button]:rounded-xl [&>button]:border-white/10 [&>button]:bg-white/[0.04] [&>button]:px-3 [&>button]:text-sm [&>button]:text-zinc-100 [&>button]:hover:border-white/25 [&>button]:hover:bg-white/[0.08]"
+                            />
+                            <p className="text-[11px] leading-relaxed text-zinc-500">
+                                Search all supported cloud providers, local runtimes, and custom OpenAI-compatible endpoints.
+                            </p>
+                        </div>
+
+                        <div className="flex flex-col gap-3 rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.04] p-3.5">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p className="text-sm font-semibold text-zinc-100">
+                                        ChatGPT subscription
+                                    </p>
+                                    <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
+                                        Sign in with ChatGPT to use your subscription through a secure session. No API key required.
+                                    </p>
+                                </div>
+                                <ShieldCheck
+                                    size={18}
+                                    weight="fill"
+                                    className="shrink-0 text-emerald-400"
+                                />
                             </div>
-                            <div className="mt-1 flex flex-wrap gap-1.5">
-                                {LOCAL_IDS.map((id) => (
-                                    <ProviderChip
-                                        key={id}
-                                        active={provider === id}
-                                        label={PROVIDER_DEFAULTS[id].name}
-                                        icon={<HardDrives size={13} weight="light" />}
-                                        onClick={() => selectProvider(id)}
-                                    />
-                                ))}
-                            </div>
+                            <LoginWithChatGPT
+                                consent={{
+                                    appName: "ai.diy",
+                                    continueLabel: "I understand - continue",
+                                }}
+                                onAuthenticated={handleChatGPTAuthenticated}
+                            />
+                            {isAuthenticated && user?.email ? (
+                                <p className="font-mono text-[10px] text-emerald-300/80">
+                                    Already connected as {user.email}
+                                </p>
+                            ) : null}
                         </div>
 
                         {!local ? (
@@ -420,35 +429,12 @@ export function SetupGate() {
                     No server-side LLM credentials · MIT open source
                 </p>
             </div>
+            <ChatGPTConnectionRefreshDialog
+                open={chatGptRefreshOpen}
+                onOpenChange={setChatGptRefreshOpen}
+                onRefresh={refreshAfterChatGPTLogin}
+            />
         </div>
-    );
-}
-
-function ProviderChip({
-    active,
-    label,
-    icon,
-    onClick,
-}: {
-    active: boolean;
-    label: string;
-    icon?: React.ReactNode;
-    onClick: () => void;
-}) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            className={cn(
-                "inline-flex min-h-8 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium outline-none transition-[background-color,border-color,color,transform,box-shadow] active:scale-[0.97]",
-                active
-                    ? "border-white/20 bg-white text-black shadow-[0_8px_24px_-12px_rgba(255,255,255,0.55)]"
-                    : "border-white/10 bg-white/[0.03] text-zinc-400 hover:border-white/20 hover:bg-white/[0.07] hover:text-zinc-100",
-            )}
-        >
-            {icon}
-            {label}
-        </button>
     );
 }
 

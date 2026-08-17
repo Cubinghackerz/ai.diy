@@ -8,7 +8,7 @@ const linkClass =
 
 export function LandingFooter() {
     return (
-        <footer className="border-t border-white/[0.1]">
+        <footer className="border-t border-white/[0.08]">
             <div className="mx-auto flex max-w-6xl flex-col gap-10 px-5 py-16 sm:flex-row sm:justify-between sm:px-8">
                 <div>
                     <BrandMark height={22} />

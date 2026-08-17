@@ -87,8 +87,8 @@ export function ProductBezel({ className }: { className?: string }) {
                     </button>
                 </div>
             </DoubleBezel>
-            <p className="mt-3 text-center font-mono text-[10px] text-zinc-500">
-                Product demo — opens fullscreen
+            <p className="mt-3 text-center font-mono text-[10px] tracking-wide text-zinc-600">
+                Workspace demo · click to expand
             </p>
 
             {mounted && open
