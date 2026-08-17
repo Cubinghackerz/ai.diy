@@ -85,7 +85,7 @@ export const BUILTIN_FORCED_SKILLS: ForcedSkill[] = [
     {
         name: "Linux Environment",
         content:
-            "You MUST activate and follow the linux_environment_skill for this request before using the in-browser Linux VM: call linux_environment_skill first, then use only linux_run_command / linux_read_file (or run_command / read_file when those aliases are listed). Do not invent exit codes, Canvas files, or compiler output. Do not answer before calling linux_environment_skill.",
+            "You MUST activate and follow the linux_environment_skill contract for this request before using the in-browser Linux VM: load the contract once (call linux_environment_skill, or reuse it if it is already loaded in this conversation), then use linux_run_command / linux_read_file (or run_command / read_file when those aliases are listed), linux_background_start / linux_list_processes / linux_kill_process for servers and long jobs. Never mask failures with `|| true`; quote real exit codes and output; verify started servers via linux_list_processes and the returned log. Do not invent exit codes, Canvas files, or compiler output. Do not answer before loading the contract.",
     },
 ];
 
@@ -316,11 +316,57 @@ export function lastUserTextFromMessages(
     return "";
 }
 
-/** Merge Research into the forced-skill list when research intent is detected. */
+/** Explicit re-request wording — stronger than the auto-detect heuristics. */
+const EXPLICIT_RESEARCH_WORDING =
+    /\b(research|investigate|look\s*up|look\s+into|find\s+out|web\s*search|google\s+for|continue\s+(the\s+)?(research|search|lookup))\b/;
+
+/**
+ * Whether any listed tool was already invoked in the thread messages
+ * (assistant tool-call parts or AIMessage toolCalls). Used to skip re-injecting
+ * once-per-conversation skills on follow-up turns.
+ */
+export function toolInvokedInThread(
+    messages: Array<{
+        role?: string;
+        parts?: Array<{
+            type?: string;
+            toolInvocation?: { toolName?: string };
+        }>;
+        toolCalls?: Array<{ name?: string }>;
+    }> | undefined,
+    toolNames: string[],
+): boolean {
+    if (!messages?.length || !toolNames.length) return false;
+    const wanted = new Set(toolNames);
+    for (const message of messages) {
+        if (Array.isArray(message.toolCalls)) {
+            for (const call of message.toolCalls) {
+                if (call.name && wanted.has(call.name)) return true;
+            }
+        }
+        if (Array.isArray(message.parts)) {
+            for (const part of message.parts) {
+                const toolName = (part as { toolInvocation?: { toolName?: string } })
+                    .toolInvocation?.toolName;
+                if (toolName && wanted.has(toolName)) return true;
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * Merge Research into the forced-skill list when research intent is detected.
+ * `alreadyInvoked` suppresses the auto-injection once research_skill ran this
+ * thread — unless the current ask explicitly re-requests research.
+ */
 export function ensureResearchSkill(
     skills: ForcedSkill[] | undefined,
     userText: string,
-    options: { webSearchEnabled?: boolean } = {},
+    options: {
+        webSearchEnabled?: boolean;
+        alreadyInvoked?: boolean;
+    } = {},
 ): ForcedSkill[] {
     const next = [...(skills ?? [])];
     const hasResearch = next.some(
@@ -329,6 +375,12 @@ export function ensureResearchSkill(
     if (hasResearch) return next;
     if (options.webSearchEnabled === false) return next;
     if (!detectResearchIntent(userText)) return next;
+    if (
+        options.alreadyInvoked === true &&
+        !EXPLICIT_RESEARCH_WORDING.test(userText.toLowerCase())
+    ) {
+        return next;
+    }
     const research = lookupForcedSkill("Research");
     if (research) next.unshift(research);
     return next;
@@ -499,11 +551,16 @@ export function detectLinuxIntent(text: string | undefined | null): boolean {
     return false;
 }
 
-/** Merge Linux Environment when the user asks for the in-browser VM. */
+/**
+ * Merge Linux Environment when the user asks for the in-browser VM.
+ * `alreadyInvoked` skips re-injection once the contract was loaded this thread —
+ * later turns reuse the loaded contract per the skill's once-per-conversation
+ * rule.
+ */
 export function ensureLinuxSkill(
     skills: ForcedSkill[] | undefined,
     userText: string,
-    options: { linuxEnvironment?: boolean } = {},
+    options: { linuxEnvironment?: boolean; alreadyInvoked?: boolean } = {},
 ): ForcedSkill[] {
     const next = [...(skills ?? [])];
     const hasLinux = next.some(
@@ -512,6 +569,7 @@ export function ensureLinuxSkill(
     if (hasLinux) return next;
     if (options.linuxEnvironment === false) return next;
     if (!detectLinuxIntent(userText)) return next;
+    if (options.alreadyInvoked === true) return next;
     const skill = lookupForcedSkill("Linux Environment");
     if (skill) next.unshift(skill);
     return next;

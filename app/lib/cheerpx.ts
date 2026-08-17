@@ -16,6 +16,9 @@ export type LinuxCommandResult = {
     stderr: string;
     exitCode: number;
     timedOut: boolean;
+    /** Process id of the bash that ran the command (when tracked). */
+    pid?: number;
+    durationMs?: number;
 };
 
 export type LinuxClientResult = {
@@ -27,7 +30,10 @@ export type LinuxToolName =
     | "run_command"
     | "read_file"
     | "linux_run_command"
-    | "linux_read_file";
+    | "linux_read_file"
+    | "linux_background_start"
+    | "linux_list_processes"
+    | "linux_kill_process";
 
 type CheerpXDevice = {
     readFileAsBlob?: (path: string) => Promise<Blob>;
@@ -75,13 +81,19 @@ type CheerpXWindow = Window & {
 /** Latest 1.x on the Leaning CDN (npm `cheerpx@1.3.7`, 2026-07-30). Docs examples still show 1.2.8; majors are the compatibility boundary. */
 export const CHEERPX_VERSION = "1.3.7";
 export const CHEERPX_LOADER_URL = `https://cxrtnc.leaningtech.com/${CHEERPX_VERSION}/cx.esm.js`;
-/** Official WebVM CloudDevice image (WebSocket block store — no GitHub/CORS). */
+/**
+ * Official WebVM CloudDevice image (WebSocket block store — no GitHub/CORS).
+ * The permission-fixed 2026 buster build is what webvm.io currently serves;
+ * /home/user is writable and the old permission workarounds are gone.
+ * Note: this stays Debian 10 — nodejs is v10 and python3 is 3.7. A modern
+ * Node (20/22) would require a custom image or an HTTP FetchDevice kit.
+ */
 export const CHEERPX_DISK_IMAGE_URL =
-    "wss://disks.webvm.io/debian_large_20230522_5044875331.ext2";
+    "wss://disks.webvm.io/debian_buster_large_permis_fixed_01-06-2026.ext2";
 const OVERLAY_DB_BASE = "aidiy-cx-v3";
 
 const COMMAND_TIMEOUT_MS = 90_000;
-const COMMAND_TIMEOUT_SEC = 90;
+const MAX_COMMAND_TIMEOUT_MS = 300_000;
 const BOOT_TIMEOUT_MS = 60_000;
 const MAX_OUTPUT_BYTES = 32 * 1024;
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
@@ -96,7 +108,7 @@ const DEFAULT_ENV = [
     "LANG=en_US.UTF-8",
     "LC_ALL=C",
     "TERM=xterm-256color",
-    "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/user/bin",
 ];
 
 const UNAVAILABLE_MESSAGE =
@@ -321,7 +333,10 @@ export function isLinuxClientTool(name: string): name is LinuxToolName {
         name === "run_command" ||
         name === "read_file" ||
         name === "linux_run_command" ||
-        name === "linux_read_file"
+        name === "linux_read_file" ||
+        name === "linux_background_start" ||
+        name === "linux_list_processes" ||
+        name === "linux_kill_process"
     );
 }
 
@@ -329,6 +344,14 @@ function linuxToolKind(name: LinuxToolName): "run_command" | "read_file" {
     return name === "read_file" || name === "linux_read_file"
         ? "read_file"
         : "run_command";
+}
+
+function isBackgroundTool(name: LinuxToolName): boolean {
+    return (
+        name === "linux_background_start" ||
+        name === "linux_list_processes" ||
+        name === "linux_kill_process"
+    );
 }
 
 function sanitizeScopeId(scopeId: string): string {
@@ -586,8 +609,20 @@ async function runProcess(
     cx: CheerpXLinux,
     args: string[],
     cwd: string,
-    opts?: { uid?: number; gid?: number; timeoutMs?: number },
-): Promise<{ status: number; timedOut: boolean; output: string }> {
+    opts?: {
+        uid?: number;
+        gid?: number;
+        timeoutMs?: number;
+        /** Prepend a pid-emission echo and parse AIDIY_PID from the output. */
+        trackPid?: boolean;
+    },
+): Promise<{
+    status: number;
+    timedOut: boolean;
+    output: string;
+    pid?: number;
+    durationMs: number;
+}> {
     await stopInteractiveShell();
     const chunks: Uint8Array[] = [];
     const unsubscribe = subscribeCheerpXOutput((buf) => {
@@ -595,16 +630,24 @@ async function runProcess(
     });
     let timedOut = false;
     const timeoutMs = opts?.timeoutMs ?? COMMAND_TIMEOUT_MS;
+    const startedAt = Date.now();
     setRuntimePhase("running");
+    const fullArgs = opts?.trackPid ? ["-lc", `echo AIDIY_PID:$$; ${args[1] ?? ""}`] : args;
     try {
         const result = await new Promise<{ status: number }>((resolve, reject) => {
             failLiveProcess = reject;
             const timeoutId = window.setTimeout(() => {
                 timedOut = true;
+                // Phase 1: graceful interrupt (SIGINT/SIGQUIT) so quick
+                // processes exit cleanly.
                 interruptRunningProcess();
+                // Phase 2: escalate — SIGKILL every user process (the hung
+                // command and all its descendants). CheerpX is multi-process,
+                // so this runs in parallel and does not wait on the hung run.
+                window.setTimeout(() => killUserProcesses(cx), 400);
                 reject(new Error("timeout"));
             }, timeoutMs);
-            const run = cx.run("/bin/bash", args, {
+            const run = cx.run("/bin/bash", fullArgs, {
                 env: DEFAULT_ENV,
                 cwd,
                 uid: opts?.uid ?? 1000,
@@ -623,14 +666,22 @@ async function runProcess(
             status: result.status,
             timedOut: timedOut || sentinelTimeout || result.status === 124,
             output,
+            pid: parsePidSentinel(output),
+            durationMs: Date.now() - startedAt,
         };
     } catch (error) {
         const output = decodeBytes(chunks);
         if (isStoppedError(error)) {
-            return { status: 130, timedOut: false, output };
+            return { status: 130, timedOut: false, output, durationMs: Date.now() - startedAt };
         }
         if (timedOut || (error instanceof Error && /timed out/i.test(error.message))) {
-            return { status: 124, timedOut: true, output };
+            return {
+                status: 124,
+                timedOut: true,
+                output,
+                pid: parsePidSentinel(output),
+                durationMs: Date.now() - startedAt,
+            };
         }
         resetRuntime();
         throw error;
@@ -638,6 +689,28 @@ async function runProcess(
         unsubscribe();
         if (booted) setRuntimePhase("ready");
     }
+}
+
+/**
+ * SIGKILL all uid-1000 processes in the VM. Commands are serialized through
+ * the command chain and the interactive shell is stopped first, so the only
+ * user-owned processes at timeout time belong to the hung command tree.
+ * Never matches root: killing init would take the whole VM down.
+ */
+function killUserProcesses(cx: CheerpXLinux): void {
+    void cx
+        .run(
+            "/bin/bash",
+            ["-lc", "pkill -9 -u 1000 2>/dev/null; exit 0"],
+            { env: DEFAULT_ENV, cwd: "/", uid: 1000, gid: 1000 },
+        )
+        .catch(() => undefined);
+}
+
+function parsePidSentinel(output: string): number | undefined {
+    const match = /AIDIY_PID:(\d+)/.exec(output);
+    const pid = match?.[1] ? Number.parseInt(match[1], 10) : NaN;
+    return Number.isInteger(pid) && pid > 0 ? pid : undefined;
 }
 
 async function ensureWritableHome(cx: CheerpXLinux): Promise<void> {
@@ -649,46 +722,119 @@ async function ensureWritableHome(cx: CheerpXLinux): Promise<void> {
     homeReady = true;
 }
 
+/**
+ * One-time per-page probe. Debian's `nodejs` package ships the npm CLI at
+ * /usr/share/nodejs/npm/bin/npm-cli.js but the `npm` frontend is a separate
+ * package this image lacks, so npm is "command not found". If the CLI exists,
+ * install a small wrapper into /home/user/bin (persisted in the overlay,
+ * already on PATH) so `npm` resolves to Node 10's npm. No network is needed
+ * for the wrapper itself; `npm install` still requires network.
+ */
+let toolchainEnsure: Promise<void> | null = null;
+let toolchainNote: string | null = null;
+
+const TOOLCHAIN_PROBE = `set +e
+for t in node npm python3 pip3 gcc g++ make git curl wget jq; do
+  p=$(command -v "$t" 2>/dev/null)
+  if [ -n "$p" ]; then echo "HAVE $t=$p"; else echo "MISSING $t"; fi
+done
+if [ -f /usr/share/nodejs/npm/bin/npm-cli.js ]; then
+  if [ ! -x "$HOME/bin/npm" ]; then
+    mkdir -p "$HOME/bin"
+    printf '%s\n' '#!/bin/bash' 'export NODE_PATH="/usr/share/nodejs:\${NODE_PATH}"' 'exec node /usr/share/nodejs/npm/bin/npm-cli.js "$@"' > "$HOME/bin/npm"
+    chmod +x "$HOME/bin/npm"
+    echo NPM_WRAPPER_INSTALLED
+  else
+    echo NPM_WRAPPER_PRESENT
+  fi
+else
+  echo NPM_CLI_MISSING
+fi`;
+
+function ensureToolchain(cx: CheerpXLinux): Promise<void> {
+    if (!toolchainEnsure) {
+        toolchainEnsure = runProcess(cx, ["-lc", TOOLCHAIN_PROBE], DEFAULT_CWD, {
+            timeoutMs: 20_000,
+        })
+            .then((result) => {
+                toolchainNote = result.output
+                    .split("\n")
+                    .map((line) => line.trim())
+                    .filter((line) => line && /^(HAVE|MISSING|NPM_)/.test(line))
+                    .join("; ");
+                console.info("[cheerpx] toolchain:", toolchainNote);
+            })
+            .catch(() => undefined);
+    }
+    return toolchainEnsure;
+}
+
+export function getToolchainNote(): string | null {
+    return toolchainNote;
+}
+
 export async function runCommand(
     cx: CheerpXLinux,
     command: string,
-    opts?: { cwd?: string },
+    opts?: { cwd?: string; timeoutSec?: number },
 ): Promise<LinuxCommandResult> {
     const source = String(command ?? "").trim();
     if (!source) {
         return { stdout: "", stderr: "No command provided.", exitCode: 1, timedOut: false };
     }
     const cwd = String(opts?.cwd ?? DEFAULT_CWD).trim() || DEFAULT_CWD;
+    const requestedMs = Math.round(Number(opts?.timeoutSec) * 1000);
+    const timeoutMs =
+        Number.isFinite(requestedMs) && requestedMs > 0
+            ? Math.min(MAX_COMMAND_TIMEOUT_MS, requestedMs)
+            : COMMAND_TIMEOUT_MS;
+    const timeoutSec = Math.round(timeoutMs / 1000);
     await ensureWritableHome(cx);
     const result = await runProcess(
         cx,
         ["-lc", source],
         cwd,
+        { trackPid: true, timeoutMs },
     );
     const stdout = capOutput(
-        result.output.replace(/\n?AIDIY_TIMEOUT\n?/g, "").trimEnd(),
+        result.output.replace(/\n?AIDIY_PID:\d+\n?/g, "").replace(/\n?AIDIY_TIMEOUT\n?/g, "").trimEnd(),
     );
     return {
         stdout,
         stderr: result.timedOut
-            ? `Command timed out after ${COMMAND_TIMEOUT_SEC}s and was killed.`
+            ? `Command timed out after ${timeoutSec}s; all descendant processes were killed.`
             : result.status === 130
               ? "Stopped by user."
               : "",
         exitCode: result.timedOut ? 124 : result.status,
         timedOut: result.timedOut,
+        pid: result.pid,
+        durationMs: result.durationMs,
     };
 }
 
-const READ_WRAPPER = `set +e
-path="$1"
+const READ_WRAPPER = `path="$1"
 max="$2"
-if [ ! -e "$path" ]; then echo AIDIY_ERR:not_found; exit 2; fi
-if [ -d "$path" ]; then echo AIDIY_ERR:is_directory; exit 2; fi
+if [ ! -e "$path" ]; then
+  echo AIDIY_ERR:not_found >&2
+  exit 2
+fi
+if [ -d "$path" ]; then
+  echo AIDIY_ERR:is_directory >&2
+  exit 2
+fi
 size=$(wc -c < "$path" | tr -d " ")
-if [ "$size" -gt "$max" ]; then echo AIDIY_ERR:too_large:$size; exit 3; fi
+if [ "$size" -gt "$max" ]; then
+  echo AIDIY_ERR:too_large:$size >&2
+  exit 3
+fi
 echo AIDIY_B64_BEGIN
-if base64 -w0 "$path" 2>/dev/null; then echo; else base64 "$path" | tr -d "\\n"; echo; fi
+if base64 -w0 "$path" 2>/dev/null; then
+  echo
+else
+  base64 "$path" | tr -d "\\n"
+  echo
+fi
 echo AIDIY_B64_END`;
 
 function looksLikeText(bytes: Uint8Array): boolean {
@@ -770,12 +916,124 @@ export async function readFileFromVM(
     return { output: capOutput(summary), artifacts: [artifact] };
 }
 
+const BG_DIR = "/home/user/.aidiy-bg";
+
+/**
+ * Background-process primitive: `setsid bash <script> &` so the process
+ * survives the launching command and gets its own process group. The pid
+ * returned is the group leader — linux_kill_process kills the whole group.
+ */
+async function startBackgroundProcess(
+    cx: CheerpXLinux,
+    command: string,
+    cwd: string,
+): Promise<LinuxClientResult> {
+    const source = String(command ?? "").trim();
+    if (!source) {
+        return {
+            output: "linux_background_start error: no command provided.",
+            artifacts: [],
+        };
+    }
+    const workDir = String(cwd ?? "").trim() || DEFAULT_CWD;
+    const script = [
+        "set -u",
+        `workdir="${workDir}"`,
+        'cd "$workdir" || exit 9',
+        `mkdir -p ${BG_DIR}`,
+        `cat > ${BG_DIR}/cmd.sh <<'AIDIY_EOF'`,
+        source,
+        "AIDIY_EOF",
+        `setsid bash ${BG_DIR}/cmd.sh > ${BG_DIR}/out.log 2>&1 < /dev/null &`,
+        "echo AIDIY_PID:$!",
+    ].join("\n");
+    const result = await runProcess(cx, ["-lc", script], DEFAULT_CWD, {
+        timeoutMs: 20_000,
+    });
+    const pid = parsePidSentinel(result.output);
+    if (result.timedOut || pid == null) {
+        return {
+            output: `linux_background_start error: could not start the background process (timedOut: ${result.timedOut}).`,
+            artifacts: [],
+        };
+    }
+    return {
+        output: `Background process started.\npid: ${pid}\nlog: ${BG_DIR}/out.log\n\nVerify readiness with linux_list_processes and by reading the log; stop it with linux_kill_process(${pid}).`,
+        artifacts: [],
+    };
+}
+
+async function listProcesses(cx: CheerpXLinux): Promise<LinuxClientResult> {
+    const result = await runProcess(
+        cx,
+        ["-lc", "ps -u 1000 -o pid=,stat=,etime=,args= --sort=pid"],
+        DEFAULT_CWD,
+        { timeoutMs: 20_000 },
+    );
+    if (result.timedOut) {
+        return {
+            output: "linux_list_processes: timed out listing processes.",
+            artifacts: [],
+        };
+    }
+    const lines = result.output.trim();
+    return {
+        output: capOutput(
+            lines
+                ? `User processes (uid 1000):\n${lines}`
+                : "No user processes are running.",
+        ),
+        artifacts: [],
+    };
+}
+
+async function killProcess(
+    cx: CheerpXLinux,
+    pidRaw: unknown,
+): Promise<LinuxClientResult> {
+    const pid = Number(pidRaw);
+    if (!Number.isInteger(pid) || pid <= 0) {
+        return {
+            output: "linux_kill_process error: a positive numeric pid is required.",
+            artifacts: [],
+        };
+    }
+    const script = [
+        `if ! kill -0 ${pid} 2>/dev/null; then`,
+        "  echo AIDIY_ERR:no_such_pid >&2",
+        "  exit 4",
+        "fi",
+        `kill -9 -- -${pid} 2>/dev/null`,
+        `pkill -9 -P ${pid} 2>/dev/null`,
+        `kill -9 ${pid} 2>/dev/null`,
+        `echo AIDIY_KILLED:${pid}`,
+    ].join("\n");
+    const result = await runProcess(cx, ["-lc", script], DEFAULT_CWD, {
+        timeoutMs: 20_000,
+    });
+    const text = result.output;
+    if (/AIDIY_ERR:no_such_pid/.test(text)) {
+        return {
+            output: `linux_kill_process: process ${pid} is not running.`,
+            artifacts: [],
+        };
+    }
+    return {
+        output: /AIDIY_KILLED:/.test(text)
+            ? `Process ${pid} and its descendants were killed.`
+            : `linux_kill_process: could not confirm the kill of ${pid}.\n${capOutput(text)}`,
+        artifacts: [],
+    };
+}
+
 function formatCommandOutput(result: LinuxCommandResult): string {
     const parts = [
         result.stdout ? `stdout:\n${result.stdout}` : "",
         result.stderr ? `stderr:\n${result.stderr}` : "",
         `exitCode: ${result.exitCode}`,
         result.timedOut ? "timedOut: true" : "",
+        result.pid != null ? `pid: ${result.pid}` : "",
+        result.durationMs != null ? `durationMs: ${result.durationMs}` : "",
     ].filter(Boolean);
     return capOutput(parts.join("\n\n") || "Command completed with no output.");
 }
@@ -802,7 +1060,14 @@ export async function prewarmCheerpX(scopeId: string): Promise<void> {
 
 export async function executeLinuxClientTool(
     name: LinuxToolName,
-    input: { command?: string; cwd?: string; path?: string; maxBytes?: number },
+    input: {
+        command?: string;
+        cwd?: string;
+        path?: string;
+        maxBytes?: number;
+        pid?: number;
+        timeoutSec?: number;
+    },
     scopeId: string,
 ): Promise<LinuxClientResult> {
     if (!cheerpxAvailable()) {
@@ -827,8 +1092,26 @@ export async function executeLinuxClientTool(
                     if (linuxToolKind(name) === "read_file") {
                         return readFileFromVM(cx, input.path ?? "", input.maxBytes);
                     }
+                    if (isBackgroundTool(name)) {
+                        if (name === "linux_background_start") {
+                            await ensureToolchain(cx);
+                            throwIfStopped();
+                            return startBackgroundProcess(
+                                cx,
+                                input.command ?? "",
+                                input.cwd ?? "",
+                            );
+                        }
+                        if (name === "linux_list_processes") {
+                            return listProcesses(cx);
+                        }
+                        return killProcess(cx, input.pid);
+                    }
+                    await ensureToolchain(cx);
+                    throwIfStopped();
                     const result = await runCommand(cx, input.command ?? "", {
                         cwd: input.cwd,
+                        timeoutSec: input.timeoutSec,
                     });
                     if (result.exitCode === 130) {
                         return { output: "Stopped by user.", artifacts: [] };

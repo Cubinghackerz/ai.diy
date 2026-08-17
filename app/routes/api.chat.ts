@@ -24,6 +24,7 @@ import {
     ensureUrlDoctorSkill,
     lastUserTextFromMessages,
     resolveRequiredSkillTools,
+    toolInvokedInThread,
     type ForcedSkill,
 } from "~/lib/skill-command";
 import {
@@ -76,6 +77,8 @@ interface ChatRequestBody {
     model: string;
     provider: ProviderId;
     apiKey: string;
+    /** Current thread id — used for once-per-chat skill dedupe. */
+    chatId?: string;
     baseUrl?: string;
     systemPrompt?: string;
     system?: string;
@@ -519,12 +522,21 @@ export async function action({ request }: ActionFunctionArgs) {
 
         // Slash-selected skills + auto Research / Frontend / URL Doctor when intent is clear.
         const userText = lastUserTextFromMessages(body.messages);
+        // Once-per-conversation skills: don't re-inject the forced skill when
+        // its tool already ran in this thread (contract is already in context).
+        const researchInvokedThisChat = toolInvokedInThread(body.messages, [
+            "research_skill",
+        ]);
+        const linuxInvokedThisChat = toolInvokedInThread(body.messages, [
+            "linux_environment_skill",
+        ]);
         const activeSkills: ForcedSkill[] = ensureLinuxSkill(
             ensureCompactionSkill(
                 ensureUrlDoctorSkill(
                     ensureFrontendSkill(
                         ensureResearchSkill(body.customSkills, userText, {
                             webSearchEnabled: body.toolSettings?.webSearchEnabled,
+                            alreadyInvoked: researchInvokedThisChat,
                         }),
                         userText,
                     ),
@@ -536,7 +548,10 @@ export async function action({ request }: ActionFunctionArgs) {
                 userText,
             ),
             userText,
-            { linuxEnvironment: body.toolSettings?.linuxEnvironment },
+            {
+                linuxEnvironment: body.toolSettings?.linuxEnvironment,
+                alreadyInvoked: linuxInvokedThisChat,
+            },
         );
         const requiredSkillTools = resolveRequiredSkillTools(activeSkills);
 
@@ -550,6 +565,7 @@ export async function action({ request }: ActionFunctionArgs) {
                 suppressWebSearch: mcpSearchAvailable,
                 messages: body.messages,
                 provider: body.provider,
+                chatId: body.chatId,
             },
         );
         const tools: Record<string, Tool> =

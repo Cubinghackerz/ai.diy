@@ -57,7 +57,8 @@ const SEARCH_PATTERN =
 const FETCH_PATTERN = /fetch|read_url|scrape|web_fetch|parse|crawl|browse/i;
 const IMAGE_PATTERN = /image|midjourney|dall.?e|flux/i;
 const CODE_PATTERN = /python|run_code|pyodide|execute/i;
-const LINUX_PATTERN = /linux_run_command|linux_read_file|^run_command$|^read_file$/;
+const LINUX_PATTERN =
+    /linux_run_command|linux_read_file|linux_background_start|linux_list_processes|linux_kill_process|^run_command$|^read_file$/;
 
 export interface ToolHumanLabel {
     /** Short noun, e.g. "Web search". */
@@ -105,7 +106,13 @@ export function toolHumanLabel(toolName: string): ToolHumanLabel {
                     ? "Waiting for Linux file…"
                     : raw === "linux_environment_skill"
                       ? "Loading Linux guide…"
-                      : "Waiting for Linux VM…",
+                      : raw === "linux_background_start"
+                        ? "Starting VM process…"
+                        : raw === "linux_list_processes"
+                          ? "Listing VM processes…"
+                          : raw === "linux_kill_process"
+                            ? "Stopping VM process…"
+                            : "Waiting for Linux VM…",
             past: "Used Linux",
         };
     }

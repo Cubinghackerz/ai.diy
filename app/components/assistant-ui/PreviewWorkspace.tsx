@@ -39,6 +39,12 @@ import { ModelPicker } from "~/components/ui/ModelPicker";
 import { ProviderPicker } from "~/components/ui/ProviderPicker";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { assertClientUsageAllowed } from "~/lib/usage-ledger.client";
+import {
+    applyCreditsFallback,
+    findCreditsFallbackTarget,
+    notifyCreditsFallback,
+} from "~/lib/credits-fallback";
+import { detectProviderCreditError } from "~/lib/provider-errors";
 import { runBrowserPython } from "~/lib/pyodide";
 import {
     abortLinuxExecution,
@@ -1304,16 +1310,61 @@ const PreviewRunPanel: FC<{
             new AssistantChatTransport({
                 api: "/api/chat",
                 fetch: async (input, init) => {
+                    let payload: Record<string, unknown> | null = null;
+                    if (init && typeof init.body === "string") {
+                        try {
+                            payload = JSON.parse(init.body) as Record<string, unknown>;
+                        } catch {
+                            payload = null;
+                        }
+                    }
                     const response = await globalThis.fetch(input, {
                         ...init,
                         credentials: "include",
                     });
-                    if (!response.ok) {
-                        throw new Error(
-                            await parseChatError(response, "Preview run failed"),
+                    if (response.ok) return response;
+                    const raw = await response.text();
+                    if (
+                        detectProviderCreditError(raw, response.status) &&
+                        payload
+                    ) {
+                        const fallback = findCreditsFallbackTarget(
+                            settingsRef.current,
+                            run.config.provider as ProviderId,
                         );
+                        if (fallback) {
+                            try {
+                                const rerun = await globalThis.fetch(input, {
+                                    ...init,
+                                    credentials: "include",
+                                    body: JSON.stringify(
+                                        applyCreditsFallback(payload, fallback),
+                                    ),
+                                });
+                                if (rerun.ok) {
+                                    notifyCreditsFallback(
+                                        run.config.provider,
+                                        fallback.provider,
+                                    );
+                                    return rerun;
+                                }
+                                throw new Error(
+                                    await parseChatError(
+                                        rerun,
+                                        "Preview run failed",
+                                    ),
+                                );
+                            } catch (err) {
+                                console.error("[credits-fallback]", err);
+                            }
+                        }
                     }
-                    return response;
+                    throw new Error(
+                        await parseChatError(
+                            new Response(raw, { status: response.status }),
+                            "Preview run failed",
+                        ),
+                    );
                 },
                 prepareSendMessagesRequest: async (options) => {
                     await assertClientUsageAllowed(
@@ -1325,6 +1376,7 @@ const PreviewRunPanel: FC<{
                         body: {
                             ...options.body,
                             messages: options.messages,
+                            chatId: run.id,
                             model: run.config.model,
                             provider: run.config.provider as ProviderId,
                             apiKey:
@@ -1372,6 +1424,9 @@ const PreviewRunPanel: FC<{
                     "read_file",
                     "linux_run_command",
                     "linux_read_file",
+                    "linux_background_start",
+                    "linux_list_processes",
+                    "linux_kill_process",
                     "ask_user",
                     "memory",
                 ].includes(toolCall.toolName)

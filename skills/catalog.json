@@ -54,12 +54,12 @@
     {
       "id": "linux-environment",
       "name": "Linux Environment",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "description": "Use the in-browser Debian VM (CheerpX) for bash, gcc, node, and system tools. Activate before linux_run_command / linux_read_file, compile-C, or Linux sandbox requests.",
       "category": "developer",
       "path": "developer/linux-environment/SKILL.md",
       "popular": true,
-      "tools": ["linux_environment_skill", "linux_run_command", "linux_read_file", "run_python", "ask_user"]
+      "tools": ["linux_environment_skill", "linux_run_command", "linux_read_file", "linux_background_start", "linux_list_processes", "linux_kill_process", "run_python", "ask_user"]
     },
     {
       "id": "url-doctor",

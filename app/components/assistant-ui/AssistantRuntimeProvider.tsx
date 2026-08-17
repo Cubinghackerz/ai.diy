@@ -44,6 +44,12 @@ import {
 } from "~/lib/knowledge/store.client";
 import { askUserInBrowser } from "~/lib/client-tools";
 import { forcedSkillStore, toolNameForForcedSkill } from "~/lib/skill-command";
+import {
+    applyCreditsFallback,
+    findCreditsFallbackTarget,
+    notifyCreditsFallback,
+} from "~/lib/credits-fallback";
+import { detectProviderCreditError } from "~/lib/provider-errors";
 import { useSubagent } from "~/components/assistant-ui/subagents";
 import {
     createWebSpeechDictationAdapter,
@@ -52,8 +58,7 @@ import {
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { assertClientUsageAllowed } from "~/lib/usage-ledger.client";
 
-async function parseChatError(res: Response): Promise<string> {
-    const text = await res.text();
+function parseErrorText(text: string, status: number): string {
     try {
         const json = JSON.parse(text) as { error?: string; message?: string };
         if (json.error) return json.error;
@@ -61,7 +66,26 @@ async function parseChatError(res: Response): Promise<string> {
     } catch {
         // not JSON
     }
-    return text.trim() || `Chat request failed (HTTP ${res.status})`;
+    return text.trim() || `Chat request failed (HTTP ${status})`;
+}
+
+/** Read the outgoing request body once, without consuming it for the retry. */
+function captureRequestBody(
+    input: RequestInfo | URL,
+    init?: RequestInit,
+): Record<string, unknown> | null {
+    let raw: string | null = null;
+    if (init && typeof init.body === "string") raw = init.body;
+    else if (input instanceof Request) {
+        const body = (input as unknown as { body?: unknown }).body;
+        if (typeof body === "string") raw = body;
+    }
+    if (!raw) return null;
+    try {
+        return JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+        return null;
+    }
 }
 
 export function AssistantRuntimeProvider({
@@ -94,14 +118,52 @@ export function AssistantRuntimeProvider({
             new AssistantChatTransport({
                 api: "/api/chat",
                 fetch: async (input, init) => {
+                    const payload = captureRequestBody(input, init);
                     const res = await globalThis.fetch(input, {
                         ...init,
                         credentials: "include",
                     });
-                    if (!res.ok) {
-                        throw new Error(await parseChatError(res));
+                    if (res.ok) return res;
+                    const raw = await res.text();
+                    const creditExhausted = detectProviderCreditError(
+                        raw,
+                        res.status,
+                    );
+                    if (creditExhausted && payload) {
+                        // Credits exhausted → retry once on the next provider.
+                        const s = settingsRef.current;
+                        const fallback = findCreditsFallbackTarget(
+                            s,
+                            s.chat.provider,
+                        );
+                        if (fallback) {
+                            try {
+                                const rerun = await globalThis.fetch(input, {
+                                    ...init,
+                                    credentials: "include",
+                                    body: JSON.stringify(
+                                        applyCreditsFallback(payload, fallback),
+                                    ),
+                                });
+                                if (rerun.ok) {
+                                    notifyCreditsFallback(
+                                        s.chat.provider,
+                                        fallback.provider,
+                                    );
+                                    return rerun;
+                                }
+                                throw new Error(
+                                    parseErrorText(
+                                        await rerun.text(),
+                                        rerun.status,
+                                    ),
+                                );
+                            } catch (err) {
+                                console.error("[credits-fallback]", err);
+                            }
+                        }
                     }
-                    return res;
+                    throw new Error(parseErrorText(raw, res.status));
                 },
                 prepareSendMessagesRequest: async (options) => {
                     const s = settingsRef.current;
@@ -156,6 +218,7 @@ export function AssistantRuntimeProvider({
                             ...options.body,
                             messages: options.messages,
                             id: options.id,
+                            chatId: threadId ?? "draft",
                             trigger: options.trigger,
                             messageId: options.messageId,
                             metadata: options.requestMetadata,
@@ -216,6 +279,9 @@ export function AssistantRuntimeProvider({
                 "read_file",
                 "linux_run_command",
                 "linux_read_file",
+                "linux_background_start",
+                "linux_list_processes",
+                "linux_kill_process",
                 "ask_user",
                 "memory",
                 "knowledge_search",

@@ -51,6 +51,31 @@ import {
     linuxGenerationAborted,
 } from "~/lib/cheerpx";
 import { useSettings } from "~/lib/providers/SettingsProvider";
+import {
+    applyCreditsFallback,
+    findCreditsFallbackTarget,
+    notifyCreditsFallback,
+} from "~/lib/credits-fallback";
+import { detectProviderCreditError } from "~/lib/provider-errors";
+
+/** Read the outgoing subagent request body without consuming it. */
+function captureSubagentRequestBody(
+    input: RequestInfo | URL,
+    init?: RequestInit,
+): Record<string, unknown> | null {
+    let raw: string | null = null;
+    if (init && typeof init.body === "string") raw = init.body;
+    else if (input instanceof Request) {
+        const body = (input as unknown as { body?: unknown }).body;
+        if (typeof body === "string") raw = body;
+    }
+    if (!raw) return null;
+    try {
+        return JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+        return null;
+    }
+}
 
 export type SubagentSessionStatus =
     | "awaiting-approval"
@@ -582,16 +607,52 @@ function SubagentRun({
             new AssistantChatTransport({
                 api: "/api/chat",
                 fetch: async (input, init) => {
+                    const payload = captureSubagentRequestBody(input, init);
                     const response = await globalThis.fetch(input, {
                         ...init,
                         credentials: "include",
                     });
-                    if (!response.ok) {
-                        throw new Error(
-                            await parseChatError(response, "Subagent run failed"),
+                    if (response.ok) return response;
+                    const raw = await response.text();
+                    if (
+                        detectProviderCreditError(raw, response.status) &&
+                        payload
+                    ) {
+                        const s = settingsRef.current;
+                        const fallback = findCreditsFallbackTarget(
+                            s,
+                            s.chat.provider,
                         );
+                        if (fallback) {
+                            try {
+                                const rerun = await globalThis.fetch(input, {
+                                    ...init,
+                                    credentials: "include",
+                                    body: JSON.stringify(
+                                        applyCreditsFallback(payload, fallback),
+                                    ),
+                                });
+                                if (rerun.ok) {
+                                    notifyCreditsFallback(
+                                        s.chat.provider,
+                                        fallback.provider,
+                                    );
+                                    return rerun;
+                                }
+                                throw new Error(
+                                    await parseChatError(rerun, "Subagent run failed"),
+                                );
+                            } catch (err) {
+                                console.error("[credits-fallback]", err);
+                            }
+                        }
                     }
-                    return response;
+                    throw new Error(
+                        await parseChatError(
+                            new Response(raw, { status: response.status }),
+                            "Subagent run failed",
+                        ),
+                    );
                 },
                 prepareSendMessagesRequest: async (options) => {
                     const s = settingsRef.current;
@@ -615,6 +676,7 @@ function SubagentRun({
                         body: {
                             ...options.body,
                             messages: options.messages,
+                            chatId: threadIdRef.current ?? "draft",
                             model: s.chat.model,
                             provider,
                             apiKey: provider === "chatgpt" ? "" : resolvedApiKey,
@@ -663,6 +725,9 @@ function SubagentRun({
                     "read_file",
                     "linux_run_command",
                     "linux_read_file",
+                    "linux_background_start",
+                    "linux_list_processes",
+                    "linux_kill_process",
                     "memory",
                     "ask_user",
                 ].includes(toolCall.toolName)

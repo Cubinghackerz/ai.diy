@@ -722,41 +722,63 @@ Create real, downloadable files with browser-side Pyodide. Use this skill before
 - Keep binary file bytes out of chat text and out of saved memory.`;
 }
 
-function linuxEnvironmentSkill(input: { task?: string }): string {
+/** Chats that already loaded the Linux contract this process — skip re-injection. */
+const linuxSkillLoadedChats = new Set<string>();
+
+function linuxEnvironmentSkill(input: { task?: string }, chatId?: string): string {
+    if (chatId) {
+        if (linuxSkillLoadedChats.has(chatId)) {
+            return `# Linux Environment Skill (already loaded)
+
+You loaded this contract earlier in this conversation. Reuse it — do not call \`linux_environment_skill\` again. Tools: \`linux_run_command\` / \`linux_read_file\` / \`linux_background_start\` / \`linux_list_processes\` / \`linux_kill_process\`. No outbound network; never mask failures with \`|| true\`; verify server readiness before continuing.`;
+        }
+        linuxSkillLoadedChats.add(chatId);
+    }
     return `# Linux Environment Skill
 
 Task: ${input.task?.trim() || "Use the in-browser Debian VM (CheerpX) correctly."}
 
 ## Purpose
-This is a real x86 Debian 10 VM in the browser (CheerpX / WebVM). It is not Pyodide and not the host machine. Load this contract before any linux_run_command / linux_read_file work.
+This is a real x86 Debian 10 VM in the browser (CheerpX / WebVM). It is not Pyodide and not the host machine. Load this contract once per conversation, then reuse it on later turns.
 
 ## What is actually there
-- User: \`user\` (uid 1000). Home: \`/home/user\`. Writable scratch: \`/tmp\`.
-- Tools on the image: \`bash\`, \`python3\` (Debian 3.7 — no pandas/numpy), \`gcc\`, \`g++\`, \`make\`, \`node\`, \`apt\`.
+- User: \`user\` (uid 1000). Home: \`/home/user\` (writable). Scratch: \`/tmp\`.
+- Toolchain on the image: \`node\` v10 (Debian 10 — write Node 10-compatible code, no ESM-only packages), \`python3\` 3.7 (no pandas/numpy), \`gcc\`/\`g++\` 8, \`make\`, \`bash\`, \`apt\`. The \`npm\` frontend may be installed by the boot probe as a wrapper in \`/home/user/bin\` (already on PATH) if the image ships the npm CLI — but \`npm install\` still needs network and will fail.
 - No outbound network by default. \`apt install\`, \`pip install\`, \`npm install\`, curl, and git clone will fail. Do not retry them.
-- Files persist in the browser's IndexedDB overlay. Commands time out at 90s. Combined stdout/stderr is capped at 32KB. First boot has a 60s startup cap; do not retry a reported VM failure in the same turn.
+- Files persist in the browser's IndexedDB overlay. Commands time out after 90s by default; pass \`timeoutSec\` (1-300) to \`linux_run_command\` for long compiles or servers. On timeout the VM kills the command AND all of its descendants. Combined stdout/stderr is capped at 32KB. First boot has a 60s startup cap; do not retry a reported VM failure in the same turn.
 
 ## Tools
-- \`linux_run_command\` (alias \`run_command\` on non-ChatGPT providers): \`command\` (required), \`cwd\` (default \`/home/user\`), \`description\` (short card title, e.g. "Check compiler versions").
+- \`linux_run_command\` (alias \`run_command\` on non-ChatGPT providers): \`command\` (required), \`cwd\` (default \`/home/user\`), \`timeoutSec\` (optional, 1-300, default 90), \`description\` (short card title). Returns \`stdout\`, \`stderr\`, \`exitCode\`, \`pid\`, \`durationMs\`, \`timedOut\`.
 - \`linux_read_file\` (alias \`read_file\` on non-ChatGPT): \`path\`, optional \`maxBytes\` (cap 2 MiB). Attaches a Canvas artifact. Mention the filename in backticks.
+- \`linux_background_start\`: \`command\`, optional \`cwd\`. Starts a detached process (\`setsid\`), returns \`pid\` + log path. Use this instead of bare \`node server.js &\`.
+- \`linux_list_processes\`: no args. Lists running user processes (pid, state, elapsed, args).
+- \`linux_kill_process\`: \`pid\`. Kills the process and its whole process group.
 - Prefer \`run_python\` for analysis, charts, pandas, and document generation. Use this VM for gcc, node, bash, and system tools.
 
 ## Workflow
-1. Call this skill once, then run a short probe if versions matter: \`uname -srm; python3 --version; gcc --version | head -n1; node --version\`.
+1. Run one short probe only if versions matter: \`node --version; npm --version; python3 --version; gcc --version | head -n1\`.
 2. One job per command. Pass a human \`description\`. Prefer several small calls over one huge script.
 3. Write files with a heredoc or printf into \`/home/user\` or \`/tmp\`. Compile with \`gcc -o hello hello.c && ./hello\`.
 4. After creating a file the user should see, call \`linux_read_file\`. Do not copy bytes into \`create_file\`.
 5. Report real stdout/stderr and the exit code. Never invent compiler output.
 
+## Failure discipline (no masking)
+- Never append \`|| true\`, \`|| echo done\`, or a trailing \`echo\` that hides a failing command. Check \`$?\` or use \`set -e\` in scripts.
+- If a command fails, report its actual exit code and output; do not claim success.
+
+## Servers and background work
+- Start servers with \`linux_background_start\` (never \`node server.js &\` in a run_command — the shell exits and the process dies or orphans silently).
+- After starting a server, VERIFY readiness before continuing: call \`linux_list_processes\` and read the log (\`linux_read_file\` on the returned log path) to confirm it is alive and serving. There is no loopback TCP in this VM — never claim "listening on port X" unless the log confirms it.
+- Stop servers with \`linux_kill_process <pid>\`; it kills descendants too.
+
 ## Hard limits (do not fight them)
 - Do not use GNU \`timeout\`, \`stdbuf\`, or other i386-fragile wrappers — they can abort with "stack smashing detected".
-- If a write returns Permission denied, retry under \`/tmp\` (or \`mkdir -p /tmp/work && cd /tmp/work\`). Do not keep retrying \`/home/user\` after one failure.
 - If a binary stack-smashes, drop it and use a simpler command. Do not loop the same crashing binary.
 - Do not claim pandas/matplotlib in this VM. That is Pyodide (\`run_python\`).
 - Do not use \`create_file\` to fake VM results.
 
 ## Delivery
-- Quote measured versions and exit codes.
+- Quote measured versions, exit codes, and pids.
 - Cite Canvas artifacts as \`filename.ext\`.
 - If the VM is unavailable (not cross-origin isolated), say so and stop.`;
 }
@@ -879,6 +901,8 @@ export async function buildChatTools(
         messages?: CompactableMessage[];
         /** When `chatgpt`, omit Codex-reserved Linux tool aliases. */
         provider?: string;
+        /** Thread id — used to load linux_environment_skill once per chat. */
+        chatId?: string;
     } = {},
 ) {
     const subagentMode = options.subagentMode === true;
@@ -1327,11 +1351,17 @@ export async function buildChatTools(
         const linuxRun = tool({
             description: policy.compactToolDescriptions
                 ? "Run bash in the browser Linux VM (Debian: apt/python3/gcc/node). No outbound network by default. Persist files per chat; use linux_read_file for Canvas. Call linux_environment_skill first. This is the tool if the user asks for run_command."
-                : "Execute a bash command in the in-browser Linux environment (CheerpX/WebVM): a full x86 Debian VM running client-side. python3, gcc, node, and apt are on the image. There is no outbound network by default, so apt/pip/npm installs that need the network will fail unless the operator later enables networking. Filesystem changes persist in the browser's IndexedDB overlay. Capture stdout/stderr and the exit code; commands are killed after 90s and output is capped at 32KB. First boot has a 60s startup cap. If the VM reports an error, do not retry Linux tools in that turn. Use linux_read_file to bring a VM file into Canvas (2 MiB cap). Prefer this for gcc/node/system tools; use run_python for in-browser Pyodide analysis. Call linux_environment_skill before non-trivial use. Call this when the user asks for run_command.",
+                : "Execute a bash command in the in-browser Linux environment (CheerpX/WebVM): a full x86 Debian VM running client-side. python3, gcc, node, and apt are on the image. There is no outbound network by default, so apt/pip/npm installs that need the network will fail unless the operator later enables networking. Filesystem changes persist in the browser's IndexedDB overlay. Capture stdout/stderr and the exit code; commands are killed after 90s by default (pass timeoutSec 1-300 to extend, e.g. for long builds) and output is capped at 32KB. First boot has a 60s startup cap. If the VM reports an error, do not retry Linux tools in that turn. Use linux_read_file to bring a VM file into Canvas (2 MiB cap). Prefer this for gcc/node/system tools; use run_python for in-browser Pyodide analysis. Call linux_environment_skill before non-trivial use. Call this when the user asks for run_command.",
             inputSchema: z.object({
                 command: z.string(),
                 cwd: z.string().optional(),
                 description: z.string().optional(),
+                timeoutSec: z
+                    .number()
+                    .int()
+                    .min(1)
+                    .max(300)
+                    .describe("Optional kill timeout for this command in seconds (1-300; default 90). Use for long compiles or servers, not for streaming jobs."),
             }),
         });
         const linuxRead = tool({
@@ -1343,8 +1373,31 @@ export async function buildChatTools(
                 maxBytes: z.number().int().positive().optional(),
             }),
         });
+        const linuxBackgroundStart = tool({
+            description:
+                "Start a command as a detached background process (setsid) in the in-browser Linux VM. Use instead of a bare `&` inside linux_run_command — the run shell exits and would kill the child. Returns pid and the log file path. Always verify the process is alive afterwards with linux_list_processes and linux_read_file on the log before claiming readiness.",
+            inputSchema: z.object({
+                command: z.string(),
+                cwd: z.string().optional(),
+            }),
+        });
+        const linuxListProcesses = tool({
+            description:
+                "List running user processes (pid, state, elapsed time, args) in the in-browser Linux VM. Call after linux_background_start to verify a server is alive, and before killing anything.",
+            inputSchema: z.object({}),
+        });
+        const linuxKillProcess = tool({
+            description:
+                "Kill a process (pid) in the in-browser Linux VM, including its whole process group / descendants.",
+            inputSchema: z.object({
+                pid: z.number().int().positive(),
+            }),
+        });
         tools.linux_run_command = linuxRun;
         tools.linux_read_file = linuxRead;
+        tools.linux_background_start = linuxBackgroundStart;
+        tools.linux_list_processes = linuxListProcesses;
+        tools.linux_kill_process = linuxKillProcess;
         // Short aliases for non-Codex providers. ChatGPT's Codex backend
         // drops custom functions that collide with native computer tools.
         if (options.provider !== "chatgpt") {
@@ -1353,9 +1406,9 @@ export async function buildChatTools(
         }
         const linuxSkill = tool({
             description:
-                "Callable Linux environment skill. Invoke before bash, gcc, node, or VM file work. It defines the CheerpX Debian contract: tools on the image, no network, writable paths, linux_run_command / linux_read_file usage, and recovery for permission or stack-smash failures.",
+                "Callable Linux environment skill. Invoke before bash, gcc, node, or VM file work. It defines the CheerpX Debian contract: tools on the image, no network, writable paths, linux_run_command / linux_read_file usage, and recovery for permission or stack-smash failures. Loads once per conversation.",
             inputSchema: z.object({ task: z.string().optional() }),
-            execute: async (input) => linuxEnvironmentSkill(input),
+            execute: async (input) => linuxEnvironmentSkill(input, options.chatId),
         });
         tools.linux_environment_skill = linuxSkill;
     }

@@ -379,6 +379,21 @@ export function providerErrorPayload(
     };
 }
 
+/** Detect provider credit/billing exhaustion from an error string or status. */
+export function detectProviderCreditError(
+    text: string | undefined | null,
+    status?: number | null,
+): boolean {
+    const raw = (text ?? "").toLowerCase();
+    return Boolean(
+        /usage_limit_reached|usage limit has been reached|insufficient.?quota|insufficient.?credit|billing|payment.?required|credit.?balance|out of credits|quota.?exceeded/i.test(
+            raw,
+        ) ||
+            status === 402 ||
+            (status === 429 && /plan_type|usage.?limit/i.test(raw)),
+    );
+}
+
 /** Map HTTP status for classified chat failures. */
 export function httpStatusForProviderError(kind: ProviderErrorKind): number {
     switch (kind) {

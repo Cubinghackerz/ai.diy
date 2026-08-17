@@ -48,13 +48,35 @@ For files, use real libraries such as pandas, matplotlib, openpyxl, python-docx,
 
 Call \`linux_run_command\` (or \`run_command\` when that alias is listed) with \`command\` and optional \`cwd\` (default \`/home/user\`). It runs in a client-side Debian VM (CheerpX). python3, gcc, node, and apt are available. There is no outbound network by default — package installs that need the network will fail.
 
-Commands time out after 90 seconds and output is capped at 32KB. First VM boot has a 60s startup cap. Files persist in the browser's IndexedDB overlay. If the VM reports an error, do not retry Linux tools in that turn. Use \`linux_read_file\` to bring a VM file into Canvas (2 MiB). Prefer \`run_python\` for Pyodide analysis; use this for gcc, node, system tools, and shell workflows.`,
+Commands time out after 90 seconds by default (pass timeoutSec 1-300 to extend, e.g. for long builds) and output is capped at 32KB. First VM boot has a 60s startup cap. Files persist in the browser's IndexedDB overlay. If the VM reports an error, do not retry Linux tools in that turn. Use \`linux_read_file\` to bring a VM file into Canvas (2 MiB). Prefer \`run_python\` for Pyodide analysis; use this for gcc, node, system tools, and shell workflows.
+
+Never mask failures: do not append \`|| true\` or a trailing \`echo\` to hide a failing command; quote the real exit code and output. Use \`linux_background_start\` for servers and long jobs; verify readiness with \`linux_list_processes\` and the returned log file.`,
     },
     linux_read_file: {
         summary: "read a file from the in-browser Linux VM into Canvas",
         content: `# Browser Linux file guide
 
 Call \`linux_read_file\` (or \`read_file\` when that alias is listed) with \`path\` and optional \`maxBytes\` (default and cap 2 MiB). The browser attaches the file as a Canvas artifact. Mention the filename in backticks. Do not Base64-copy the bytes into \`create_file\`.`,
+    },
+    linux_background_start: {
+        summary: "start a detached background process in the Linux VM",
+        content: `# Browser Linux background process guide
+
+Call \`linux_background_start\` with \`command\` and optional \`cwd\` to start a detached server or long job in the in-browser Linux VM. Never start background work with a bare \`&\` inside \`linux_run_command\` — its shell exits and the child dies or orphans silently.
+
+After starting, verify the process is alive with \`linux_list_processes\` and read the returned log path with \`linux_read_file\` before claiming readiness. There is no loopback TCP in the VM; never claim a server is listening unless the log confirms it.`,
+    },
+    linux_list_processes: {
+        summary: "list running user processes in the Linux VM",
+        content: `# Browser Linux process list guide
+
+Call \`linux_list_processes\` (no arguments) to see running user processes with pid, state, elapsed time, and arguments. Use it to verify a \`linux_background_start\` process is alive and to find a pid for \`linux_kill_process\`.`,
+    },
+    linux_kill_process: {
+        summary: "kill a process (and its group) in the Linux VM",
+        content: `# Browser Linux kill guide
+
+Call \`linux_kill_process\` with a numeric \`pid\` to stop a process in the in-browser Linux VM. The kill covers the whole process group, so descendants are stopped too. Get the pid from \`linux_list_processes\` or the \`pid\` returned by \`linux_background_start\`.`,
     },
     create_file: {
         summary: "create a Canvas text, code, HTML, SVG, or binary artifact",
@@ -96,7 +118,7 @@ Call \`memory\` with an optional narrow keyword \`query\` only when personal con
         summary: "load the in-browser Linux VM contract before bash/gcc/node work",
         content: `# Browser Linux skill guide
 
-Call \`linux_environment_skill\` with optional \`task\` before non-trivial bash, gcc, node, or VM file work. Follow its contract: use \`linux_run_command\` / \`linux_read_file\`, write under \`/home/user\` or \`/tmp\`, never expect network installs, and do not invent tool output.`,
+Call \`linux_environment_skill\` with optional \`task\` before non-trivial bash, gcc, node, or VM file work. It loads once per conversation; on later turns reuse the contract instead of calling it again. Follow its contract: use \`linux_run_command\` / \`linux_read_file\` / \`linux_background_start\` / \`linux_list_processes\` / \`linux_kill_process\`, write under \`/home/user\` or \`/tmp\`, never expect network installs, never mask failures with \`|| true\`, verify started servers, and do not invent tool output.`,
     },
     python_file_creation_skill: {
         summary: "load the file-creation contract before substantial Python artifacts",

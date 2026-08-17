@@ -29,6 +29,7 @@ import { ARTIFACT_MARKER, decodeArtifactContent, type ArtifactContentEncoding } 
 import { useCanvas, type ArtifactKind } from "~/lib/canvas";
 import { skillLabelForTool } from "~/lib/skill-command";
 import { isLinuxClientTool } from "~/lib/cheerpx";
+import { LinuxProcessCard } from "~/components/assistant-ui/linux-process-card";
 
 const ANIMATION_DURATION = 200;
 
@@ -45,6 +46,9 @@ const AUTO_EXECUTED_CLIENT_TOOL_NAMES = new Set([
   "read_file",
   "linux_run_command",
   "linux_read_file",
+  "linux_background_start",
+  "linux_list_processes",
+  "linux_kill_process",
   "memory",
   "knowledge_search",
   "knowledge_list",
@@ -223,6 +227,16 @@ function linuxCardTitle(toolName: string, args: Record<string, unknown> | null):
     const path = typeof args?.path === "string" ? args.path.trim() : "";
     return path ? `Read ${path}` : "Read VM file";
   }
+  if (toolName === "linux_background_start") {
+    const command =
+      typeof args?.command === "string" ? args.command.trim() : "";
+    return command ? `Background: ${command}` : "Start background process";
+  }
+  if (toolName === "linux_list_processes") return "List processes";
+  if (toolName === "linux_kill_process") {
+    const pid = typeof args?.pid === "number" ? String(args.pid) : "";
+    return pid ? `Kill process ${pid}` : "Kill process";
+  }
   return "Run command";
 }
 
@@ -382,14 +396,35 @@ function ToolFallbackArgs({
 
 function ToolFallbackResult({
   result,
+  toolName,
   className,
   ...props
 }: React.ComponentProps<"div"> & {
   result?: unknown;
+  toolName?: string;
 }) {
   const { addArtifact } = useCanvas();
   const [downloadError, setDownloadError] = useState<string | null>(null);
   if (result === undefined) return null;
+
+  // Linux run results get a status-aware card (stdout/stderr split, exit code).
+  if (
+    typeof result === "string" &&
+    toolName &&
+    isLinuxClientTool(toolName) &&
+    toolName !== "linux_read_file" &&
+    toolName !== "read_file"
+  ) {
+    return (
+      <div
+        data-slot="tool-fallback-result"
+        className={cn("aui-tool-fallback-result", className)}
+        {...props}
+      >
+        <LinuxProcessCard result={result} />
+      </div>
+    );
+  }
 
   // Suppress raw JSON artifact payloads — Canvas panel shows them instead.
   if (isArtifactPayload(result)) {
@@ -793,7 +828,9 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
             respondToApproval={respondToApproval}
           />
         )}
-        {!isCancelled && <ToolFallbackResult result={result} />}
+        {!isCancelled && (
+          <ToolFallbackResult result={result} toolName={toolName} />
+        )}
       </ToolFallbackContent>
     </ToolFallbackRoot>
   );
