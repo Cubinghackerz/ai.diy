@@ -32,6 +32,16 @@
       "tools": ["web_search", "fetch_url", "run_python", "memory", "ask_user"]
     },
     {
+      "id": "html-craft",
+      "name": "HTML Craft",
+      "version": "1.0.0",
+      "description": "Hand-crafted static HTML/CSS/JS site building with modern design patterns, refactoring, and design iteration. Use for building, redesigning, or polishing static websites—not React/Next.js apps.",
+      "category": "developer",
+      "path": "developer/html-craft/SKILL.md",
+      "popular": false,
+      "tools": ["create_file", "generate_file", "ask_user", "memory"]
+    },
+    {
       "id": "prompt-engineering",
       "name": "Prompt Engineering",
       "version": "1.0.0",

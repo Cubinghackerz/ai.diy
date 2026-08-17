@@ -78,6 +78,7 @@ If success criteria are ambiguous and blocking, ask once via `ask_user`, then pr
 | Review diff/PR/patch, merge safety | `code-review` |
 | Write/improve system prompts, user prompts, tool descriptions, agent constitutions, prompt evals | `prompt-engineering` |
 | GitHub repo structure, stack, health | `github-repository-analysis` |
+| Build/redesign/polish a static HTML/CSS/JS site | `html-craft` |
 | Audit a public URL / site health / SEO·a11y·privacy scores (URL Doctor, AuditURL) | `url-doctor` |
 | Parse/correlate logs, error patterns | `log-analysis` |
 | Why it failed, RCA, 5-Whys, postmortem cause | `root-cause-analysis` |
