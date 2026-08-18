@@ -61,8 +61,11 @@ Copy everything below the `---` line and paste it to your next AI agent session 
 
 ---
 
-### Dev Commands
+### Run Commands
 
-- `npm run dev` — Start Vite dev server on port 5173
-- `npx tsc --noEmit` — Type-check codebase
-- `npx vite build` — Test production build
+> **Important:** `npm run dev` has a known composer input regression (inputs drop keystrokes). The **only supported local run path is the production build.**
+
+- `npm run build && npm start` — **THE correct way to run the app.** Builds the production bundle, then serves it locally on `http://localhost:3000` (script: `react-router-serve ./build/server/index.js`).
+- `npm run typecheck` — Type-check the codebase (runs `react-router typegen && tsc`).
+- `npm run build` — Test the production build (same as above WITHOUT starting the server).
+- `npm start` — Serve the existing `build/` on `http://localhost:3000` (only after `npm run build`).

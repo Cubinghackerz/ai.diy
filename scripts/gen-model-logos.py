@@ -24,9 +24,16 @@ SLUGS = {
     "openrouter": "openrouter",
     "x": "x",
     "amazonwebservices": "amazonwebservices",
+    "groq": "groq",
+    "cerebras": "cerebras",
+    "perplexity": "perplexity",
+    "cohere": "cohere",
+    "microsoftazure": "microsoftazure",
+    "vercel": "vercel",
+    "mistralai": "mistral",
 }
 
-CDN = "https://cdn.simpleicons.org/{}"
+CDN = "https://cdn.jsdelivr.net/npm/simple-icons@15/icons/{}.svg"
 
 paths = {}
 for name, slug in SLUGS.items():

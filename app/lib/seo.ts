@@ -6,7 +6,9 @@ import {
     SITE_IMAGE_URL,
     SITE_KEYWORDS,
     SITE_NAME,
+    SITE_REPOSITORY_URL,
     SITE_TWITTER_HANDLE,
+    SITE_URL,
 } from "./site";
 
 type PageMetaOptions = {
@@ -15,6 +17,17 @@ type PageMetaOptions = {
     url: string;
     noindex?: boolean;
     structuredData?: Record<string, unknown> | Record<string, unknown>[];
+};
+
+export type SeoGuideMetaPage = {
+    title: string;
+    description: string;
+    path: string;
+};
+
+export type SeoGuideFaq = {
+    question: string;
+    answer: string;
 };
 
 export function pageMeta({
@@ -56,4 +69,93 @@ export function pageMeta({
         { name: "twitter:image:alt", content: SITE_IMAGE_ALT },
         ...(structuredData ? [{ "script:ld+json": structuredData }] : []),
     ];
+}
+
+export function seoGuideStructuredData({
+    title,
+    description,
+    url,
+    section,
+    faqs,
+}: {
+    title: string;
+    description: string;
+    url: string;
+    section: string;
+    faqs: readonly SeoGuideFaq[];
+}): Record<string, unknown> {
+    return {
+        "@context": "https://schema.org",
+        "@graph": [
+            {
+                "@type": "WebPage",
+                "@id": `${url}#webpage`,
+                url,
+                name: title,
+                description,
+                isPartOf: { "@id": `${SITE_URL}/#website` },
+                about: { "@id": `${SITE_URL}/#software` },
+                inLanguage: "en-US",
+                mainEntity: { "@id": `${url}#faq` },
+            },
+            {
+                "@type": "BreadcrumbList",
+                "@id": `${url}#breadcrumb`,
+                itemListElement: [
+                    {
+                        "@type": "ListItem",
+                        position: 1,
+                        name: SITE_NAME,
+                        item: SITE_URL,
+                    },
+                    {
+                        "@type": "ListItem",
+                        position: 2,
+                        name: section,
+                        item: url,
+                    },
+                ],
+            },
+            {
+                "@type": "FAQPage",
+                "@id": `${url}#faq`,
+                url: `${url}#faq`,
+                mainEntity: faqs.map((faq) => ({
+                    "@type": "Question",
+                    name: faq.question,
+                    acceptedAnswer: {
+                        "@type": "Answer",
+                        text: faq.answer,
+                    },
+                })),
+            },
+            {
+                "@type": "SoftwareApplication",
+                "@id": `${SITE_URL}/#software`,
+                name: SITE_NAME,
+                url: SITE_URL,
+                codeRepository: SITE_REPOSITORY_URL,
+                applicationCategory: "ProductivityApplication",
+            },
+        ],
+    };
+}
+
+export function seoGuideMeta(
+    page: SeoGuideMetaPage,
+    faqs: readonly SeoGuideFaq[],
+): MetaDescriptor[] {
+    const url = `${SITE_URL}${page.path}`;
+    return pageMeta({
+        title: page.title,
+        description: page.description,
+        url,
+        structuredData: seoGuideStructuredData({
+            title: page.title,
+            description: page.description,
+            url,
+            section: page.title.split("|")[0]?.trim() || page.title,
+            faqs,
+        }),
+    });
 }

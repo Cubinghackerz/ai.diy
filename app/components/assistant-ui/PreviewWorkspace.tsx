@@ -10,6 +10,8 @@ import {
     ArrowClockwise,
     CaretDown,
     CopySimple,
+    DownloadSimple,
+    FileText,
     Paperclip,
     Play,
     Plus,
@@ -30,7 +32,10 @@ import {
 } from "react";
 import { lastAssistantMessageIsCompleteWithToolCalls, type UIMessage } from "ai";
 import { ChatSessionProvider } from "~/components/assistant-ui/ChatSessionContext";
-import { ChatThreadSync } from "~/components/assistant-ui/ChatThreadSync";
+import {
+    ChatThreadSync,
+    type SyncedArtifact,
+} from "~/components/assistant-ui/ChatThreadSync";
 import { Thread } from "~/components/assistant-ui/Thread";
 import { createAttachmentAdapter } from "~/lib/attachments";
 import { getModelModalities } from "~/lib/model-modalities";
@@ -45,21 +50,16 @@ import {
     notifyCreditsFallback,
 } from "~/lib/credits-fallback";
 import { detectProviderCreditError } from "~/lib/provider-errors";
+import { notifyChatGPTRequestFailure } from "~/lib/chatgpt-refresh";
 import { runBrowserPython } from "~/lib/pyodide";
 import {
-    abortLinuxExecution,
-    executeLinuxClientTool,
-    isLinuxClientTool,
-    linuxGenerationAborted,
-} from "~/lib/cheerpx";
-import { artifactContentHash, inferArtifactMimeType } from "~/lib/artifacts";
-import { useCanvas } from "~/lib/canvas";
-import {
-    buildLocalMemoryContext,
-    hasLocalMemoryEntries,
-    readLocalMemory,
-} from "~/lib/memory";
-import { askUserInChat } from "~/lib/ask-user";
+    artifactContentHash,
+    decodeArtifactContent,
+    inferArtifactMimeType,
+    isImageMimeType,
+    preparePreviewDocument,
+} from "~/lib/artifacts";
+import { useCanvas, type Artifact } from "~/lib/canvas";
 import {
     deletePreviewSession,
     loadPreviewSession,
@@ -121,6 +121,7 @@ type PreviewRun = {
     output: string;
     error?: string;
     messages?: UIMessage[];
+    artifacts: Artifact[];
     files: PreviewFile[];
     uploadNotice?: string;
     startedAt: number;
@@ -214,8 +215,49 @@ function parseChatError(response: Response, fallback: string): Promise<string> {
     });
 }
 
+function serializePreviewSession(
+    prompt: string,
+    runs: PreviewRun[],
+    session: PreviewSession | null,
+    stopRunning = false,
+): StoredPreviewSession {
+    const finishedAt = Date.now();
+    return {
+        prompt,
+        runs: runs.map((run) => {
+            const status: RunStatus =
+                stopRunning && run.status === "running" ? "stopped" : run.status;
+            return {
+                ...run,
+                status,
+                ...(status === "stopped" && run.status === "running"
+                    ? { finishedAt }
+                    : {}),
+                config: {
+                    provider: run.config.provider,
+                    model: run.config.model,
+                    reasoningEffort: run.config.reasoningEffort,
+                },
+            };
+        }),
+        session: session
+            ? {
+                  ...session,
+                  fusionConfig: session.fusionConfig
+                      ? {
+                            provider: session.fusionConfig.provider,
+                            model: session.fusionConfig.model,
+                            reasoningEffort: session.fusionConfig.reasoningEffort,
+                        }
+                      : null,
+              }
+            : null,
+    };
+}
+
 export const PreviewWorkspace: FC = () => {
     const { settings, updateSettings } = useSettings();
+    const { setArtifactScope, closeCanvas } = useCanvas();
     const [prompt, setPrompt] = useState("");
     const [files, setFiles] = useState<PreviewFile[]>([]);
     const [runs, setRuns] = useState<PreviewRun[]>([]);
@@ -225,8 +267,21 @@ export const PreviewWorkspace: FC = () => {
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const [focusedColumn, setFocusedColumn] = useState(0);
     const previewHydrated = useRef(false);
+    const previewStateRef = useRef<{
+        prompt: string;
+        files: PreviewFile[];
+        runs: PreviewRun[];
+        session: PreviewSession | null;
+    }>({ prompt: "", files: [], runs: [], session: null });
     const stopMap = useRef(new Map<string, () => void>());
     const columnRefs = useRef<Array<HTMLElement | null>>([]);
+
+    previewStateRef.current = { prompt, files, runs, session };
+
+    useEffect(() => {
+        setArtifactScope("preview-workspace");
+        closeCanvas();
+    }, [closeCanvas, setArtifactScope]);
 
     const resolveConfig = (config: PreviewModelConfig): ResolvedConfig => {
         const provider = settings.providers[config.provider];
@@ -286,7 +341,17 @@ export const PreviewWorkspace: FC = () => {
         let cancelled = false;
         void loadPreviewSession<StoredPreviewSession>(PREVIEW_SESSION_ID).then(
             (stored) => {
-                if (cancelled || !stored) {
+                if (cancelled || previewHydrated.current) return;
+                const current = previewStateRef.current;
+                if (
+                    current.prompt.trim() ||
+                    current.files.length > 0 ||
+                    current.runs.length > 0
+                ) {
+                    previewHydrated.current = true;
+                    return;
+                }
+                if (!stored) {
                     previewHydrated.current = true;
                     return;
                 }
@@ -300,6 +365,8 @@ export const PreviewWorkspace: FC = () => {
                                 ? (run.slotIndex ?? primaries.indexOf(run))
                                 : undefined,
                         startedAt: run.startedAt ?? Date.now(),
+                        status: run.status === "running" ? "stopped" : run.status,
+                        artifacts: run.artifacts ?? [],
                         config: resolveConfig(run.config),
                     })),
                 );
@@ -324,35 +391,37 @@ export const PreviewWorkspace: FC = () => {
 
     useEffect(() => {
         if (!previewHydrated.current) return;
+        if (!prompt.trim() && runs.length === 0 && !session) return;
         const timer = window.setTimeout(() => {
-            const stored: StoredPreviewSession = {
-                prompt,
-                runs: runs.map((run) => ({
-                    ...run,
-                    config: {
-                        provider: run.config.provider,
-                        model: run.config.model,
-                        reasoningEffort: run.config.reasoningEffort,
-                    },
-                })),
-                session: session
-                    ? {
-                          ...session,
-                          fusionConfig: session.fusionConfig
-                              ? {
-                                    provider: session.fusionConfig.provider,
-                                    model: session.fusionConfig.model,
-                                    reasoningEffort:
-                                        session.fusionConfig.reasoningEffort,
-                                }
-                              : null,
-                      }
-                    : null,
-            };
-            void savePreviewSession(PREVIEW_SESSION_ID, stored);
+            void savePreviewSession(
+                PREVIEW_SESSION_ID,
+                serializePreviewSession(prompt, runs, session),
+            );
         }, 300);
         return () => window.clearTimeout(timer);
     }, [prompt, runs, session]);
+
+    // Navigation unmounts Preview. Persist the latest snapshot and mark active
+    // runs stopped so re-entry never shows an orphaned stream as running.
+    useEffect(() => {
+        return () => {
+            if (!previewHydrated.current) return;
+            const current = previewStateRef.current;
+            if (!current.prompt.trim() && current.runs.length === 0 && !current.session) {
+                void deletePreviewSession(PREVIEW_SESSION_ID);
+                return;
+            }
+            void savePreviewSession(
+                PREVIEW_SESSION_ID,
+                serializePreviewSession(
+                    current.prompt,
+                    current.runs,
+                    current.session,
+                    true,
+                ),
+            );
+        };
+    }, []);
 
     const primaryModels = settings.preview.primaryModels.slice(0, 3);
 
@@ -387,6 +456,7 @@ export const PreviewWorkspace: FC = () => {
             return;
         }
 
+        previewHydrated.current = true;
         const id = `preview_${Date.now()}`;
         const now = Date.now();
         const primaryRuns = selections.map((config, index): PreviewRun => ({
@@ -398,6 +468,7 @@ export const PreviewWorkspace: FC = () => {
             config: resolveConfig(config),
             status: "running",
             output: "",
+            artifacts: [],
             files: files.filter((file) => fileSupportedForRun(file, config)),
             uploadNotice: files.some((file) => !fileSupportedForRun(file, config))
                 ? "Some files were skipped because this model does not support their modality."
@@ -420,6 +491,7 @@ export const PreviewWorkspace: FC = () => {
 
     const addFiles = async (selected: FileList | null) => {
         if (!selected?.length) return;
+        previewHydrated.current = true;
         const next = await Promise.all([...selected].map(fileToPreviewPart));
         setFiles((current) => [...current, ...next].slice(0, 8));
     };
@@ -437,6 +509,37 @@ export const PreviewWorkspace: FC = () => {
                       }
                     : run,
             ),
+        );
+    };
+
+    const addPreviewArtifact = (runId: string, artifact: SyncedArtifact) => {
+        setRuns((current) =>
+            current.map((run) => {
+                if (run.id !== runId) return run;
+                const sourceKey =
+                    artifact.sourceKey ??
+                    `${artifact.kind}:${artifact.filename ?? artifact.title}:${artifact.contentEncoding ?? "text"}:${artifact.content}`;
+                if (run.artifacts.some((item) => item.sourceKey === sourceKey)) {
+                    return run;
+                }
+                const id =
+                    typeof crypto !== "undefined" && "randomUUID" in crypto
+                        ? `preview_artifact_${crypto.randomUUID()}`
+                        : `preview_artifact_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+                return {
+                    ...run,
+                    artifacts: [
+                        ...run.artifacts,
+                        {
+                            ...artifact,
+                            id,
+                            sourceKey,
+                            scopeId: runId,
+                            createdAt: Date.now(),
+                        },
+                    ],
+                };
+            }),
         );
     };
 
@@ -466,7 +569,6 @@ export const PreviewWorkspace: FC = () => {
     };
 
     const stopRun = (runId: string) => {
-        abortLinuxExecution();
         stopMap.current.get(runId)?.();
     };
 
@@ -506,6 +608,7 @@ export const PreviewWorkspace: FC = () => {
             config: session.fusionConfig,
             status: "running",
             output: "",
+            artifacts: [],
             files: [],
             startedAt: Date.now(),
         };
@@ -561,6 +664,10 @@ export const PreviewWorkspace: FC = () => {
     };
 
     const closePrimarySlot = (index: number) => {
+        const removedRun = runs.find(
+            (run) => run.kind === "primary" && run.slotIndex === index,
+        );
+        if (removedRun?.status === "running") stopRun(removedRun.id);
         const primaryModelsNext = settings.preview.primaryModels.filter(
             (_, i) => i !== index,
         );
@@ -631,6 +738,7 @@ export const PreviewWorkspace: FC = () => {
             config: resolveConfig(config),
             status: "running",
             output: "",
+            artifacts: [],
             files: files.filter((file) => fileSupportedForRun(file, config)),
             startedAt: Date.now(),
         };
@@ -669,9 +777,12 @@ export const PreviewWorkspace: FC = () => {
     };
 
     const resetPreview = () => {
+        previewHydrated.current = true;
         for (const run of runs) {
             if (run.status === "running") stopRun(run.id);
         }
+        setPrompt("");
+        setFiles([]);
         setRuns([]);
         setSession(null);
         setFocusedColumn(0);
@@ -792,6 +903,7 @@ export const PreviewWorkspace: FC = () => {
                                 onComplete={markComplete}
                                 onError={markError}
                                 onStopped={markStopped}
+                                onArtifact={addPreviewArtifact}
                                 stopMap={stopMap}
                             />
                         );
@@ -812,23 +924,28 @@ export const PreviewWorkspace: FC = () => {
                     onComplete={markComplete}
                     onError={markError}
                     onStopped={markStopped}
+                    onArtifact={addPreviewArtifact}
                     stopMap={stopMap}
                 />
 
                 <PreviewComposer
                     prompt={prompt}
-                    onPromptChange={setPrompt}
+                    onPromptChange={(value) => {
+                        previewHydrated.current = true;
+                        setPrompt(value);
+                    }}
                     onSubmit={startRuns}
                     onStop={stopAll}
                     running={running}
                     configurationError={configurationError}
                     files={files}
                     onFiles={addFiles}
-                    onRemoveFile={(filename) =>
+                    onRemoveFile={(filename) => {
+                        previewHydrated.current = true;
                         setFiles((current) =>
                             current.filter((file) => file.filename !== filename),
-                        )
-                    }
+                        );
+                    }}
                 />
             </div>
         </div>
@@ -864,6 +981,7 @@ const PreviewColumn: FC<{
     onComplete: (runId: string, messages: UIMessage[]) => void;
     onError: (runId: string, error: Error) => void;
     onStopped: (runId: string) => void;
+    onArtifact: (runId: string, artifact: SyncedArtifact) => void;
     stopMap: MutableRefObject<Map<string, () => void>>;
 }> = ({
     columnRef,
@@ -879,6 +997,7 @@ const PreviewColumn: FC<{
     onComplete,
     onError,
     onStopped,
+    onArtifact,
     stopMap,
 }) => {
     return (
@@ -900,10 +1019,12 @@ const PreviewColumn: FC<{
             <div className="min-h-0 flex-1 overflow-hidden">
                 {run ? (
                     <PreviewRunPanel
+                        key={run.id}
                         run={run}
                         onComplete={onComplete}
                         onError={onError}
                         onStopped={onStopped}
+                        onArtifact={onArtifact}
                         stopMap={stopMap}
                     />
                 ) : (
@@ -1006,54 +1127,54 @@ const ColumnHeader: FC<{
                 ) : null}
             </div>
             {comparing ? null : (
-            <div className="flex min-w-0 flex-wrap items-center gap-1">
-                <ProviderPicker
-                    value={config.provider}
-                    onChange={(provider) =>
-                        onConfigChange({
-                            provider,
-                            model: resolveModel(provider, config.model),
-                            reasoningEffort: "medium",
-                        })
-                    }
-                    compact
-                    className="max-w-[8.5rem]"
-                />
-                {providerReady ? (
-                    <ModelPicker
-                        provider={config.provider}
-                        value={config.model}
-                        onChange={(model) => onConfigChange({ model })}
-                        enabled
-                        compact
-                        className="max-w-[11rem]"
-                    />
-                ) : (
-                    <span className="text-[10px] text-destructive">Connect provider</span>
-                )}
-                {reasoningOptions.length > 0 ? (
-                    <select
-                        value={
-                            reasoningOptions.some((option) => option.id === config.reasoningEffort)
-                                ? config.reasoningEffort
-                                : reasoningOptions[0].id
-                        }
-                        onChange={(event) =>
+                <div className="flex min-w-0 flex-wrap items-center gap-1">
+                    <ProviderPicker
+                        value={config.provider}
+                        onChange={(provider) =>
                             onConfigChange({
-                                reasoningEffort: event.target.value as PreviewModelConfig["reasoningEffort"],
+                                provider,
+                                model: resolveModel(provider, config.model),
+                                reasoningEffort: "medium",
                             })
                         }
-                        className="h-7 max-w-32 rounded-lg border border-border/70 bg-transparent px-2 text-[11px] font-medium outline-none"
-                        aria-label="Reasoning effort"
-                    >
-                        {reasoningOptions.map((option) => (
-                            <option key={option.id} value={option.id}>
-                                {option.label}
-                            </option>
-                        ))}
-                    </select>
-                ) : null}
-            </div>
+                        compact
+                        className="max-w-[8.5rem]"
+                    />
+                    {providerReady ? (
+                        <ModelPicker
+                            provider={config.provider}
+                            value={config.model}
+                            onChange={(model) => onConfigChange({ model })}
+                            enabled
+                            compact
+                            className="max-w-[11rem]"
+                        />
+                    ) : (
+                        <span className="text-[10px] text-destructive">Connect provider</span>
+                    )}
+                    {reasoningOptions.length > 0 ? (
+                        <select
+                            value={
+                                reasoningOptions.some((option) => option.id === config.reasoningEffort)
+                                    ? config.reasoningEffort
+                                    : reasoningOptions[0].id
+                            }
+                            onChange={(event) =>
+                                onConfigChange({
+                                    reasoningEffort: event.target.value as PreviewModelConfig["reasoningEffort"],
+                                })
+                            }
+                            className="h-7 max-w-32 rounded-lg border border-border/70 bg-transparent px-2 text-[11px] font-medium outline-none"
+                            aria-label="Reasoning effort"
+                        >
+                            {reasoningOptions.map((option) => (
+                                <option key={option.id} value={option.id}>
+                                    {option.label}
+                                </option>
+                            ))}
+                        </select>
+                    ) : null}
+                </div>
             )}
         </div>
     );
@@ -1098,6 +1219,7 @@ const FusionStrip: FC<{
     onComplete: (runId: string, messages: UIMessage[]) => void;
     onError: (runId: string, error: Error) => void;
     onStopped: (runId: string) => void;
+    onArtifact: (runId: string, artifact: SyncedArtifact) => void;
     stopMap: MutableRefObject<Map<string, () => void>>;
 }> = ({
     fusionModel,
@@ -1113,6 +1235,7 @@ const FusionStrip: FC<{
     onComplete,
     onError,
     onStopped,
+    onArtifact,
     stopMap,
 }) => {
     if (!fusionModel) {
@@ -1168,10 +1291,12 @@ const FusionStrip: FC<{
                 <div className="min-h-0 flex-1 overflow-hidden border-t border-border/50">
                     {run ? (
                         <PreviewRunPanel
+                            key={run.id}
                             run={run}
                             onComplete={onComplete}
                             onError={onError}
                             onStopped={onStopped}
+                            onArtifact={onArtifact}
                             stopMap={stopMap}
                         />
                     ) : (
@@ -1289,17 +1414,16 @@ const PreviewRunPanel: FC<{
     onComplete: (runId: string, messages: UIMessage[]) => void;
     onError: (runId: string, error: Error) => void;
     onStopped: (runId: string) => void;
+    onArtifact: (runId: string, artifact: SyncedArtifact) => void;
     stopMap: MutableRefObject<Map<string, () => void>>;
-}> = ({ run, onComplete, onError, onStopped, stopMap }) => {
+}> = ({ run, onComplete, onError, onStopped, onArtifact, stopMap }) => {
     const callbacksRef = useRef({ onComplete, onError, onStopped });
     callbacksRef.current = { onComplete, onError, onStopped };
     const sentRef = useRef(false);
     const stoppedRef = useRef(false);
     const { settings } = useSettings();
-    const { addArtifact } = useCanvas();
     const settingsRef = useRef(settings);
     settingsRef.current = settings;
-    const memoryEnabled = settings.memoryEnabled !== false;
     const modalities = getModelModalities(run.config.model, run.config.provider);
     const adapters = useMemo(
         () => ({ attachments: createAttachmentAdapter(modalities) }),
@@ -1394,20 +1518,26 @@ const PreviewRunPanel: FC<{
                                 size: run.config.imageSize,
                                 count: run.config.imageCount,
                             },
-                            mcpServers: run.config.mcpServers,
-                            memoryContext: memoryEnabled
-                                ? await buildLocalMemoryContext()
-                                : "",
+                            mcpServers: [],
+                            memoryContext: "",
                             toolSettings: {
                                 ...run.config.toolSettings,
-                                memoryAvailable:
-                                    memoryEnabled && (await hasLocalMemoryEntries()),
+                                webSearchEnabled: true,
+                                calculatorEnabled: false,
+                                pythonEnabled: true,
+                                linuxEnvironment: false,
+                                skillsEnabled: false,
+                                subagentsEnabled: false,
+                                connectors: [],
+                                memoryAvailable: false,
+                                knowledgeEnabled: false,
                             },
+                            previewMode: true,
                         },
                     };
                 },
             }),
-        [run.config, memoryEnabled],
+        [run.config],
     );
     const chatRef = useRef<ReturnType<typeof useChat> | null>(null);
     const pendingClientCalls = useRef(0);
@@ -1416,48 +1546,12 @@ const PreviewRunPanel: FC<{
         transport,
         messages: run.messages,
         onToolCall: ({ toolCall }) => {
-            if (
-                ![
-                    "run_python",
-                    "run_code",
-                    "run_command",
-                    "read_file",
-                    "linux_run_command",
-                    "linux_read_file",
-                    "linux_background_start",
-                    "linux_list_processes",
-                    "linux_kill_process",
-                    "ask_user",
-                    "memory",
-                ].includes(toolCall.toolName)
-            )
-                return;
+            if (toolCall.toolName !== "run_python" && toolCall.toolName !== "run_code") return;
             pendingClientCalls.current += 1;
             const input = toolCall.input as {
                 code?: string;
-                command?: string;
-                cwd?: string;
-                path?: string;
-                maxBytes?: number;
-                question?: string;
-                questionType?: "single" | "multiple" | "short";
-                options?: string[];
-                query?: string;
             };
-            const task =
-                toolCall.toolName === "ask_user"
-                    ? askUserInChat(toolCall.toolCallId, {
-                          question: input.question ?? "Please provide more information.",
-                          questionType: input.questionType,
-                          options: input.options,
-                      })
-                    : toolCall.toolName === "memory"
-                      ? settingsRef.current.memoryEnabled !== false
-                          ? readLocalMemory(input.query)
-                          : Promise.resolve("Memory is disabled for this chat.")
-                      : isLinuxClientTool(toolCall.toolName)
-                        ? executeLinuxClientTool(toolCall.toolName, input, run.id)
-                      : runBrowserPython(input.code ?? "");
+            const task = runBrowserPython(input.code ?? "");
             void task.then(
                 (result) => {
                     const output =
@@ -1465,24 +1559,19 @@ const PreviewRunPanel: FC<{
                     const pythonResult =
                         typeof result === "string" ? null : result;
                     if (pythonResult) {
-                        const sourcePrefix = isLinuxClientTool(toolCall.toolName)
-                            ? "linux"
-                            : "python";
+                        const sourcePrefix = "python";
                         for (const artifact of pythonResult.artifacts) {
-                            addArtifact(
-                                {
-                                    kind: /\.html?$/i.test(artifact.filename)
-                                        ? "html"
-                                        : "file",
-                                    title: artifact.filename,
-                                    filename: artifact.filename,
-                                    content: artifact.content,
-                                    contentEncoding: artifact.contentEncoding,
-                                    mimeType: inferArtifactMimeType(artifact.filename),
-                                    sourceKey: `${sourcePrefix}:${artifact.filename}:${artifact.contentEncoding}:${artifact.content.length}:${artifactContentHash(artifact.content)}`,
-                                },
-                                { scopeId: run.id },
-                            );
+                            onArtifact(run.id, {
+                                kind: /\.html?$/i.test(artifact.filename)
+                                    ? "html"
+                                    : "file",
+                                title: artifact.filename,
+                                filename: artifact.filename,
+                                content: artifact.content,
+                                contentEncoding: artifact.contentEncoding,
+                                mimeType: inferArtifactMimeType(artifact.filename),
+                                sourceKey: `${sourcePrefix}:${artifact.filename}:${artifact.contentEncoding}:${artifact.content.length}:${artifactContentHash(artifact.content)}`,
+                            });
                         }
                     }
                     const addToolOutput = chatRef.current
@@ -1518,18 +1607,12 @@ const PreviewRunPanel: FC<{
                         errorText:
                             error instanceof Error
                                 ? error.message
-                                : isLinuxClientTool(toolCall.toolName)
-                                  ? "Linux environment execution failed"
                                 : "Pyodide execution failed",
                     });
                 },
             );
         },
         sendAutomaticallyWhen: ({ messages }) => {
-            if (linuxGenerationAborted()) {
-                pendingClientCalls.current = 0;
-                return false;
-            }
             if (pendingClientCalls.current === 0) return false;
             if (!lastAssistantMessageIsCompleteWithToolCalls({ messages })) {
                 return false;
@@ -1544,6 +1627,9 @@ const PreviewRunPanel: FC<{
         onError: (error) => {
             if (stoppedRef.current) return;
             callbacksRef.current.onError(run.id, error);
+            if (run.config.provider === "chatgpt") {
+                notifyChatGPTRequestFailure();
+            }
         },
     });
     chatRef.current = chat;
@@ -1551,14 +1637,18 @@ const PreviewRunPanel: FC<{
     useEffect(() => {
         const stop = () => {
             stoppedRef.current = true;
-            void chat.stop();
+            void chatRef.current?.stop();
             callbacksRef.current.onStopped(run.id);
         };
         stopMap.current.set(run.id, stop);
         return () => {
             stopMap.current.delete(run.id);
+            if (!stoppedRef.current) {
+                stoppedRef.current = true;
+                void chatRef.current?.stop();
+            }
         };
-    }, [chat, run.id, stopMap]);
+    }, [run.id, stopMap]);
 
     const runtime = useAISDKRuntime(chat, { adapters });
 
@@ -1567,16 +1657,22 @@ const PreviewRunPanel: FC<{
     }, [transport, runtime]);
 
     useLayoutEffect(() => {
-        if (sentRef.current || run.messages?.length) return;
+        if (run.status !== "running" || sentRef.current || run.messages?.length) return;
         sentRef.current = true;
         void chat.sendMessage({ text: run.prompt, files: run.files });
     }, [chat, run.files, run.messages?.length, run.prompt]);
 
     return (
-        <div className="flex h-full min-h-0 flex-col">
+        <div className="relative flex h-full min-h-0 flex-col">
             <ChatSessionProvider value={chat}>
                 <AuiRuntimeProvider runtime={runtime}>
-                    <ChatThreadSync threadId={null} artifactScopeId={run.id} />
+                    <ChatThreadSync
+                        threadId={null}
+                        artifactScopeId={run.id}
+                        manageArtifactScope={false}
+                        openArtifacts={false}
+                        onArtifact={(artifact) => onArtifact(run.id, artifact)}
+                    />
                     {run.error ? (
                         <div className="mx-4 mt-3 shrink-0 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                             {run.error}
@@ -1595,6 +1691,7 @@ const PreviewRunPanel: FC<{
                     </div>
                 </AuiRuntimeProvider>
             </ChatSessionProvider>
+            {run.artifacts.length > 0 ? <PreviewArtifactTray artifacts={run.artifacts} /> : null}
         </div>
     );
 };
@@ -1609,3 +1706,184 @@ function PreviewStreamingWelcome() {
         </div>
     );
 };
+
+function isPreviewHtmlArtifact(artifact: Artifact): boolean {
+    return (
+        artifact.kind === "html" ||
+        Boolean(artifact.mimeType && /text\/html/i.test(artifact.mimeType)) ||
+        Boolean(artifact.filename?.match(/\.html?$/i))
+    );
+}
+
+function isPreviewImageArtifact(artifact: Artifact): boolean {
+    return (
+        isImageMimeType(artifact.mimeType) ||
+        Boolean(artifact.filename?.match(/\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i))
+    );
+}
+
+function PreviewArtifactContent({ artifact }: { artifact: Artifact }) {
+    const binary = useMemo(
+        () => decodeArtifactContent(artifact.content, artifact.contentEncoding),
+        [artifact.content, artifact.contentEncoding],
+    );
+    const imageUrl = useMemo(() => {
+        if (!isPreviewImageArtifact(artifact)) return null;
+        if (artifact.contentEncoding && binary) {
+            return URL.createObjectURL(
+                new Blob([binary], { type: artifact.mimeType || "image/png" }),
+            );
+        }
+        if (/^data:image\//i.test(artifact.content.trim())) return artifact.content.trim();
+        if (artifact.filename?.toLowerCase().endsWith(".svg")) {
+            return URL.createObjectURL(new Blob([artifact.content], { type: "image/svg+xml" }));
+        }
+        return null;
+    }, [artifact, binary]);
+    useEffect(() => {
+        return () => {
+            if (imageUrl?.startsWith("blob:")) URL.revokeObjectURL(imageUrl);
+        };
+    }, [imageUrl]);
+
+    if (isPreviewHtmlArtifact(artifact)) {
+        const htmlSource = artifact.contentEncoding
+            ? binary
+                ? new TextDecoder().decode(binary)
+                : null
+            : artifact.content;
+        return htmlSource ? (
+            <iframe
+                srcDoc={preparePreviewDocument(htmlSource)}
+                title={artifact.title}
+                className="h-72 w-full rounded-lg border border-border bg-white"
+                sandbox="allow-scripts allow-modals allow-popups allow-popups-to-escape-sandbox"
+                referrerPolicy="no-referrer"
+            />
+        ) : (
+            <ArtifactError />
+        );
+    }
+
+    if (isPreviewImageArtifact(artifact)) {
+        return imageUrl ? (
+            <div className="flex max-h-72 items-center justify-center overflow-auto rounded-lg border border-border bg-white p-3">
+                <img src={imageUrl} alt={artifact.title} className="max-h-64 max-w-full object-contain" />
+            </div>
+        ) : (
+            <ArtifactError />
+        );
+    }
+
+    if (artifact.contentEncoding && !binary) return <ArtifactError />;
+
+    return (
+        <pre className="max-h-72 overflow-auto rounded-lg border border-border bg-background p-3 font-mono text-[11px] leading-relaxed text-foreground">
+            <code>{artifact.content}</code>
+        </pre>
+    );
+}
+
+function ArtifactError() {
+    return (
+        <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            This artifact payload is invalid. Regenerate the file with exact text or valid Base64/hex bytes.
+        </p>
+    );
+}
+
+function PreviewArtifactTray({ artifacts }: { artifacts: Artifact[] }) {
+    const [open, setOpen] = useState(false);
+    const [activeId, setActiveId] = useState(artifacts[0]?.id ?? null);
+    const active = artifacts.find((artifact) => artifact.id === activeId) ?? artifacts[0];
+
+    useEffect(() => {
+        if (!artifacts.some((artifact) => artifact.id === activeId)) {
+            setActiveId(artifacts[0]?.id ?? null);
+        }
+    }, [activeId, artifacts]);
+
+    const download = () => {
+        if (!active) return;
+        const binary = decodeArtifactContent(active.content, active.contentEncoding);
+        if (active.contentEncoding && !binary) return;
+        const blob = new Blob([binary ?? active.content], {
+            type: active.mimeType || "text/plain;charset=utf-8",
+        });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = active.filename || active.title || "artifact.txt";
+        anchor.click();
+        URL.revokeObjectURL(url);
+    };
+
+    return (
+        <div className="absolute bottom-3 right-3 z-30">
+            {open && active ? (
+                <div
+                    className="mb-2 w-[min(25rem,calc(100vw-2rem))] max-w-[calc(100%-0.5rem)] overflow-hidden rounded-2xl border border-border bg-card/95 p-2 shadow-2xl backdrop-blur-xl"
+                    role="dialog"
+                    aria-label="Preview artifacts"
+                >
+                    <div className="flex items-center gap-2 px-2 py-1.5">
+                        <FileText size={14} className="text-primary" />
+                        <span className="min-w-0 flex-1 truncate text-xs font-semibold">{active.title}</span>
+                        <button
+                            type="button"
+                            onClick={download}
+                            className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                            aria-label="Download artifact"
+                            title="Download artifact"
+                        >
+                            <DownloadSimple size={14} />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setOpen(false)}
+                            className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                            aria-label="Close artifact popup"
+                        >
+                            <X size={14} />
+                        </button>
+                    </div>
+                    {artifacts.length > 1 ? (
+                        <div className="flex gap-1 overflow-x-auto border-y border-border/70 px-1 py-1">
+                            {artifacts.map((artifact) => (
+                                <button
+                                    key={artifact.id}
+                                    type="button"
+                                    onClick={() => setActiveId(artifact.id)}
+                                    className={cn(
+                                        "max-w-36 shrink-0 truncate rounded-md px-2 py-1 text-[10px]",
+                                        artifact.id === active.id
+                                            ? "bg-accent text-foreground"
+                                            : "text-muted-foreground hover:bg-accent/60",
+                                    )}
+                                >
+                                    {artifact.filename || artifact.title}
+                                </button>
+                            ))}
+                        </div>
+                    ) : null}
+                    <div className="mt-2">
+                        <PreviewArtifactContent artifact={active} />
+                    </div>
+                </div>
+            ) : null}
+            <button
+                type="button"
+                onClick={() => setOpen((value) => !value)}
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-border bg-card/95 px-3 text-[11px] font-semibold text-foreground shadow-lg backdrop-blur transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                aria-expanded={open}
+                aria-label={`${open ? "Close" : "Open"} ${artifacts.length} preview artifact${artifacts.length === 1 ? "" : "s"}`}
+            >
+                <FileText size={13} />
+                <span>Artifacts</span>
+                <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground">
+                    {artifacts.length}
+                </span>
+            </button>
+        </div>
+    );
+}

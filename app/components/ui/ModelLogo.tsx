@@ -17,28 +17,28 @@ const BRAND: Record<
     anthropic: { logo: "anthropic", letter: "A", bg: "#d97757", fg: "#ffffff", label: "Anthropic" },
     google: { logo: "google", letter: "G", bg: "#4285f4", fg: "#ffffff", label: "Google" },
     gemini: { logo: "gemini", letter: "G", bg: "#4285f4", fg: "#ffffff", label: "Gemini" },
-    groq: { letter: "G", bg: "#f55036", fg: "#ffffff", label: "Groq" },
-    cerebras: { letter: "C", bg: "#6b5cff", fg: "#ffffff", label: "Cerebras" },
-    fireworks: { letter: "F", bg: "#f97316", fg: "#ffffff", label: "Fireworks AI" },
-    perplexity: { letter: "P", bg: "#20b8cd", fg: "#ffffff", label: "Perplexity" },
-    cohere: { letter: "C", bg: "#39594d", fg: "#ffffff", label: "Cohere" },
+    groq: { logo: "groq", letter: "G", bg: "#f55036", fg: "#ffffff", label: "Groq" },
+    cerebras: { logo: "cerebras", letter: "C", bg: "#6b5cff", fg: "#ffffff", label: "Cerebras" },
+    fireworks: { logo: "fireworks", letter: "F", bg: "#f97316", fg: "#ffffff", label: "Fireworks AI" },
+    perplexity: { logo: "perplexity", letter: "P", bg: "#20b8cd", fg: "#ffffff", label: "Perplexity" },
+    cohere: { logo: "cohere", letter: "C", bg: "#39594d", fg: "#ffffff", label: "Cohere" },
     deepseek: { logo: "deepseek", letter: "D", bg: "#4d6bfe", fg: "#ffffff", label: "DeepSeek" },
     "amazon-bedrock": { logo: "amazonwebservices", letter: "B", bg: "#ff9900", fg: "#1a1a1a", label: "Bedrock" },
     bedrock: { logo: "amazonwebservices", letter: "B", bg: "#ff9900", fg: "#1a1a1a", label: "Bedrock" },
-    azure: { letter: "A", bg: "#0078d4", fg: "#ffffff", label: "Azure" },
+    azure: { logo: "azure", letter: "A", bg: "#0078d4", fg: "#ffffff", label: "Azure" },
     "google-vertex": { logo: "googlecloud", letter: "V", bg: "#4285f4", fg: "#ffffff", label: "Vertex" },
     vertex: { logo: "googlecloud", letter: "V", bg: "#4285f4", fg: "#ffffff", label: "Vertex" },
     openrouter: { logo: "openrouter", letter: "O", bg: "#6366f1", fg: "#ffffff", label: "OpenRouter" },
-    gateway: { logo: "openrouter", letter: "O", bg: "#6366f1", fg: "#ffffff", label: "Gateway" },
-    togetherai: { letter: "T", bg: "#f97316", fg: "#ffffff", label: "Together AI" },
-    together: { letter: "T", bg: "#f97316", fg: "#ffffff", label: "Together AI" },
-    mistral: { letter: "M", bg: "#fa520f", fg: "#ffffff", label: "Mistral" },
-    mistralai: { letter: "M", bg: "#fa520f", fg: "#ffffff", label: "Mistral" },
+    gateway: { logo: "vercel", letter: "V", bg: "#111111", fg: "#ffffff", label: "Vercel AI Gateway" },
+    togetherai: { logo: "together", letter: "T", bg: "#0f172a", fg: "#ffffff", label: "Together AI" },
+    together: { logo: "together", letter: "T", bg: "#0f172a", fg: "#ffffff", label: "Together AI" },
+    mistral: { logo: "mistral", letter: "M", bg: "#fa520f", fg: "#ffffff", label: "Mistral" },
+    mistralai: { logo: "mistral", letter: "M", bg: "#fa520f", fg: "#ffffff", label: "Mistral" },
     huggingface: { logo: "huggingface", letter: "H", bg: "#ffd21e", fg: "#1a1a1a", label: "Hugging Face" },
     lmstudio: { logo: "lmstudio", letter: "L", bg: "#8b5cf6", fg: "#ffffff", label: "LM Studio" },
     xai: { logo: "x", letter: "X", bg: "#111111", fg: "#ffffff", label: "xAI" },
     ollama: { logo: "ollama", letter: "O", bg: "#2563eb", fg: "#ffffff", label: "Ollama" },
-    custom: { letter: "C", bg: "#64748b", fg: "#ffffff", label: "Custom" },
+    custom: { logo: "openai", letter: "O", bg: "#10a37f", fg: "#ffffff", label: "OpenAI Compatible" },
 };
 
 /** Resolve brand from an app provider + (optionally) a qualified model id. */
@@ -71,9 +71,10 @@ export function ModelLogo({
     className?: string;
 }) {
     const brand = resolveBrand(provider, modelId);
-    const path = brand.logo ? BRAND_LOGO_PATHS[brand.logo] : undefined;
+    const mark = brand.logo ? BRAND_LOGO_PATHS[brand.logo] : undefined;
+    const paths = typeof mark === "string" ? [mark] : mark ?? [];
 
-    if (path) {
+    if (paths.length > 0) {
         return (
             <svg
                 role="img"
@@ -88,7 +89,9 @@ export function ModelLogo({
                 )}
             >
                 <title>{brand.label}</title>
-                <path d={path} />
+                {paths.map((d) => (
+                    <path key={d.slice(0, 24)} d={d} />
+                ))}
             </svg>
         );
     }

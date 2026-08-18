@@ -1,6 +1,5 @@
 import { CaretDown } from "@phosphor-icons/react";
 import { Reveal } from "./DoubleBezel";
-import { SectionIndex } from "./SectionIndex";
 
 export const FAQ_ITEMS = [
     {
@@ -21,7 +20,7 @@ export const FAQ_ITEMS = [
     {
         question: "Which AI providers work with ai.diy?",
         answer:
-            "ai.diy supports OpenAI, Anthropic, Google Gemini, Groq, OpenRouter, DeepSeek, xAI, Ollama, Mistral, Hugging Face, Amazon Bedrock, Azure, Vertex, Vercel Gateway, Together, LM Studio, and custom OpenAI-compatible endpoints.",
+            "ai.diy supports 20+ integrations including OpenAI, ChatGPT subscription, Anthropic, Google Gemini, Groq, Cerebras, Fireworks, Perplexity, Cohere, OpenRouter, DeepSeek, xAI, Ollama, Mistral, Hugging Face, Amazon Bedrock, Azure, Vertex, Vercel Gateway, Together, LM Studio, and custom OpenAI-compatible endpoints.",
     },
     {
         question: "Can I self-host ai.diy?",
@@ -44,7 +43,6 @@ export function Faq() {
             data-anim-gate="faq"
         >
             <Reveal>
-                <SectionIndex index="07" label="FAQ" />
                 <h2
                     id="faq-heading"
                     className="max-w-[18ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl"

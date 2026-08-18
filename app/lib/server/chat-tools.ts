@@ -15,7 +15,7 @@ import {
     type DuckDuckGoInstantAnswer,
     type SearchEngine,
 } from "~/lib/search";
-import { connectorSearch } from "~/lib/search/connectors";
+import { connectorSearch, findEnabledSearchConnector } from "~/lib/search/connectors";
 import type { ConnectorConfig } from "~/lib/types";
 import { assertPublicHttpUrl } from "~/lib/server/ssrf";
 import {
@@ -99,6 +99,44 @@ function evaluateMath(expression: string): string {
     }
 }
 
+function normalizeEncodedArtifactContent(
+    content: string,
+    encoding: ArtifactContentEncoding,
+): string | null {
+    let normalized = content.trim()
+        .replace(/^```(?:base64|hex)?\s*/i, "")
+        .replace(/\s*```$/i, "")
+        .trim();
+    if (/^data:[^,]+,/i.test(normalized)) {
+        normalized = normalized.slice(normalized.indexOf(",") + 1).trim();
+    }
+    normalized = normalized.replace(/^(?:base64|hex)\s*[:=]\s*/i, "");
+
+    const pythonBytes = normalized.match(/^b([\'"])([\s\S]*)\1$/);
+    if (pythonBytes) normalized = pythonBytes[2];
+    const quoted = normalized.match(/^[\'"]([\s\S]*)\1$/);
+    if (quoted) normalized = quoted[1];
+    normalized = normalized.replace(/\s+/g, "");
+
+    if (encoding === "hex") {
+        normalized = normalized.replace(/^0x/i, "");
+        return /^(?:[0-9a-f]{2})*$/i.test(normalized) ? normalized : null;
+    }
+
+    normalized = normalized.replace(/-/g, "+").replace(/_/g, "/");
+    const remainder = normalized.length % 4;
+    if (remainder === 1) return null;
+    if (remainder === 2) normalized += "==";
+    else if (remainder === 3) normalized += "=";
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(normalized)) return null;
+    try {
+        globalThis.atob(normalized);
+        return normalized;
+    } catch {
+        return null;
+    }
+}
+
 function artifactPayload(input: {
     title: string;
     filename: string;
@@ -107,11 +145,17 @@ function artifactPayload(input: {
     mimeType?: string;
     contentEncoding?: ArtifactContentEncoding;
 }) {
+    const encodedContent = input.contentEncoding
+        ? normalizeEncodedArtifactContent(input.content, input.contentEncoding)
+        : input.content;
+    if (encodedContent == null) {
+        return `Artifact creation failed for \`${input.filename}\`: the ${input.contentEncoding} payload is invalid. Retry with exact ${input.contentEncoding} bytes, without commentary or markdown outside the payload.`;
+    }
     return JSON.stringify({
         [ARTIFACT_MARKER]: true,
         title: input.title,
         filename: input.filename,
-        content: input.content,
+        content: encodedContent,
         kind: input.kind,
         ...(input.mimeType ? { mimeType: input.mimeType } : {}),
         ...(input.contentEncoding ? { contentEncoding: input.contentEncoding } : {}),
@@ -714,7 +758,7 @@ Context (unverified): ${context}
 ## Rules
 1. Answer only from sources retrieved this session. Training recall is hypothesis, not evidence.
 2. Keep \`research_skill.question\` close to the user's words (≤1 short sentence). Do not invent years, vendors, model names, or scope the user did not ask for.
-3. Search queries must be short keywords (3–10 words), not essays. Prefer exact phrases + official domains (\`site:openai.com\`, \`site:anthropic.com\`, docs hosts). Call \`get_current_time\` when a calendar year is needed — never guess a year into the query.
+3. Search queries must be short keywords (3–10 words), not essays. Prefer exact phrases + official domains (\`site:openai.com\`, \`site:anthropic.com\`, docs hosts). Use the configured connector search tool if present. Call \`get_current_time\` when a calendar year is needed — never guess a year into the query.
 4. Budget by depth:
    - quick: 1–2 searches, 1 primary fetch
    - standard: ≤3 focused searches, fetch only pages that change the answer
@@ -945,6 +989,8 @@ export async function buildChatTools(
     settings: ToolSettings = {},
     options: {
         subagentMode?: boolean;
+        /** Preview compares models with a deliberately small, deterministic tool surface. */
+        previewMode?: boolean;
         suppressWebSearch?: boolean;
         /** Current thread messages — used by compaction_skill. */
         messages?: CompactableMessage[];
@@ -955,6 +1001,7 @@ export async function buildChatTools(
     } = {},
 ) {
     const subagentMode = options.subagentMode === true;
+    const previewMode = options.previewMode === true;
     const policy = tokenModePolicy(normalizeTokenMode(settings.tokenMode));
     const forcedTools = new Set(
         (settings.forceToolNames ?? []).filter((name) => typeof name === "string"),
@@ -976,25 +1023,26 @@ export async function buildChatTools(
         forcedTools.has("word_document_skill") ||
         forcedTools.has("linux_environment_skill");
     const enableResearch =
+        !previewMode &&
         settings.webSearchEnabled !== false &&
         (policy.researchSkill || forceResearch);
     const enableSearch =
         settings.webSearchEnabled !== false && options.suppressWebSearch !== true;
-    const enableCalc = settings.calculatorEnabled !== false;
+    const enableCalc = !previewMode && settings.calculatorEnabled !== false;
     // Python is a client-side tool. The browser executes it in Pyodide and
     // sends the result back before the model continues.
     const enablePython = settings.pythonEnabled !== false;
     // Toggle is the only gate. Token efficiency used to hide these tools
     // even when Linux environment was on, so every provider reported them
     // missing. ChatGPT/Codex also reserves `run_command` / `read_file`.
-    const enableLinux = settings.linuxEnvironment !== false;
+    const enableLinux = !previewMode && settings.linuxEnvironment !== false;
     const enableSkillSuite =
-        settings.skillsEnabled !== false && (policy.skillSuite || forceSkillSuite);
+        !previewMode && settings.skillsEnabled !== false && (policy.skillSuite || forceSkillSuite);
 
     const tools: Record<string, Tool> = {};
 
-    // Always available; forceable via /Compaction.
-    tools.compaction_skill = tool({
+    // Always available in the full chat; forceable via /Compaction.
+    if (!previewMode) tools.compaction_skill = tool({
         description:
             "Compress prior chat into a faithful carry-forward brief (goals, decisions, constraints, open threads, URLs). Call when /Compaction is selected or the user asks to compact context. Does not invent facts.",
         needsApproval: false,
@@ -1070,6 +1118,7 @@ export async function buildChatTools(
     }
 
     if (
+        !previewMode &&
         policy.connectorsMeta &&
         settings.connectors?.some((connector) => connector.enabled)
     ) {
@@ -1083,7 +1132,7 @@ export async function buildChatTools(
         });
     }
 
-    if (connectAvailable()) {
+    if (!previewMode && connectAvailable()) {
         tools.connect_request = tool({
             description:
                 "Vercel Connect: act on third-party apps using app-scoped operator-installed connectors. `list` shows available connectors; `inspect` shows connector + token state; `authorize` starts the one-time operator consent flow; `call` mints a token and performs an HTTPS API request against the connector's service (the connector base URL is set via CONNECT_BASE_URL_<KEY>; absolute URLs are allowed). Scopes are the operator-configured app scopes — only act within them.",
@@ -1212,12 +1261,7 @@ export async function buildChatTools(
 
     if (enableSearch) {
         const engine = settings.webSearchEngine ?? "duckduckgo";
-        const activeConnector = settings.connectors?.find(
-            (connector) =>
-                connector.enabled &&
-                Boolean(connector.apiKey?.trim()) &&
-                ["tavily", "brave", "exa", "parallel"].includes(connector.kind),
-        );
+        const activeConnector = findEnabledSearchConnector(settings.connectors);
         const engineLabel =
             activeConnector?.name ||
             (engine === "searxng" && settings.searxngUrl?.trim()
@@ -1348,7 +1392,7 @@ export async function buildChatTools(
 
     // Available even when MCP suppresses built-in web_search/fetch_url —
     // URL Doctor is a scored audit, not a generic search fallback.
-    if (settings.webSearchEnabled !== false || forceUrlDoctor || forceYoutube) {
+    if (!previewMode && (settings.webSearchEnabled !== false || forceUrlDoctor || forceYoutube)) {
         const youtubeTranscript = tool({
             description:
                 "Fetch a YouTube video's title, channel, and captions/transcript so you can summarize or quote it. Pass a youtube.com, youtu.be, shorts, or live URL. Do not invent a transcript; use this tool first.",
@@ -1505,7 +1549,7 @@ export async function buildChatTools(
         tools.word_doc_skill = wordDocumentSkillTool;
     }
 
-    tools.get_current_time = tool({
+    if (!previewMode) tools.get_current_time = tool({
         description: "Return the current ISO date/time in a requested IANA timezone.",
         inputSchema: z.object({ timezone: z.string().optional() }),
         execute: async ({ timezone }) => {
@@ -1518,7 +1562,7 @@ export async function buildChatTools(
         },
     });
 
-    if (settings.memoryAvailable) {
+    if (!previewMode && settings.memoryAvailable) {
         tools.memory = tool({
             description:
                 "Read relevant user-approved local memory, including pasted or imported entries, from the browser. Use only when the needed personal context is not already visible; send a narrow keyword query and never infer, invent, or request credentials or secrets.",
@@ -1528,7 +1572,7 @@ export async function buildChatTools(
         });
     }
 
-    if (settings.knowledgeEnabled !== false) {
+    if (!previewMode && settings.knowledgeEnabled !== false) {
         tools.knowledge_search = tool({
             description:
                 "Private on-device RAG over the user's local knowledge base (uploaded notes/PDFs/text). Embeddings never leave the browser. Call with a focused query when the user asks about their documents or uploaded materials.",
@@ -1544,7 +1588,7 @@ export async function buildChatTools(
         });
     }
 
-    if (policy.connectorsMeta) {
+    if (!previewMode && policy.connectorsMeta) {
         tools.list_connections = tool({
             description: "List enabled integrations and their capability categories without exposing credentials.",
             inputSchema: z.object({}),
@@ -1561,7 +1605,7 @@ export async function buildChatTools(
         });
     }
 
-    if (!subagentMode) {
+    if (!previewMode && !subagentMode) {
         tools.ask_user = tool({
             description: "Ask the user a focused multiple-choice, multi-select, or short-answer question when required information cannot be safely inferred.",
             inputSchema: z.object({
@@ -1720,7 +1764,7 @@ export async function buildChatTools(
         });
     }
 
-    if ((settings.subagentsEnabled || forcedTools.has("spawn_subagent") || forcedTools.has("spawn_subagents")) && !subagentMode) {
+    if (!previewMode && (settings.subagentsEnabled || forcedTools.has("spawn_subagent") || forcedTools.has("spawn_subagents")) && !subagentMode) {
         // No server execute — same as ask_user / run_python. The browser must
         // approve, run, and addToolOutput before the main model continues.
         tools.spawn_subagent = tool({
@@ -1738,6 +1782,21 @@ export async function buildChatTools(
                 tasks: z.array(z.string().min(1)).min(1).max(3),
             }),
         });
+    }
+
+    if (previewMode) {
+        const allowedPreviewTools = new Set([
+            "web_search",
+            "fetch_url",
+            "read_url",
+            "run_python",
+            "run_code",
+            "create_file",
+            "generate_file",
+        ]);
+        return Object.fromEntries(
+            Object.entries(tools).filter(([name]) => allowedPreviewTools.has(name)),
+        );
     }
 
     return tools;

@@ -14,6 +14,9 @@ import { localProviderKey } from "~/lib/provider-credentials";
 function fallbackTitle(message: string): string {
     const cleaned = message.replace(/\s+/g, " ").trim();
     if (!cleaned) return "New Chat";
+    if (/^(?:yo|hi|hey|hello|hiya|howdy)[!.?]*$/i.test(cleaned)) {
+        return "Casual Chat";
+    }
     return cleaned.length > 48 ? `${cleaned.slice(0, 45).trimEnd()}…` : cleaned;
 }
 
@@ -50,11 +53,6 @@ export function ChatLifecycle({
         if (!sawEmptyForThread.current) return;
         if (pendingTitle.current) return;
         if (titledForThread.current === threadId) return;
-        if (threadTitle && threadTitle !== "New Chat") {
-            titledForThread.current = threadId;
-            return;
-        }
-
         const messages = aui.thread.getState().messages;
         const firstUser = messages.find((m) => m.role === "user");
         if (!firstUser) return;
@@ -64,6 +62,17 @@ export function ChatLifecycle({
             .join(" ")
             .trim();
         if (!text) return;
+
+        const rawFallback = fallbackTitle(text);
+        if (
+            threadTitle &&
+            threadTitle !== "New Chat" &&
+            threadTitle !== text &&
+            threadTitle !== rawFallback
+        ) {
+            titledForThread.current = threadId;
+            return;
+        }
 
         pendingTitle.current = true;
         const provider = settings.chat.provider;
@@ -91,7 +100,11 @@ export function ChatLifecycle({
                 const data = (await res.json()) as {
                     title?: string;
                 };
-                const title = data.title?.trim() || fallbackTitle(text);
+                const candidate = data.title?.trim() || "";
+                const title =
+                    candidate && candidate.toLowerCase() !== text.toLowerCase()
+                        ? candidate
+                        : fallbackTitle(text);
                 if (title && titleThreadId === threadId) {
                     onTitleChange(titleThreadId, title);
                     titledForThread.current = titleThreadId;

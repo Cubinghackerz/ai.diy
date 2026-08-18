@@ -104,6 +104,11 @@ export function ProviderPicker({
                     />
                 ) : null}
                 <span className="truncate">{selected?.name || value}</span>
+                {isLocalProvider(value) ? (
+                    <span className="rounded-full border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.08em] text-primary">
+                        Beta
+                    </span>
+                ) : null}
                 <CaretDown
                     size={12}
                     className="shrink-0 text-muted-foreground"
@@ -156,11 +161,11 @@ export function ProviderPicker({
                                             {p.name}
                                         </span>
                                     </span>
-                                    {p.local ? (
-                                        <span className="text-[10px] text-muted-foreground">
-                                            Local
-                                        </span>
-                                    ) : null}
+                                     {p.local ? (
+                                         <span className="rounded-full border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-primary">
+                                             Experimental
+                                         </span>
+                                     ) : null}
                                 </Command.Item>
                             ))}
                         </Command.List>

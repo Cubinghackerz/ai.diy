@@ -10,6 +10,7 @@ import { useChatGenerating } from "~/components/assistant-ui/ChatSessionContext"
 import { ChatLifecycle } from "~/components/assistant-ui/ChatLifecycle";
 import { ChatErrorBanner } from "~/components/assistant-ui/ChatThreadSync";
 import { PreviewWorkspace } from "~/components/assistant-ui/PreviewWorkspace";
+import { ChatGPTRequestRefreshPrompt } from "~/components/settings/ChatGPTRequestRefreshPrompt";
 import { SubagentProvider } from "~/components/assistant-ui/subagents";
 import { Thread } from "~/components/assistant-ui/Thread";
 import { CanvasPanel } from "~/components/canvas/CanvasPanel";
@@ -79,14 +80,25 @@ function HomeInner() {
         [updateThreadTitle],
     );
 
+    const leavePreview = useCallback(() => {
+        if (!settings.preview.enabled) return;
+        updateSettings({
+            preview: {
+                ...settings.preview,
+                enabled: false,
+            },
+        });
+    }, [settings.preview, updateSettings]);
+
     const handleNewChat = useCallback(
         (projectId: string | null = null) => {
             haptic();
+            leavePreview();
             void createNewThread("New Chat", projectId);
             setSidebarPanel("chats");
             setMobileSidebarOpen(false);
         },
-        [createNewThread],
+        [createNewThread, leavePreview],
     );
 
     const activeThread = threads.find((t) => t.id === activeThreadId);
@@ -113,11 +125,15 @@ function HomeInner() {
             activeThreadId={activeThreadId}
             onSelectThread={(id) => {
                 hapticSelect();
+                leavePreview();
                 setActiveThreadId(id);
                 setMobileSidebarOpen(false);
             }}
             onNewChat={handleNewChat}
             onDeleteThread={(id) => {
+                if (settings.preview.enabled && id === activeThreadId) {
+                    leavePreview();
+                }
                 void deleteThread(id);
             }}
             onRenameThread={handleTitleChange}
@@ -249,9 +265,9 @@ function HomeInner() {
         </div>
     );
 
-    if (settings.preview.enabled) return appShell;
-
-    return (
+    const workspace = settings.preview.enabled ? (
+        appShell
+    ) : (
         <SubagentProvider threadId={activeThreadId}>
             <AssistantRuntimeProvider
                 key={activeThreadId ?? "draft"}
@@ -261,6 +277,13 @@ function HomeInner() {
                 {appShell}
             </AssistantRuntimeProvider>
         </SubagentProvider>
+    );
+
+    return (
+        <>
+            <ChatGPTRequestRefreshPrompt />
+            {workspace}
+        </>
     );
 }
 

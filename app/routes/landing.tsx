@@ -101,7 +101,7 @@ const STRUCTURED_DATA = {
                 "Browser-owned chat and knowledge storage",
                 "Web search and MCP tools",
                 "Canvas artifacts and browser Python",
-                "17 cloud and local AI providers",
+                "20+ cloud and local AI provider integrations",
                 "Node.js and Docker self-hosting",
             ],
             author: { "@id": `${SITE_URL}/#organization` },

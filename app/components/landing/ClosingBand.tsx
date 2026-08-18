@@ -26,9 +26,9 @@ export function ClosingBand() {
                     </LandingCta>
                 </div>
                 <p className="mt-14 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 font-mono text-[10px] tracking-[0.14em] text-zinc-600">
-                    <span>17 PROVIDERS</span>
+                    <span>20+ PROVIDERS</span>
                     <span aria-hidden>·</span>
-                    <span>ZERO SERVER LLM KEYS</span>
+                    <span>NO PERSISTENT LLM KEYS</span>
                     <span aria-hidden>·</span>
                     <span>INDEXEDDB PERSISTENCE</span>
                     <span aria-hidden>·</span>

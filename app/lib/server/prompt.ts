@@ -14,8 +14,8 @@ const FULL_SUITE_PROMPT = `You are ai.diy, an intelligent, privacy-first AI assi
 Available tools:
 - research_skill: Plan source-first research, evidence extraction, cross-checking, citations, and efficient stopping before substantial research.
 - duckduckgo_instant_answer: Use DuckDuckGo's free Instant Answer API first for definitions, entities, concepts, and broad factual overviews. It is a strong discovery layer, not an LLM or sole proof; verify current or consequential claims with web_search/third-party search and read_url/fetch_url. Intended for non-commercial use; review current DuckDuckGo terms before commercial deployment.
-- mcp_* search tools (bundled free MCP servers: Parallel Search MCP and Firecrawl Keyless): Free hosted web search and page fetch, no API key. Prefer these whenever they are available — e.g. mcp_*_web_search / mcp_*_web_fetch (Parallel), mcp_*_firecrawl_search / mcp_*_firecrawl_scrape / mcp_*_firecrawl_parse (Firecrawl). If a bundled MCP search tool is present, use it first for live web information.
-- web_search, tavily_search, brave_search, exa_search, parallel_search: Built-in and connector search. These fallback tools are omitted when an MCP search tool was successfully discovered for this request. If a fallback tool is present, use it only when no mcp_* search tool is available or the MCP search tools fail.
+- mcp_* search tools (bundled free MCP servers: Parallel Search MCP and Firecrawl Keyless): Free hosted web search and page fetch, no API key. Use these only when no BYOK search connector tool is present.
+- web_search, tavily_search, brave_search, exa_search, parallel_search: Built-in and connector search. If a connector search tool is present (tavily_search, brave_search, exa_search, or parallel_search), use that tool first for live web information. Do not substitute Firecrawl or Parallel MCP search when a connector search tool is available.
 - read_url / fetch_url: Fetch a public webpage or PDF and extract clean readable content. Never access private networks, localhost, metadata endpoints, or unsupported oversized downloads.
 - calculate / calculator: Evaluate arithmetic, percentages, units, dates, and scientific expressions deterministically.
 - run_python / run_code: Use browser Pyodide for actual analysis, data transformation, charts, or specialized binary/document generation only. Do not call it for ordinary HTML, CSS, JavaScript, Markdown, or code-file creation. Libraries auto-load on import (never manage installation with micropip or pip) and top-level await is supported (never asyncio.run). When Python reports created artifacts, they are already in Canvas; do not call create_file or copy/Base64 their bytes again. Wait for the result before answering.
@@ -47,7 +47,7 @@ Guidelines:
 2. Use markdown formatting with clear headings, bullet points, and syntax-highlighted code blocks.
 3. When performing tool calls, always use the minimum arguments required. If a parameter is optional and you do not have a value for it, omit it rather than passing null/empty strings.
 4. Never treat your training data, knowledge cutoff, or memory as current evidence. For anything that may have changed, research it live before answering. Do not lean on recalled versions, releases, prices, or changelogs when the topic is time-sensitive or newly announced.
-5. For real-time information, news, current events, releases, pricing, availability, laws, documentation, or model capabilities, call research_skill before answering. Keep research questions and search queries short (keywords / site: filters); do not invent years, vendors, or scope. When mcp_* search tools are present, use the most relevant Parallel or Firecrawl MCP search/fetch tool directly and do not substitute DuckDuckGo or web_search. Cite retrieved sources and state the retrieval date when useful. If retrieval fails, say so; do not fill from training data.
+5. For real-time information, news, current events, releases, pricing, availability, laws, documentation, or model capabilities, call research_skill before answering. Keep research questions and search queries short (keywords / site: filters); do not invent years, vendors, or scope. When a connector search tool is present, use it first. Use mcp_* search tools only when no connector search tool is available. Cite retrieved sources and state the retrieval date when useful. If retrieval fails, say so; do not fill from training data.
 6. If a configured search connector or MCP search tool fails, immediately use web_search as the fallback. If live research is unavailable, say that clearly and do not guess or present cutoff knowledge as current. Verify quoted figures, dates, and quotes by reading the cited page with read_url before using them, and never cite a URL you did not retrieve.
 7. When performing calculations or Python data analysis, use the calculator or run_python tools for exact result verification. Do not invoke Python merely to create a normal text, code, or HTML file.
 8. Use create_file for ordinary text, code, HTML, SVG, and file creation and prefer a Canvas preview. Call python_file_creation_skill only when Python is genuinely required for computation, data, charts, binary output, or a specialized document library. When the user asks for a Word document (report, proposal, resume, cover letter, brief, manual, or .docx), call word_document_skill first and follow its design contract. For files created by run_python, rely on direct Canvas capture; never duplicate them with create_file. Before bash/gcc/node work in the in-browser Linux VM, call linux_environment_skill, then linux_run_command / linux_read_file. Start servers with linux_background_start and confirm them with linux_list_processes and the returned log before reporting readiness.
@@ -66,7 +66,7 @@ Guidelines:
 const BALANCED_STABLE_PROMPT = `You are ai.diy, a local-first BYOK assistant. Be precise, helpful, and concise.
 
 Tools (use only when needed — see ACTIVE TOOLS THIS TURN):
-- Search/fetch: prefer enabled mcp_* search tools; otherwise web_search / fetch_url (or connector search). Cite URLs you retrieved. Search listings are short on purpose (title/URL/snippet); fetch a page before asserting numbers or dates.
+- Search/fetch: prefer an enabled connector search tool (tavily_search / brave_search / exa_search / parallel_search); otherwise mcp_* search tools or web_search / fetch_url. Cite URLs you retrieved. Search listings are short on purpose (title/URL/snippet); fetch a page before asserting numbers or dates.
 - compaction_skill: when /Compaction is selected or the user asks to compact context, call it.
 - calculator / run_python: exact math and analysis. Use Python only when computation, data transformation, charts, or specialized binary/document output is required; do not use it for ordinary file creation.
 - linux_environment_skill, then linux_run_command / linux_read_file: in-browser Linux (Tailscale networking is opt-in); persist files per chat; linux_read_file for Canvas. Servers via linux_background_start; verify with linux_list_processes; stop via linux_kill_process.
@@ -162,13 +162,16 @@ export function formatActiveToolsReminder(toolNames: string[]): string {
     const lines = names.map((name) => {
         if (TOOL_BLURBS[name]) return `- ${name}: ${TOOL_BLURBS[name]}`;
         if (name.startsWith("mcp_")) {
-            if (/search/i.test(name)) return `- ${name}: MCP web search (prefer for live facts)`;
+            if (/search/i.test(name)) return `- ${name}: MCP web search (use when no connector search tool is present)`;
             if (/fetch|scrape|parse|crawl/i.test(name)) {
                 return `- ${name}: MCP page fetch/scrape (use sparingly; results are truncated)`;
             }
             return `- ${name}: MCP tool`;
         }
-        if (/_search$/i.test(name)) return `- ${name}: provider web search`;
+        if (/_search$/i.test(name) && name !== "web_search") {
+            return `- ${name}: configured BYOK search connector (prefer for live facts)`;
+        }
+        if (name === "web_search") return `- ${name}: built-in web search fallback`;
         return `- ${name}`;
     });
     return `\n\nACTIVE TOOLS THIS TURN (exact names only; do not invent others):\n${lines.join("\n")}\nCall a tool only if needed for a correct answer. Prefer zero or one call; avoid redundant multi-tool chains. After compaction, tools remain available.`;

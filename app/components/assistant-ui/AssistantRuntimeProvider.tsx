@@ -53,6 +53,7 @@ import {
     notifyCreditsFallback,
 } from "~/lib/credits-fallback";
 import { detectProviderCreditError } from "~/lib/provider-errors";
+import { notifyChatGPTRequestFailure } from "~/lib/chatgpt-refresh";
 import { useSubagent } from "~/components/assistant-ui/subagents";
 import {
     createWebSpeechDictationAdapter,
@@ -499,6 +500,9 @@ export function AssistantRuntimeProvider({
         },
         onError: (err) => {
             console.error("[chat]", err);
+            if (!isGenerationStopRequested() && settingsRef.current.chat.provider === "chatgpt") {
+                notifyChatGPTRequestFailure();
+            }
         },
     });
     chatRef.current = chat;

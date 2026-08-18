@@ -27,6 +27,9 @@ interface TitleRequestBody {
 function fallbackTitle(message: string): string {
     const cleaned = message.replace(/\s+/g, " ").trim();
     if (!cleaned) return "New Chat";
+    if (/^(?:yo|hi|hey|hello|hiya|howdy)[!.?]*$/i.test(cleaned)) {
+        return "Casual Chat";
+    }
     return cleaned.length > 48 ? `${cleaned.slice(0, 45).trimEnd()}…` : cleaned;
 }
 
@@ -36,7 +39,9 @@ function cleanTitle(raw: string, message: string): string {
         ?.replace(/^["'`]+|["'`]+$/g, "")
         .replace(/^(title|chat)\s*:\s*/i, "")
         .trim();
-    if (!line) return fallbackTitle(message);
+    if (!line || line.toLowerCase() === message.trim().toLowerCase()) {
+        return fallbackTitle(message);
+    }
     return line.length > 60 ? `${line.slice(0, 57).trimEnd()}…` : line;
 }
 
@@ -123,11 +128,14 @@ export async function action({ request }: ActionFunctionArgs) {
         const model = createChatModel({ ...body, request });
         const { text } = await generateText({
             model,
-            temperature: 0.3,
-            maxOutputTokens: 24,
+            ...(body.provider === "chatgpt" ? {} : { temperature: 0.3 }),
+            maxOutputTokens: body.provider === "chatgpt" ? 64 : 24,
             system:
                 "Generate a short chat title (3–6 words) for the user's first message. Return only the title text — no quotes, no punctuation at the end, no explanation.",
-            prompt: message.slice(0, 500),
+            prompt:
+                body.provider === "chatgpt"
+                    ? `Title this chat in 3-6 words.\n\nMessage: ${message.slice(0, 500)}\nTitle:`
+                    : message.slice(0, 500),
         });
 
         return withCors(request, Response.json({ title: cleanTitle(text, message) }));

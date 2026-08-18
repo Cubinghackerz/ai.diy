@@ -6,7 +6,6 @@ import {
 } from "@phosphor-icons/react";
 import { Reveal } from "./DoubleBezel";
 import { EASE_OUT } from "./motion";
-import { SectionIndex } from "./SectionIndex";
 import { StatusPill } from "./StatusPill";
 import { cn } from "~/lib/utils";
 
@@ -16,7 +15,7 @@ const TABS = [
         label: "Tools",
         icon: PlugsConnected,
         title: "Search, skills, MCP, subagents.",
-        body: "DuckDuckGo plus Firecrawl and Parallel MCP ship keyless. URL fetch, calculator, browser Python, on-device knowledge RAG, memory, remote MCP, slash skills, approved subagents, and experimental website presets.",
+        body: "DuckDuckGo plus Firecrawl and Parallel MCP ship keyless. URL fetch, calculator, browser Python, on-device knowledge RAG, memory, remote MCP, slash skills, approved subagents, and experimental website presets. Enabled tools have their own service boundaries.",
         chips: ["Keyless search", "Website presets", "Agent Mode"],
     },
     {
@@ -24,15 +23,15 @@ const TABS = [
         label: "Storage",
         icon: HardDrives,
         title: "Your browser is the database.",
-        body: "Chats, Canvas artifacts, memory, knowledge chunks, usage events, and preview sessions live in IndexedDB. Settings and keys stay in localStorage. Optional client-side backup to S3, WebDAV, or Google Drive.",
+        body: "Chats, Canvas artifacts, memory, knowledge chunks, usage events, and preview sessions live in IndexedDB. Settings use AES-GCM encrypted localStorage when Web Crypto and IndexedDB are available, with the envelope key stored separately. Optional client-side backup goes to S3, WebDAV, or Google Drive.",
         chips: ["IndexedDB", "No vendor vector DB", "Export anytime"],
     },
     {
         id: "deploy" as const,
         label: "Deploy",
         icon: TerminalWindow,
-        title: "Node or Docker. No LLM env vars.",
-        body: "Self-host on a standard Node server or Docker Compose. The relay never needs provider credentials. Optional RATE_LIMIT_RPM for public exposure. MIT licensed.",
+        title: "Node or Docker. No persistent LLM secrets.",
+        body: "Self-host on a standard Node server or Docker Compose. The relay does not need persistent provider credentials. Optional RATE_LIMIT_RPM for public exposure. MIT licensed.",
         chips: ["npm start", "docker compose", "MIT"],
     },
 ] as const;
@@ -51,7 +50,6 @@ export function CapabilityRack() {
             data-anim-gate="capabilities"
         >
             <Reveal>
-                <SectionIndex index="05" label="CAPABILITIES" />
                 <h2 className="max-w-[18ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
                     Tools, storage, and deployment on your terms.
                 </h2>
@@ -147,11 +145,13 @@ export function CapabilityRack() {
                                 <pre className="mt-8 overflow-x-auto rounded-lg border border-white/[0.08] bg-[#0e0e11] p-4 font-mono text-[11px] leading-relaxed text-zinc-400 sm:text-[12px]">
                                     <code>
                                         {`browser/
-  localStorage  → settings, provider keys
-  IndexedDB     → threads, canvas, memory,
+  localStorage  → encrypted settings payload
+  IndexedDB     → settings envelope key,
+                  threads, canvas, memory,
                   knowledge, usage ledger
 server/
-  /api/*        → relay only · no LLM secrets`}
+  /api/*        → relay + enabled services
+                 · no persistent LLM secrets`}
                                     </code>
                                 </pre>
                             ) : null}

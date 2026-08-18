@@ -3,11 +3,11 @@
 [![Clone repository](https://img.shields.io/badge/Clone-GitHub-181717?logo=github)](https://github.com/Cubinghackerz/ai.diy)
 [![Deploy a preview](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FCubinghackerz%2Fai.diy&project-name=ai-diy-preview)
 
-**The open-source AI workspace you own.**
+**Your AI workspace lives in your browser.**
 
 **Live demo:** [ai-diy-demo.vercel.app](https://ai-diy-demo.vercel.app/)
 
-Local-first, bring-your-own-key chat for Node or Docker. No server-side LLM credentials. Your keys, chats, memory, knowledge base, and Canvas artifacts stay in the browser.
+Local-first, bring-your-own-key chat for Node or Docker. Your workspace state stays in the browser by default, while the server relays requests to the model and tools you choose. Provider API keys are not required as persistent server configuration.
 
 Built with React Router, assistant-ui, the Vercel AI SDK, Tailwind CSS, browser-side Pyodide, and CheerpX (in-browser Linux).
 
@@ -41,13 +41,13 @@ docker build -t ai-diy .
 docker run -p 3000:3000 ai-diy
 ```
 
-`npm run dev` is not recommended (composer regression in Vite). Use the production build above. Details: [DEPLOYMENT.md](./DEPLOYMENT.md) · QA checklist: [QA.md](./QA.md).
+`npm run dev` is not recommended (composer regression in Vite). Use the production build above. Details: [DEPLOYMENT.md](./DEPLOYMENT.md) · QA checklist: [QA.md](./QA.md) · launch brief: [PRODUCT_HUNT.md](./PRODUCT_HUNT.md).
 
 ## Status
 
 Features marked **available** are wired. **Planned** items are not claimed as working.
 
-- **Available:** landing, chat, 17 providers, model discovery, local persistence, files, browser Python (Canvas capture + IndexedDB persistence for generated images/binaries), in-browser Linux environment (CheerpX/WebVM: bash, python3, gcc, node, apt; no outbound network by default), search + connectors, remote MCP, artifacts, memory, on-device knowledge RAG, usage ledger with soft spend/token/RPM caps, server rate-limit hooks, voice dictation (Web Speech), multi-model Preview, import/export, client-side S3/WebDAV/Google Drive backup, portable skills catalog + install, slash commands (`/Research`, `/Compaction`, `/Subagent`, …), Agent Mode, subagents (approve → wait → synthesize), encrypted browser settings, Vercel Connect (Beta: token-backed MCP servers + `connect_request`)
+- **Available:** landing, 20+ provider integrations, model discovery, local persistence, files, browser Python (Canvas capture + IndexedDB persistence for generated images/binaries), in-browser Linux environment (CheerpX/WebVM: bash, python3, gcc, node, apt; no outbound network by default), search + connectors, remote MCP, artifacts, memory, on-device knowledge RAG, usage ledger with soft spend/token/RPM caps, server rate-limit hooks, voice dictation (Web Speech), multi-model Preview, import/export, client-side S3/WebDAV/Google Drive backup, portable skills catalog + install, slash commands (`/Research`, `/Compaction`, `/Subagent`, …), Agent Mode, subagents (approve → wait → synthesize), encrypted browser settings where supported, Vercel Connect (Beta: token-backed MCP servers + `connect_request`)
 - **Coming soon:** direct GitHub/Supabase/PostgreSQL adapters, custom-provider capability probing
 
 ## What You Own
@@ -59,7 +59,24 @@ Features marked **available** are wired. **Planned** items are not claimed as wo
 | LLM relay, model discovery, search, MCP, optional RPM rate limit | Node server |
 | Provider API keys | Browser only; relayed per request |
 
-Settings are not encrypted at rest today. Protect the browser profile. Treat hosted instances as able to observe keys in transit.
+When Web Crypto and IndexedDB are available, settings are encrypted at rest with AES-GCM. The encrypted payload is kept in localStorage and its envelope key is kept separately in IndexedDB. Browser or platform fallbacks may use plaintext storage, and this protection does not defend against a compromised browser profile or malicious same-origin code. Provider keys still pass through the relay in transit; treat hosted instances as able to observe that traffic.
+
+## Architecture
+
+```text
+Browser-owned workspace
+  settings, provider keys, chats, memory, knowledge, Canvas, Preview
+                |
+                | per-request relay
+                v
+Node server
+  model forwarding, model discovery, optional search/MCP/connectors
+                |
+                +--> selected cloud or local model provider
+                +--> explicitly enabled search, fetch, MCP, or connector service
+```
+
+The server does not need persistent provider API keys. It can still see request traffic while relaying it, and enabled tools can send selected data to their own services. See [ARCHITECTURE.md](./ARCHITECTURE.md) and [SECURITY.md](./SECURITY.md).
 
 ## Skills
 
@@ -89,7 +106,7 @@ Enable Agent Mode under **Settings → Experimental**. The model plans, selects 
 
 ### Providers
 
-OpenAI, Anthropic, Gemini, Groq, OpenRouter, xAI, DeepSeek, Bedrock, Azure, Vertex, Vercel Gateway, Together, Mistral, Hugging Face, Ollama, LM Studio, custom OpenAI-compatible.
+OpenAI, ChatGPT subscription, Anthropic, Gemini, Groq, Cerebras, Fireworks, Perplexity, Cohere, OpenRouter, xAI, DeepSeek, Bedrock, Azure, Vertex, Vercel Gateway, Together, Mistral, Hugging Face, Ollama, LM Studio, and custom OpenAI-compatible endpoints.
 
 ### Tools
 
@@ -123,15 +140,16 @@ ChatGPT, Claude, ShareGPT, Markdown, ai.diy JSON. Client-side backup to S3-compa
 - Do not log request bodies or credentials
 - In-browser Linux (CheerpX) runs entirely in the tab: Safari is supported; there is no outbound network. A corrupt disk overlay is wiped and retried automatically. The CheerpX runtime is loaded from Leaning Technologies' CDN under the [CheerpX Community License](https://cheerpx.io/) (free for FOSS such as this MIT project). Commercial use or self-hosting the runtime requires a license from Leaning Technologies — do not vendor `cx.esm.js`.
 
-See [DEPLOYMENT.md](./DEPLOYMENT.md) and `.env.example`.
+See [DEPLOYMENT.md](./DEPLOYMENT.md), [SECURITY.md](./SECURITY.md), and `.env.example`.
 
-## Vercel Preview Only
+## Vercel Preview and public deployment
 
 ```bash
 npx vercel
 ```
 
-Do not use `--prod` for this beta.
+Use this for preview testing. For a public launch, configure a branded domain
+and set `VITE_SITE_URL` at build time before using a production deployment.
 
 ## Credits
 

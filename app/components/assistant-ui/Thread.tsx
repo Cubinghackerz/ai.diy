@@ -14,7 +14,7 @@ import {
 import { BorderBeam } from "~/components/ui/border-beam";
 import { ThreadFollowupSuggestions } from "~/components/assistant-ui/follow-up-suggestions";
 import { MarkdownText } from "~/components/assistant-ui/markdown-text";
-import { MessageUsageStats } from "~/components/assistant-ui/MessageUsageStats";
+
 import { ToolFallback } from "~/components/assistant-ui/tool-fallback";
 import { ToolGroup } from "~/components/assistant-ui/tool-group";
 import {
@@ -826,7 +826,6 @@ const AssistantMessage: FC = () => {
       >
         <BranchPicker />
         <AssistantActionBar />
-        <MessageUsageStats />
       </div>
     </MessagePrimitive.Root>
   );

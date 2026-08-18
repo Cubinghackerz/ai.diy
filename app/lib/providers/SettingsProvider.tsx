@@ -233,7 +233,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         }
     }
 
-    // Apply theme
+    // Apply the selected workspace theme.
     useEffect(() => {
         if (!loaded) return;
         const root = document.documentElement;
@@ -244,7 +244,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 settings.theme === "oled" ||
                 (settings.theme === "system" && mq.matches);
             root.classList.toggle("dark", dark);
-            root.classList.toggle("oled", dark);
+            root.classList.toggle("oled", settings.theme === "oled");
         };
         applyTheme();
         if (settings.theme !== "system") return;

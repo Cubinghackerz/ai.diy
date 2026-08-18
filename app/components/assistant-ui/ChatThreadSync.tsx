@@ -11,7 +11,7 @@ import {
     replaceThreadMessages,
 } from "~/lib/chat-store";
 import { ARTIFACT_MARKER, type ArtifactContentEncoding } from "~/lib/artifacts";
-import { useCanvas, type ArtifactKind } from "~/lib/canvas";
+import { useCanvas, type Artifact, type ArtifactKind } from "~/lib/canvas";
 import {
     getArtifactsForScope,
 } from "~/lib/db";
@@ -51,12 +51,23 @@ function extractArtifactFromText(text: string) {
     }
 }
 
+export type SyncedArtifact = Omit<Artifact, "id" | "createdAt" | "scopeId"> & {
+    sourceKey?: string;
+};
+
 export function ChatThreadSync({
     threadId,
     artifactScopeId = threadId,
+    manageArtifactScope = true,
+    openArtifacts = true,
+    onArtifact,
 }: {
     threadId: string | null;
     artifactScopeId?: string | null;
+    /** Preview runs keep their artifacts in the run, not the shared Canvas scope. */
+    manageArtifactScope?: boolean;
+    openArtifacts?: boolean;
+    onArtifact?: (artifact: SyncedArtifact) => void;
 }) {
     const { chat } = useChatSession();
     const { settings } = useSettings();
@@ -72,10 +83,11 @@ export function ChatThreadSync({
     // Canvas is scoped to the current chat or preview run. Switching scope
     // never leaves artifacts from a different conversation visible.
     useEffect(() => {
+        if (!manageArtifactScope) return;
         setArtifactScope(artifactScopeId);
         seenArtifacts.current.clear();
         restoredMessageIds.current.clear();
-    }, [artifactScopeId, setArtifactScope]);
+    }, [artifactScopeId, manageArtifactScope, setArtifactScope]);
 
     // Preview tabs have no IndexedDB hydrate. Treat already-streamed messages
     // as restored when a tab becomes active so reopening a tab never pops the
@@ -176,7 +188,7 @@ export function ChatThreadSync({
         return () => clearTimeout(timer);
     }, [threadId, chat.status, chat.messages, settings.chat.model, settings.chat.provider]);
 
-                // Push create_file / create_skill / prompt_architect / frontend_design_skill results into Canvas.
+    // Push create_file / create_skill / prompt_architect / frontend_design_skill results into Canvas.
     useEffect(() => {
         const messages = chat.messages as UIMessage[];
         for (const msg of messages) {
@@ -218,33 +230,40 @@ export function ChatThreadSync({
                 const key = `${msg.id}:${toolName}:${part.toolCallId ?? artifact.filename}`;
                 if (seenArtifacts.current.has(key)) continue;
                 seenArtifacts.current.add(key);
+                const sourceKey = `${artifact.kind}:${artifact.filename}:${artifact.contentEncoding ?? "text"}:${artifact.content}`;
+                const syncedArtifact: SyncedArtifact = {
+                    ...artifact,
+                    sourceKey,
+                };
+                if (onArtifact) {
+                    onArtifact(syncedArtifact);
+                    continue;
+                }
                 const artifactId = addArtifact(
-                    {
-                        kind: artifact.kind,
-                        title: artifact.title,
-                        filename: artifact.filename,
-                        content: artifact.content,
-                        mimeType: artifact.mimeType,
-                        contentEncoding: artifact.contentEncoding,
-                        sourceKey: `${artifact.kind}:${artifact.filename}:${artifact.contentEncoding ?? "text"}:${artifact.content}`,
-                    },
+                    syncedArtifact,
                     {
                         scopeId: artifactScopeId,
-                        open: !restoredMessageIds.current.has(msg.id),
+                        open: openArtifacts && !restoredMessageIds.current.has(msg.id),
                     },
                 );
                 if (threadId) {
                     persistArtifactForScope(threadId, {
                         id: artifactId,
-                        ...artifact,
-                        sourceKey: `${artifact.kind}:${artifact.filename}:${artifact.contentEncoding ?? "text"}:${artifact.content}`,
+                        ...syncedArtifact,
                         scopeId: threadId,
                         createdAt: Date.now(),
                     });
                 }
             }
         }
-    }, [chat.messages, addArtifact, artifactScopeId, threadId]);
+    }, [
+        chat.messages,
+        addArtifact,
+        artifactScopeId,
+        onArtifact,
+        openArtifacts,
+        threadId,
+    ]);
 
     return null;
 }

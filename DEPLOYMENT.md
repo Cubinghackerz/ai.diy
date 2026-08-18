@@ -105,15 +105,15 @@ If you serve the frontend and API from different origins, set `CORS_ORIGINS` to 
 CORS_ORIGINS=https://app.example.com,https://beta.example.com npm start
 ```
 
-## Vercel Preview Only
+## Vercel Preview and public deployment
 
-Temporary Preview testing only — not a production dependency:
+Temporary preview testing:
 
 ```bash
 npx vercel
 ```
 
-Do not attach a production domain or use `npx vercel --prod` for this beta workspace. No server-side LLM env vars are required.
+For a public launch, configure a branded domain and set `VITE_SITE_URL` at build time so canonical URLs, sitemap entries, Open Graph metadata, and robots output use that domain. Do not use the `ai-diy-demo.vercel.app` hostname as the long-term launch identity. No persistent provider API keys are required in server environment variables.
 
 ## Vercel Connect (Optional, Beta)
 

@@ -5,7 +5,6 @@ import { Reveal } from "./DoubleBezel";
 import { useCopy } from "./hooks";
 import { LandingCta } from "./LandingCta";
 import { EASE_OUT } from "./motion";
-import { SectionIndex } from "./SectionIndex";
 import { cn } from "~/lib/utils";
 
 export function DeployTerminal() {
@@ -21,7 +20,6 @@ export function DeployTerminal() {
         >
             <Reveal>
                 <div>
-                    <SectionIndex index="06" label="DEPLOY" />
                     <h2 className="text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
                         Self-host in one command.
                     </h2>

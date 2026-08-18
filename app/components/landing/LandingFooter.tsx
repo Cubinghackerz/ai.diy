@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { ArrowSquareOut, XLogo } from "@phosphor-icons/react";
 import { BrandMark } from "./BrandMark";
 import { DOCS_URL, GITHUB_URL, TWITTER_URL } from "./constants";
+import { SEO_GUIDES } from "~/lib/seo-pages";
 
 const linkClass =
     "inline-flex min-h-10 items-center transition-colors duration-150 hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40";
@@ -93,6 +94,18 @@ export function LandingFooter() {
                                     X / @HeckingHacker
                                 </a>
                             </li>
+                        </ul>
+                    </div>
+                    <div>
+                        <p className="font-mono text-[10px] tracking-wide text-zinc-500">GUIDES</p>
+                        <ul className="mt-2 space-y-0.5 text-zinc-400">
+                            {SEO_GUIDES.map((guide) => (
+                                <li key={guide.slug}>
+                                    <Link to={guide.path} className={linkClass}>
+                                        {guide.label}
+                                    </Link>
+                                </li>
+                            ))}
                         </ul>
                     </div>
                     <div>

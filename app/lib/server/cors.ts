@@ -16,12 +16,20 @@ function allowedOrigin(request: Request): string | null {
     return configured.includes(origin) ? origin : null;
 }
 
-/** Add CORS headers only for origins explicitly allowed by CORS_ORIGINS. */
+/** Add API indexing/cache policy, then add CORS only for allowed origins. */
 export function withCors(request: Request, response: Response): Response {
     const origin = allowedOrigin(request);
-    if (!origin) return response;
-
     const headers = new Headers(response.headers);
+    headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
+    if (!headers.has("Cache-Control")) headers.set("Cache-Control", "no-store");
+    if (!origin) {
+        return new Response(response.body, {
+            status: response.status,
+            statusText: response.statusText,
+            headers,
+        });
+    }
+
     headers.set("Access-Control-Allow-Origin", origin);
     headers.set("Access-Control-Allow-Methods", ALLOW_METHODS);
     headers.set("Access-Control-Allow-Headers", ALLOW_HEADERS);

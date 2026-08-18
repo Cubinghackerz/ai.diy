@@ -56,7 +56,7 @@ export function getChatGPTHandler(): ChatGPTHandler {
         basePath: "/api/chatgpt",
         clientVersion,
         // Prefer latest Codex default; live discovery still picks the account's best.
-        defaultModel: "gpt-5.6",
+        defaultModel: "gpt-5.6-luna",
         allowedOrigins: allowedOrigins.length ? allowedOrigins : undefined,
         responsesProxy: {
             // Unset allowedModels → any model the signed-in account can use.

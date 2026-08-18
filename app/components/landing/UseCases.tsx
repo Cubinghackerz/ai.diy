@@ -1,6 +1,7 @@
 import { Code, Files, SquareHalf } from "@phosphor-icons/react";
+import { Link } from "react-router";
 import { Reveal } from "./DoubleBezel";
-import { SectionIndex } from "./SectionIndex";
+import { SEO_GUIDES } from "~/lib/seo-pages";
 
 const CASES = [
     {
@@ -28,7 +29,6 @@ export function UseCases() {
             data-anim-gate="use-cases"
         >
             <Reveal>
-                <SectionIndex index="04" label="USE CASES" />
                 <h2 className="max-w-[16ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
                     Private by default. Capable by design.
                 </h2>
@@ -50,6 +50,25 @@ export function UseCases() {
                         );
                     })}
                 </ul>
+            </Reveal>
+            <Reveal delayMs={80} className="mt-12 border-t border-white/[0.1] pt-7">
+                <nav aria-label="ai.diy product guides">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-500">
+                        Explore the product
+                    </p>
+                    <ul className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-zinc-300">
+                        {SEO_GUIDES.map((guide) => (
+                            <li key={guide.slug}>
+                                <Link
+                                    to={guide.path}
+                                    className="underline decoration-white/20 underline-offset-4 transition-colors hover:text-white hover:decoration-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                                >
+                                    {guide.label}
+                                </Link>
+                            </li>
+                        ))}
+                    </ul>
+                </nav>
             </Reveal>
         </section>
     );

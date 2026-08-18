@@ -12,6 +12,7 @@ async function handle(request: Request): Promise<Response> {
     const response = await getChatGPTHandler().handler(request);
     const headers = new Headers(response.headers);
     headers.set("Cache-Control", "no-store");
+    headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
     const pathname = new URL(request.url).pathname;
     if (pathname.endsWith("/session") || pathname.endsWith("/status")) {
         const cookie = await refreshChatGPTSessionCookie(request);

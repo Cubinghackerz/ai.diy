@@ -55,6 +55,7 @@ import { providerNeedsKey } from "~/lib/provider-credentials";
 import { corsPreflight, withCors } from "~/lib/server/cors";
 import { getChatGPTHandler } from "~/lib/server/chatgpt-auth";
 import { normalizeProviderBaseUrl } from "~/lib/server/provider-url";
+import { findEnabledSearchConnector } from "~/lib/search/connectors";
 import {
     formatProviderError,
     httpStatusForProviderError,
@@ -110,6 +111,8 @@ interface ChatRequestBody {
     customSkills?: { name: string; content: string }[];
     /** When true the request runs as a delegated subagent (no ask_user/spawn_subagent). */
     subagentMode?: boolean;
+    /** Multi-model Preview uses only web, Python, and artifact tools. */
+    previewMode?: boolean;
     /** Agent Mode: plan → skills/tools → verify → synthesize. */
     agentMode?: boolean;
     openAICompatible?: {
@@ -512,10 +515,26 @@ export async function action({ request }: ActionFunctionArgs) {
         const mode = normalizeTokenMode(body.toolSettings?.tokenMode);
         const policy = tokenModePolicy(mode);
 
-        const loadedMcp = await loadMcpTools(body.mcpServers, policy);
-        mcpTools = loadedMcp.tools;
-        mcpClients = loadedMcp.clients;
+        if (body.previewMode !== true) {
+            const loadedMcp = await loadMcpTools(body.mcpServers, policy);
+            mcpTools = loadedMcp.tools;
+            mcpClients = loadedMcp.clients;
+        }
         const modelInstance = createChatModel({ ...body, request });
+        const activeSearchConnector = findEnabledSearchConnector(
+            body.toolSettings?.connectors,
+        );
+        if (activeSearchConnector) {
+            for (const name of Object.keys(mcpTools)) {
+                if (
+                    /^mcp_(?:parallel_search_mcp_(?:web_search|web_fetch)|firecrawl_keyless_firecrawl_(?:search|scrape|parse))$/i.test(
+                        name,
+                    )
+                ) {
+                    delete mcpTools[name];
+                }
+            }
+        }
         const mcpSearchAvailable = Object.keys(mcpTools).some((name) =>
             /^mcp_(?:parallel_search_mcp_(?:web_search|web_fetch)|firecrawl_keyless_firecrawl_(?:search|scrape|parse))$/i.test(name),
         );
@@ -530,29 +549,32 @@ export async function action({ request }: ActionFunctionArgs) {
         const linuxInvokedThisChat = toolInvokedInThread(body.messages, [
             "linux_environment_skill",
         ]);
-        const activeSkills: ForcedSkill[] = ensureLinuxSkill(
-            ensureCompactionSkill(
-                ensureUrlDoctorSkill(
-                    ensureFrontendSkill(
-                        ensureResearchSkill(body.customSkills, userText, {
-                            webSearchEnabled: body.toolSettings?.webSearchEnabled,
-                            alreadyInvoked: researchInvokedThisChat,
-                        }),
-                        userText,
-                    ),
-                    userText,
-                    {
-                        webSearchEnabled: body.toolSettings?.webSearchEnabled,
-                    },
-                ),
-                userText,
-            ),
-            userText,
-            {
-                linuxEnvironment: body.toolSettings?.linuxEnvironment,
-                alreadyInvoked: linuxInvokedThisChat,
-            },
-        );
+        const activeSkills: ForcedSkill[] =
+            body.previewMode === true
+                ? []
+                : ensureLinuxSkill(
+                      ensureCompactionSkill(
+                          ensureUrlDoctorSkill(
+                              ensureFrontendSkill(
+                                  ensureResearchSkill(body.customSkills, userText, {
+                                      webSearchEnabled: body.toolSettings?.webSearchEnabled,
+                                      alreadyInvoked: researchInvokedThisChat,
+                                  }),
+                                  userText,
+                              ),
+                              userText,
+                              {
+                                  webSearchEnabled: body.toolSettings?.webSearchEnabled,
+                              },
+                          ),
+                          userText,
+                      ),
+                      userText,
+                      {
+                          linuxEnvironment: body.toolSettings?.linuxEnvironment,
+                          alreadyInvoked: linuxInvokedThisChat,
+                      },
+                  );
         const requiredSkillTools = resolveRequiredSkillTools(activeSkills);
 
         const builtIn = await buildChatTools(
@@ -562,7 +584,8 @@ export async function action({ request }: ActionFunctionArgs) {
             },
             {
                 subagentMode: body.subagentMode === true,
-                suppressWebSearch: mcpSearchAvailable,
+                previewMode: body.previewMode === true,
+                suppressWebSearch: mcpSearchAvailable && !activeSearchConnector,
                 messages: body.messages,
                 provider: body.provider,
                 chatId: body.chatId,
@@ -571,7 +594,7 @@ export async function action({ request }: ActionFunctionArgs) {
         const tools: Record<string, Tool> =
             body.openAICompatible?.capabilityOverrides?.tools === false
                 ? {}
-                : { ...builtIn, ...mcpTools };
+                : { ...builtIn, ...(body.previewMode === true ? {} : mcpTools) };
 
         const forceCompaction = requiredSkillTools.includes("compaction_skill");
         const contextWindow = resolveModelContextWindow(body.provider, body.model);
@@ -583,7 +606,7 @@ export async function action({ request }: ActionFunctionArgs) {
             activeSkills,
             body.subagentMode === true ? "subagent" : "main",
             body.projectInstructions,
-            body.agentMode === true,
+            body.previewMode === true ? false : body.agentMode === true,
             mode,
             Object.keys(tools),
         );
@@ -605,7 +628,7 @@ export async function action({ request }: ActionFunctionArgs) {
             activeSkills,
             body.subagentMode === true ? "subagent" : "main",
             body.projectInstructions,
-            body.agentMode === true,
+            body.previewMode === true ? false : body.agentMode === true,
             mode,
             Object.keys(tools),
         );

@@ -37,7 +37,7 @@ export function Hero() {
                         )}
                         data-hero-step="1"
                     >
-                        The open-source AI workspace that lives on your machine.
+                        Your AI workspace lives in your browser.
                     </h1>
 
                     <p
@@ -47,9 +47,11 @@ export function Hero() {
                         )}
                         data-hero-step="2"
                     >
-                        ai.diy is a local-first, bring-your-own-key chat workspace. Keys, chats,
-                        Canvas, and knowledge stay in your browser — you pick from 17 cloud and
-                        local providers. No accounts, no server-side keys, no lock-in.
+                        ai.diy is a local-first, bring-your-own-key chat workspace. Chats, Canvas,
+                        knowledge, and settings stay in your browser by default while you choose
+                        from 20+ cloud and local provider integrations. Add web search, MCP tools,
+                        Python, and approved agents without giving up the workspace. No persistent
+                        provider keys are required on the server.
                     </p>
 
                     <div
@@ -78,7 +80,7 @@ export function Hero() {
                         data-hero-step="4"
                         aria-label="Key facts"
                     >
-                        {["LOCAL-FIRST", "17 PROVIDERS", "MIT LICENSED", "NO SERVER LLM KEYS"].map(
+                        {["LOCAL-FIRST", "20+ PROVIDERS", "MIT LICENSED", "NO PERSISTENT LLM KEYS"].map(
                             (fact) => (
                                 <li key={fact} className="flex items-center gap-2">
                                     <span

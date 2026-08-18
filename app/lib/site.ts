@@ -3,11 +3,11 @@ const configuredSiteUrl = import.meta.env.VITE_SITE_URL?.trim();
 
 export const SITE_URL = (configuredSiteUrl || DEFAULT_SITE_URL).replace(/\/+$/, "");
 export const SITE_NAME = "ai.diy";
-export const SITE_TITLE = "ai.diy | Open-Source, Self-Hosted AI Workspace";
+export const SITE_TITLE = "ai.diy | Browser-Owned AI Workspace";
 export const SITE_DESCRIPTION =
-    "ai.diy is an open-source, self-hosted AI workspace for BYOK chat. Keep keys, chats, memory, and knowledge in your browser while using 17 cloud or local providers.";
+    "ai.diy is a browser-owned, open-source AI workspace for BYOK chat. Keep workspace state in your browser while using 20+ cloud and local provider integrations through a self-hosted relay.";
 export const SITE_IMAGE_URL = `${SITE_URL}/og-image.png`;
-export const SITE_IMAGE_ALT = "ai.diy open-source self-hosted AI workspace";
+export const SITE_IMAGE_ALT = "ai.diy browser-owned AI workspace with a self-hosted relay";
 export const SITE_TWITTER_HANDLE = "@HeckingHacker";
 export const SITE_KEYWORDS =
     "open source AI workspace, self-hosted AI chat, BYOK AI, local-first AI, private AI workspace, Ollama chat, browser-based AI";

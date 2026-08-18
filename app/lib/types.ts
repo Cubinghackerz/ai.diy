@@ -41,6 +41,26 @@ export type ConnectorKind =
     | "s3"
     | "remote-mcp";
 
+export type ConnectorSearchRecency = "any" | "day" | "week" | "month" | "year";
+export type ExaSearchType = "auto" | "fast" | "instant" | "deep";
+export type ParallelSearchMode = "turbo" | "fast" | "basic" | "advanced";
+
+export interface ConnectorSearchOptions {
+    searchType?: ExaSearchType;
+    category?:
+        | ""
+        | "company"
+        | "publication"
+        | "news"
+        | "personal site"
+        | "financial report"
+        | "people";
+    mode?: ParallelSearchMode;
+    recency?: ConnectorSearchRecency;
+    includeDomains?: string;
+    excludeDomains?: string;
+}
+
 export interface ConnectorConfig {
     id: string;
     kind: ConnectorKind;
@@ -51,6 +71,7 @@ export interface ConnectorConfig {
     projectUrl?: string;
     bucket?: string;
     region?: string;
+    options?: ConnectorSearchOptions;
 }
 
 export interface ProviderConfig {
@@ -435,7 +456,7 @@ export const PROVIDER_DEFAULTS: Record<ProviderId, Omit<ProviderConfig, "apiKey"
     },
     lmstudio: {
         id: "lmstudio",
-        name: "LM Studio (Local)",
+        name: "LM Studio",
         baseUrl: "http://localhost:1234/v1",
     },
     xai: {
@@ -445,12 +466,12 @@ export const PROVIDER_DEFAULTS: Record<ProviderId, Omit<ProviderConfig, "apiKey"
     },
     ollama: {
         id: "ollama",
-        name: "Ollama (Local)",
+        name: "Ollama",
         baseUrl: "http://localhost:11434/v1",
     },
     custom: {
         id: "custom",
-        name: "Custom OpenAI Proxy",
+        name: "OpenAI Compatible",
         baseUrl: "http://localhost:1234/v1",
     },
 };
@@ -485,9 +506,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
         temperature: 0.7,
         maxTokens: null,
         topP: 1,
-        model: "gpt-5.6",
+        model: "gpt-5.6-luna",
         provider: "chatgpt",
-        lastModelsByProvider: { chatgpt: "gpt-5.6" },
+        lastModelsByProvider: { chatgpt: "gpt-5.6-luna" },
         reasoningEffort: "medium",
         imageSize: "1024x1024",
         imageCount: 1,
@@ -549,10 +570,10 @@ export const DEFAULT_MODELS: Record<ProviderId, ModelInfo[]> = {
         { id: "gpt-4o-mini-tts", name: "GPT-4o Mini TTS", provider: "openai", supportsAudio: true },
     ],
     chatgpt: [
+        { id: "gpt-5.6-luna", name: "GPT-5.6 Luna", provider: "chatgpt", contextWindow: 1050000, supportsTools: true, supportsVision: true, supportsReasoning: true },
         { id: "gpt-5.6", name: "GPT-5.6", provider: "chatgpt", contextWindow: 1050000, supportsTools: true, supportsVision: true, supportsReasoning: true },
         { id: "gpt-5.6-sol", name: "GPT-5.6 Sol", provider: "chatgpt", contextWindow: 1050000, supportsTools: true, supportsVision: true, supportsReasoning: true },
         { id: "gpt-5.6-terra", name: "GPT-5.6 Terra", provider: "chatgpt", contextWindow: 1050000, supportsTools: true, supportsVision: true, supportsReasoning: true },
-        { id: "gpt-5.6-luna", name: "GPT-5.6 Luna", provider: "chatgpt", contextWindow: 1050000, supportsTools: true, supportsVision: true, supportsReasoning: true },
         { id: "gpt-5.5", name: "GPT-5.5", provider: "chatgpt", contextWindow: 1050000, supportsTools: true, supportsVision: true, supportsReasoning: true },
         { id: "gpt-5.4", name: "GPT-5.4", provider: "chatgpt", contextWindow: 400000, supportsTools: true, supportsVision: true, supportsReasoning: true },
         { id: "gpt-5.4-mini", name: "GPT-5.4 Mini", provider: "chatgpt", contextWindow: 200000, supportsTools: true, supportsVision: true, supportsReasoning: true },

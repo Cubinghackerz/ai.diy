@@ -43,6 +43,9 @@ import {
     type McpServerConfig,
     type ConnectorConfig,
     type ConnectorKind,
+    type ConnectorSearchOptions,
+    type ExaSearchType,
+    type ParallelSearchMode,
     type ModelInfo,
     type Project,
     type PreviewModelConfig,
@@ -296,6 +299,31 @@ const SETTINGS_GROUPS: { label: string; items: SettingsNavItem[] }[] = [
 
 type ThreadItem = { id: string; title: string; projectId?: string | null };
 
+function SidebarBrand() {
+    const { settings } = useSettings();
+    const [systemDark, setSystemDark] = useState(false);
+    useEffect(() => {
+        const media = window.matchMedia("(prefers-color-scheme: dark)");
+        const sync = () => setSystemDark(media.matches);
+        sync();
+        media.addEventListener("change", sync);
+        return () => media.removeEventListener("change", sync);
+    }, []);
+    const darkSurface =
+        settings.theme === "dark" ||
+        settings.theme === "oled" ||
+        (settings.theme === "system" && systemDark);
+    return (
+        <img
+            src={versionedAsset(
+                darkSurface ? "/ai-diy-new-logo-white.png" : "/ai-diy-new-logo.png",
+            )}
+            alt="ai.diy"
+            className="h-6 w-auto max-w-[7.5rem] object-contain object-left"
+        />
+    );
+}
+
 export function AppSidebar({
     threads,
     projects,
@@ -338,16 +366,7 @@ export function AppSidebar({
             <div className="flex h-full flex-col">
             <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-3">
                 <div className="flex items-center gap-2 min-w-0">
-                    <img
-                        src={versionedAsset("/ai-diy-mark.png")}
-                        alt="ai.diy"
-                        className="h-5 w-auto max-w-[7.5rem] object-contain object-left dark:hidden"
-                    />
-                    <img
-                        src={versionedAsset("/ai-diy-mark-white.png")}
-                        alt="ai.diy"
-                        className="hidden h-5 w-auto max-w-[7.5rem] object-contain object-left dark:block"
-                    />
+                    <SidebarBrand />
                     <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-primary">
                         Beta
                     </span>
@@ -1197,31 +1216,35 @@ function SettingsPanel({
                                         const Icon = item.icon;
                                         const selected = section === item.id;
                                         return (
-                                            <button
+                                            <div
                                                 key={item.id}
-                                                type="button"
-                                                onClick={() => {
-                                                    hapticSelect();
-                                                    setSection(item.id);
-                                                }}
                                                 className={cn(
-                                                    "flex min-h-10 min-w-0 items-center gap-2.5 rounded-xl px-3 text-left text-sm font-medium outline-none transition-[background-color,color,transform] active:scale-[0.98]",
+                                                    "flex min-h-10 min-w-0 items-center rounded-xl pr-1.5",
                                                     selected
                                                         ? "bg-accent text-foreground shadow-sm"
                                                         : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
                                                 )}
-                                                aria-current={selected ? "page" : undefined}
                                             >
-                                                <Icon size={17} className="shrink-0" />
-                                                <span className="min-w-0 flex-1 truncate">
-                                                    {item.label}
-                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        hapticSelect();
+                                                        setSection(item.id);
+                                                    }}
+                                                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                                                    aria-current={selected ? "page" : undefined}
+                                                >
+                                                    <Icon size={17} className="shrink-0" />
+                                                    <span className="min-w-0 flex-1 truncate">
+                                                        {item.label}
+                                                    </span>
+                                                </button>
                                                 <Tooltip>
                                                     <TooltipTrigger
                                                         render={
-                                                            <span
-                                                                className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-background/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                                                                tabIndex={0}
+                                                            <button
+                                                                type="button"
+                                                                className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 outline-none transition-colors hover:bg-background/80 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
                                                                 aria-label={`About ${item.label}`}
                                                             />
                                                         }
@@ -1229,15 +1252,15 @@ function SettingsPanel({
                                                         <Info size={14} weight="regular" />
                                                     </TooltipTrigger>
                                                     <TooltipContent
-                                                        side="right"
-                                                        align="start"
-                                                        sideOffset={8}
+                                                        side="bottom"
+                                                        align="end"
+                                                        sideOffset={6}
                                                         className="max-w-56 leading-relaxed"
                                                     >
                                                         {item.description}
                                                     </TooltipContent>
                                                 </Tooltip>
-                                            </button>
+                                            </div>
                                         );
                                     })}
                                 </div>
@@ -1544,96 +1567,43 @@ function SettingsPanel({
             {section === "appearance" && (
                 <div className="flex flex-col gap-3">
                     <p className="text-[11px] leading-relaxed text-muted-foreground">
-                        Tune the workspace for the room you are in. OLED removes the
-                        canvas glow entirely for true-black displays.
+                        Choose the workspace surface. Onboarding always uses its own dark presentation.
                     </p>
                     <div className="grid grid-cols-2 gap-2">
-                    {(
-                        [
-                            {
-                                id: "dark",
-                                label: "Dark",
-                                description: "Soft black surfaces",
-                                icon: Moon,
-                                swatch: "bg-[#0a0a0a]",
-                            },
-                            {
-                                id: "light",
-                                label: "Light",
-                                description: "Bright paper canvas",
-                                icon: Sun,
-                                swatch: "bg-[#f7f7f7]",
-                            },
-                            {
-                                id: "system",
-                                label: "System",
-                                description: "Follow device theme",
-                                icon: Desktop,
-                                swatch: "bg-[linear-gradient(135deg,#f7f7f7_50%,#0a0a0a_50%)]",
-                            },
-                            {
-                                id: "oled",
-                                label: "OLED / Pure Black",
-                                description: "True #000 canvas",
-                                icon: Lightning,
-                                swatch: "bg-black",
-                            },
-                        ] as const
-                    ).map((t) => {
-                        const Icon = t.icon;
-                        const selected = settings.theme === t.id;
-                        return (
-                            <button
-                                key={t.id}
-                                type="button"
-                                onClick={() => {
-                                    hapticSelect();
-                                    updateSettings({ theme: t.id });
-                                }}
-                                className={cn(
-                                    "group flex min-w-0 flex-col items-start gap-2 rounded-2xl border p-2.5 text-left outline-none transition-[background-color,border-color,transform] active:scale-[0.98]",
-                                    selected
-                                        ? "border-primary/40 bg-primary/10 text-foreground"
-                                        : "border-border/70 text-muted-foreground hover:bg-accent hover:text-foreground",
-                                )}
-                            >
-                                <span
+                        {([
+                            { id: "dark", label: "Dark", description: "Soft black surfaces", icon: Moon, swatch: "bg-[#0a0a0a]" },
+                            { id: "light", label: "Light", description: "Bright paper canvas", icon: Sun, swatch: "bg-[#f7f7f7]" },
+                            { id: "system", label: "System", description: "Follow device theme", icon: Desktop, swatch: "bg-[linear-gradient(135deg,#f7f7f7_50%,#0a0a0a_50%)]" },
+                            { id: "oled", label: "OLED / Pure Black", description: "True #000 canvas", icon: Lightning, swatch: "bg-black" },
+                        ] as const).map((theme) => {
+                            const Icon = theme.icon;
+                            const selected = settings.theme === theme.id;
+                            return (
+                                <button
+                                    key={theme.id}
+                                    type="button"
+                                    onClick={() => {
+                                        hapticSelect();
+                                        updateSettings({ theme: theme.id });
+                                    }}
                                     className={cn(
-                                        "relative flex h-10 w-full items-end justify-between overflow-hidden rounded-xl border border-black/10 p-1.5",
-                                        t.swatch,
+                                        "group flex min-w-0 flex-col items-start gap-2 rounded-2xl border p-2.5 text-left outline-none transition-colors",
+                                        selected
+                                            ? "border-primary/40 bg-primary/10 text-foreground"
+                                            : "border-border/70 text-muted-foreground hover:bg-accent hover:text-foreground",
                                     )}
                                 >
-                                    <Icon
-                                        size={14}
-                                        className={cn(
-                                            t.id === "light"
-                                                ? "text-zinc-600"
-                                                : "text-zinc-300",
-                                        )}
-                                    />
-                                    {selected ? (
-                                        <CheckCircle
-                                            size={14}
-                                            weight="fill"
-                                            className={
-                                                t.id === "light"
-                                                    ? "text-zinc-700"
-                                                    : "text-white"
-                                            }
-                                        />
-                                    ) : null}
-                                </span>
-                                <span className="min-w-0">
-                                    <span className="block truncate text-[11px] font-semibold">
-                                        {t.label}
+                                    <span className={cn("relative flex h-10 w-full items-end justify-between overflow-hidden rounded-xl border border-black/10 p-1.5", theme.swatch)}>
+                                        <Icon size={14} className={theme.id === "light" ? "text-zinc-600" : "text-zinc-300"} />
+                                        {selected ? <CheckCircle size={14} weight="fill" className={theme.id === "light" ? "text-zinc-700" : "text-white"} /> : null}
                                     </span>
-                                    <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
-                                        {t.description}
+                                    <span className="min-w-0">
+                                        <span className="block truncate text-[11px] font-semibold">{theme.label}</span>
+                                        <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{theme.description}</span>
                                     </span>
-                                </span>
-                            </button>
-                        );
-                    })}
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
             )}
@@ -2495,7 +2465,7 @@ function ConnectorsSection() {
             <div>
                 <h3 className="text-xs font-semibold">Connectors <span className="text-[9px] uppercase tracking-wider text-primary">Beta</span></h3>
                 <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                    Search connectors are BYOK and sent only for the current request. The first enabled connector wins.
+                    Search connectors are BYOK and sent only for the current request. An enabled connector is used instead of Firecrawl or Parallel MCP search.
                 </p>
             </div>
             {SEARCH_CONNECTOR_OPTIONS.map((option) => {
@@ -2538,6 +2508,17 @@ function ConnectorsSection() {
                             </Button>
                         </div>
                         {status[option.kind] ? <p className="text-[10px] text-muted-foreground">{status[option.kind]}</p> : null}
+                        {option.kind === "exa" || option.kind === "parallel" ? (
+                            <ConnectorSearchOptionsFields
+                                connector={connector}
+                                onChange={(options) =>
+                                    saveConnector({
+                                        ...connector,
+                                        options: { ...connector.options, ...options },
+                                    })
+                                }
+                            />
+                        ) : null}
                         {helpKind === option.kind ? (
                             <ConnectorHelp kind={option.kind} />
                         ) : null}
@@ -2547,6 +2528,125 @@ function ConnectorsSection() {
             <div className="rounded-xl border border-dashed border-border/70 p-3 text-[11px] leading-relaxed text-muted-foreground">
                 <strong className="text-foreground">GitHub, Supabase, PostgreSQL, S3:</strong> connect these through a permission-scoped Remote MCP server in MCP Beta. Direct database/service-role proxying is intentionally blocked.
             </div>
+        </div>
+    );
+}
+
+function ConnectorSearchOptionsFields({
+    connector,
+    onChange,
+}: {
+    connector: ConnectorConfig;
+    onChange: (options: ConnectorSearchOptions) => void;
+}) {
+    const options = connector.options ?? {};
+    const selectClass =
+        "h-8 rounded-lg border border-border/70 bg-transparent px-2 text-[11px] outline-none";
+    return (
+        <div className="grid grid-cols-2 gap-1.5">
+            {connector.kind === "exa" ? (
+                <>
+                    <label className="flex flex-col gap-1 text-[10px] text-muted-foreground">
+                        Search type
+                        <select
+                            value={options.searchType ?? "auto"}
+                            onChange={(event) =>
+                                onChange({
+                                    searchType: event.target.value as ExaSearchType,
+                                })
+                            }
+                            className={selectClass}
+                        >
+                            <option value="auto">Auto</option>
+                            <option value="fast">Fast</option>
+                            <option value="instant">Instant</option>
+                            <option value="deep">Deep</option>
+                        </select>
+                    </label>
+                    <label className="flex flex-col gap-1 text-[10px] text-muted-foreground">
+                        Category
+                        <select
+                            value={options.category ?? ""}
+                            onChange={(event) =>
+                                onChange({
+                                    category: event.target.value as NonNullable<
+                                        ConnectorSearchOptions["category"]
+                                    >,
+                                })
+                            }
+                            className={selectClass}
+                        >
+                            <option value="">Any</option>
+                            <option value="news">News</option>
+                            <option value="publication">Publication</option>
+                            <option value="company">Company</option>
+                            <option value="people">People</option>
+                            <option value="personal site">Personal site</option>
+                            <option value="financial report">Financial report</option>
+                        </select>
+                    </label>
+                </>
+            ) : (
+                <label className="flex flex-col gap-1 text-[10px] text-muted-foreground">
+                    Mode
+                    <select
+                        value={options.mode ?? "advanced"}
+                        onChange={(event) =>
+                            onChange({
+                                mode: event.target.value as ParallelSearchMode,
+                            })
+                        }
+                        className={selectClass}
+                    >
+                        <option value="turbo">Turbo</option>
+                        <option value="fast">Fast</option>
+                        <option value="basic">Basic</option>
+                        <option value="advanced">Advanced</option>
+                    </select>
+                </label>
+            )}
+            <label className="flex flex-col gap-1 text-[10px] text-muted-foreground">
+                Recency
+                <select
+                    value={options.recency ?? "any"}
+                    onChange={(event) =>
+                        onChange({
+                            recency: event.target.value as NonNullable<
+                                ConnectorSearchOptions["recency"]
+                            >,
+                        })
+                    }
+                    className={selectClass}
+                >
+                    <option value="any">Any time</option>
+                    <option value="day">Past day</option>
+                    <option value="week">Past week</option>
+                    <option value="month">Past month</option>
+                    <option value="year">Past year</option>
+                </select>
+            </label>
+            <label className="col-span-2 flex flex-col gap-1 text-[10px] text-muted-foreground">
+                Include domains
+                <Input
+                    value={options.includeDomains ?? ""}
+                    onChange={(event) =>
+                        onChange({ includeDomains: event.target.value })
+                    }
+                    placeholder="arxiv.org, openai.com"
+                    className="h-8 rounded-lg text-xs"
+                />
+            </label>
+            <label className="col-span-2 flex flex-col gap-1 text-[10px] text-muted-foreground">
+                Exclude domains
+                <Input
+                    value={options.excludeDomains ?? ""}
+                    onChange={(event) =>
+                        onChange({ excludeDomains: event.target.value })
+                    }
+                    placeholder="reddit.com, x.com"
+                    className="h-8 rounded-lg text-xs"
+                />
+            </label>
         </div>
     );
 }
@@ -4065,7 +4165,7 @@ function KeysSection() {
             const model =
                 manualModelId.trim() || discoveredModels[0]?.id || "default-model";
             updateProvider(active, {
-                name: draftName.trim() || "Custom OpenAI Proxy",
+                name: draftName.trim() || "OpenAI Compatible",
                 apiKey: draftKey.trim() || localProviderKey(active),
                 baseUrl: draftUrl.trim(),
                 enabled: true,

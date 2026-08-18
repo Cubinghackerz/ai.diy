@@ -12,20 +12,20 @@ Technical self-hosters evaluating ai.diy: developers and privacy-minded people w
 
 ## Product Purpose
 
-ai.diy is a local-first, bring-your-own-key AI chat workspace for self-hosting on a standard Node.js server or Docker. The server needs no LLM credentials. Users bring their own provider keys (OpenAI, Anthropic, Gemini, local Ollama/LM Studio, and many more), and everything — chats, files, Canvas artifacts (including Python-generated images and binaries), memory, knowledge-base chunks, usage events, and preview sessions — persists in the browser via IndexedDB and localStorage.
+ai.diy is a local-first, bring-your-own-key AI chat workspace for self-hosting on a standard Node.js server or Docker. The server needs no persistent provider credentials. Users bring their own provider keys (OpenAI, Anthropic, Gemini, local Ollama/LM Studio, and many more), and everything — chats, files, Canvas artifacts (including Python-generated images and binaries), memory, knowledge-base chunks, usage events, and preview sessions — persists in the browser via IndexedDB and localStorage.
 
 Success for the landing page: a technical visitor understands within seconds that this is a BYOK, local-first workspace they can self-host, and acts (opens the workspace / starts the setup).
 
 ## Positioning
 
-The claim a neighboring product could not copy truthfully: a self-hosted AI workspace where no LLM key ever needs to live on the server, where the provider list spans cloud and local models, and where the user's conversation data stays in their own browser. The user picks the model; the product keeps out of the way.
+The claim a neighboring product could not copy truthfully: a self-hosted AI workspace where no provider key needs to be configured as a persistent server secret, where the provider list spans cloud and local models, and where the user's conversation data stays in their own browser. The user picks the model; the product keeps out of the way.
 
 ## Operating Context
 
 - Runs on a standard Node.js server or Docker; no server-side LLM credentials required.
 - Browser-side persistence: chats, messages, Canvas artifacts, memory, on-device knowledge base, usage ledger, and preview sessions in IndexedDB; settings and keys in localStorage.
 - Provider API keys are stored in the browser and relayed per request to the chosen provider endpoint through the Node server.
-- Supports 17 provider integrations (OpenAI, Anthropic, Gemini, Groq, OpenRouter, DeepSeek, Bedrock, Azure, Vertex, Vercel Gateway, Together, Mistral, Hugging Face, LM Studio, xAI, Ollama, custom OpenAI-compatible).
+- Supports 20+ provider integrations across cloud, subscription, and local endpoints, plus custom OpenAI-compatible endpoints.
 - Free web search from the start via bundled keyless MCP servers (Firecrawl, Parallel).
 - Voice dictation via browser Web Speech; Python execution via browser-side Pyodide (generated files land in Canvas and are saved with the chat).
 - Client soft spend/token/RPM guardrails per key fingerprint, plus optional server sliding-window rate limits.
@@ -48,7 +48,7 @@ Confirmed functionality (from README and code):
 
 Known constraints:
 - `npm run dev` has a known composer input regression; production build (`npm run build && npm start`) is the supported local path.
-- Settings are encrypted at rest with AES-GCM (envelope key in IndexedDB; see `app/lib/settings-crypto.ts`).
+- Settings are encrypted at rest with AES-GCM when Web Crypto and IndexedDB are available (envelope key in IndexedDB; see `app/lib/settings-crypto.ts`). Fallback environments may use plaintext storage.
 - Subagents require browser approval and wait for each nested session to finish before the main chat continues.
 - Very large binary artifacts may skip IndexedDB persistence when over the client size cap; download remains available in-session.
 - Security posture: LLM keys proxied in transit only, private-network URL rejection, no stdio MCP, redirects rejected; configure `RATE_LIMIT_*` before public exposure.
@@ -65,7 +65,7 @@ Known constraints:
 
 - README.md documents all product facts, features, trust boundary, and environment variables (authority for claims).
 - `public/ai-diy.png` logo, `public/landing-logos/*`, `public/firecrawl-{dark,light}.png`, `public/parallel-{dark,light}.png`, `public/workspace-demo.gif`.
-- 17-provider network, bundled MCP search, local memory/knowledge/artifacts/usage/backup features all implemented and runnable.
+- 20+ provider integrations, bundled MCP search, local memory/knowledge/artifacts/usage/backup features all implemented and runnable.
 - No testimonials, customers, pricing, or benchmark data exist; must not be fabricated.
 
 ## Product Principles

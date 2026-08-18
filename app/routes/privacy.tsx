@@ -36,7 +36,12 @@ export default function PrivacyPage() {
             <LegalSection title="Data stored in your browser">
                 <p>Depending on the features you use, ai.diy stores the following locally:</p>
                 <LegalList>
-                    <li>Provider settings and API keys in localStorage. Settings are not encrypted at rest today.</li>
+                    <li>
+                        Provider settings and API keys in browser storage. When Web Crypto and
+                        IndexedDB are available, the settings payload is encrypted at rest with
+                        AES-GCM; the envelope key is stored separately in IndexedDB. Fallback
+                        environments may use plaintext storage.
+                    </li>
                     <li>Chats, attachments, threads, Canvas artifacts, memory, knowledge-base indexes, usage events, and preview sessions in browser storage.</li>
                     <li>Optional cloud-backup credentials in the browser so the client can talk to your chosen storage endpoint.</li>
                 </LegalList>

@@ -2,6 +2,15 @@
   "buildCommand": "npm run build",
   "installCommand": "npm install",
   "devCommand": "npm run dev",
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" },
+        { "key": "Cache-Control", "value": "no-store" }
+      ]
+    }
+  ],
   "redirects": [
     {
       "source": "/:path*",

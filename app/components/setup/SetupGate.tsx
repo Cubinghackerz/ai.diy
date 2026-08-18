@@ -61,6 +61,17 @@ export function SetupGate() {
     const [error, setError] = useState<string | null>(null);
     const [chatGptRefreshOpen, setChatGptRefreshOpen] = useState(false);
 
+    useEffect(() => {
+        const root = document.documentElement;
+        const hadDark = root.classList.contains("dark");
+        const hadOled = root.classList.contains("oled");
+        root.classList.add("dark", "oled");
+        return () => {
+            root.classList.toggle("dark", hadDark);
+            root.classList.toggle("oled", hadOled);
+        };
+    }, []);
+
     const local = isLocalProvider(provider);
     const keyReady = local || apiKey.trim().length > 0;
 
@@ -73,6 +84,27 @@ export function SetupGate() {
         setVerified(false);
         setError(null);
     }, [provider]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => {
+        if (!loaded || !isAuthenticated || settings.setupComplete) return;
+        const model =
+            DEFAULT_MODELS.chatgpt?.find((item) => item.id === "gpt-5.6-luna")?.id ||
+            "gpt-5.6-luna";
+        if (settings.chat.provider !== "chatgpt") {
+            updateSettings({ chatgptLoginEnabled: true });
+            updateProvider("chatgpt", { apiKey: "", enabled: true });
+            updateChat({ provider: "chatgpt", model });
+            setProvider("chatgpt");
+        }
+    }, [
+        loaded,
+        isAuthenticated,
+        settings.setupComplete,
+        settings.chat.provider,
+        updateChat,
+        updateProvider,
+        updateSettings,
+    ]);
 
     const selectProvider = useCallback((id: ProviderId) => {
         hapticSelect();
@@ -116,8 +148,17 @@ export function SetupGate() {
 
         updateProvider(provider, {
             apiKey: storedKey,
-            baseUrl: baseUrl || PROVIDER_DEFAULTS[provider].baseUrl,
+            baseUrl: baseUrl.trim() || PROVIDER_DEFAULTS[provider].baseUrl,
             enabled: true,
+            ...(provider === "custom"
+                ? {
+                      openAICompatible: {
+                          apiMode: "chat",
+                          reasoningWithTools: "auto",
+                          authMode: apiKey.trim() ? "bearer" : "none",
+                      },
+                  }
+                : {}),
         });
         updateChat({ provider, model });
         updateSettings({ setupComplete: true });
@@ -134,7 +175,10 @@ export function SetupGate() {
     ]);
 
     const handleChatGPTAuthenticated = useCallback(() => {
-        const chatGptModel = DEFAULT_MODELS.chatgpt?.[0]?.id || "gpt-5.6";
+        const chatGptModel =
+            DEFAULT_MODELS.chatgpt?.find((model) => model.id === "gpt-5.6-luna")?.id ||
+            DEFAULT_MODELS.chatgpt?.[0]?.id ||
+            "gpt-5.6-luna";
         updateSettings({ chatgptLoginEnabled: true });
         updateProvider("chatgpt", { apiKey: "", enabled: true });
         updateChat({ provider: "chatgpt", model: chatGptModel });
@@ -199,7 +243,8 @@ export function SetupGate() {
                         </h1>
                         <p className="mx-auto max-w-md text-[14px] leading-relaxed text-zinc-400">
                             Connect a provider, live-test the key, then unlock models.
-                            Credentials stay in this browser — never on the server.
+                            Credentials stay in browser storage and pass through the relay only for
+                            the request you send.
                         </p>
                     </div>
                     <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 font-mono text-[10px] tracking-wide text-zinc-400">

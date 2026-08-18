@@ -13,6 +13,8 @@ Pass/fail matrix derived from README “Available” features. Test from a **cle
 | 5 | Model discovery | Live list loads | Bad key / offline → fallback | | |
 | 6 | Model selection | Pick model, chat uses it | Unavailable model | | |
 | 7 | Multi-model Preview | 2–3 models + optional fusion | Missing key on one lane | | |
+| 7a | Preview to regular chat | Select an existing chat or create New Chat from Preview; Preview exits and the correct thread loads | Preview run is active, interrupted, or restored | | |
+| 7b | Preview lifecycle | Re-enter Preview, reload, retry a lane, remove a lane, and inspect per-run artifacts | No duplicate sends, orphaned streams, shared Canvas artifacts, or stale running state | | |
 | 8 | Web search | Model uses search tool | Engine down / no results | | |
 | 9 | Search connectors | Test Tavily/Brave/Exa/Parallel | Bad connector key | | |
 | 10 | Remote MCP | Enable Firecrawl/Parallel MCP | Bad URL / stdio rejected | | |

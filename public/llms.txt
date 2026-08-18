@@ -1,6 +1,6 @@
 # ai.diy
 
-> ai.diy is an open-source, self-hosted AI workspace for bring-your-own-key (BYOK) chat.
+> ai.diy is a browser-owned, open-source AI workspace for bring-your-own-key (BYOK) chat.
 
 ## Canonical site
 
@@ -10,13 +10,21 @@
 - Privacy: https://ai-diy-demo.vercel.app/privacy
 - Terms: https://ai-diy-demo.vercel.app/terms
 
+## Product guides
+
+- Self-hosted AI: https://ai-diy-demo.vercel.app/self-hosted-ai
+- Local AI with Ollama and LM Studio: https://ai-diy-demo.vercel.app/local-ai
+- MCP tools: https://ai-diy-demo.vercel.app/mcp
+- AI agents and subagents: https://ai-diy-demo.vercel.app/agents
+- Multi-model Preview: https://ai-diy-demo.vercel.app/multi-model
+
 ## Product summary
 
-Users connect their own cloud or local AI providers and keep chats, files, Canvas artifacts, memory, knowledge-base chunks, usage events, and preview sessions in browser storage. Provider keys are stored in the browser and relayed per request. The Node server does not need LLM credentials.
+Users connect their own cloud or local AI providers and keep chats, files, Canvas artifacts, memory, knowledge-base chunks, usage events, and preview sessions in browser storage. Provider keys are stored in the browser and relayed per request. When supported, settings are encrypted at rest with AES-GCM; fallback environments may use plaintext storage. The Node server does not need persistent provider credentials, but it can observe relayed traffic and enabled tools can contact their own services.
 
 ## Supported providers
 
-OpenAI, Anthropic, Google Gemini, Groq, OpenRouter, DeepSeek, xAI, Ollama, Mistral, Hugging Face, Amazon Bedrock, Azure, Vertex, Vercel Gateway, Together, LM Studio, and custom OpenAI-compatible endpoints.
+20+ integrations including OpenAI, ChatGPT subscription, Anthropic, Google Gemini, Groq, Cerebras, Fireworks, Perplexity, Cohere, OpenRouter, DeepSeek, xAI, Ollama, Mistral, Hugging Face, Amazon Bedrock, Azure, Vertex, Vercel Gateway, Together, LM Studio, and custom OpenAI-compatible endpoints.
 
 ## Capabilities
 
@@ -28,4 +36,4 @@ OpenAI, Anthropic, Google Gemini, Groq, OpenRouter, DeepSeek, xAI, Ollama, Mistr
 
 ## Important boundaries
 
-ai.diy does not provide model credits or replace an AI provider. Provider costs, quotas, availability, and data policies remain controlled by each provider. A hosted instance operator can observe request traffic in transit; self-host for infrastructure control. The source is MIT licensed.
+ai.diy does not provide model credits or replace an AI provider. Provider costs, quotas, availability, and data policies remain controlled by each provider. Web search, URL fetch, MCP, connectors, backups, and ChatGPT subscription login have additional service or session boundaries. A hosted instance operator can observe request traffic in transit; self-host for infrastructure control. The source is MIT licensed.
