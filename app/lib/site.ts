@@ -1,4 +1,4 @@
-const DEFAULT_SITE_URL = "https://ai-diy-demo.vercel.app";
+const DEFAULT_SITE_URL = "https://tryaidiy.com";
 const configuredSiteUrl = import.meta.env.VITE_SITE_URL?.trim();
 
 export const SITE_URL = (configuredSiteUrl || DEFAULT_SITE_URL).replace(/\/+$/, "");

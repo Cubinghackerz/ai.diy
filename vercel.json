@@ -14,7 +14,7 @@
   "redirects": [
     {
       "source": "/:path*",
-      "destination": "https://ai-diy-demo.vercel.app/:path*",
+      "destination": "https://tryaidiy.com/:path*",
       "permanent": true,
       "has": [
         {

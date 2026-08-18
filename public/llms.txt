@@ -4,19 +4,19 @@
 
 ## Canonical site
 
-- https://ai-diy-demo.vercel.app/
-- Workspace: https://ai-diy-demo.vercel.app/workspace
+- https://tryaidiy.com/
+- Workspace: https://tryaidiy.com/workspace
 - Source code: https://github.com/Cubinghackerz/ai.diy
-- Privacy: https://ai-diy-demo.vercel.app/privacy
-- Terms: https://ai-diy-demo.vercel.app/terms
+- Privacy: https://tryaidiy.com/privacy
+- Terms: https://tryaidiy.com/terms
 
 ## Product guides
 
-- Self-hosted AI: https://ai-diy-demo.vercel.app/self-hosted-ai
-- Local AI with Ollama and LM Studio: https://ai-diy-demo.vercel.app/local-ai
-- MCP tools: https://ai-diy-demo.vercel.app/mcp
-- AI agents and subagents: https://ai-diy-demo.vercel.app/agents
-- Multi-model Preview: https://ai-diy-demo.vercel.app/multi-model
+- Self-hosted AI: https://tryaidiy.com/self-hosted-ai
+- Local AI with Ollama and LM Studio: https://tryaidiy.com/local-ai
+- MCP tools: https://tryaidiy.com/mcp
+- AI agents and subagents: https://tryaidiy.com/agents
+- Multi-model Preview: https://tryaidiy.com/multi-model
 
 ## Product summary
 
