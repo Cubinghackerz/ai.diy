@@ -47,11 +47,9 @@ export function Hero() {
                         )}
                         data-hero-step="2"
                     >
-                        ai.diy is a local-first, bring-your-own-key chat workspace. Chats, Canvas,
-                        knowledge, and settings stay in your browser by default while you choose
-                        from 20+ cloud and local provider integrations. Add web search, MCP tools,
-                        Python, and approved agents without giving up the workspace. No persistent
-                        provider keys are required on the server.
+                        ai.diy is a browser-owned BYOK workspace for 20+ cloud and local providers.
+                        Keep chats, Canvas, knowledge, and settings in your browser, then add search,
+                        MCP, Python, and agents. No persistent provider keys are required on the server.
                     </p>
 
                     <div

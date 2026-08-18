@@ -18,7 +18,7 @@ const NODES = [
     {
         id: "provider",
         label: "Chosen provider",
-        status: "YOURS",
+        status: "CHOSEN",
         tone: "provider" as const,
         lines: ["20+ cloud and local providers", "Ollama / custom endpoint", "You pick the model"],
     },
@@ -36,7 +36,7 @@ export function TrustBoundary({ className }: { className?: string }) {
                     <span>LOCAL DATA PLANE</span>
                     <span className="inline-flex items-center gap-1.5 tracking-normal text-[var(--landing-mint,#3DFFB0)]">
                         <span className="size-1.5 rounded-full bg-[var(--landing-mint,#3DFFB0)]" />
-                        RELAY · NO STORE
+                        RELAY · TRANSIT ONLY
                     </span>
                 </div>
 

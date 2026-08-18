@@ -5,7 +5,7 @@
 
 **Your AI workspace lives in your browser.**
 
-**Live demo:** [ai-diy-demo.vercel.app](https://ai-diy-demo.vercel.app/)
+**Live demo:** [tryaidiy.com](https://tryaidiy.com/)
 
 Local-first, bring-your-own-key chat for Node or Docker. Your workspace state stays in the browser by default, while the server relays requests to the model and tools you choose. Provider API keys are not required as persistent server configuration.
 
@@ -96,7 +96,7 @@ Enable Agent Mode under **Settings → Experimental**. The model plans, selects 
 
 ## Knowledge Base
 
-**Settings → Knowledge Base** uploads documents for private on-device RAG (browser WASM embeddings + HNSW). The model can call `knowledge_search` / `knowledge_list`. Nothing is uploaded to a vendor vector store.
+**Settings → Knowledge Base** uploads documents for on-device RAG (browser WASM embeddings + HNSW). The index stays local and is not uploaded to a vendor vector store, but retrieved context may be sent to the selected cloud model. The model can call `knowledge_search` / `knowledge_list`.
 
 ## Usage Guardrails
 

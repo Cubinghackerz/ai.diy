@@ -12,7 +12,7 @@ const CASES = [
     {
         icon: Files,
         title: "Private document RAG",
-        body: "Search your notes and PDFs with on-device embeddings. The knowledge base never leaves this machine.",
+        body: "Search your notes and PDFs with on-device embeddings. The index stays local, but retrieved context may be sent to the selected cloud model.",
     },
     {
         icon: SquareHalf,
@@ -30,7 +30,7 @@ export function UseCases() {
         >
             <Reveal>
                 <h2 className="max-w-[16ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
-                    Private by default. Capable by design.
+                    Browser-owned by default. Capable by design.
                 </h2>
             </Reveal>
             <Reveal delayMs={40} className="mt-12">

@@ -113,7 +113,7 @@ Temporary preview testing:
 npx vercel
 ```
 
-For a public launch, configure a branded domain and set `VITE_SITE_URL` at build time so canonical URLs, sitemap entries, Open Graph metadata, and robots output use that domain. Do not use the `ai-diy-demo.vercel.app` hostname as the long-term launch identity. No persistent provider API keys are required in server environment variables.
+For the public launch, use `https://tryaidiy.com/` and set `VITE_SITE_URL` at build time so canonical URLs, sitemap entries, Open Graph metadata, and robots output use that domain. No persistent provider API keys are required in server environment variables.
 
 ## Vercel Connect (Optional, Beta)
 

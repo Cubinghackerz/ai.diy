@@ -11,7 +11,7 @@ export const SITE_IMAGE_ALT = "ai.diy browser-owned AI workspace with a self-hos
 export const SITE_TWITTER_HANDLE = "@HeckingHacker";
 export const SITE_KEYWORDS =
     "open source AI workspace, self-hosted AI chat, BYOK AI, local-first AI, private AI workspace, Ollama chat, browser-based AI";
-export const SITE_LAST_MODIFIED = "2026-08-16";
+export const SITE_LAST_MODIFIED = "2026-08-18";
 export const SITE_LOGO_URL = `${SITE_URL}/ai-diy-new-logo.png`;
 export const SITE_REPOSITORY_URL = "https://github.com/Cubinghackerz/ai.diy";
 export const SITE_SOCIAL_URLS = [
