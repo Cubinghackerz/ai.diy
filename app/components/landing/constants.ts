@@ -2,6 +2,8 @@ export const GITHUB_REPO = "Cubinghackerz/ai.diy";
 export const GITHUB_URL = `https://github.com/${GITHUB_REPO}`;
 export const DOCS_URL = `${GITHUB_URL}#readme`;
 export const TWITTER_URL = "https://x.com/HeckingHacker";
+export const SUPPORT_EMAIL = "support@tryaidiy.com";
+export const SUPPORT_MAILTO = `mailto:${SUPPORT_EMAIL}`;
 export const VERCEL_DEPLOY_URL =
     "https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FCubinghackerz%2Fai.diy&project-name=ai-diy-preview";
 

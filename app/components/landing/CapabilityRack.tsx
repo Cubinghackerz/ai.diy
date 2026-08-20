@@ -51,7 +51,7 @@ export function CapabilityRack() {
             data-anim-gate="capabilities"
         >
             <MaskedHeading className="max-w-[18ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
-                Tools, storage, and deployment on your terms.
+                    Create files, presentations, and code with your own models.
             </MaskedHeading>
 
             <Reveal delayMs={40} className="mt-12">

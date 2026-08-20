@@ -80,6 +80,16 @@ check("install allows only registry specs", install.kind === "command" && !insta
 const exported = planNpmProject({ action: "export", project: "demo" });
 check("export uses the stable project helper", exported.kind === "export" && exported.command.includes("npm-project-helper.py"));
 check("export stays in temporary VM storage", exported.kind === "export" && exported.archivePath.startsWith("/tmp/aidiy-demo"));
+const preview = planNpmProject({ action: "preview", project: "demo" });
+check("preview defaults to dev", preview.kind === "command" && preview.command.includes("npm run 'dev'"));
+check("preview rejects arbitrary scripts", (() => {
+  try {
+    planNpmProject({ action: "preview", project: "demo", script: "build" });
+    return false;
+  } catch {
+    return true;
+  }
+})());
 check("run rejects arbitrary scripts", (() => {
   try {
     planNpmProject({ action: "run", project: "demo", script: "publish" });

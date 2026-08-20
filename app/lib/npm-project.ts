@@ -29,6 +29,7 @@ export const NPM_PROJECT_ACTIONS = [
     "write",
     "install",
     "run",
+    "preview",
     "read",
     "inspect",
     "export",
@@ -276,6 +277,17 @@ export function planNpmProject(input: NpmProjectInput): NpmProjectPlan {
                 throw new Error(
                     `Script must be one of: ${NPM_PROJECT_SCRIPTS.join(", ")}.`,
                 );
+            }
+            return {
+                kind: "command",
+                cwd: root,
+                command: `set -eu\nnpm run ${shellQuote(script)}`,
+            };
+        }
+        case "preview": {
+            const script = String(input.script ?? "dev").trim();
+            if (!(script === "dev" || script === "start" || script === "preview")) {
+                throw new Error("Preview script must be dev, start, or preview.");
             }
             return {
                 kind: "command",

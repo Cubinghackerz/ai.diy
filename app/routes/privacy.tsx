@@ -69,7 +69,11 @@ export default function PrivacyPage() {
 
             <LegalSection title="Contact">
                 <p>
-                    Questions or corrections can be raised through the project repository or the official X account linked in the footer. ai.diy is open source, so you can also inspect the implementation and deploy it on infrastructure you control.
+                    Questions or corrections can be sent to{" "}
+                    <a href="mailto:support@tryaidiy.com" className="text-zinc-200 underline decoration-white/20 underline-offset-4 hover:decoration-white/60">
+                        support@tryaidiy.com
+                    </a>
+                    , or raised through the project repository or the official X account linked in the footer. ai.diy is open source, so you can also inspect the implementation and deploy it on infrastructure you control.
                 </p>
             </LegalSection>
         </LegalPage>

@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import { ArrowSquareOut, XLogo } from "@phosphor-icons/react";
 import { BrandMark } from "./BrandMark";
-import { DOCS_URL, GITHUB_URL, TWITTER_URL } from "./constants";
+import { DOCS_URL, GITHUB_URL, SUPPORT_EMAIL, SUPPORT_MAILTO, TWITTER_URL } from "./constants";
 import { SEO_GUIDES } from "~/lib/seo-pages";
 
 const linkClass =
@@ -20,9 +20,15 @@ export function LandingFooter() {
                         />
                         All systems normal
                     </p>
-                    <p className="mt-4 max-w-xs text-[13px] leading-relaxed text-zinc-400">
-                        Open tools for useful thinking. MIT licensed.
-                    </p>
+                     <p className="mt-4 max-w-xs text-[13px] leading-relaxed text-zinc-400">
+                         Open tools for useful thinking. MIT licensed.
+                     </p>
+                     <a
+                         href={SUPPORT_MAILTO}
+                         className={`${linkClass} mt-3 text-[13px] text-zinc-400`}
+                     >
+                         {SUPPORT_EMAIL}
+                     </a>
                 </div>
                 <div className="flex flex-wrap gap-x-14 gap-y-8 text-[13px]">
                     <div>
@@ -120,6 +126,11 @@ export function LandingFooter() {
                                 <Link to="/terms" className={linkClass}>
                                     Terms
                                 </Link>
+                            </li>
+                            <li>
+                                <a href={SUPPORT_MAILTO} className={linkClass}>
+                                    Contact
+                                </a>
                             </li>
                         </ul>
                     </div>

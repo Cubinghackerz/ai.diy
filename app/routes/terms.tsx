@@ -62,7 +62,11 @@ export default function TermsPage() {
 
             <LegalSection title="Changes and contact">
                 <p>
-                    These terms may be updated as the beta evolves. Material changes will be reflected in this page. Questions can be raised through the GitHub repository or the official X account linked in the footer.
+                    These terms may be updated as the beta evolves. Material changes will be reflected in this page. Questions can be sent to{" "}
+                    <a href="mailto:support@tryaidiy.com" className="text-zinc-200 underline decoration-white/20 underline-offset-4 hover:decoration-white/60">
+                        support@tryaidiy.com
+                    </a>
+                    , or raised through the GitHub repository or the official X account linked in the footer.
                 </p>
             </LegalSection>
         </LegalPage>

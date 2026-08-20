@@ -1,7 +1,7 @@
 import { ArrowLeft, ArrowUpRight, XLogo } from "@phosphor-icons/react";
 import { Link } from "react-router";
 import type { ReactNode } from "react";
-import { GITHUB_URL, TWITTER_URL } from "~/components/landing/constants";
+import { GITHUB_URL, SUPPORT_EMAIL, SUPPORT_MAILTO, TWITTER_URL } from "~/components/landing/constants";
 
 export function LegalPage({
     title,
@@ -82,6 +82,12 @@ export function LegalPage({
                         >
                             <XLogo weight="light" className="size-3.5" />
                             X
+                        </a>
+                        <a
+                            href={SUPPORT_MAILTO}
+                            className="transition-colors hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                        >
+                            {SUPPORT_EMAIL}
                         </a>
                         <a
                             href={GITHUB_URL}

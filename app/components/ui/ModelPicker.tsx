@@ -218,7 +218,7 @@ export function SearchableModelSelect({
     const catalog = useModelCatalog();
 
     useEffect(() => {
-        if (!open) setHovered(null);
+        setHovered(null);
     }, [open, setHovered]);
 
     useEffect(() => {
@@ -247,7 +247,7 @@ export function SearchableModelSelect({
         width: 360,
         maxHeight: 320,
         align: "left",
-        zIndex: 100,
+        zIndex: 140,
     });
 
     return (
@@ -274,7 +274,7 @@ export function SearchableModelSelect({
                     }
                 }}
                 onMouseLeave={() => setHovered(null)}
-                className="flex h-10 w-full items-center justify-between gap-3 rounded-xl border border-input bg-background px-3 text-left outline-none transition-colors hover:border-foreground/25 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+                className="flex h-10 w-full items-center justify-between gap-3 rounded-xl border border-input bg-background px-3 text-left text-foreground outline-none transition-colors hover:border-foreground/25 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
                 aria-haspopup="listbox"
                 aria-expanded={open}
                 aria-label="Choose model"
@@ -286,7 +286,7 @@ export function SearchableModelSelect({
                         size={16}
                     />
                 ) : null}
-                <span className="min-w-0 truncate text-sm font-medium">
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
                     {selected?.name || value || "Choose a model"}
                 </span>
                 <CaretDown
@@ -305,7 +305,7 @@ export function SearchableModelSelect({
                         style={menuStyle}
                         className="overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl shadow-black/20"
                     >
-                    <Command className="flex max-h-80 flex-col" label="Choose model">
+                    <Command className="flex h-full min-h-0 flex-col" label="Choose model">
                         <div className="flex items-center gap-2 border-b border-border px-3">
                             <MagnifyingGlass
                                 size={14}
@@ -318,7 +318,7 @@ export function SearchableModelSelect({
                             />
                         </div>
                         <Command.List
-                            className="overflow-y-auto p-1"
+                            className="min-h-0 flex-1 overflow-y-auto p-1"
                             onMouseLeave={() => setHovered(null)}
                         >
                             <Command.Empty className="px-3 py-6 text-center text-xs text-muted-foreground">
@@ -389,7 +389,7 @@ export function SearchableModelSelect({
                 )
                 : null}
 
-            {hovered && merged ? (
+            {hovered && merged && !open ? (
                 <ModelHoverCard
                     anchor={hovered.rect}
                     model={merged}
@@ -489,7 +489,7 @@ export function ModelPicker({
         width: 352,
         maxHeight: 320,
         align,
-        zIndex: 100,
+        zIndex: 140,
     });
 
     // Do NOT auto-call onChange when the catalog loads — that was resetting
@@ -556,7 +556,7 @@ export function ModelPicker({
                         className="overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg"
                     >
                     <Command
-                        className="flex max-h-80 flex-col"
+                        className="flex h-full min-h-0 flex-col"
                         label="Search models"
                     >
                         <div className="flex items-center gap-2 border-b border-border px-3">
@@ -576,7 +576,7 @@ export function ModelPicker({
                             </p>
                         ) : null}
                         <Command.List
-                            className="overflow-y-auto p-1"
+                            className="min-h-0 flex-1 overflow-y-auto p-1"
                             onMouseLeave={() => setHovered(null)}
                         >
                             <Command.Empty className="px-3 py-6 text-center text-xs text-muted-foreground">
@@ -638,7 +638,7 @@ export function ModelPicker({
                 )
                 : null}
 
-            {hovered && merged ? (
+            {hovered && merged && !open ? (
                 <ModelHoverCard
                     anchor={hovered.rect}
                     model={merged}

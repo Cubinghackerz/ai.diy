@@ -82,7 +82,7 @@ Call \`linux_kill_process\` with a numeric \`pid\` to stop a process in the in-b
         summary: "build a browser-local npm project with safe package installs",
         content: `# NPM Project guide
 
-Use \`npm_project\` for a Node project that needs npm libraries. Actions are \`init\`, \`write\`, \`install\`, \`run\`, \`inspect\`, \`read\`, and \`export\`. The project lives only in the browser-local WebContainer runtime. Run accepts only build, dev, start, preview, test, lint, typecheck, check, or format scripts.
+Use \`npm_project\` for a Node project that needs npm libraries. Actions are \`init\`, \`write\`, \`install\`, \`run\`, \`preview\`, \`inspect\`, \`read\`, and \`export\`. The project lives only in the browser-local WebContainer runtime. Run accepts only build, dev, start, preview, test, lint, typecheck, check, or format scripts. Use \`preview\` to start a verified WebContainer app preview.
 
 Install only public registry package names with optional exact semver versions. Git, file, tarball, arbitrary registry, shell-flag, and lifecycle-script installs are rejected; installs always use \`--ignore-scripts\`. WebContainer npm networking is browser-local and does not use the CheerpX/Tailscale Linux VM. Keep writes within the project root and use \`read\` or \`inspect\` to verify results before claiming success.`,
     },
@@ -90,7 +90,7 @@ Install only public registry package names with optional exact semver versions. 
         summary: "load the safe npm project workflow",
         content: `# NPM Project skill guide
 
-Call \`npm_project_skill\` before using \`npm_project\`. Then initialize a short project, write its files, install exact public registry dependencies with lifecycle scripts disabled, run a named npm script, inspect or read the result, and export only when requested. Never execute npm on the ai.diy server, expose secrets in project files, or claim a build or preview without real output.`,
+Call \`npm_project_skill\` before using \`npm_project\`. Then initialize a short project, write its files, install exact public registry dependencies with lifecycle scripts disabled, run a named npm script, inspect or read the result, and export the project by default unless the user explicitly says not to create, download, or export files. Use \`preview\` when a dev, start, or preview script exists. Never execute npm on the ai.diy server, expose secrets in project files, or claim a build or preview without real output.`,
     },
     create_file: {
         summary: "create a Canvas text, code, HTML, SVG, or binary artifact",

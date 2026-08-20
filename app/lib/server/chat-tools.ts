@@ -900,8 +900,8 @@ Build small runnable projects with npm libraries inside the user's browser-local
 1. Choose a short project name and use npm_project with action init.
 2. Write the complete source tree with action write and a files object. Keep paths relative; never write outside the project root.
 3. Install only public npm registry packages with action install. Prefer exact versions such as react@19.1.0. Git URLs, file paths, tarballs, arbitrary registries, shell flags, and package scripts are rejected. Lifecycle scripts are disabled with --ignore-scripts.
-4. Run only an allowlisted package script with action run (build, dev, start, preview, test, lint, typecheck, check, or format). Read the actual output before claiming success.
-5. Use action inspect or action read to verify files and dependencies. Use action export when the user wants a downloadable tarball.
+4. Run only an allowlisted package script with action run (build, dev, start, preview, test, lint, typecheck, check, or format). Read the actual output before claiming success. Use action preview for a verified browser preview when a dev, start, or preview script exists.
+5. Use action inspect or action read to verify files and dependencies. Use action export by default after creating an app/project so the user receives the files, unless they explicitly say not to create, download, or export files.
 
 ## Network and runtime boundary
 - The runtime is client-side and isolated from the ai.diy server. WebContainer npm networking does not use the CheerpX/Tailscale Linux VM.
@@ -911,7 +911,7 @@ Build small runnable projects with npm libraries inside the user's browser-local
 - npm_project is unavailable in Preview mode and delegated subagents.
 
 ## Output contract
-Return the real command output and exit code. Mention generated files with their exact names. Do not claim a live preview unless a verified process/log or built artifact was read. Prefer static builds and exported artifacts over background servers because the VM has no browser loopback network. Do not use Base64 in prose.\n`;
+Return the real command output and exit code. Mention generated files with their exact names. Use action preview for a verified WebContainer URL when the project can run. Export the project by default unless the user opts out of files. Do not claim a live preview without a verified preview URL. Do not use Base64 in prose.\n`;
 }
 
 function wordDocumentSkill(input: { task?: string }): string {
@@ -1625,7 +1625,7 @@ export async function buildChatTools(
         const npmProject = tool({
             description: policy.compactToolDescriptions
                 ? "Create and run a browser-local npm project with safe registry installs, file writes, named scripts, inspection, and export in WebContainers."
-                : "Create and run a project inside the browser-local WebContainer runtime using npm libraries. Actions: init, write, install, run, inspect, read, export. Installs accept only public npm registry package names with optional exact versions and always use --ignore-scripts. Run is limited to named build/dev/start/preview/test/lint/typecheck/check/format scripts. This never runs npm on the ai.diy server; report real exit codes/output.",
+                : "Create and run a project inside the browser-local WebContainer runtime using npm libraries. Actions: init, write, install, run, preview, inspect, read, export. Preview returns a verified URL for a running dev/start/preview script. Installs accept only public npm registry package names with optional exact versions and always use --ignore-scripts. Run is limited to named build/dev/start/preview/test/lint/typecheck/check/format scripts. This never runs npm on the ai.diy server; report real exit codes/output. Export created projects by default unless the user explicitly opts out.",
             inputSchema: z.object({
                 action: z.enum(NPM_PROJECT_ACTIONS),
                 project: z.string().min(1).max(48),

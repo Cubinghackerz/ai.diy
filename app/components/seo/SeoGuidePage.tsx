@@ -257,6 +257,12 @@ export function SeoGuidePage({
                             Terms
                         </Link>
                         <a
+                            href="mailto:support@tryaidiy.com"
+                            className="hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                        >
+                            Contact
+                        </a>
+                        <a
                             href={SITE_REPOSITORY_URL}
                             target="_blank"
                             rel="noreferrer"

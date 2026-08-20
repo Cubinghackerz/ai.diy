@@ -90,7 +90,7 @@ export const BUILTIN_FORCED_SKILLS: ForcedSkill[] = [
     {
         name: "NPM Project",
         content:
-            "You MUST activate and follow the npm_project_skill before building a project that needs npm packages or Node libraries: call npm_project_skill first, then use npm_project for init, write, install, run, inspect, read, or export. Work only in the browser-local WebContainer project workspace. Install public registry packages with exact versions when practical; lifecycle scripts are disabled by default. Do not run npm on the ai.diy server, use git/file/tarball package specs, place files outside the project root, expose secrets, or claim a preview/build succeeded without reading the real result.",
+            "You MUST activate and follow the npm_project_skill before building a project that needs npm packages or Node libraries: call npm_project_skill first, then use npm_project for init, write, install, run, preview, inspect, read, or export. Work only in the browser-local WebContainer project workspace. Install public registry packages with exact versions when practical; lifecycle scripts are disabled by default. For app/project requests, export the verified project by default unless the user explicitly says not to create, download, or export files. Use preview when a dev/start/preview script exists. Do not run npm on the ai.diy server, use git/file/tarball package specs, place files outside the project root, expose secrets, or claim a preview/build succeeded without reading the real result.",
     },
 ];
 

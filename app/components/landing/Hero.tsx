@@ -1,7 +1,7 @@
 import { GithubLogo } from "@phosphor-icons/react";
 import { CipherHeadline } from "./CipherHeadline";
 import { GITHUB_URL } from "./constants";
-import { formatStars, useGithubStars, usePrefersReducedMotion } from "./hooks";
+import { usePrefersReducedMotion } from "./hooks";
 import { LandingCta } from "./LandingCta";
 import { ProductBezel } from "./ProductBezel";
 import { cn } from "~/lib/utils";
@@ -9,10 +9,7 @@ import { cn } from "~/lib/utils";
 const FACTS = ["LOCAL-FIRST", "20+ PROVIDERS", "MIT LICENSED", "NO PERSISTENT LLM KEYS"] as const;
 
 export function Hero() {
-    const stars = useGithubStars();
     const reduced = usePrefersReducedMotion();
-    const starLabel =
-        stars != null ? `Star on GitHub (${formatStars(stars)})` : "Star on GitHub";
 
     return (
         <section
@@ -32,9 +29,9 @@ export function Hero() {
                     )}
                     data-hero-step="2"
                 >
-                    ai.diy is a browser-owned BYOK workspace for 20+ cloud and local providers.
-                    Keep chats, Canvas, knowledge, and settings in your browser, then add search,
-                    MCP, Python, and agents. No persistent provider keys are required on the server.
+                    Use AI, npm packages, Canvas, Python, and browser tools to create presentations,
+                    documents, code, and useful files. Your chats, files, knowledge, and settings
+                    stay in your browser, with no persistent provider keys required on the server.
                 </p>
 
                 <div
@@ -51,7 +48,7 @@ export function Hero() {
                         variant="ghost"
                         leadingIcon={<GithubLogo weight="light" className="size-4" />}
                     >
-                        {starLabel}
+                            View on GitHub
                     </LandingCta>
                 </div>
 

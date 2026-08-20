@@ -18,8 +18,8 @@ const CASES = [
     },
     {
         icon: SquareHalf,
-        title: "Interactive Canvas",
-        body: "Preview HTML, Python files, and code artifacts beside the thread — live outputs without cloud lock-in.",
+        title: "Create useful artifacts",
+        body: "Make presentations, documents, code, and files with Canvas, Python, npm packages, and browser tools beside the thread.",
     },
 ] as const;
 

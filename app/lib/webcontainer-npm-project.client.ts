@@ -14,6 +14,7 @@ const MAX_ARCHIVE_BYTES = 2 * 1024 * 1024;
 const PROJECTS_ROOT = "/projects";
 
 let webContainerPromise: Promise<import("@webcontainer/api").WebContainer> | null = null;
+const previewProcesses = new Map<string, import("@webcontainer/api").WebContainerProcess>();
 
 function scopeKey(scopeId: string): string {
     const value = String(scopeId ?? "draft")
@@ -257,14 +258,75 @@ async function inspectProject(
     return `--- package.json ---\n${packageJson}\n--- installed top-level packages ---\n${packages.join("\n")}`;
 }
 
+async function startPreview(
+    container: Awaited<ReturnType<typeof getWebContainer>>,
+    root: string,
+    input: NpmProjectInput,
+    key: string,
+): Promise<LinuxClientResult> {
+    const script = input.script ?? "dev";
+    if (script !== "dev" && script !== "start" && script !== "preview") {
+        throw new Error("Preview script must be dev, start, or preview.");
+    }
+    previewProcesses.get(key)?.kill();
+    const process = await container.spawn("npm", ["run", script], { cwd: root });
+    previewProcesses.set(key, process);
+
+    let url: string;
+    try {
+        url = await new Promise<string>((resolve, reject) => {
+        let settled = false;
+        const unsubscribe = container.on("server-ready", (_port, previewUrl) => {
+            if (settled) return;
+            settled = true;
+            unsubscribe();
+            resolve(previewUrl);
+        });
+        const timeout = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            unsubscribe();
+            reject(new Error("Preview server did not become ready within 60 seconds."));
+        }, 60_000);
+        void process.exit.then((exitCode) => {
+            clearTimeout(timeout);
+            if (settled) return;
+            settled = true;
+            unsubscribe();
+            reject(new Error(`Preview process exited before readiness with code ${exitCode}.`));
+        });
+    });
+    } catch (error) {
+        process.kill();
+        previewProcesses.delete(key);
+        throw error;
+    }
+
+    return {
+        output: `Preview ready at ${url}\n\n[Open app preview](${url})\n\nThe ${script} process is still running in this browser-local WebContainer.`,
+        artifacts: [],
+    };
+}
+
 export async function executeWebContainerNpmProjectTool(
     input: NpmProjectInput,
     scopeId: string,
 ): Promise<LinuxClientResult> {
-    const plan = planNpmProject(input);
     const container = await getWebContainer();
     const root = projectPath(input.project, scopeId);
     await ensureProjectDirectory(container, root);
+
+    if (input.action === "preview") {
+        planNpmProject(input);
+        return startPreview(
+            container,
+            root,
+            input,
+            `${scopeKey(scopeId)}:${input.project}`,
+        );
+    }
+
+    const plan = planNpmProject(input);
 
     if (input.action === "init") {
         if (!(await fileExists(container, `${root}/package.json`))) {
