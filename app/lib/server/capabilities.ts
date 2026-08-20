@@ -78,6 +78,20 @@ Call \`linux_list_processes\` (no arguments) to see running user processes with 
 
 Call \`linux_kill_process\` with a numeric \`pid\` to stop a process in the in-browser Linux VM. The kill covers the whole process group, so descendants are stopped too. Get the pid from \`linux_list_processes\` or the \`pid\` returned by \`linux_background_start\`.`,
     },
+    npm_project: {
+        summary: "build a browser-local npm project with safe package installs",
+        content: `# NPM Project guide
+
+Use \`npm_project\` for a Node project that needs npm libraries. Actions are \`init\`, \`write\`, \`install\`, \`run\`, \`inspect\`, \`read\`, and \`export\`. The project lives only in the browser-local WebContainer runtime. Run accepts only build, dev, start, preview, test, lint, typecheck, check, or format scripts.
+
+Install only public registry package names with optional exact semver versions. Git, file, tarball, arbitrary registry, shell-flag, and lifecycle-script installs are rejected; installs always use \`--ignore-scripts\`. WebContainer npm networking is browser-local and does not use the CheerpX/Tailscale Linux VM. Keep writes within the project root and use \`read\` or \`inspect\` to verify results before claiming success.`,
+    },
+    npm_project_skill: {
+        summary: "load the safe npm project workflow",
+        content: `# NPM Project skill guide
+
+Call \`npm_project_skill\` before using \`npm_project\`. Then initialize a short project, write its files, install exact public registry dependencies with lifecycle scripts disabled, run a named npm script, inspect or read the result, and export only when requested. Never execute npm on the ai.diy server, expose secrets in project files, or claim a build or preview without real output.`,
+    },
     create_file: {
         summary: "create a Canvas text, code, HTML, SVG, or binary artifact",
         content: `# Canvas file guide
@@ -109,10 +123,10 @@ Call \`url_doctor\` with one public HTTP(S) \`url\` when the user requests a sit
 Report only the returned Overall Health and category scores and findings. Do not invent Lighthouse timings, reputation data, or measurements the tool did not produce.`,
     },
     knowledge_search: {
-        summary: "search the user's private on-device knowledge base",
+        summary: "search the user's browser-local knowledge base",
         content: `# Knowledge base guide
 
-Use \`knowledge_list\` to inspect indexed document names, or \`knowledge_search\` with a focused \`query\` and optional \`k\` (1-8) when the user asks about their uploaded documents. The content is private local context. Do not claim a result unless the tool returned it.`,
+Use \`knowledge_list\` to inspect indexed document names, or \`knowledge_search\` with a focused \`query\` and optional \`k\` (1-8) when the user asks about their uploaded documents. The index and embeddings stay in browser storage, but retrieved context may be sent to the selected cloud model as part of the request. Do not claim a result unless the tool returned it.`,
     },
     memory: {
         summary: "retrieve relevant user-approved local memory",

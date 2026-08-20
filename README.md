@@ -47,7 +47,8 @@ docker run -p 3000:3000 ai-diy
 
 Features marked **available** are wired. **Planned** items are not claimed as working.
 
-- **Available:** landing, 20+ provider integrations, model discovery, local persistence, files, browser Python (Canvas capture + IndexedDB persistence for generated images/binaries), in-browser Linux environment (CheerpX/WebVM: bash, python3, gcc, node, apt; no outbound network by default), search + connectors, remote MCP, artifacts, memory, on-device knowledge RAG, usage ledger with soft spend/token/RPM caps, server rate-limit hooks, voice dictation (Web Speech), multi-model Preview, import/export, client-side S3/WebDAV/Google Drive backup, portable skills catalog + install, slash commands (`/Research`, `/Compaction`, `/Subagent`, …), Agent Mode, subagents (approve → wait → synthesize), encrypted browser settings where supported, Vercel Connect (Beta: token-backed MCP servers + `connect_request`)
+- **Available:** landing, 20+ provider integrations, model discovery, local persistence, files, browser Python (Canvas capture + IndexedDB persistence for generated images/binaries), in-browser Linux environment (CheerpX/WebVM: bash, python3, gcc, node, apt; no outbound network by default), search + connectors, remote MCP, artifacts, memory, on-device knowledge RAG, usage ledger with soft spend/token/RPM caps, server rate-limit hooks, voice dictation (Web Speech), multi-model Preview, import/export, client-side S3/WebDAV/Google Drive backup, portable skills catalog + install, slash commands (`/Research`, `/Compaction`, `/Subagent`, …), Agent Mode, subagents (approve → wait → synthesize), encrypted browser settings where supported, Vercel Connect (Beta: token-backed MCP servers + `connect_request`), first-run and Settings tool-access allowlist (only enabled capabilities are registered for the model)
+- **Browser-local npm projects:** the AI can scaffold a per-chat Node project in the active browser tab using WebContainers, write files, install public registry packages with lifecycle scripts disabled, run allowlisted build/test scripts, inspect files, and export a tarball. Projects run in the browser, not on the ai.diy server or CheerpX Linux VM.
 - **Coming soon:** direct GitHub/Supabase/PostgreSQL adapters, custom-provider capability probing
 
 ## What You Own
@@ -84,6 +85,8 @@ Portable skill packages live in [`skills/`](./skills/). Install from **Settings 
 
 Built-in slash commands force matching tools for the next send — including **`/Linux Environment`** (in-browser Debian VM), **`/Subagent`** (spawns approved subagents; the main chat waits for results before continuing), `/Research`, `/Compaction`, and design/file-creation skills. Skill tool calls appear in chat as **Used skill: …**.
 
+When a request asks for an npm-backed app or Node library, ai.diy activates **NPM Project**. The workflow stays inside a browser-native WebContainer: initialize a project, write its files, install exact public registry packages, run `build`, `dev`, `start`, `preview`, `test`, `lint`, `typecheck`, `check`, or `format`, then read or export the result. It does not depend on the Debian Node 10 CheerpX VM.
+
 Flagship starters include Deep Research, Code Review, GitHub Repository Analysis, PDF Analysis, Incident Investigator, and **General Task Solver** (understand → select skills → execute → verify → synthesize).
 
 Authoring guide for agents: [`.cursor/skills/ai-diy-skill-authoring/SKILL.md`](./.cursor/skills/ai-diy-skill-authoring/SKILL.md).
@@ -114,7 +117,7 @@ Web search (DuckDuckGo + connectors), URL fetch, calculator, browser Python, in-
 
 Python saves generated files in the working directory; the browser captures up to four files (≤2 MiB each) into Canvas and persists them with the chat when under the client size cap.
 
-The Linux environment is a client-side Debian VM (CheerpX/WebVM) with bash, python3, gcc, node, and apt. Enable it under **Settings → Linux environment**. There is no outbound network (apt/pip/curl/git that need the internet fail). The VM stays warm in the tab after the first boot. Commands time out at 90s. `/workspace` is cross-origin isolated (required for SharedArrayBuffer). While a reply or VM command is running, send and new-chat are locked; **Stop** aborts the wait and unlocks the composer. A corrupt disk overlay is discarded and the VM retries once instead of hanging.
+The Linux environment is a client-side Debian VM (CheerpX/WebVM) with bash, python3, gcc, node, and apt. Enable it under **Settings → Linux environment**. Networking is offline by default; raw Linux apt/pip/npm/curl/git downloads require the opt-in Tailscale bridge and an internet exit node. Use **NPM Project** for browser-native npm work without that VM network. The VM stays warm in the tab after the first boot. Commands time out at 90s. `/workspace` is cross-origin isolated (required for SharedArrayBuffer). While a reply or VM command is running, send and new-chat are locked; **Stop** aborts the wait and unlocks the composer. A corrupt disk overlay is discarded and the VM retries once instead of hanging.
 
 Global custom instructions live under **Settings → Instructions**. They append to ai.diy's defaults rather than replacing core tool, safety, and active-skill instructions.
 

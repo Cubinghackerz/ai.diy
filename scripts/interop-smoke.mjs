@@ -1,9 +1,9 @@
-import { parseChatGPTConversations } from "../app/lib/interop/importers/chatgpt";
-import { parseClaudeConversations } from "../app/lib/interop/importers/claude";
-import { parseAiDiyExport } from "../app/lib/interop/importers/ai-diy";
-import { parseShareGPT } from "../app/lib/interop/importers/sharegpt";
-import { parseMarkdownChat } from "../app/lib/interop/importers/markdown";
-import { chatToMarkdown, chatToAiDiyJson, markdownBundleZip, safeFilename } from "../app/lib/interop/exporters";
+import { parseChatGPTConversations } from "../app/lib/interop/importers/chatgpt.ts";
+import { parseClaudeConversations } from "../app/lib/interop/importers/claude.ts";
+import { parseAiDiyExport } from "../app/lib/interop/importers/ai-diy.ts";
+import { parseShareGPT } from "../app/lib/interop/importers/sharegpt.ts";
+import { parseMarkdownChat } from "../app/lib/interop/importers/markdown.ts";
+import { chatToMarkdown, chatToAiDiyJson, markdownBundleZip, safeFilename } from "../app/lib/interop/exporters.ts";
 import { unzipSync } from "fflate";
 
 let failures = 0;

@@ -47,6 +47,8 @@ const SEARCH_TOOL_COMPACT_CHARS = 180;
 const SEARCH_TOOL_RECENT_THRESHOLD = 400;
 const FETCH_TOOL_TRUNCATE_THRESHOLD = 800;
 const FETCH_TOOL_TRUNCATE_CHARS = 600;
+const OTHER_TOOL_TRUNCATE_THRESHOLD = 2_000;
+const OTHER_TOOL_TRUNCATE_CHARS = 1_200;
 
 function classifyCompactionToolKind(toolName: string): "search" | "fetch" | "other" {
     const name = toolName.toLowerCase();
@@ -79,6 +81,41 @@ function compactSearchListingText(text: string, maxChars = SEARCH_TOOL_COMPACT_C
     const normalized = text.replace(/\s+/g, " ").trim();
     if (normalized.length <= maxChars) return normalized;
     return `${normalized.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
+}
+
+function truncateWithTail(text: string, maxChars: number): string {
+    if (text.length <= maxChars) return text;
+    const marker = "\n\n[Truncated historical tool output]";
+    const available = Math.max(0, maxChars - marker.length);
+    const head = Math.ceil(available * 0.72);
+    const tail = Math.max(0, available - head);
+    return `${text.slice(0, head).trimEnd()}${marker}${tail ? `\n${text.slice(-tail).trimStart()}` : ""}`;
+}
+
+function compactGenericToolText(text: string): string {
+    const normalized = text.trim();
+    if (normalized.length <= OTHER_TOOL_TRUNCATE_THRESHOLD) return text;
+
+    // Artifact results are JSON. Keep the filename/kind and both ends of the
+    // content so a later turn can identify the artifact without replaying its
+    // entire payload through the model.
+    try {
+        const parsed = JSON.parse(normalized) as Record<string, unknown>;
+        if (parsed && typeof parsed === "object" && "content" in parsed) {
+            const content = parsed.content;
+            if (typeof content === "string") {
+                return JSON.stringify({
+                    ...parsed,
+                    content: truncateWithTail(content, 900),
+                    historicalContentTruncated: true,
+                });
+            }
+        }
+    } catch {
+        // Non-JSON tool output is handled by the bounded text path below.
+    }
+
+    return truncateWithTail(normalized, OTHER_TOOL_TRUNCATE_CHARS);
 }
 
 export function estimateTokensFromText(text: string): number {
@@ -355,6 +392,27 @@ export function compactUiMessages(
     };
 }
 
+/**
+ * Project only old tool payloads before every normal request. User and
+ * assistant text stays intact, and the newest messages stay byte-for-byte
+ * untouched. This keeps useful conversation continuity without replaying old
+ * search dumps, page bodies, or artifact bytes on every turn.
+ */
+export function projectUiMessagesForModel(
+    messages: UIMessage[],
+    options: { keepRecent?: number; compactToolResults?: boolean } = {},
+): UIMessage[] {
+    if (options.compactToolResults === false) return messages;
+    const keepRecent = Math.max(2, options.keepRecent ?? KEEP_RECENT_MESSAGES);
+    if (messages.length <= keepRecent) return messages;
+
+    const older = messages
+        .slice(0, -keepRecent)
+        .map((message) => stripBulkyToolParts(message, { aggressive: true }));
+    const recent = messages.slice(-keepRecent);
+    return [...older, ...recent] as UIMessage[];
+}
+
 function stripBulkyToolParts(
     message: UIMessage,
     options: { aggressive?: boolean } = {},
@@ -400,6 +458,12 @@ function stripBulkyToolParts(
             return {
                 ...part,
                 output: `${text.slice(0, FETCH_TOOL_TRUNCATE_CHARS)}\n\n[Truncated tool output for context compaction]`,
+            };
+        }
+        if (aggressive && text.length > OTHER_TOOL_TRUNCATE_THRESHOLD) {
+            return {
+                ...part,
+                output: compactGenericToolText(text),
             };
         }
         return part;

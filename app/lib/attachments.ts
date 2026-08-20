@@ -8,6 +8,7 @@ import {
     type AttachmentAdapter,
 } from "@assistant-ui/core";
 import type { ModelModalities } from "~/lib/model-modalities";
+import { extractKnowledgeText } from "~/lib/knowledge/extract.client";
 
 async function fileToDataURL(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -152,45 +153,82 @@ const imageAttachmentAdapter = {
     async remove() {},
 } satisfies AttachmentAdapter;
 
-const binaryDocumentAdapter = {
-    accept: DOCUMENT_ACCEPT,
-    async add({ file }) {
-        if (isTextLike(file)) {
-            return textDocumentAdapter.add({ file });
-        }
-        return {
-            id: crypto.randomUUID(),
-            type: "file",
-            name: file.name,
-            contentType: getFileMimeType(file),
-            file,
-            content: [],
-            status: { type: "requires-action", reason: "composer-send" },
-        };
-    },
-    async send(attachment) {
-        const file = attachment.file;
-        if (!file) {
-            return { ...attachment, status: { type: "complete" }, content: [] };
-        }
-        if (isTextLike(file)) {
-            return textDocumentAdapter.send(attachment);
-        }
-        return {
-            ...attachment,
-            status: { type: "complete" },
-            content: [
-                {
-                    type: "file",
-                mimeType: attachment.contentType ?? getFileMimeType(file),
-                    filename: attachment.name,
-                    data: await fileToDataURL(file),
-                },
-            ],
-        };
-    },
-    async remove() {},
-} satisfies AttachmentAdapter;
+function isPdfOrWord(file: File): boolean {
+    return (
+        file.type === "application/pdf" ||
+        file.type === "application/msword" ||
+        file.type ===
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+        /\.(pdf|docx?)$/i.test(file.name)
+    );
+}
+
+function createBinaryDocumentAdapter(supportsDocuments: boolean): AttachmentAdapter {
+    return {
+        accept: DOCUMENT_ACCEPT,
+        async add({ file }) {
+            if (isTextLike(file)) {
+                return textDocumentAdapter.add({ file });
+            }
+            return {
+                id: crypto.randomUUID(),
+                type: "file",
+                name: file.name,
+                contentType: getFileMimeType(file),
+                file,
+                content: [],
+                status: { type: "requires-action", reason: "composer-send" },
+            };
+        },
+        async send(attachment) {
+            const file = attachment.file;
+            if (!file) {
+                return { ...attachment, status: { type: "complete" }, content: [] };
+            }
+            if (isTextLike(file)) {
+                return textDocumentAdapter.send(attachment);
+            }
+            if (!supportsDocuments) {
+                let extracted = "";
+                try {
+                    if (isPdfOrWord(file)) {
+                        extracted = (await extractKnowledgeText(file)).text;
+                    }
+                } catch (error) {
+                    const reason = error instanceof Error ? error.message : String(error);
+                    extracted = `[Readable text unavailable: ${reason.slice(0, 300)}]`;
+                }
+                if (!extracted) {
+                    extracted = "[This attachment has no readable text layer for this text-only model.]";
+                }
+                return {
+                    ...attachment,
+                    type: "document",
+                    status: { type: "complete" },
+                    content: [
+                        {
+                            type: "text",
+                            text: `<attachment name="${attachment.name}">\n${extracted}\n</attachment>`,
+                        },
+                    ],
+                };
+            }
+            return {
+                ...attachment,
+                status: { type: "complete" },
+                content: [
+                    {
+                        type: "file",
+                        mimeType: attachment.contentType ?? getFileMimeType(file),
+                        filename: attachment.name,
+                        data: await fileToDataURL(file),
+                    },
+                ],
+            };
+        },
+        async remove() {},
+    };
+}
 
 export function createAttachmentAdapter(
     modalities: ModelModalities,
@@ -204,9 +242,9 @@ export function createAttachmentAdapter(
     // Always allow text-like docs (inlined as text — works with any chat model).
     adapters.push(textDocumentAdapter);
 
-    if (modalities.documents) {
-        adapters.push(binaryDocumentAdapter);
-    }
+    // Text-only models receive a local text extraction instead of a file part.
+    // Vision/document-capable models retain the original binary attachment.
+    adapters.push(createBinaryDocumentAdapter(modalities.documents));
 
     return new CompositeAttachmentAdapter(adapters);
 }
@@ -223,6 +261,6 @@ export const prismiumAttachmentAdapter = createAttachmentAdapter({
 export function attachmentAcceptHint(modalities: ModelModalities): string {
     const parts = ["text", "markdown"];
     if (modalities.vision) parts.unshift("images");
-    if (modalities.documents) parts.push("PDF", "Word");
+    parts.push("PDF", "Word");
     return `Add files (${parts.join(", ")}…)`;
 }

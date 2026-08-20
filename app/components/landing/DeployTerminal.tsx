@@ -4,6 +4,7 @@ import { DEPLOY_TABS, VERCEL_DEPLOY_URL, type DeployTabId } from "./constants";
 import { Reveal } from "./DoubleBezel";
 import { useCopy } from "./hooks";
 import { LandingCta } from "./LandingCta";
+import { MaskedHeading } from "./MaskedHeading";
 import { EASE_OUT } from "./motion";
 import { cn } from "~/lib/utils";
 
@@ -20,9 +21,9 @@ export function DeployTerminal() {
         >
             <Reveal>
                 <div>
-                    <h2 className="text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
+                    <MaskedHeading className="text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
                         Self-host in one command.
-                    </h2>
+                    </MaskedHeading>
                     <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-zinc-400">
                         Node production build, Docker Compose, or a Vercel preview. Click
                         the terminal to copy.
@@ -31,8 +32,8 @@ export function DeployTerminal() {
             </Reveal>
 
             <Reveal delayMs={40} className="mt-8">
-                <div className="overflow-hidden rounded-2xl border border-white/[0.08]">
-                    <div className="flex items-center gap-1 border-b border-white/[0.08] bg-[#0e0e11] px-2 pt-1.5">
+                <div className="overflow-hidden rounded-2xl border border-white/[0.1] bg-[#0a0a0a]">
+                    <div className="flex items-center gap-1 border-b border-white/[0.08] bg-[#0a0a0a] px-2 pt-1.5">
                         {DEPLOY_TABS.map((t) => (
                             <button
                                 key={t.id}
@@ -41,7 +42,7 @@ export function DeployTerminal() {
                                 className={cn(
                                     "min-h-10 rounded-t-lg px-3 py-2 font-mono text-[11px] transition-[color,background-color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40",
                                     tab === t.id
-                                        ? "bg-[#0A0A0A] text-zinc-100"
+                                        ? "bg-black text-zinc-100"
                                         : "text-zinc-500 hover:text-zinc-300",
                                 )}
                                 style={{ transitionTimingFunction: EASE_OUT }}
@@ -53,7 +54,7 @@ export function DeployTerminal() {
                     <button
                         type="button"
                         onClick={() => void copy()}
-                        className="group relative block w-full overflow-x-auto bg-[#0A0A0A] p-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/40"
+                        className="group relative block w-full overflow-x-auto bg-black p-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/40"
                         aria-label={copied ? "Command copied" : "Copy command"}
                     >
                         <pre className="font-mono text-[12px] leading-relaxed text-zinc-300 sm:text-[13px]">
@@ -75,7 +76,7 @@ export function DeployTerminal() {
                             {copied ? "Copied" : "Copy"}
                         </span>
                     </button>
-                    <div className="flex flex-wrap items-center gap-2 border-t border-white/[0.08] bg-[#0e0e11] px-3 py-3">
+                    <div className="flex flex-wrap items-center gap-2 border-t border-white/[0.08] bg-[#0a0a0a] px-3 py-3">
                         <LandingCta href={VERCEL_DEPLOY_URL} external size="compact">
                             Deploy to Vercel
                         </LandingCta>

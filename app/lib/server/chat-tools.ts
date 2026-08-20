@@ -39,11 +39,22 @@ import {
     type TokenMode,
 } from "~/lib/token-mode";
 import {
+    normalizeToolAccess,
+    type ToolAccessSettings,
+} from "~/lib/tool-access";
+import {
     compactUiMessages,
     compactionSkillGuide,
     type CompactableMessage,
 } from "~/lib/server/context-compaction";
 import type { UIMessage } from "ai";
+import {
+    MAX_NPM_PACKAGE_SPECS,
+    MAX_NPM_PROJECT_FILES,
+    MAX_NPM_PROJECT_FILE_BYTES,
+    MAX_NPM_PROJECT_TOTAL_BYTES,
+    NPM_PROJECT_ACTIONS,
+} from "~/lib/npm-project";
 
 export { ARTIFACT_MARKER };
 
@@ -60,6 +71,7 @@ export type ToolSettings = {
     knowledgeEnabled?: boolean;
     subagentsEnabled?: boolean;
     tokenMode?: TokenMode;
+    toolAccess?: Partial<ToolAccessSettings>;
     /** Tool ids that must be registered this turn even outside full-suite mode. */
     forceToolNames?: string[];
 };
@@ -876,6 +888,32 @@ This is a real x86 Debian 10 VM in the browser (CheerpX / WebVM). It is not Pyod
 - If the VM is unavailable (not cross-origin isolated), say so and stop.`;
 }
 
+function npmProjectSkill(input: { task?: string }): string {
+    return `# NPM Project Skill
+
+Task: ${input.task?.trim() || "Create or modify a browser-local Node/npm project."}
+
+## Purpose
+Build small runnable projects with npm libraries inside the user's browser-local WebContainer. This is the Claude-style project path: write a file tree, install dependencies, run a named script, inspect the result, and export the project without placing code or packages on the ai.diy server.
+
+## Required workflow
+1. Choose a short project name and use npm_project with action init.
+2. Write the complete source tree with action write and a files object. Keep paths relative; never write outside the project root.
+3. Install only public npm registry packages with action install. Prefer exact versions such as react@19.1.0. Git URLs, file paths, tarballs, arbitrary registries, shell flags, and package scripts are rejected. Lifecycle scripts are disabled with --ignore-scripts.
+4. Run only an allowlisted package script with action run (build, dev, start, preview, test, lint, typecheck, check, or format). Read the actual output before claiming success.
+5. Use action inspect or action read to verify files and dependencies. Use action export when the user wants a downloadable tarball.
+
+## Network and runtime boundary
+- The runtime is client-side and isolated from the ai.diy server. WebContainer npm networking does not use the CheerpX/Tailscale Linux VM.
+- Never run npm, node, or shell commands on the ai.diy server. Do not ask the user to paste credentials into project files.
+- WebContainer provides the Node runtime for this workflow. Report real package or build failures rather than working around them.
+- The package install cap is ${MAX_NPM_PACKAGE_SPECS} specs per step; a write is limited to ${MAX_NPM_PROJECT_FILES} files, ${MAX_NPM_PROJECT_FILE_BYTES} bytes per file, and ${MAX_NPM_PROJECT_TOTAL_BYTES} total bytes.
+- npm_project is unavailable in Preview mode and delegated subagents.
+
+## Output contract
+Return the real command output and exit code. Mention generated files with their exact names. Do not claim a live preview unless a verified process/log or built artifact was read. Prefer static builds and exported artifacts over background servers because the VM has no browser loopback network. Do not use Base64 in prose.\n`;
+}
+
 function wordDocumentSkill(input: { task?: string }): string {
     return `# Beautiful Word Document Skill
 
@@ -985,6 +1023,22 @@ function extractMainContentFromHtml(html: string, maxChars: number): string {
     return parts.join("\n\n");
 }
 
+function toolNamesFromMessages(messages: CompactableMessage[] | undefined): Set<string> {
+    const names = new Set<string>();
+    for (const message of messages ?? []) {
+        for (const part of message.parts ?? []) {
+            const direct = typeof part.toolName === "string" ? part.toolName : "";
+            const typed =
+                typeof part.type === "string" && part.type.startsWith("tool-")
+                    ? part.type.slice(5)
+                    : "";
+            if (direct) names.add(direct);
+            if (typed) names.add(typed);
+        }
+    }
+    return names;
+}
+
 export async function buildChatTools(
     settings: ToolSettings = {},
     options: {
@@ -1003,9 +1057,22 @@ export async function buildChatTools(
     const subagentMode = options.subagentMode === true;
     const previewMode = options.previewMode === true;
     const policy = tokenModePolicy(normalizeTokenMode(settings.tokenMode));
+    const access = normalizeToolAccess(settings.toolAccess, {
+        webSearch: settings.webSearchEnabled !== false,
+        calculator: settings.calculatorEnabled !== false,
+        python: settings.pythonEnabled !== false,
+        linux: settings.linuxEnvironment !== false,
+        skills: settings.skillsEnabled !== false,
+        memory: settings.memoryAvailable === true,
+        knowledge: settings.knowledgeEnabled !== false,
+        subagents: settings.subagentsEnabled === true,
+    });
     const forcedTools = new Set(
         (settings.forceToolNames ?? []).filter((name) => typeof name === "string"),
     );
+    const invokedToolNames = toolNamesFromMessages(options.messages);
+    const exposeLegacyAlias = (name: string) =>
+        policy.mode === "full" || forcedTools.has(name) || invokedToolNames.has(name);
     const forceResearch = forcedTools.has("research_skill");
     const forceCompaction = forcedTools.has("compaction_skill");
     const forceUrlDoctor = forcedTools.has("url_doctor");
@@ -1020,29 +1087,46 @@ export async function buildChatTools(
         forcedTools.has("prompt_architect") ||
         forcedTools.has("create_prompt") ||
         forcedTools.has("python_file_creation_skill") ||
-        forcedTools.has("word_document_skill") ||
-        forcedTools.has("linux_environment_skill");
+        forcedTools.has("word_document_skill");
+    const legacySkillUsed = [
+        "file_creation_skill",
+        "word_doc_skill",
+        "skill_architect",
+        "create_prompt",
+        "frontend_design_skill",
+        "ultimate_frontend_ui",
+    ].some((name) => invokedToolNames.has(name));
     const enableResearch =
         !previewMode &&
+        access.webSearch &&
         settings.webSearchEnabled !== false &&
         (policy.researchSkill || forceResearch);
     const enableSearch =
-        settings.webSearchEnabled !== false && options.suppressWebSearch !== true;
-    const enableCalc = !previewMode && settings.calculatorEnabled !== false;
+        access.webSearch &&
+        settings.webSearchEnabled !== false &&
+        options.suppressWebSearch !== true;
+    const enableCalc =
+        !previewMode && access.calculator && settings.calculatorEnabled !== false;
     // Python is a client-side tool. The browser executes it in Pyodide and
     // sends the result back before the model continues.
-    const enablePython = settings.pythonEnabled !== false;
+    const enablePython = access.python && settings.pythonEnabled !== false;
     // Toggle is the only gate. Token efficiency used to hide these tools
     // even when Linux environment was on, so every provider reported them
     // missing. ChatGPT/Codex also reserves `run_command` / `read_file`.
-    const enableLinux = !previewMode && settings.linuxEnvironment !== false;
+    const enableLinux =
+        !previewMode && access.linux && settings.linuxEnvironment !== false;
     const enableSkillSuite =
-        !previewMode && settings.skillsEnabled !== false && (policy.skillSuite || forceSkillSuite);
+        !previewMode &&
+        access.skills &&
+        settings.skillsEnabled !== false &&
+        (policy.skillSuite || forceSkillSuite || legacySkillUsed);
+    const enableNpmProject = !previewMode && !subagentMode && access.npmProject;
+    const forceNpmProject = forcedTools.has("npm_project_skill") && access.npmProject;
 
     const tools: Record<string, Tool> = {};
 
     // Always available in the full chat; forceable via /Compaction.
-    if (!previewMode) tools.compaction_skill = tool({
+    if (!previewMode && access.compaction) tools.compaction_skill = tool({
         description:
             "Compress prior chat into a faithful carry-forward brief (goals, decisions, constraints, open threads, URLs). Call when /Compaction is selected or the user asks to compact context. Does not invent facts.",
         needsApproval: false,
@@ -1119,6 +1203,7 @@ export async function buildChatTools(
 
     if (
         !previewMode &&
+        access.connectors &&
         policy.connectorsMeta &&
         settings.connectors?.some((connector) => connector.enabled)
     ) {
@@ -1132,7 +1217,7 @@ export async function buildChatTools(
         });
     }
 
-    if (!previewMode && connectAvailable()) {
+    if (!previewMode && access.connectors && connectAvailable()) {
         tools.connect_request = tool({
             description:
                 "Vercel Connect: act on third-party apps using app-scoped operator-installed connectors. `list` shows available connectors; `inspect` shows connector + token state; `authorize` starts the one-time operator consent flow; `call` mints a token and performs an HTTPS API request against the connector's service (the connector base URL is set via CONNECT_BASE_URL_<KEY>; absolute URLs are allowed). Scopes are the operator-configured app scopes — only act within them.",
@@ -1387,12 +1472,16 @@ export async function buildChatTools(
                 }
             },
         });
-        tools.read_url = tools.fetch_url;
+        if (exposeLegacyAlias("read_url")) tools.read_url = tools.fetch_url;
     }
 
     // Available even when MCP suppresses built-in web_search/fetch_url —
     // URL Doctor is a scored audit, not a generic search fallback.
-    if (!previewMode && (settings.webSearchEnabled !== false || forceUrlDoctor || forceYoutube)) {
+    if (
+        !previewMode &&
+        access.webSearch &&
+        (settings.webSearchEnabled !== false || forceUrlDoctor || forceYoutube)
+    ) {
         const youtubeTranscript = tool({
             description:
                 "Fetch a YouTube video's title, channel, and captions/transcript so you can summarize or quote it. Pass a youtube.com, youtu.be, shorts, or live URL. Do not invent a transcript; use this tool first.",
@@ -1411,7 +1500,9 @@ export async function buildChatTools(
             },
         });
         tools.youtube_transcript = youtubeTranscript;
-        tools.summarize_youtube = youtubeTranscript;
+        if (exposeLegacyAlias("summarize_youtube")) {
+            tools.summarize_youtube = youtubeTranscript;
+        }
         tools.url_doctor = tool({
             description:
                 "Audit a public URL (URL Doctor / AuditURL). Fetches the page once and returns scored Overall Health plus Security, Performance, SEO, Accessibility, Privacy/Tracking, Links, Conversion, and Reputation/risk with findings. Call when the user pastes a site URL to audit, diagnose, or score. Do not invent Lab metrics; use this tool's measured scores.",
@@ -1444,20 +1535,20 @@ export async function buildChatTools(
             }),
             execute: async ({ expression }) => evaluateMath(expression),
         });
-        tools.calculate = tools.calculator;
+        if (exposeLegacyAlias("calculate")) tools.calculate = tools.calculator;
     }
 
     if (enablePython) {
         tools.run_python = tool({
             description: policy.compactToolDescriptions
-                ? "Run Python in browser Pyodide only when actual analysis, data transformation, charting, or specialized binary/document output is needed. Do not use it for ordinary HTML, CSS, JavaScript, Markdown, or code-file creation. Rely on Canvas capture for specialized outputs; do not re-upload binary artifacts via create_file."
-                : "Execute Python 3 in the browser with Pyodide only when the task genuinely requires computation, data processing, charts, or a specialized binary/document library. Do not use it for ordinary HTML, CSS, JavaScript, Markdown, or code-file creation; use create_file for those. Libraries auto-load on first import; never use micropip, pip, subprocess, or asyncio.run. Save specialized outputs in the current working directory; the browser captures up to four new files of 2 MiB each as Canvas artifacts. When a result reports created artifacts, do not call create_file or copy/Base64 their bytes again.",
+                ? "Run Python in browser Pyodide for actual analysis, data transformation, charting, screenshots, or modifying an attached file. Attached files are staged in the working directory. Do not use it for ordinary HTML, CSS, JavaScript, Markdown, or code-file creation. Rely on Canvas capture for outputs; do not re-upload binary artifacts via create_file."
+                : "Execute Python 3 in the browser with Pyodide for computation, data processing, charts, screenshots, or modifying attached files. Attached files are staged in the working directory with their original filenames. Use matplotlib/Pillow for visualizations and save outputs as PNG/SVG; use pypdf, python-docx, openpyxl, or other available libraries for document edits. Do not use Python for ordinary text, code, or HTML creation; use create_file for those. Libraries auto-load on import; never use pip, subprocess, or asyncio.run. Save outputs in the current working directory; the browser captures up to four new files of 2 MiB each as Canvas artifacts. When a result reports created artifacts, do not call create_file or copy/Base64 their bytes again.",
             inputSchema: z.object({
                 code: z.string(),
                 description: z.string().optional(),
             }),
         });
-        tools.run_code = tools.run_python;
+        if (exposeLegacyAlias("run_code")) tools.run_code = tools.run_python;
     }
 
     if (enableLinux) {
@@ -1517,8 +1608,8 @@ export async function buildChatTools(
         // Short aliases for non-Codex providers. ChatGPT's Codex backend
         // drops custom functions that collide with native computer tools.
         if (options.provider !== "chatgpt") {
-            tools.run_command = linuxRun;
-            tools.read_file = linuxRead;
+            if (exposeLegacyAlias("run_command")) tools.run_command = linuxRun;
+            if (exposeLegacyAlias("read_file")) tools.read_file = linuxRead;
         }
         const linuxSkill = tool({
             description:
@@ -1527,6 +1618,38 @@ export async function buildChatTools(
             execute: async (input) => linuxEnvironmentSkill(input, options.chatId),
         });
         tools.linux_environment_skill = linuxSkill;
+
+    }
+
+    if (enableNpmProject) {
+        const npmProject = tool({
+            description: policy.compactToolDescriptions
+                ? "Create and run a browser-local npm project with safe registry installs, file writes, named scripts, inspection, and export in WebContainers."
+                : "Create and run a project inside the browser-local WebContainer runtime using npm libraries. Actions: init, write, install, run, inspect, read, export. Installs accept only public npm registry package names with optional exact versions and always use --ignore-scripts. Run is limited to named build/dev/start/preview/test/lint/typecheck/check/format scripts. This never runs npm on the ai.diy server; report real exit codes/output.",
+            inputSchema: z.object({
+                action: z.enum(NPM_PROJECT_ACTIONS),
+                project: z.string().min(1).max(48),
+                files: z
+                    .record(z.string(), z.string().max(MAX_NPM_PROJECT_FILE_BYTES))
+                    .optional(),
+                packages: z
+                    .array(z.string().max(128))
+                    .max(MAX_NPM_PACKAGE_SPECS)
+                    .optional(),
+                script: z.string().max(64).optional(),
+                path: z.string().max(160).optional(),
+            }),
+        });
+        tools.npm_project = npmProject;
+    }
+
+    if (enableNpmProject && (enableSkillSuite || forceNpmProject)) {
+        tools.npm_project_skill = tool({
+            description:
+                "Load the curated NPM Project contract before using npm_project. It defines the browser-local project root, safe package/install policy, file limits, network boundary, build verification, and export workflow.",
+            inputSchema: z.object({ task: z.string().optional() }),
+            execute: async (input) => npmProjectSkill(input),
+        });
     }
 
     if (enablePython && enableSkillSuite) {
@@ -1537,7 +1660,9 @@ export async function buildChatTools(
             execute: async (input) => pythonFileCreationSkill(input),
         });
         tools.python_file_creation_skill = pythonFileSkill;
-        tools.file_creation_skill = pythonFileSkill;
+        if (exposeLegacyAlias("file_creation_skill")) {
+            tools.file_creation_skill = pythonFileSkill;
+        }
 
         const wordDocumentSkillTool = tool({
             description:
@@ -1546,10 +1671,12 @@ export async function buildChatTools(
             execute: async (input) => wordDocumentSkill(input),
         });
         tools.word_document_skill = wordDocumentSkillTool;
-        tools.word_doc_skill = wordDocumentSkillTool;
+        if (exposeLegacyAlias("word_doc_skill")) {
+            tools.word_doc_skill = wordDocumentSkillTool;
+        }
     }
 
-    if (!previewMode) tools.get_current_time = tool({
+    if (!previewMode && access.currentTime) tools.get_current_time = tool({
         description: "Return the current ISO date/time in a requested IANA timezone.",
         inputSchema: z.object({ timezone: z.string().optional() }),
         execute: async ({ timezone }) => {
@@ -1562,7 +1689,7 @@ export async function buildChatTools(
         },
     });
 
-    if (!previewMode && settings.memoryAvailable) {
+    if (!previewMode && access.memory && settings.memoryAvailable) {
         tools.memory = tool({
             description:
                 "Read relevant user-approved local memory, including pasted or imported entries, from the browser. Use only when the needed personal context is not already visible; send a narrow keyword query and never infer, invent, or request credentials or secrets.",
@@ -1572,10 +1699,10 @@ export async function buildChatTools(
         });
     }
 
-    if (!previewMode && settings.knowledgeEnabled !== false) {
+    if (!previewMode && access.knowledge && settings.knowledgeEnabled !== false) {
         tools.knowledge_search = tool({
             description:
-                "Private on-device RAG over the user's local knowledge base (uploaded notes/PDFs/text). Embeddings never leave the browser. Call with a focused query when the user asks about their documents or uploaded materials.",
+                "Browser-local RAG over the user's knowledge base (uploaded notes/PDFs/text). The index and embeddings stay in the browser, but retrieved context may be included in the request sent to the selected cloud model. Call with a focused query when the user asks about their documents or uploaded materials.",
             inputSchema: z.object({
                 query: z.string(),
                 k: z.number().int().min(1).max(8).optional(),
@@ -1588,7 +1715,7 @@ export async function buildChatTools(
         });
     }
 
-    if (!previewMode && policy.connectorsMeta) {
+    if (!previewMode && access.connectors && policy.connectorsMeta) {
         tools.list_connections = tool({
             description: "List enabled integrations and their capability categories without exposing credentials.",
             inputSchema: z.object({}),
@@ -1605,7 +1732,7 @@ export async function buildChatTools(
         });
     }
 
-    if (!previewMode && !subagentMode) {
+    if (!previewMode && !subagentMode && access.askUser) {
         tools.ask_user = tool({
             description: "Ask the user a focused multiple-choice, multi-select, or short-answer question when required information cannot be safely inferred.",
             inputSchema: z.object({
@@ -1654,7 +1781,7 @@ export async function buildChatTools(
                 }),
         });
         tools.create_skill = createSkill;
-        tools.skill_architect = createSkill;
+        if (exposeLegacyAlias("skill_architect")) tools.skill_architect = createSkill;
 
         const promptArchitectInput = z.object({
             goal: z.string(),
@@ -1704,7 +1831,7 @@ export async function buildChatTools(
             },
         });
         tools.prompt_architect = createPrompt;
-        tools.create_prompt = createPrompt;
+        if (exposeLegacyAlias("create_prompt")) tools.create_prompt = createPrompt;
 
         const htmlCraftTool = tool({
             description:
@@ -1718,11 +1845,15 @@ export async function buildChatTools(
         });
         tools.html_craft = htmlCraftTool;
         // Keep the old tool ids as aliases for persisted prompts and older chats.
-        tools.frontend_design_skill = htmlCraftTool;
-        tools.ultimate_frontend_ui = htmlCraftTool;
+        if (exposeLegacyAlias("frontend_design_skill")) {
+            tools.frontend_design_skill = htmlCraftTool;
+        }
+        if (exposeLegacyAlias("ultimate_frontend_ui")) {
+            tools.ultimate_frontend_ui = htmlCraftTool;
+        }
     }
 
-    tools.create_file = tool({
+    if (access.fileCreation) tools.create_file = tool({
         description: policy.compactToolDescriptions
             ? "Create the requested Canvas file (text/code/HTML/SVG or base64/hex binary). This is the default file-creation tool. Mention the filename in backticks, not as a markdown link."
             : "Create a document, code file, SVG, interactive HTML preview, or downloadable binary file in the Canvas panel. This is the preferred and default tool for file creation. Do not use run_python, run_code, or generate_file for ordinary files. For binary bytes produced by run_python, pass the exact Base64 or hex string with contentEncoding set to base64 or hex; the client decodes it before download. For interactive HTML, use in-page # anchors or absolute https:// links only—never root-relative paths like /pricing that would leave the preview. Always mention the resulting filename in backticks (never as a markdown link).",
@@ -1738,7 +1869,11 @@ export async function buildChatTools(
             artifactPayload({ title, filename, content, kind, mimeType, contentEncoding }),
     });
 
-    if (policy.generateFile) {
+    if (
+        policy.generateFile &&
+        access.fileCreation &&
+        exposeLegacyAlias("generate_file")
+    ) {
         tools.generate_file = tool({
             description: policy.compactToolDescriptions
                 ? "Legacy file-generation alias. Prefer create_file for ordinary files and Canvas previews. Do not duplicate run_python binary artifacts."
@@ -1764,7 +1899,14 @@ export async function buildChatTools(
         });
     }
 
-    if (!previewMode && (settings.subagentsEnabled || forcedTools.has("spawn_subagent") || forcedTools.has("spawn_subagents")) && !subagentMode) {
+    if (
+        !previewMode &&
+        access.subagents &&
+        (settings.subagentsEnabled ||
+            forcedTools.has("spawn_subagent") ||
+            forcedTools.has("spawn_subagents")) &&
+        !subagentMode
+    ) {
         // No server execute — same as ask_user / run_python. The browser must
         // approve, run, and addToolOutput before the main model continues.
         tools.spawn_subagent = tool({

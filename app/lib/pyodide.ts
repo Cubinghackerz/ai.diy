@@ -17,6 +17,11 @@ export type BrowserPythonResult = {
     artifacts: BrowserPythonArtifact[];
 };
 
+export type BrowserPythonInputFile = {
+    filename: string;
+    dataUrl: string;
+};
+
 type PyodideWindow = Window & {
     loadPyodide?: (options: { indexURL: string }) => Promise<PyodideRuntime>;
 };
@@ -27,6 +32,8 @@ const PYODIDE_BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/
 // written to IndexedDB. Keep their in-memory footprint deliberately bounded.
 const MAX_PYTHON_ARTIFACT_BYTES = 2 * 1024 * 1024;
 const MAX_PYTHON_ARTIFACTS = 4;
+const MAX_PYTHON_INPUT_BYTES = 8 * 1024 * 1024;
+const MAX_PYTHON_INPUT_FILES = 4;
 
 // Pyodide loads these only when the user's code imports the matching module.
 // Keeping the map here makes common scientific, data, plotting, parsing,
@@ -54,6 +61,7 @@ const USEFUL_PACKAGE_ALIASES: Record<string, string> = {
     fpdf: "fpdf2",
     jinja2: "jinja2",
     requests: "requests",
+    pypdf: "pypdf",
 };
 
 // These useful file/document packages are not bundled in every Pyodide
@@ -65,6 +73,7 @@ const MICROPIP_PACKAGE_ALIASES: Record<string, string> = {
     pptx: "python-pptx",
     reportlab: "reportlab",
     fpdf: "fpdf2",
+    pypdf: "pypdf",
 };
 
 const micropipInstallPromises = new Map<string, Promise<void>>();
@@ -139,7 +148,58 @@ function loadPyodide(): Promise<PyodideRuntime> {
     return pyodidePromise!;
 }
 
-export async function runBrowserPython(code: string): Promise<BrowserPythonResult> {
+function base64Payload(dataUrl: string): string | null {
+    const comma = dataUrl.indexOf(",");
+    if (comma < 0 || !/^data:[^;,]+(?:;[^;,]+)*;base64$/i.test(dataUrl.slice(0, comma))) {
+        return null;
+    }
+    const payload = dataUrl.slice(comma + 1).replace(/\s+/g, "");
+    return payload && payload.length <= Math.ceil((MAX_PYTHON_INPUT_BYTES * 4) / 3)
+        ? payload
+        : null;
+}
+
+export function collectPythonInputFiles(messages: unknown[]): BrowserPythonInputFile[] {
+    const files: BrowserPythonInputFile[] = [];
+    const seen = new Set<string>();
+    for (const message of messages) {
+        if (!message || typeof message !== "object") continue;
+        const parts = (message as { parts?: unknown[] }).parts;
+        if (!Array.isArray(parts)) continue;
+        for (const part of parts) {
+            if (!part || typeof part !== "object") continue;
+            const value = part as {
+                type?: unknown;
+                filename?: unknown;
+                data?: unknown;
+                image?: unknown;
+            };
+            const dataUrl =
+                typeof value.data === "string"
+                    ? value.data
+                    : typeof value.image === "string"
+                      ? value.image
+                      : "";
+            const payload = base64Payload(dataUrl);
+            const filename =
+                typeof value.filename === "string" && value.filename.trim()
+                    ? value.filename.trim().replace(/[\\/]/g, "_")
+                    : value.type === "image"
+                      ? "attachment-image.bin"
+                      : "attachment.bin";
+            if (!payload || seen.has(`${filename}:${payload.length}`)) continue;
+            seen.add(`${filename}:${payload.length}`);
+            files.push({ filename, dataUrl });
+            if (files.length >= MAX_PYTHON_INPUT_FILES) return files;
+        }
+    }
+    return files;
+}
+
+export async function runBrowserPython(
+    code: string,
+    inputFiles: BrowserPythonInputFile[] = [],
+): Promise<BrowserPythonResult> {
     const source = String(code ?? "").trim();
     if (!source) {
         return { output: "Python error: no code provided.", artifacts: [] };
@@ -183,6 +243,14 @@ export async function runBrowserPython(code: string): Promise<BrowserPythonResul
         }
     }
 
+    const stagedFiles = inputFiles
+        .slice(0, MAX_PYTHON_INPUT_FILES)
+        .map((file) => {
+            const payload = base64Payload(file.dataUrl);
+            const filename = file.filename.replace(/[^a-zA-Z0-9._ -]/g, "_").slice(0, 160) || "attachment.bin";
+            return payload ? { filename, payload } : null;
+        })
+        .filter((file): file is { filename: string; payload: string } => Boolean(file));
     const result = await pyodide.runPythonAsync(`
 import ast
 import base64
@@ -203,6 +271,16 @@ except BaseException:
 _prismium_stdout = io.StringIO()
 _prismium_stderr = io.StringIO()
 _prismium_working_directory = os.getcwd()
+
+_prismium_inputs = ${JSON.stringify(stagedFiles)}
+for _prismium_input in _prismium_inputs:
+    _prismium_input_path = os.path.join(_prismium_working_directory, _prismium_input["filename"])
+    with open(_prismium_input_path, "wb") as _prismium_input_file:
+        _prismium_input_file.write(base64.b64decode(_prismium_input["payload"]))
+_prismium_input_payloads = {
+    _prismium_input["filename"]: _prismium_input["payload"]
+    for _prismium_input in _prismium_inputs
+}
 
 def _prismium_file_snapshot():
     snapshot = {}
@@ -250,12 +328,17 @@ _prismium_artifacts = []
 _prismium_skipped_files = []
 try:
     for _prismium_filename, _prismium_state in _prismium_file_snapshot().items():
-        if _prismium_before.get(_prismium_filename) == _prismium_state:
+        _prismium_path = os.path.join(_prismium_working_directory, _prismium_filename)
+        if _prismium_filename in _prismium_input_payloads:
+            with open(_prismium_path, "rb") as _prismium_file:
+                _prismium_current_payload = base64.b64encode(_prismium_file.read()).decode("ascii")
+            if _prismium_current_payload == _prismium_input_payloads[_prismium_filename]:
+                continue
+        elif _prismium_before.get(_prismium_filename) == _prismium_state:
             continue
         if len(_prismium_artifacts) >= ${MAX_PYTHON_ARTIFACTS}:
             _prismium_skipped_files.append(_prismium_filename)
             continue
-        _prismium_path = os.path.join(_prismium_working_directory, _prismium_filename)
         if _prismium_state[0] > ${MAX_PYTHON_ARTIFACT_BYTES}:
             _prismium_skipped_files.append(_prismium_filename)
             continue

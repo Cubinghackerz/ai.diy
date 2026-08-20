@@ -70,6 +70,10 @@ export interface TokenModePolicy {
     maxFetchChars: number;
     /** Max chars for any single MCP tool result after compacting. */
     maxMcpResultChars: number;
+    /** Number of newest UI messages kept verbatim before old tool outputs are projected. */
+    historyKeepRecent: number;
+    /** Project bulky tool results from older turns before sending model history. */
+    compactHistoricalToolResults: boolean;
     /**
      * Split system prompt into a large stable prefix (cacheable) and a small
      * volatile suffix (date, memory, skills). Enables provider cache breakpoints.
@@ -99,6 +103,8 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
                 maxSnippetChars: 140,
                 maxFetchChars: 3_500,
                 maxMcpResultChars: 8_000,
+                historyKeepRecent: 6,
+                compactHistoricalToolResults: true,
                 promptCaching: false,
             };
         case "caching":
@@ -120,6 +126,8 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
                 maxSnippetChars: 160,
                 maxFetchChars: 4_500,
                 maxMcpResultChars: 10_000,
+                historyKeepRecent: 8,
+                compactHistoricalToolResults: true,
                 promptCaching: true,
             };
         case "full":
@@ -141,6 +149,8 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
                 maxSnippetChars: 240,
                 maxFetchChars: 10_000,
                 maxMcpResultChars: 24_000,
+                historyKeepRecent: 10,
+                compactHistoricalToolResults: false,
                 promptCaching: false,
             };
         case "balanced":
@@ -164,6 +174,8 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
                 maxSnippetChars: 160,
                 maxFetchChars: 4_500,
                 maxMcpResultChars: 10_000,
+                historyKeepRecent: 8,
+                compactHistoricalToolResults: true,
                 promptCaching: false,
             };
     }

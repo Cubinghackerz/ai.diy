@@ -88,8 +88,8 @@ type CheerpXWindow = Window & {
     CheerpXUnavailable?: boolean;
 };
 
-/** Latest 1.x on the Leaning CDN (npm `cheerpx@1.3.7`, 2026-07-30). Docs examples still show 1.2.8; majors are the compatibility boundary. */
-export const CHEERPX_VERSION = "1.3.7";
+/** Pinned 1.x runtime. 1.3.9 fixes sequential Node process instability seen with 1.3.7. */
+export const CHEERPX_VERSION = "1.3.9";
 export const CHEERPX_LOADER_URL = `https://cxrtnc.leaningtech.com/${CHEERPX_VERSION}/cx.esm.js`;
 /**
  * Official WebVM CloudDevice image (WebSocket block store — no GitHub/CORS).
@@ -100,7 +100,14 @@ export const CHEERPX_LOADER_URL = `https://cxrtnc.leaningtech.com/${CHEERPX_VERS
  */
 export const CHEERPX_DISK_IMAGE_URL =
     "wss://disks.webvm.io/debian_buster_large_permis_fixed_01-06-2026.ext2";
-const OVERLAY_DB_BASE = "aidiy-cx-v3";
+export const CHEERPX_DISK_IMAGE_HTTP_URL = CHEERPX_DISK_IMAGE_URL.replace(
+    /^wss:/,
+    "https:",
+);
+// Scope the VM overlay to a conversation. The previous shared database could
+// expose files and installed packages across threads in the same tab. Include
+// the image generation so an old ext2 overlay is never mounted over a new disk.
+const OVERLAY_DB_BASE = "aidiy-cx-v6-cheerpx-1-3-9-debian-buster-2026-06";
 
 const COMMAND_TIMEOUT_MS = 90_000;
 const MAX_COMMAND_TIMEOUT_MS = 300_000;
@@ -146,6 +153,7 @@ export type LinuxNetworkSnapshot = {
 
 let cheerpxModulePromise: Promise<CheerpXNamespace> | null = null;
 let cloudDevicePromise: Promise<CheerpXDevice> | null = null;
+let preferHttpDiskTransport = false;
 let booted: { scopeId: string; cx: CheerpXLinux } | null = null;
 let bootChain: Promise<unknown> = Promise.resolve();
 let commandChain: Promise<unknown> = Promise.resolve();
@@ -329,7 +337,7 @@ function isStoppedError(error: unknown): boolean {
 
 function isCorruptImageError(error: unknown): boolean {
     const message = error instanceof Error ? error.message : String(error ?? "");
-    return /invalid disk image|could not mount|initialization failed/i.test(
+    return /invalid disk image|could not mount|disk failed to mount|initialization failed/i.test(
         message,
     );
 }
@@ -340,8 +348,9 @@ function throwIfStopped(): void {
     }
 }
 
-function overlayDbName(_scopeId?: string): string {
-    return overlayEpoch > 0 ? `${OVERLAY_DB_BASE}-${overlayEpoch}` : OVERLAY_DB_BASE;
+function overlayDbName(scopeId?: string): string {
+    const scoped = `${OVERLAY_DB_BASE}-${sanitizeScopeId(scopeId || "draft")}`;
+    return overlayEpoch > 0 ? `${scoped}-${overlayEpoch}` : scoped;
 }
 
 function deleteIndexedDb(name: string): Promise<void> {
@@ -392,7 +401,7 @@ function installConsoleWatch(): void {
             )
             .join(" ");
         if (
-            /invalid disk image|could not mount|initialization failed|access-control-allow-origin|failed to load resource/i.test(
+            /invalid disk image|could not mount|disk failed to mount|initialization failed|access-control-allow-origin|failed to load resource/i.test(
                 text,
             )
         ) {
@@ -404,24 +413,29 @@ function installConsoleWatch(): void {
 function installFaultWatch(): void {
     if (typeof window === "undefined" || faultWatchInstalled) return;
     faultWatchInstalled = true;
-    const onFault = (message: string) => {
+    const onFault = (message: string): boolean => {
         if (
-            !/cx\.esm|cheerpx|j\[.+\] is not a function|Fault addr|invalid disk image|initialization failed/i.test(
+            !/cx\.esm|cheerpx|[ij]\[.+\].*is not a function|Fault addr|could not mount|invalid disk image|initialization failed/i.test(
                 message,
             )
         ) {
-            return;
+            return false;
         }
         failBoot(new Error("Linux VM crashed. Retry the command."));
         resetRuntime();
         setRuntimePhase("error");
+        return true;
     };
     window.addEventListener("error", (event) => {
-        onFault(`${event.filename ?? ""} ${event.message ?? ""}`);
+        if (onFault(`${event.filename ?? ""} ${event.message ?? ""}`)) {
+            event.preventDefault();
+        }
     });
     window.addEventListener("unhandledrejection", (event) => {
         const reason = event.reason;
-        onFault(reason instanceof Error ? reason.message : String(reason ?? ""));
+        if (onFault(reason instanceof Error ? reason.message : String(reason ?? ""))) {
+            event.preventDefault();
+        }
     });
 }
 
@@ -547,7 +561,7 @@ async function loadCheerpX(): Promise<CheerpXNamespace> {
     cheerpxModulePromise = (async () => {
         try {
             const mod = (await import(
-                /* @vite-ignore */ "https://cxrtnc.leaningtech.com/1.3.7/cx.esm.js"
+                /* @vite-ignore */ CHEERPX_LOADER_URL
             )) as CheerpXNamespace;
             if (!mod?.Linux?.create || !mod.CloudDevice || !mod.IDBDevice || !mod.OverlayDevice) {
                 throw new Error("CheerpX loader is missing Linux or device APIs.");
@@ -562,14 +576,32 @@ async function loadCheerpX(): Promise<CheerpXNamespace> {
     return cheerpxModulePromise;
 }
 
+async function createBaseDevice(CX: CheerpXNamespace): Promise<CheerpXDevice> {
+    const primaryUrl = preferHttpDiskTransport
+        ? CHEERPX_DISK_IMAGE_HTTP_URL
+        : CHEERPX_DISK_IMAGE_URL;
+    try {
+        return await CX.CloudDevice.create(primaryUrl);
+    } catch (primaryError) {
+        if (primaryUrl === CHEERPX_DISK_IMAGE_HTTP_URL) throw primaryError;
+        preferHttpDiskTransport = true;
+        try {
+            return await CX.CloudDevice.create(CHEERPX_DISK_IMAGE_HTTP_URL);
+        } catch (fallbackError) {
+            throw new AggregateError(
+                [primaryError, fallbackError],
+                "Linux disk transport failed over WebSocket and HTTPS.",
+            );
+        }
+    }
+}
+
 async function getBaseDevice(CX: CheerpXNamespace): Promise<CheerpXDevice> {
     if (!cloudDevicePromise) {
-        cloudDevicePromise = CX.CloudDevice.create(CHEERPX_DISK_IMAGE_URL).catch(
-            (error) => {
-                cloudDevicePromise = null;
-                throw error;
-            },
-        );
+        cloudDevicePromise = createBaseDevice(CX).catch((error) => {
+            cloudDevicePromise = null;
+            throw error;
+        });
     }
     return cloudDevicePromise;
 }
@@ -580,7 +612,8 @@ async function createLinux(scopeId: string): Promise<CheerpXLinux> {
     const idbDevice = await CX.IDBDevice.create(overlayDbName(scopeId));
     const overlayDevice = await CX.OverlayDevice.create(baseDevice, idbDevice);
     return new Promise<CheerpXLinux>((resolve, reject) => {
-        bootFail = (error) => reject(error);
+        const rejectBoot = (error: Error) => reject(error);
+        bootFail = rejectBoot;
         void CX.Linux.create({
             mounts: [
                 { type: "ext2", path: "/", dev: overlayDevice },
@@ -590,7 +623,7 @@ async function createLinux(scopeId: string): Promise<CheerpXLinux> {
             ],
             networkInterface: CHEERPX_NETWORK_INTERFACE,
         }).then(resolve, reject).finally(() => {
-            if (bootFail) bootFail = null;
+            if (bootFail === rejectBoot) bootFail = null;
         });
     });
 }
@@ -608,6 +641,12 @@ async function bootCheerpXInner(scopeId: string): Promise<CheerpXLinux> {
     if (!cheerpxAvailable()) {
         throw new Error(UNAVAILABLE_MESSAGE);
     }
+    if (booted && booted.scopeId !== scopeId) {
+        const previous = booted;
+        await stopInteractiveShell();
+        killUserProcesses(previous.cx);
+        resetRuntime();
+    }
     if (booted) return booted.cx;
     setRuntimePhase("booting");
     const bootOnce = () =>
@@ -624,6 +663,10 @@ async function bootCheerpXInner(scopeId: string): Promise<CheerpXLinux> {
             cx = await bootOnce();
         } catch (error) {
             if (isStoppedError(error)) throw error;
+            if (isCorruptImageError(error)) {
+                preferHttpDiskTransport = true;
+                cloudDevicePromise = null;
+            }
             await recoverOverlay(scopeId);
             setRuntimePhase("booting");
             cx = await bootOnce();
@@ -889,12 +932,8 @@ async function ensureWritableHome(cx: CheerpXLinux): Promise<void> {
 }
 
 /**
- * One-time per-page probe. Debian's `nodejs` package ships the npm CLI at
- * /usr/share/nodejs/npm/bin/npm-cli.js but the `npm` frontend is a separate
- * package this image lacks, so npm is "command not found". If the CLI exists,
- * install a small wrapper into /home/user/bin (persisted in the overlay,
- * already on PATH) so `npm` resolves to Node 10's npm. No network is needed
- * for the wrapper itself; `npm install` still requires network.
+ * One-time per-page probe. If the image has npm's CLI but no frontend, install
+ * a small local wrapper into /home/user/bin. No network bootstrap is attempted.
  */
 let toolchainEnsure: Promise<void> | null = null;
 let toolchainNote: string | null = null;
@@ -904,7 +943,9 @@ for t in node npm python3 pip3 gcc g++ make git curl wget jq; do
   p=$(command -v "$t" 2>/dev/null)
   if [ -n "$p" ]; then echo "HAVE $t=$p"; else echo "MISSING $t"; fi
 done
-if [ -f /usr/share/nodejs/npm/bin/npm-cli.js ]; then
+if command -v npm >/dev/null 2>&1; then
+  echo NPM_READY
+elif [ -f /usr/share/nodejs/npm/bin/npm-cli.js ]; then
   if [ ! -x "$HOME/bin/npm" ]; then
     mkdir -p "$HOME/bin"
     printf '%s\n' '#!/bin/bash' 'export NODE_PATH="/usr/share/nodejs"' 'exec node /usr/share/nodejs/npm/bin/npm-cli.js "$@"' > "$HOME/bin/npm"
@@ -913,24 +954,33 @@ if [ -f /usr/share/nodejs/npm/bin/npm-cli.js ]; then
   else
     echo NPM_WRAPPER_PRESENT
   fi
+  echo NPM_READY
 else
   echo NPM_CLI_MISSING
 fi`;
 
+async function probeToolchain(cx: CheerpXLinux): Promise<void> {
+    const result = await runProcess(cx, ["-lc", TOOLCHAIN_PROBE], DEFAULT_CWD, {
+        timeoutMs: 20_000,
+    });
+    toolchainNote = result.output
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line && /^(HAVE|MISSING|NPM_)/.test(line))
+        .join("; ");
+    console.info("[cheerpx] toolchain:", toolchainNote);
+}
+
 function ensureToolchain(cx: CheerpXLinux): Promise<void> {
     if (!toolchainEnsure) {
-        toolchainEnsure = runProcess(cx, ["-lc", TOOLCHAIN_PROBE], DEFAULT_CWD, {
-            timeoutMs: 20_000,
-        })
-            .then((result) => {
-                toolchainNote = result.output
-                    .split("\n")
-                    .map((line) => line.trim())
-                    .filter((line) => line && /^(HAVE|MISSING|NPM_)/.test(line))
-                    .join("; ");
-                console.info("[cheerpx] toolchain:", toolchainNote);
-            })
-            .catch(() => undefined);
+        const attempt = probeToolchain(cx).catch(() => undefined);
+        toolchainEnsure = attempt;
+        void attempt.finally(() => {
+            if (toolchainEnsure === attempt && !/NPM_READY/.test(toolchainNote ?? "")) {
+                // Retry after the user connects Tailscale with an exit node.
+                toolchainEnsure = null;
+            }
+        });
     }
     return toolchainEnsure;
 }
@@ -947,7 +997,7 @@ function resolveCommandTimeoutMs(timeoutSec?: number): number {
 }
 
 function commandNeedsNpm(source: string): boolean {
-    return /(^|[\s/])npm(?:\s|$)/.test(source);
+    return /(?:^|\n)\s*(?:exec\s+)?npm(?:\s|$)/.test(source);
 }
 
 export async function runCommand(
@@ -960,7 +1010,21 @@ export async function runCommand(
         return { stdout: "", stderr: "No command provided.", exitCode: 1, timedOut: false };
     }
     const cwd = String(opts?.cwd ?? DEFAULT_CWD).trim() || DEFAULT_CWD;
-    if (commandNeedsNpm(source)) await ensureToolchain(cx);
+    if (commandNeedsNpm(source)) {
+        await ensureToolchain(cx);
+        const note = toolchainNote ?? "";
+        if (/NPM_CLI_MISSING/.test(note)) {
+            // Missing executables can destabilize this CheerpX image. Do not
+            // launch npm until the toolchain probe has installed a wrapper.
+            return {
+                stdout: "",
+                stderr: note || "NPM_CLI_MISSING",
+                exitCode: 127,
+                timedOut: false,
+                durationMs: 0,
+            };
+        }
+    }
     const timeoutMs = resolveCommandTimeoutMs(opts?.timeoutSec);
     const timeoutSec = Math.round(timeoutMs / 1000);
     await ensureWritableHome(cx);
@@ -968,7 +1032,7 @@ export async function runCommand(
         cx,
         ["-lc", source],
         cwd,
-        { trackPid: true, timeoutMs, maxOutputBytes: MAX_OUTPUT_BYTES },
+        { timeoutMs, maxOutputBytes: MAX_OUTPUT_BYTES },
     );
     const stdout = capOutput(
         result.output.replace(/\n?AIDIY_PID:\d+\n?/g, "").replace(/\n?AIDIY_TIMEOUT\n?/g, "").trimEnd(),
@@ -1003,12 +1067,7 @@ if [ "$size" -gt "$max" ]; then
   exit 3
 fi
 echo AIDIY_B64_BEGIN
-if base64 -w0 "$path" 2>/dev/null; then
-  echo
-else
-  base64 "$path" | tr -d "\\n"
-  echo
-fi
+python3 -c 'import base64,sys; print(base64.b64encode(open(sys.argv[1], "rb").read()).decode())' "$path"
 echo AIDIY_B64_END`;
 
 function looksLikeText(bytes: Uint8Array): boolean {

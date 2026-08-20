@@ -23,15 +23,16 @@ import { useSettings } from "~/lib/providers/SettingsProvider";
 import { createAttachmentAdapter } from "~/lib/attachments";
 import { getModelModalities } from "~/lib/model-modalities";
 import { localProviderKey } from "~/lib/provider-credentials";
-import { runBrowserPython } from "~/lib/pyodide";
+import { collectPythonInputFiles, runBrowserPython } from "~/lib/pyodide";
 import {
     cheerpxAvailable,
     executeLinuxClientTool,
     isLinuxClientTool,
     linuxGenerationAborted,
     prefetchCheerpX,
-    prewarmCheerpX,
 } from "~/lib/cheerpx";
+import { executeNpmProjectClientTool } from "~/lib/npm-project.client";
+import type { NpmProjectInput } from "~/lib/npm-project";
 import { artifactContentHash, inferArtifactMimeType } from "~/lib/artifacts";
 import { persistArtifactForScope } from "~/lib/artifact-persist.client";
 import { useCanvas } from "~/lib/canvas";
@@ -61,6 +62,10 @@ import {
 } from "~/lib/dictation";
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { assertClientUsageAllowed } from "~/lib/usage-ledger.client";
+import {
+    normalizeToolAccess,
+    toolAccessAllows,
+} from "~/lib/tool-access";
 
 function parseErrorText(text: string, status: number): string {
     try {
@@ -111,11 +116,13 @@ export function AssistantRuntimeProvider({
     projectInstructionsRef.current = projectInstructions ?? "";
 
     useEffect(() => {
-        if (settings.linuxEnvironment === false) return;
+        if (settings.linuxEnvironment === false || settings.toolAccess.linux === false) return;
         if (typeof window === "undefined" || !cheerpxAvailable()) return;
+        // Fetch the runtime/disk metadata early, but boot only when the user
+        // opens the environment or a tool needs it. Eager boots can race the
+        // first client tool and leave its reply waiting on a failed mount.
         prefetchCheerpX();
-        void prewarmCheerpX(threadId ?? "draft").catch(() => undefined);
-    }, [settings.linuxEnvironment, threadId]);
+    }, [settings.linuxEnvironment, settings.toolAccess.linux]);
 
     const transport = useMemo(
         () =>
@@ -186,9 +193,20 @@ export function AssistantRuntimeProvider({
 
                     await assertClientUsageAllowed(s, provider, resolvedApiKey);
 
-                    const memoryEnabled = s.memoryEnabled !== false;
-                    const knowledgeEnabled = s.knowledgeEnabled !== false;
-                    const memoryContext = memoryEnabled
+                    const access = normalizeToolAccess(s.toolAccess, {
+                        webSearch: s.webSearchEnabled !== false,
+                        calculator: s.calculatorEnabled !== false,
+                        python: s.pythonEnabled !== false,
+                        linux: s.linuxEnvironment !== false,
+                        skills: s.skillsEnabled !== false,
+                        memory: s.memoryEnabled !== false,
+                        knowledge: s.knowledgeEnabled !== false,
+                        subagents: s.subagentsEnabled === true,
+                    });
+                    const memoryEnabled = access.memory && s.memoryEnabled !== false;
+                    const knowledgeEnabled =
+                        access.knowledge && s.knowledgeEnabled !== false;
+                    const memoryContext = memoryEnabled && s.memoryAutoAttach
                         ? await buildLocalMemoryContext()
                         : "";
                     const lastMsg = [...(options.messages ?? [])]
@@ -212,7 +230,7 @@ export function AssistantRuntimeProvider({
                         memoryEnabled && (await hasLocalMemoryEntries());
                     const forcedSkills = forcedSkillStore.current;
                     forcedSkillStore.current = [];
-                    const forceSubagents = forcedSkills.some(
+                    const forceSubagents = access.subagents && forcedSkills.some(
                         (skill) =>
                             toolNameForForcedSkill(skill.name) === "spawn_subagents",
                     );
@@ -235,6 +253,7 @@ export function AssistantRuntimeProvider({
                             baseUrl,
                             openAICompatible: providerConfig?.openAICompatible,
                              systemPrompt: s.chat.systemPrompt,
+                             advancedSystemPrompt: s.chat.advancedSystemPrompt,
                              projectInstructions: projectInstructionsRef.current || undefined,
                             temperature: s.chat.temperature,
                             maxTokens: s.chat.maxTokens,
@@ -245,21 +264,25 @@ export function AssistantRuntimeProvider({
                                  count: s.chat.imageCount,
                              },
                             toolSettings: {
-                                webSearchEnabled: s.webSearchEnabled,
-                                calculatorEnabled: s.calculatorEnabled,
-                                pythonEnabled: s.pythonEnabled,
-                                linuxEnvironment: s.linuxEnvironment,
+                                 webSearchEnabled: access.webSearch && s.webSearchEnabled,
+                                 calculatorEnabled: access.calculator && s.calculatorEnabled,
+                                 pythonEnabled: access.python && s.pythonEnabled,
+                                 linuxEnvironment: access.linux && s.linuxEnvironment,
                                 webSearchEngine: s.webSearchEngine,
                                 searxngUrl: s.searxngUrl,
-                                skillsEnabled: s.skillsEnabled,
-                                connectors: s.connectors,
+                                 skillsEnabled: access.skills && s.skillsEnabled,
+                                 connectors: access.connectors ? s.connectors : [],
                                 memoryAvailable,
                                 knowledgeEnabled,
-                                subagentsEnabled:
-                                    s.subagentsEnabled === true || forceSubagents,
+                                 subagentsEnabled:
+                                     access.subagents &&
+                                     (s.subagentsEnabled === true || forceSubagents),
                                 tokenMode: s.tokenMode ?? "balanced",
+                                toolAccess: access,
                             },
-                            mcpServers: s.mcpServers.filter((m) => m.enabled),
+                            mcpServers: access.mcp
+                                ? s.mcpServers.filter((m) => m.enabled)
+                                : [],
                             memoryContext: combinedContext,
                             agentMode: s.agentModeEnabled === true,
                             ...(forcedSkills.length ? { customSkills: forcedSkills } : {}),
@@ -320,6 +343,7 @@ export function AssistantRuntimeProvider({
                 "linux_background_start",
                 "linux_list_processes",
                 "linux_kill_process",
+                "npm_project",
                 "ask_user",
                 "memory",
                 "knowledge_search",
@@ -327,6 +351,26 @@ export function AssistantRuntimeProvider({
                 "spawn_subagent",
                 "spawn_subagents",
             ].includes(toolCall.toolName)) return;
+            if (!toolAccessAllows(settingsRef.current.toolAccess, toolCall.toolName)) {
+                pendingClientCalls.current += 1;
+                const addToolOutput = chatRef.current
+                    ?.addToolOutput as unknown as
+                    | ((args: {
+                          tool: string;
+                          toolCallId: string;
+                          state: "output-available";
+                          output: string;
+                      }) => void)
+                    | undefined;
+                addToolOutput?.({
+                    tool: toolCall.toolName,
+                    toolCallId: toolCall.toolCallId,
+                    state: "output-available",
+                    output: `Tool access is disabled in Settings: ${toolCall.toolName}. Continue without it.`,
+                });
+                scheduleMainChatResume();
+                return;
+            }
             pendingClientCalls.current += 1;
             const input = toolCall.input as {
                 code?: string;
@@ -341,7 +385,12 @@ export function AssistantRuntimeProvider({
                 k?: number;
                 task?: string;
                 tasks?: string[];
-            };
+                 action?: NpmProjectInput["action"];
+                 project?: string;
+                 files?: Record<string, string>;
+                 packages?: string[];
+                 script?: string;
+             };
             const task =
                 toolCall.toolName === "ask_user"
                     ? askUserInChat(toolCall.toolCallId, {
@@ -373,17 +422,35 @@ export function AssistantRuntimeProvider({
                                         : "Knowledge base is empty.",
                                 )
                               : Promise.resolve("Knowledge base is disabled.")
-                          : toolCall.toolName === "knowledge_search"
+                         : toolCall.toolName === "knowledge_search"
                             ? settingsRef.current.knowledgeEnabled !== false
                                 ? readLocalKnowledge(input.query)
                                 : Promise.resolve("Knowledge base is disabled.")
-                            : isLinuxClientTool(toolCall.toolName)
-                              ? executeLinuxClientTool(
+                             : toolCall.toolName === "npm_project"
+                               ? executeNpmProjectClientTool(
+                                     {
+                                         action: input.action ?? "inspect",
+                                         project: input.project ?? "app",
+                                         files: input.files,
+                                         packages: input.packages,
+                                         script: input.script,
+                                         path: input.path,
+                                     },
+                                     threadId ?? "draft",
+                                 )
+                               : isLinuxClientTool(toolCall.toolName)
+                               ? executeLinuxClientTool(
                                     toolCall.toolName,
                                     input,
                                     threadId ?? "draft",
                                 )
-                            : runBrowserPython(input.code ?? "");
+                              : runBrowserPython(
+                                    input.code ?? "",
+                                    collectPythonInputFiles(
+                                        ((chatRef.current as unknown as { messages?: unknown[] } | null)
+                                            ?.messages ?? []),
+                                    ),
+                                );
             void task.then(
                 (result) => {
                     const output =
@@ -391,9 +458,12 @@ export function AssistantRuntimeProvider({
                     const pythonResult =
                         typeof result === "string" ? null : result;
                     if (pythonResult) {
-                        const sourcePrefix = isLinuxClientTool(toolCall.toolName)
-                            ? "linux"
-                            : "python";
+                        const sourcePrefix =
+                            toolCall.toolName === "npm_project"
+                                ? "npm"
+                                : isLinuxClientTool(toolCall.toolName)
+                                  ? "linux"
+                                  : "python";
                         for (const artifact of pythonResult.artifacts) {
                             const mimeType = inferArtifactMimeType(artifact.filename);
                             const sourceKey = `${sourcePrefix}:${artifact.filename}:${artifact.contentEncoding}:${artifact.content.length}:${artifactContentHash(artifact.content)}`;
@@ -453,8 +523,10 @@ export function AssistantRuntimeProvider({
                             ? error.message
                             : isSubagent
                               ? "Subagent run failed"
-                              : isLinuxClientTool(toolCall.toolName)
-                                ? "Linux environment execution failed"
+                               : toolCall.toolName === "npm_project"
+                                 ? "NPM project execution failed"
+                                 : isLinuxClientTool(toolCall.toolName)
+                                 ? "Linux environment execution failed"
                               : "Pyodide execution failed";
                     // Always resume the main chat — never leave spawn_* hanging.
                     const addToolOutput = chatRef.current

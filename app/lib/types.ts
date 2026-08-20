@@ -120,6 +120,8 @@ export type ReasoningEffort = "off" | "minimal" | "low" | "medium" | "high";
 
 export interface ChatSettings {
     systemPrompt: string;
+    /** Explicit danger-zone override for the complete system prompt. */
+    advancedSystemPrompt?: string;
     temperature: number;
     maxTokens: number | null;
     topP: number;
@@ -179,6 +181,8 @@ export interface AppSettings {
     linuxEnvironment: boolean;
     calculatorEnabled: boolean;
     memoryEnabled: boolean;
+    /** Memory remains callable, but is not injected unless explicitly enabled. */
+    memoryAutoAttach: boolean;
     /** Private on-device knowledge base (WASM embeddings + local vector search). */
     knowledgeEnabled: boolean;
     skillsEnabled: boolean;
@@ -189,6 +193,8 @@ export interface AppSettings {
     tokenMode: import("./token-mode").TokenMode;
     /** Beta: let the model delegate subtasks to user-approved subagents. */
     subagentsEnabled: boolean;
+    /** Setup-time capability allowlist; legacy toggles remain synchronized. */
+    toolAccess: import("./tool-access").ToolAccessSettings;
     /**
      * Agent Mode: plan → select installed skills/tools → execute → verify.
      * Uses General Task Solver routing when available.
@@ -503,6 +509,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     },
     chat: {
         systemPrompt: "",
+        advancedSystemPrompt: "",
         temperature: 0.7,
         maxTokens: null,
         topP: 1,
@@ -525,10 +532,28 @@ export const DEFAULT_SETTINGS: AppSettings = {
     linuxEnvironment: true,
     calculatorEnabled: true,
     memoryEnabled: true,
+    memoryAutoAttach: false,
     knowledgeEnabled: true,
     skillsEnabled: true,
     tokenMode: "balanced",
     subagentsEnabled: false,
+    toolAccess: {
+        webSearch: true,
+        calculator: true,
+        python: true,
+        linux: true,
+        npmProject: true,
+        fileCreation: true,
+        skills: true,
+        memory: true,
+        knowledge: true,
+        connectors: true,
+        mcp: true,
+        subagents: false,
+        currentTime: true,
+        askUser: true,
+        compaction: true,
+    },
     agentModeEnabled: false,
     chatgptLoginEnabled: false,
     preview: {

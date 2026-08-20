@@ -4,6 +4,7 @@ import { embedTexts, embedQuery } from "./embed.client";
 import { searchChunksHnsw } from "./index.client";
 import type { KbDocument } from "./types";
 import type { KbHit } from "./index.client";
+import { extractKnowledgeText } from "./extract.client";
 
 export async function listKnowledgeDocuments(): Promise<KbDocument[]> {
     const docs = await getAllKbDocuments();
@@ -11,7 +12,8 @@ export async function listKnowledgeDocuments(): Promise<KbDocument[]> {
 }
 
 export async function ingestTextFile(file: File): Promise<KbDocument> {
-    const text = await file.text();
+    const extracted = await extractKnowledgeText(file);
+    const text = extracted.text;
     if (!text.trim()) {
         throw new Error("File is empty or not readable as text.");
     }

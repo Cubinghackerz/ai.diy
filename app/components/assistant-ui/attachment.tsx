@@ -296,6 +296,9 @@ export const ComposerAttachmentGuard: FC = () => {
         if (modalities.documents) return false;
         const contentType = attachment.contentType?.toLowerCase() ?? "";
         const name = attachment.name.toLowerCase();
+        if (contentType === "application/pdf" || /\.(pdf|docx?)$/.test(name)) {
+          return false;
+        }
         const textLike =
           contentType.startsWith("text/") ||
           /json|javascript|typescript|xml|csv|markdown|yaml/.test(contentType) ||
@@ -320,6 +323,20 @@ export const ComposerAttachmentGuard: FC = () => {
     const timer = window.setTimeout(() => setNotice(null), 7000);
     return () => window.clearTimeout(timer);
   }, [aui.composer, attachments, modalities.documents, modalities.vision]);
+
+  useEffect(() => {
+    if (modalities.vision) return;
+    const documentWithPossibleImages = attachments.some(({ name, contentType }) =>
+      contentType?.toLowerCase() === "application/pdf" ||
+      /\.(pdf|docx?)$/i.test(name),
+    );
+    if (!documentWithPossibleImages) return;
+    setNotice(
+      "This model cannot see embedded images in PDF/Word attachments. Readable text is still sent.",
+    );
+    const timer = window.setTimeout(() => setNotice(null), 7000);
+    return () => window.clearTimeout(timer);
+  }, [attachments, modalities.vision]);
 
   if (!notice) return null;
   return (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { GITHUB_REPO } from "./constants";
 
 const STARS_CACHE_KEY = "ai.diy:github-stars";
@@ -94,4 +94,16 @@ export function usePrefersReducedMotion() {
         return () => mq.removeEventListener("change", sync);
     }, []);
     return reduced;
+}
+
+export function useFinePointer() {
+    return useSyncExternalStore(
+        (onStoreChange) => {
+            const mq = window.matchMedia("(hover: hover) and (pointer: fine)");
+            mq.addEventListener("change", onStoreChange);
+            return () => mq.removeEventListener("change", onStoreChange);
+        },
+        () => window.matchMedia("(hover: hover) and (pointer: fine)").matches,
+        () => false,
+    );
 }

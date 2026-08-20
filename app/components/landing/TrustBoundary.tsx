@@ -5,22 +5,19 @@ const NODES = [
         id: "browser",
         label: "Your browser",
         status: "OWNED",
-        tone: "owned" as const,
-        lines: ["Settings and keys in browser storage", "Threads · Canvas · memory", "IndexedDB + localStorage"],
+        body: "Keys, threads, Canvas, memory — IndexedDB.",
     },
     {
         id: "relay",
         label: "Node relay",
         status: "TRANSIT",
-        tone: "transit" as const,
-        lines: ["No persistent provider keys", "Models + enabled tools", "Per-request forward"],
+        body: "No persistent provider keys. Per-request forward.",
     },
     {
         id: "provider",
         label: "Chosen provider",
         status: "CHOSEN",
-        tone: "provider" as const,
-        lines: ["20+ cloud and local providers", "Ollama / custom endpoint", "You pick the model"],
+        body: "20+ cloud and local models. You pick.",
     },
 ];
 
@@ -31,64 +28,31 @@ export function TrustBoundary({ className }: { className?: string }) {
             role="img"
             aria-label="The browser owns workspace state, the Node server relays requests, and you choose the provider."
         >
-            <div className="rounded-2xl border border-white/[0.1] bg-[#08080a]">
-                <div className="flex items-center justify-between border-b border-white/[0.1] px-4 py-2.5 font-mono text-[10px] tracking-[0.18em] text-zinc-400">
+            <div className="overflow-hidden rounded-xl border border-white/[0.08]">
+                <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-2 font-mono text-[10px] tracking-[0.16em] text-zinc-600">
                     <span>LOCAL DATA PLANE</span>
-                    <span className="inline-flex items-center gap-1.5 tracking-normal text-[var(--landing-mint,#3DFFB0)]">
-                        <span className="size-1.5 rounded-full bg-[var(--landing-mint,#3DFFB0)]" />
-                        RELAY · TRANSIT ONLY
-                    </span>
+                    <span>TRANSIT ONLY</span>
                 </div>
 
-                <div className="grid lg:grid-cols-3">
+                <div className="grid md:grid-cols-3">
                     {NODES.map((node, index) => (
                         <article
                             key={node.id}
                             className={cn(
-                                "min-h-[12.5rem] p-5 sm:p-6",
-                                index > 0 && "border-t border-white/[0.08] lg:border-l lg:border-t-0",
-                                node.tone === "owned" && "bg-white text-black",
-                                node.tone === "transit" && "bg-[#101014] text-zinc-100",
-                                node.tone === "provider" && "bg-[#16161b] text-zinc-100",
+                                "px-4 py-4 sm:px-5 sm:py-5",
+                                index > 0 && "border-t border-white/[0.08] md:border-l md:border-t-0",
                             )}
                         >
-                            <p
-                                className={cn(
-                                    "font-mono text-[10px] tracking-[0.18em]",
-                                    node.tone === "owned"
-                                        ? "text-black/50"
-                                        : node.tone === "transit"
-                                          ? "text-zinc-300"
-                                          : "text-zinc-500",
-                                )}
-                            >
+                            <p className="font-mono text-[10px] tracking-[0.16em] text-zinc-600">
                                 {node.status}
                             </p>
-                            <h3
-                                className={cn(
-                                    "mt-2 text-[18px] font-medium tracking-[-0.035em]",
-                                    node.tone === "owned" ? "text-black" : "text-white",
-                                )}
-                            >
+                            <h3 className="mt-1.5 text-[15px] font-medium tracking-tight text-white">
                                 {node.label}
                             </h3>
-                            <ul
-                                className={cn(
-                                    "mt-4 space-y-1.5 text-[13px] leading-snug",
-                                    node.tone === "owned" ? "text-black/62" : "text-zinc-400",
-                                )}
-                            >
-                                {node.lines.map((line) => (
-                                    <li key={line}>{line}</li>
-                                ))}
-                            </ul>
+                            <p className="mt-1.5 text-[13px] leading-snug text-zinc-500">{node.body}</p>
                         </article>
                     ))}
                 </div>
-
-                <p className="border-t border-white/[0.1] px-5 py-3 font-mono text-[11px] leading-relaxed text-zinc-400">
-                    Stored in the browser. Relayed in transit. Never required as a persistent server secret.
-                </p>
             </div>
         </div>
     );

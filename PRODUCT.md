@@ -37,7 +37,8 @@ The claim a neighboring product could not copy truthfully: a self-hosted AI work
 Confirmed functionality (from README and code):
 - Streaming chat, provider reasoning, reasoning-effort controls, image and video generation models.
 - Files, Canvas artifacts (text, HTML previews, images, and Python binaries persisted with the thread), model hover cards with capability/price data from models.dev.
-- Tools: web search, URL fetch, calculator, browser Python, files, research skill, skills, local time, memory, on-device knowledge search, ask user, remote MCP, subagents.
+- Tools: web search, URL fetch, calculator, browser Python, files, research skill, skills, local time, memory, on-device knowledge search, ask user, remote MCP, subagents. Setup and Settings let the user choose which of these capabilities the model may use.
+- Browser-local npm projects: per-thread WebContainer Node workspaces with bounded file writes, registry-only package installs with lifecycle scripts disabled, allowlisted npm scripts, inspection, and export.
 - Slash composer commands force skills/tools (e.g. `/Research`, `/Compaction`, `/Subagent`); skill tools show as “Used skill” in chat.
 - Private on-device RAG (Settings → Knowledge Base) over uploaded documents via WASM embeddings + HNSW.
 - Local usage and cost tracking with optional soft caps; import/export; S3/WebDAV/Google Drive cloud backup (client-side).
@@ -59,7 +60,7 @@ Known constraints:
 - Voice: calm, direct, technical, no hype; "open tools for useful thinking."
 - Landing page copy and factual claims follow the Ethereal Glass × Resend blackspace redesign (ownership headline, BYOK subhead, real deploy commands, modular landing under `app/components/landing/`). Do not fabricate metrics, customers, or package names.
 - Provider brand marks use bundled assets in `public/landing-logos/` and Simple Icons where applicable; Firecrawl and Parallel logos exist in `public/`.
-- Landing visual world: OLED `#050505`, zinc/white mesh (no purple), double-bezel hardware, floating island nav, Geist, Phosphor Light, solid white CTAs. Workspace identity tokens may differ.
+- Landing visual world: Vercel/Resend blackfield — canvas `#000`, surfaces `#0a0a0a`, hairline borders, Geist Sans/Mono, Phosphor Light, solid white CTAs, flat mint `#3DFFB0` live signal, no gradients. Centered product-window hero. Workspace identity tokens may differ.
 
 ## Evidence on Hand
 

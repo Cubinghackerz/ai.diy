@@ -1,5 +1,6 @@
 import { CaretDown } from "@phosphor-icons/react";
 import { Reveal } from "./DoubleBezel";
+import { MaskedHeading } from "./MaskedHeading";
 
 export const FAQ_ITEMS = [
     {
@@ -43,12 +44,12 @@ export function Faq() {
             data-anim-gate="faq"
         >
             <Reveal>
-                <h2
+                <MaskedHeading
                     id="faq-heading"
                     className="max-w-[18ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl"
                 >
                     Frequently asked questions.
-                </h2>
+                </MaskedHeading>
                 <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-zinc-400">
                     Understand the ownership model, supported AI providers, browser storage, and
                     self-hosting path before you open the workspace.

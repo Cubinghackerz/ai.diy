@@ -67,6 +67,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <Links />
             </head>
             <body className="font-sans antialiased">
+                <div
+                    hidden
+                    dangerouslySetInnerHTML={{
+                        __html: `<!-- ai.diy landing · direction contract
+THESIS: The product is the proof — a black, flat, Vercel-grade workspace in the first viewport; rejects the text-left/media-right SaaS hero.
+OWN-WORLD: #000 canvas, #0a0a0a surfaces, white/10 hairlines, flat mint signal, Geist Sans/Mono, zero gradients; depth from borders and soft shadows.
+STORY: See the browser-owned workspace at full size, then open it or self-host it.
+FIRST VIEWPORT: Centered cipher headline and actions above a full-width product window with the real workspace screenshot.
+FORM: User-pinned canon (Vercel/Resend fidelity), built as responsive product proof.
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md. -->`,
+                    }}
+                />
                 <SettingsProvider>
                     <TooltipProvider delay={200}>{children}</TooltipProvider>
                 </SettingsProvider>

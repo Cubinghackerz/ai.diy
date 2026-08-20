@@ -87,6 +87,11 @@ export const BUILTIN_FORCED_SKILLS: ForcedSkill[] = [
         content:
             "You MUST activate and follow the linux_environment_skill contract for this request before using the in-browser Linux VM: load the contract once (call linux_environment_skill, or reuse it if it is already loaded in this conversation), then use linux_run_command / linux_read_file (or run_command / read_file when those aliases are listed), linux_background_start / linux_list_processes / linux_kill_process for servers and long jobs. Never mask failures with `|| true`; quote real exit codes and output; verify started servers via linux_list_processes and the returned log. Do not invent exit codes, Canvas files, or compiler output. Do not answer before loading the contract.",
     },
+    {
+        name: "NPM Project",
+        content:
+            "You MUST activate and follow the npm_project_skill before building a project that needs npm packages or Node libraries: call npm_project_skill first, then use npm_project for init, write, install, run, inspect, read, or export. Work only in the browser-local WebContainer project workspace. Install public registry packages with exact versions when practical; lifecycle scripts are disabled by default. Do not run npm on the ai.diy server, use git/file/tarball package specs, place files outside the project root, expose secrets, or claim a preview/build succeeded without reading the real result.",
+    },
 ];
 
 /** Search aliases for the slash skill menu (name + shortcuts). */
@@ -133,6 +138,19 @@ const SKILL_MENU_ALIASES: Record<string, string[]> = {
         "gcc",
         "sandbox",
     ],
+    "npm project": [
+        "npm project",
+        "npm",
+        "node project",
+        "node app",
+        "package",
+        "packages",
+        "dependency",
+        "dependencies",
+        "library",
+        "libraries",
+        "vite",
+    ],
 };
 
 /** Whether a skill should appear for the current `/query` filter. */
@@ -177,6 +195,17 @@ const SKILL_TOOL_BY_NAME: Record<string, string> = {
     linux: "linux_environment_skill",
     cheerpx: "linux_environment_skill",
     webvm: "linux_environment_skill",
+    "npm project": "npm_project_skill",
+    npm: "npm_project_skill",
+    "node project": "npm_project_skill",
+    "node app": "npm_project_skill",
+    package: "npm_project_skill",
+    packages: "npm_project_skill",
+    dependency: "npm_project_skill",
+    dependencies: "npm_project_skill",
+    library: "npm_project_skill",
+    libraries: "npm_project_skill",
+    vite: "npm_project_skill",
 };
 
 export function lookupForcedSkill(name: string): ForcedSkill | null {
@@ -214,6 +243,13 @@ export function toolNameForForcedSkill(skillName: string): string | null {
     ) {
         return "linux_environment_skill";
     }
+    if (
+        /\bnpm\b|\bnode\s+project\b|\bpackages?\b|\bdependenc(?:y|ies)\b|\blibrar(?:y|ies)\b|\bvite\b/.test(
+            key,
+        )
+    ) {
+        return "npm_project_skill";
+    }
     return null;
 }
 
@@ -238,6 +274,7 @@ const TOOL_TO_SKILL_LABEL: Record<string, string> = {
     summarize_youtube: "YouTube",
     url_doctor: "URL Doctor",
     linux_environment_skill: "Linux Environment",
+    npm_project_skill: "NPM Project",
 };
 
 export function skillLabelForTool(toolName: string): string | null {
@@ -349,6 +386,7 @@ export function toolInvokedInThread(
         role?: string;
         parts?: Array<{
             type?: string;
+            toolName?: string;
             toolInvocation?: { toolName?: string };
         }>;
         toolCalls?: Array<{ name?: string }>;
@@ -365,8 +403,10 @@ export function toolInvokedInThread(
         }
         if (Array.isArray(message.parts)) {
             for (const part of message.parts) {
-                const toolName = (part as { toolInvocation?: { toolName?: string } })
-                    .toolInvocation?.toolName;
+                const toolName =
+                    part.toolName ||
+                    part.toolInvocation?.toolName ||
+                    (part.type?.startsWith("tool-") ? part.type.slice(5) : undefined);
                 if (toolName && wanted.has(toolName)) return true;
             }
         }
@@ -567,7 +607,23 @@ export function detectLinuxIntent(text: string | undefined | null): boolean {
     if (/\b(gcc|g\+\+|compile)\b/.test(t) && /\b(\.c\b|hello\.c|c\s+file)\b/.test(t)) {
         return true;
     }
+    if (detectNpmProjectIntent(raw)) return true;
     return false;
+}
+
+/** Detect requests that need a browser-local Node/npm project workspace. */
+export function detectNpmProjectIntent(text: string | undefined | null): boolean {
+    const raw = (text ?? "").trim();
+    if (!raw || raw.length < 6) return false;
+    const t = raw.toLowerCase();
+    const hasNpmConcept =
+        /\bnpm\b|\bnode(?:\.js)?\b|\bpackages?\b|\bdependenc(?:y|ies)\b|\blibrar(?:y|ies)\b|\bvite\b|\breact\s+app\b/.test(
+            t,
+        );
+    if (!hasNpmConcept) return false;
+    return /\b(create|build|make|generate|scaffold|implement|install|add|use|run|bundle|compile|project|app|site|website)\b/.test(
+        t,
+    );
 }
 
 /**
@@ -590,6 +646,34 @@ export function ensureLinuxSkill(
     if (!detectLinuxIntent(userText)) return next;
     if (options.alreadyInvoked === true) return next;
     const skill = lookupForcedSkill("Linux Environment");
+    if (skill) next.unshift(skill);
+    return next;
+}
+
+/** Force the curated npm project contract before Node/library work. */
+export function ensureNpmProjectSkill(
+    skills: ForcedSkill[] | undefined,
+    userText: string,
+    options: {
+        linuxEnvironment?: boolean;
+        npmProjectEnabled?: boolean;
+        alreadyInvoked?: boolean;
+    } = {},
+): ForcedSkill[] {
+    const next = [...(skills ?? [])];
+    const hasNpm = next.some(
+        (skill) => toolNameForForcedSkill(skill.name) === "npm_project_skill",
+    );
+    if (
+        hasNpm ||
+        options.linuxEnvironment === false ||
+        options.npmProjectEnabled === false ||
+        options.alreadyInvoked === true
+    ) {
+        return next;
+    }
+    if (!detectNpmProjectIntent(userText)) return next;
+    const skill = lookupForcedSkill("NPM Project");
     if (skill) next.unshift(skill);
     return next;
 }

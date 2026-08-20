@@ -22,6 +22,7 @@ import {
     DialogTitle,
 } from "~/components/ui/dialog";
 import { ChatGPTLoginSettings } from "~/components/settings/ChatGPTLoginSettings";
+import { ToolAccessPicker } from "~/components/settings/ToolAccessPicker";
 import { haptic, hapticConfirm, hapticSelect } from "~/lib/haptics";
 import {
     connectAuthorize,
@@ -52,6 +53,7 @@ import {
     type ProviderId,
 } from "~/lib/types";
 import { resolveModel } from "~/lib/model-capabilities";
+import { getModelModalities } from "~/lib/model-modalities";
 import { getReasoningEffortOptions } from "~/lib/reasoning";
 import {
     UNIVERSAL_MEMORY_EXPORT_PROMPT,
@@ -134,6 +136,7 @@ import {
     TOKEN_MODE_LABELS,
     type TokenMode,
 } from "~/lib/token-mode";
+import { buildChatSystemPromptParts } from "~/lib/server/prompt";
 import * as Switch from "@radix-ui/react-switch";
 import {
     chatMarkdownFilename,
@@ -488,7 +491,7 @@ function ChatsPanel({
         y: number;
     } | null>(null);
     const { settings, updateSettings } = useSettings();
-    const memoryEnabled = settings.memoryEnabled !== false;
+    const memoryAutoAttach = settings.memoryAutoAttach === true;
 
     const beginEditing = (thread: ThreadItem) => {
         cancelEditRef.current = false;
@@ -735,29 +738,29 @@ function ChatsPanel({
                 </Button>
                 <button
                     type="button"
-                    aria-pressed={memoryEnabled}
+                    aria-pressed={memoryAutoAttach}
                     aria-label={
-                        memoryEnabled
-                            ? "Memory is on. Saved memories are attached to every message."
-                            : "Memory is off. No saved memories are attached."
+                        memoryAutoAttach
+                            ? "Automatic memory is on. Saved memories are attached to requests."
+                            : "Automatic memory is off. Memory remains available on demand."
                     }
                     title={
-                        memoryEnabled
-                            ? "Memory on: saved memories are attached to every request."
-                            : "Memory off: no saved memories are attached. Click to turn on."
+                        memoryAutoAttach
+                            ? "Automatic memory on: saved memories are attached to requests."
+                            : "Automatic memory off: the AI can retrieve memory with its tool when needed."
                     }
                     onClick={() => {
                         haptic();
-                        updateSettings({ memoryEnabled: !memoryEnabled });
+                        updateSettings({ memoryAutoAttach: !memoryAutoAttach });
                     }}
                     className={cn(
                         "flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border px-2.5 text-xs font-medium outline-none transition-colors focus-visible:border-border focus-visible:ring-0",
-                        memoryEnabled
+                        memoryAutoAttach
                             ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15"
                             : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
                     )}
                 >
-                    <Brain size={16} weight={memoryEnabled ? "fill" : "regular"} />
+                    <Brain size={16} weight={memoryAutoAttach ? "fill" : "regular"} />
                     <span>Memory</span>
                 </button>
             </div>
@@ -1092,6 +1095,7 @@ function SettingsPanel({
         settings,
         updateProvider,
         updateSettings,
+        updateToolAccess,
         addMcpServer,
         removeMcpServer,
         updateMcpServer,
@@ -1326,6 +1330,10 @@ function SettingsPanel({
 
             {section === "tools" && (
                 <div className="flex flex-col gap-2">
+                    <ToolAccessPicker
+                        value={settings.toolAccess}
+                        onChange={updateToolAccess}
+                    />
                     {(() => {
                         const activeSearchConnector = settings.connectors.find(
                             (connector) =>
@@ -1336,20 +1344,7 @@ function SettingsPanel({
                         const searchConnectorKinds = ["tavily", "brave", "exa", "parallel"];
                         return (
                             <>
-                    <ToolToggle
-                        title="Web search"
-                        description={
-                            activeSearchConnector?.name ||
-                            (settings.webSearchEngine === "searxng"
-                                ? "SearXNG (self-hosted)"
-                                : "DuckDuckGo — no API key")
-                        }
-                        checked={settings.webSearchEnabled}
-                        onChange={(v) =>
-                            updateSettings({ webSearchEnabled: v })
-                        }
-                    />
-                    {settings.webSearchEnabled ? (
+                    {settings.toolAccess.webSearch && settings.webSearchEnabled ? (
                         <div className="flex flex-col gap-1.5 rounded-xl border border-border/70 p-2.5">
                             <label className="text-[11px] font-medium text-muted-foreground">
                                 Search engine
@@ -1414,20 +1409,6 @@ function SettingsPanel({
                             </>
                         );
                     })()}
-                    <ToolToggle
-                        title="Calculator"
-                        description="Math & trig evaluations"
-                        checked={settings.calculatorEnabled}
-                        onChange={(v) =>
-                            updateSettings({ calculatorEnabled: v })
-                        }
-                    />
-                    <ToolToggle
-                        title="Python"
-                        description="Browser Pyodide with NumPy, pandas, SciPy, plotting, and more"
-                        checked={settings.pythonEnabled}
-                        onChange={(v) => updateSettings({ pythonEnabled: v })}
-                    />
                     <CustomSkillsSection />
                 </div>
             )}
@@ -1628,7 +1609,39 @@ function SettingsPanel({
 function CustomInstructionsSection() {
     const { settings, updateChat } = useSettings();
     const value = settings.chat.systemPrompt ?? "";
+    const advancedValue = settings.chat.advancedSystemPrompt ?? "";
+    const [dangerOpen, setDangerOpen] = useState(Boolean(advancedValue));
     const maxChars = 4_000;
+    const maxAdvancedChars = 32_000;
+    const previewToolNames = [
+        ...(settings.toolAccess.webSearch ? ["web_search", "fetch_url"] : []),
+        ...(settings.toolAccess.calculator ? ["calculator"] : []),
+        ...(settings.toolAccess.python ? ["run_python"] : []),
+        ...(settings.toolAccess.linux ? ["linux_run_command", "linux_read_file"] : []),
+        ...(settings.toolAccess.npmProject ? ["npm_project"] : []),
+        ...(settings.toolAccess.fileCreation ? ["create_file"] : []),
+        ...(settings.toolAccess.skills ? ["html_craft"] : []),
+        ...(settings.toolAccess.memory ? ["memory"] : []),
+        ...(settings.toolAccess.knowledge ? ["knowledge_search", "knowledge_list"] : []),
+        ...(settings.toolAccess.connectors ? ["list_connections"] : []),
+        ...(settings.toolAccess.mcp ? ["mcp_* tools"] : []),
+        ...(settings.toolAccess.subagents ? ["spawn_subagents"] : []),
+        ...(settings.toolAccess.currentTime ? ["get_current_time"] : []),
+        ...(settings.toolAccess.askUser ? ["ask_user"] : []),
+        ...(settings.toolAccess.compaction ? ["compaction_skill"] : []),
+    ];
+    const promptPreview = buildChatSystemPromptParts(
+        advancedValue.trim() || undefined,
+        "",
+        [],
+        "main",
+        "",
+        settings.agentModeEnabled,
+        settings.tokenMode,
+        previewToolNames,
+        settings.toolAccess,
+        value,
+    ).full;
 
     return (
         <div className="flex flex-col gap-3">
@@ -1667,6 +1680,68 @@ function CustomInstructionsSection() {
                 >
                     Clear
                 </Button>
+            </div>
+
+            <div className="rounded-xl border border-destructive/35 bg-destructive/5 p-3">
+                <button
+                    type="button"
+                    className="flex w-full items-start justify-between gap-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => setDangerOpen((open) => !open)}
+                    aria-expanded={dangerOpen}
+                >
+                    <span>
+                        <span className="block text-xs font-semibold text-destructive">
+                            Danger zone: full system prompt
+                        </span>
+                        <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">
+                            View the effective prompt or replace its built-in instructions. Changes can make the AI ignore important safety, tool, and workflow rules.
+                        </span>
+                    </span>
+                    <span className="shrink-0 text-[10px] text-destructive">
+                        {dangerOpen ? "Hide" : "View"}
+                    </span>
+                </button>
+                {dangerOpen ? (
+                    <div className="mt-3 flex flex-col gap-2.5">
+                        <label className="text-[11px] font-medium text-muted-foreground">
+                            Effective system prompt preview
+                        </label>
+                        <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-lg border border-border/70 bg-background p-2.5 text-[10px] leading-relaxed text-muted-foreground">
+                            {promptPreview}
+                        </pre>
+                        <label className="text-[11px] font-medium text-destructive">
+                            Full system prompt override
+                        </label>
+                        <textarea
+                            value={advancedValue}
+                            onChange={(event) =>
+                                updateChat({
+                                    advancedSystemPrompt: event.target.value.slice(0, maxAdvancedChars),
+                                })
+                            }
+                            placeholder="Leave empty to use ai.diy's built-in system prompt."
+                            rows={12}
+                            maxLength={maxAdvancedChars}
+                            className="h-auto min-h-48 w-full resize-y rounded-lg border border-destructive/35 bg-background px-3 py-2 font-mono text-[10px] leading-relaxed outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-destructive/40"
+                            aria-label="Full system prompt override"
+                        />
+                        <div className="flex items-center justify-between gap-2">
+                            <p className="text-[10px] tabular-nums text-muted-foreground">
+                                {advancedValue.length.toLocaleString()} / {maxAdvancedChars.toLocaleString()}
+                            </p>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={!advancedValue}
+                                onClick={() => updateChat({ advancedSystemPrompt: "" })}
+                                className="rounded-lg"
+                            >
+                                Restore built-in prompt
+                            </Button>
+                        </div>
+                    </div>
+                ) : null}
             </div>
         </div>
     );
@@ -1749,13 +1824,14 @@ function TokenModeSettingsSection() {
 }
 
 function KnowledgeSettingsSection() {
-    const { settings, updateSettings } = useSettings();
+    const { settings, updateSettings, updateToolAccess } = useSettings();
     const knowledgeEnabled = settings.knowledgeEnabled !== false;
     const [docs, setDocs] = useState<
         Array<{ id: string; name: string; chunkCount: number }>
     >([]);
     const [status, setStatus] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
+    const modalities = getModelModalities(settings.chat.model, settings.chat.provider);
 
     const refresh = useCallback(() => {
         void import("~/lib/knowledge/store.client").then(({ listKnowledgeDocuments }) =>
@@ -1781,7 +1857,14 @@ function KnowledgeSettingsSection() {
         try {
             const { ingestTextFile } = await import("~/lib/knowledge/store.client");
             const doc = await ingestTextFile(file);
-            setStatus(`Indexed ${doc.name} (${doc.chunkCount} chunks). Embeddings stay in this browser.`);
+            const mayContainImages = /\.(pdf|docx)$/i.test(file.name);
+            setStatus(
+                `Indexed ${doc.name} (${doc.chunkCount} chunks). Embeddings stay in this browser.${
+                    mayContainImages && !modalities.vision
+                        ? " Warning: the selected model cannot see embedded images in PDFs or Word files; extracted text is still available."
+                        : ""
+                }`,
+            );
             refresh();
         } catch (error) {
             setStatus(error instanceof Error ? error.message : "Ingest failed.");
@@ -1800,17 +1883,25 @@ function KnowledgeSettingsSection() {
                         : "Knowledge tools and auto-retrieval are off."
                 }
                 checked={knowledgeEnabled}
-                onChange={(value) => updateSettings({ knowledgeEnabled: value })}
+                onChange={(value) => updateToolAccess("knowledge", value)}
             />
             <p className="text-[11px] leading-relaxed text-muted-foreground">
-                Upload text, Markdown, JSON, or CSV. PDFs work best when exported as text.
-                Vectors are stored in IndexedDB; the MiniLM model caches in the browser.
-            </p>
+                    Upload text, Markdown, JSON, CSV, PDF, or DOCX. Text is extracted and
+                    embedded locally; images inside PDFs/DOCX are not indexed. The selected
+                    model receives retrieved text, not the original knowledge file.
+                    Vectors are stored in IndexedDB; the MiniLM model caches in the browser.
+                </p>
+            {!modalities.vision ? (
+                <p className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">
+                    The current model does not support image input. It can still receive
+                    extracted PDF/Word text, but it will not see embedded images.
+                </p>
+            ) : null}
             <label className="inline-flex h-8 w-fit cursor-pointer items-center rounded-xl border border-border px-3 text-xs font-medium hover:bg-accent">
                 {busy ? "Indexing…" : "Upload document"}
                 <input
                     type="file"
-                    accept=".txt,.md,.markdown,.json,.csv,.tsv,text/plain,text/markdown,application/json"
+                    accept=".txt,.md,.markdown,.json,.csv,.tsv,.pdf,.docx,text/plain,text/markdown,application/json,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     className="sr-only"
                     disabled={busy}
                     onChange={(event) => {
@@ -1879,8 +1970,9 @@ function MemorySettingsSection() {
     const [count, setCount] = useState(0);
     const [status, setStatus] = useState<string | null>(null);
     const [pastedMemory, setPastedMemory] = useState("");
-    const { settings, updateSettings } = useSettings();
+    const { settings, updateSettings, updateToolAccess } = useSettings();
     const memoryEnabled = settings.memoryEnabled !== false;
+    const memoryAutoAttach = settings.memoryAutoAttach === true;
 
     useEffect(() => {
         void getMemoryEntries().then((entries) => setCount(entries.length));
@@ -1932,21 +2024,31 @@ function MemorySettingsSection() {
     return (
         <div className="flex flex-col gap-3">
             <ToolToggle
-                title="Attach memory to chats"
+                title="Memory tool"
                 description={
                     memoryEnabled
-                        ? "Saved memories are attached to every request; the AI can also read more on demand."
-                        : "No saved memories are attached. Turn on to give the AI memory."
+                        ? "The AI can retrieve relevant saved memories on demand when it decides they are needed."
+                        : "Memory retrieval is disabled for chats."
                 }
                 checked={memoryEnabled}
-                onChange={(value) => updateSettings({ memoryEnabled: value })}
+                onChange={(value) => updateToolAccess("memory", value)}
+            />
+            <ToolToggle
+                title="Automatically attach memory"
+                description={
+                    memoryAutoAttach
+                        ? "A bounded set of saved memories is included with every request."
+                        : "Off by default. Saved memories stay out of prompts until the memory tool is called."
+                }
+                checked={memoryAutoAttach}
+                onChange={(value) => updateSettings({ memoryAutoAttach: value })}
             />
             <div>
                 <h3 className="text-xs font-semibold">Local memory</h3>
                 <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                    Saved memories stay in this browser. A bounded set of historical
-                    memories is attached to the system prompt; they are separate from
-                    active app preferences and the full archive is never sent automatically.
+                    Saved memories stay in this browser. The memory tool can retrieve a
+                    narrow relevant subset on demand. Automatic attachment is separate,
+                    optional, and off by default.
                 </p>
             </div>
             <div className="rounded-xl border border-border/70 bg-muted/20 p-3 text-[11px] leading-relaxed text-muted-foreground">
@@ -3409,7 +3511,10 @@ function CustomSkillsSection() {
     const [content, setContent] = useState("");
     const [query, setQuery] = useState("");
     const catalog = searchBundledSkills(query);
-    const popular = catalog.filter((skill) => skill.popular);
+    const availableCatalog = catalog.filter(
+        (skill) => !isSkillInstalled(skill.name, settings.customSkills),
+    );
+    const popular = availableCatalog.filter((skill) => skill.popular);
 
     const addSkill = () => {
         const trimmedName = name.trim();
@@ -3497,7 +3602,10 @@ function CustomSkillsSection() {
                     </div>
                 ) : null}
                 <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
-                    {(query.trim() ? catalog : catalog.filter((sk) => !sk.popular)).map(
+                    {(query.trim()
+                        ? availableCatalog
+                        : availableCatalog.filter((sk) => !sk.popular)
+                    ).map(
                         (skill) => (
                             <SkillCatalogRow
                                 key={skill.name}
@@ -3510,6 +3618,13 @@ function CustomSkillsSection() {
                             />
                         ),
                     )}
+                    {availableCatalog.length === 0 ? (
+                        <p className="px-1 py-2 text-[11px] text-muted-foreground">
+                            {query.trim()
+                                ? "No uninstalled skills match your search."
+                                : "All catalog skills are installed."}
+                        </p>
+                    ) : null}
                 </div>
             </div>
 
@@ -3633,14 +3748,14 @@ function SkillCatalogRow({
 }
 
 function SubagentsSettingsSection({ scopeId }: { scopeId: string | null }) {
-    const { settings, updateSettings } = useSettings();
+    const { settings, updateSettings, updateToolAccess } = useSettings();
     return (
         <div className="flex flex-col gap-3">
             <ToolToggle
                 title="Linux environment"
-                description="In-browser Debian VM (CheerpX) for bash, python3, gcc, and node. Tailscale networking is opt-in below."
+                description="In-browser Debian VM (CheerpX) for bash, Python, gcc, Node, and system-tool work. Browser-native WebContainers handle npm projects. Tailscale networking is opt-in below."
                 checked={settings.linuxEnvironment !== false}
-                onChange={(enabled) => updateSettings({ linuxEnvironment: enabled })}
+                onChange={(enabled) => updateToolAccess("linux", enabled)}
             />
             {settings.linuxEnvironment !== false ? (
                 <LinuxNetworkSection scopeId={scopeId} />
@@ -3665,7 +3780,7 @@ function SubagentsSettingsSection({ scopeId }: { scopeId: string | null }) {
                 title="Subagents"
                 description="Let the AI delegate subtasks to subagents. Every subagent requires your approval, runs in a watchable popup, and can use the same tools as the main chat."
                 checked={settings.subagentsEnabled}
-                onChange={(enabled) => updateSettings({ subagentsEnabled: enabled })}
+                onChange={(enabled) => updateToolAccess("subagents", enabled)}
             />
             {settings.subagentsEnabled ? (
                 <p className="text-[11px] leading-relaxed text-muted-foreground">

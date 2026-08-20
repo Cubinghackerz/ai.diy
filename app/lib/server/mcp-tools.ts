@@ -19,6 +19,39 @@ export type McpClientHandle = {
     close: () => Promise<void>;
 };
 
+/** The two bundled search servers are optional discovery infrastructure. */
+export function isBundledSearchMcpServer(server: McpServerConfig): boolean {
+    const id = server.id.trim().toLowerCase();
+    const url = server.url?.trim().toLowerCase() ?? "";
+    return (
+        id === "mcp_parallel_search" ||
+        id === "mcp_firecrawl_keyless" ||
+        url.includes("search.parallel.ai/mcp") ||
+        url.includes("mcp.firecrawl.dev/")
+    );
+}
+
+/**
+ * Avoid connecting the bundled search MCP servers for ordinary turns. Custom
+ * MCP servers remain user-controlled and are loaded whenever enabled.
+ */
+export function selectMcpServersForRequest(
+    servers: McpServerConfig[] | undefined,
+    options: {
+        searchIntent: boolean;
+        activeSearchConnector: boolean;
+        webSearchEnabled: boolean;
+        mcpToolAlreadyUsed: boolean;
+    },
+): McpServerConfig[] {
+    return (servers ?? []).filter((server) => {
+        if (server.enabled === false) return false;
+        if (!isBundledSearchMcpServer(server)) return true;
+        if (!options.webSearchEnabled || options.activeSearchConnector) return false;
+        return options.searchIntent || options.mcpToolAlreadyUsed;
+    });
+}
+
 export async function loadMcpTools(
     servers: McpServerConfig[] | undefined,
     policy?: Pick<

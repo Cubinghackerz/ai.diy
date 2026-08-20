@@ -1,6 +1,8 @@
 import { Code, Files, SquareHalf } from "@phosphor-icons/react";
 import { Link } from "react-router";
 import { Reveal } from "./DoubleBezel";
+import { MaskedHeading } from "./MaskedHeading";
+import { EASE_OUT } from "./motion";
 import { SEO_GUIDES } from "~/lib/seo-pages";
 
 const CASES = [
@@ -28,19 +30,21 @@ export function UseCases() {
             className="mx-auto max-w-6xl scroll-mt-28 px-5 py-16 sm:px-8 sm:py-20"
             data-anim-gate="use-cases"
         >
-            <Reveal>
-                <h2 className="max-w-[16ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
-                    Browser-owned by default. Capable by design.
-                </h2>
-            </Reveal>
+            <MaskedHeading className="max-w-[16ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
+                Browser-owned by default. Capable by design.
+            </MaskedHeading>
             <Reveal delayMs={40} className="mt-12">
-                <ul className="grid gap-10 md:grid-cols-3 md:gap-8">
+                <ul className="grid gap-3 md:grid-cols-3">
                     {CASES.map((item) => {
                         const Icon = item.icon;
                         return (
-                            <li key={item.title} className="border-t border-white/[0.1] pt-7">
-                                <Icon weight="light" className="size-6 text-zinc-200" />
-                                <h3 className="mt-5 text-[17px] font-medium tracking-tight text-white">
+                            <li
+                                key={item.title}
+                                className="rounded-2xl border border-white/[0.08] bg-[#0a0a0a] p-6 transition-[border-color,background-color] duration-200 hover:border-white/[0.16] hover:bg-[#111]"
+                                style={{ transitionTimingFunction: EASE_OUT }}
+                            >
+                                <Icon weight="light" className="size-5 text-zinc-300" />
+                                <h3 className="mt-5 text-[16px] font-medium tracking-tight text-white">
                                     {item.title}
                                 </h3>
                                 <p className="mt-2.5 text-[14px] leading-relaxed text-zinc-400">
@@ -51,7 +55,7 @@ export function UseCases() {
                     })}
                 </ul>
             </Reveal>
-            <Reveal delayMs={80} className="mt-12 border-t border-white/[0.1] pt-7">
+            <Reveal delayMs={80} className="mt-12 border-t border-white/[0.08] pt-7">
                 <nav aria-label="ai.diy product guides">
                     <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-500">
                         Explore the product

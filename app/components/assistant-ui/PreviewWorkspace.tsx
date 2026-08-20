@@ -51,7 +51,7 @@ import {
 } from "~/lib/credits-fallback";
 import { detectProviderCreditError } from "~/lib/provider-errors";
 import { notifyChatGPTRequestFailure } from "~/lib/chatgpt-refresh";
-import { runBrowserPython } from "~/lib/pyodide";
+import { collectPythonInputFiles, runBrowserPython } from "~/lib/pyodide";
 import {
     artifactContentHash,
     decodeArtifactContent,
@@ -72,6 +72,7 @@ import { resolveModel } from "~/lib/model-capabilities";
 import { PROVIDER_DEFAULTS, type PreviewModelConfig, type ProviderId, type ReasoningEffort } from "~/lib/types";
 import { cn } from "~/lib/utils";
 import { X } from "lucide-react";
+import { toolAccessAllows } from "~/lib/tool-access";
 
 type RunStatus = "running" | "complete" | "error" | "stopped";
 
@@ -80,6 +81,7 @@ type ResolvedConfig = PreviewModelConfig & {
     baseUrl?: string;
     openAICompatible?: import("~/lib/types").ProviderConfig["openAICompatible"];
     systemPrompt: string;
+    advancedSystemPrompt?: string;
     temperature: number;
     maxTokens: number | null;
     topP: number;
@@ -96,6 +98,7 @@ type ResolvedConfig = PreviewModelConfig & {
         subagentsEnabled: boolean;
         connectors: import("~/lib/types").ConnectorConfig[];
         tokenMode?: import("~/lib/token-mode").TokenMode;
+        toolAccess?: import("~/lib/tool-access").ToolAccessSettings;
     };
     mcpServers: Array<{
         id: string;
@@ -298,6 +301,7 @@ export const PreviewWorkspace: FC = () => {
             baseUrl: provider?.baseUrl?.trim() || undefined,
             openAICompatible: provider?.openAICompatible,
             systemPrompt: settings.chat.systemPrompt,
+            advancedSystemPrompt: settings.chat.advancedSystemPrompt,
             temperature: settings.chat.temperature,
             maxTokens: settings.chat.maxTokens,
             topP: settings.chat.topP,
@@ -314,6 +318,7 @@ export const PreviewWorkspace: FC = () => {
                 subagentsEnabled: settings.subagentsEnabled,
                 connectors: settings.connectors,
                 tokenMode: settings.tokenMode ?? "balanced",
+                toolAccess: settings.toolAccess,
             },
             mcpServers: settings.mcpServers.filter((server) => server.enabled),
         };
@@ -1510,6 +1515,7 @@ const PreviewRunPanel: FC<{
                             baseUrl: run.config.baseUrl,
                             openAICompatible: run.config.openAICompatible,
                             systemPrompt: run.config.systemPrompt,
+                            advancedSystemPrompt: run.config.advancedSystemPrompt,
                             temperature: run.config.temperature,
                             maxTokens: run.config.maxTokens,
                             topP: run.config.topP,
@@ -1547,11 +1553,36 @@ const PreviewRunPanel: FC<{
         messages: run.messages,
         onToolCall: ({ toolCall }) => {
             if (toolCall.toolName !== "run_python" && toolCall.toolName !== "run_code") return;
+            if (!toolAccessAllows(run.config.toolSettings.toolAccess, toolCall.toolName)) {
+                pendingClientCalls.current += 1;
+                const addToolOutput = chatRef.current
+                    ?.addToolOutput as unknown as
+                    | ((args: {
+                          tool: string;
+                          toolCallId: string;
+                          state: "output-available";
+                          output: string;
+                      }) => void)
+                    | undefined;
+                addToolOutput?.({
+                    tool: toolCall.toolName,
+                    toolCallId: toolCall.toolCallId,
+                    state: "output-available",
+                    output: `Tool access is disabled in Settings: ${toolCall.toolName}. Continue without it.`,
+                });
+                return;
+            }
             pendingClientCalls.current += 1;
             const input = toolCall.input as {
                 code?: string;
             };
-            const task = runBrowserPython(input.code ?? "");
+            const task = runBrowserPython(
+                input.code ?? "",
+                collectPythonInputFiles(
+                    ((chatRef.current as unknown as { messages?: unknown[] } | null)
+                        ?.messages ?? []),
+                ),
+            );
             void task.then(
                 (result) => {
                     const output =

@@ -36,7 +36,7 @@ export function LandingCta({
             ),
         variant === "ghost" &&
             cn(
-                "rounded-full border border-white/25 bg-white/[0.08] px-5 text-zinc-100 hover:border-white/45 hover:bg-white/[0.14] focus-visible:ring-white/40",
+                "rounded-full border border-white/20 bg-white/[0.04] px-5 text-zinc-100 hover:border-white/40 hover:bg-white/[0.1] focus-visible:ring-white/40",
                 compact ? "py-1.5" : "py-2.5",
             ),
         variant === "inverse" &&

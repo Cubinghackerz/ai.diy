@@ -37,11 +37,17 @@ import {
     decryptSettingsPayload,
     clearSettingsEnvelopeKey,
 } from "~/lib/settings-crypto";
+import {
+    DEFAULT_TOOL_ACCESS,
+    normalizeToolAccess,
+    type ToolAccessKey,
+} from "~/lib/tool-access";
 
 interface SettingsContextValue {
     settings: AppSettings;
     loaded: boolean;
     updateSettings: (patch: Partial<AppSettings>) => void;
+    updateToolAccess: (key: ToolAccessKey, enabled: boolean) => void;
     updateProvider: (id: ProviderId, patch: Partial<ProviderConfig>) => void;
     updateChat: (patch: Partial<ChatSettings>) => void;
     addMcpServer: (server: McpServerConfig) => void;
@@ -66,6 +72,17 @@ function mergeLoadedSettings(parsed: Partial<AppSettings>): AppSettings {
         ),
         ...storedMcpServers,
     ];
+    const toolAccess = normalizeToolAccess(parsed.toolAccess, {
+        ...DEFAULT_TOOL_ACCESS,
+        webSearch: parsed.webSearchEnabled ?? DEFAULT_TOOL_ACCESS.webSearch,
+        calculator: parsed.calculatorEnabled ?? DEFAULT_TOOL_ACCESS.calculator,
+        python: parsed.pythonEnabled ?? DEFAULT_TOOL_ACCESS.python,
+        linux: parsed.linuxEnvironment ?? DEFAULT_TOOL_ACCESS.linux,
+        skills: parsed.skillsEnabled ?? DEFAULT_TOOL_ACCESS.skills,
+        memory: parsed.memoryEnabled ?? DEFAULT_TOOL_ACCESS.memory,
+        knowledge: parsed.knowledgeEnabled ?? DEFAULT_TOOL_ACCESS.knowledge,
+        subagents: parsed.subagentsEnabled ?? DEFAULT_TOOL_ACCESS.subagents,
+    });
     return {
         ...DEFAULT_SETTINGS,
         ...parsed,
@@ -88,9 +105,17 @@ function mergeLoadedSettings(parsed: Partial<AppSettings>): AppSettings {
         connectors: parsed.connectors ?? [],
         customSkills: parsed.customSkills ?? [],
         agentModeEnabled: parsed.agentModeEnabled ?? false,
-        subagentsEnabled: parsed.subagentsEnabled ?? false,
+        webSearchEnabled: toolAccess.webSearch,
+        calculatorEnabled: toolAccess.calculator,
+        pythonEnabled: toolAccess.python,
+        skillsEnabled: toolAccess.skills,
+        memoryEnabled: toolAccess.memory,
+        memoryAutoAttach: parsed.memoryAutoAttach ?? false,
+        knowledgeEnabled: toolAccess.knowledge,
+        linuxEnvironment: toolAccess.linux,
+        subagentsEnabled: toolAccess.subagents,
+        toolAccess,
         chatgptLoginEnabled: parsed.chatgptLoginEnabled ?? false,
-        linuxEnvironment: parsed.linuxEnvironment ?? true,
         tokenMode:
             parsed.tokenMode === "efficient" ||
             parsed.tokenMode === "balanced" ||
@@ -256,6 +281,21 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         setSettings((prev) => ({ ...prev, ...patch }));
     }, []);
 
+    const updateToolAccess = useCallback((key: ToolAccessKey, enabled: boolean) => {
+        setSettings((prev) => ({
+            ...prev,
+            toolAccess: { ...prev.toolAccess, [key]: enabled },
+            ...(key === "webSearch" ? { webSearchEnabled: enabled } : {}),
+            ...(key === "calculator" ? { calculatorEnabled: enabled } : {}),
+            ...(key === "python" ? { pythonEnabled: enabled } : {}),
+            ...(key === "linux" ? { linuxEnvironment: enabled } : {}),
+            ...(key === "skills" ? { skillsEnabled: enabled } : {}),
+            ...(key === "memory" ? { memoryEnabled: enabled } : {}),
+            ...(key === "knowledge" ? { knowledgeEnabled: enabled } : {}),
+            ...(key === "subagents" ? { subagentsEnabled: enabled } : {}),
+        }));
+    }, []);
+
     const updateProvider = useCallback((id: ProviderId, patch: Partial<ProviderConfig>) => {
         setSettings((prev) => ({
             ...prev,
@@ -323,6 +363,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 settings,
                 loaded,
                 updateSettings,
+                updateToolAccess,
                 updateProvider,
                 updateChat,
                 addMcpServer,

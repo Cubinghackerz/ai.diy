@@ -44,7 +44,7 @@ import {
 } from "~/lib/memory";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { assertClientUsageAllowed } from "~/lib/usage-ledger.client";
-import { runBrowserPython } from "~/lib/pyodide";
+import { collectPythonInputFiles, runBrowserPython } from "~/lib/pyodide";
 import {
     executeLinuxClientTool,
     isLinuxClientTool,
@@ -58,6 +58,10 @@ import {
 } from "~/lib/credits-fallback";
 import { detectProviderCreditError } from "~/lib/provider-errors";
 import { toolHumanLabel } from "~/components/assistant-ui/work-summary";
+import {
+    normalizeToolAccess,
+    toolAccessAllows,
+} from "~/lib/tool-access";
 
 /** Read the outgoing subagent request body without consuming it. */
 function captureSubagentRequestBody(
@@ -764,7 +768,17 @@ function SubagentRun({
 
                     await assertClientUsageAllowed(s, provider, resolvedApiKey);
 
-                    const memoryEnabled = s.memoryEnabled !== false;
+                    const access = normalizeToolAccess(s.toolAccess, {
+                        webSearch: s.webSearchEnabled !== false,
+                        calculator: s.calculatorEnabled !== false,
+                        python: s.pythonEnabled !== false,
+                        linux: s.linuxEnvironment !== false,
+                        skills: s.skillsEnabled !== false,
+                        memory: s.memoryEnabled !== false,
+                        knowledge: s.knowledgeEnabled !== false,
+                        subagents: false,
+                    });
+                    const memoryEnabled = access.memory && s.memoryEnabled !== false;
                     return {
                         body: {
                             ...options.body,
@@ -776,27 +790,31 @@ function SubagentRun({
                             baseUrl,
                             openAICompatible: providerConfig?.openAICompatible,
                             systemPrompt: s.chat.systemPrompt,
+                            advancedSystemPrompt: s.chat.advancedSystemPrompt,
                             temperature: s.chat.temperature,
                             maxTokens: s.chat.maxTokens,
                             topP: s.chat.topP,
                             reasoningEffort: s.chat.reasoningEffort,
-                            mcpServers: s.mcpServers.filter((server) => server.enabled),
-                            memoryContext: memoryEnabled
+                            mcpServers: access.mcp
+                                ? s.mcpServers.filter((server) => server.enabled)
+                                : [],
+                            memoryContext: memoryEnabled && s.memoryAutoAttach
                                 ? await buildLocalMemoryContext()
                                 : "",
                             toolSettings: {
-                                webSearchEnabled: s.webSearchEnabled,
-                                calculatorEnabled: s.calculatorEnabled,
-                                pythonEnabled: s.pythonEnabled,
-                                linuxEnvironment: s.linuxEnvironment,
+                                webSearchEnabled: access.webSearch && s.webSearchEnabled,
+                                calculatorEnabled: access.calculator && s.calculatorEnabled,
+                                pythonEnabled: access.python && s.pythonEnabled,
+                                linuxEnvironment: access.linux && s.linuxEnvironment,
                                 webSearchEngine: s.webSearchEngine,
                                 searxngUrl: s.searxngUrl,
-                                skillsEnabled: s.skillsEnabled,
-                                connectors: s.connectors,
+                                skillsEnabled: access.skills && s.skillsEnabled,
+                                connectors: access.connectors ? s.connectors : [],
                                 memoryAvailable:
                                     memoryEnabled && (await hasLocalMemoryEntries()),
                                 subagentsEnabled: false,
                                 tokenMode: s.tokenMode ?? "balanced",
+                                toolAccess: access,
                             },
                             subagentMode: true,
                         },
@@ -827,6 +845,25 @@ function SubagentRun({
             ) {
                 return;
             }
+            if (!toolAccessAllows(settingsRef.current.toolAccess, toolCall.toolName)) {
+                pendingClientCalls.current += 1;
+                const addToolOutput = chatRef.current
+                    ?.addToolOutput as unknown as
+                    | ((args: {
+                          tool: string;
+                          toolCallId: string;
+                          state: "output-available";
+                          output: string;
+                      }) => void)
+                    | undefined;
+                addToolOutput?.({
+                    tool: toolCall.toolName,
+                    toolCallId: toolCall.toolCallId,
+                    state: "output-available",
+                    output: `Tool access is disabled in Settings: ${toolCall.toolName}. Continue without it.`,
+                });
+                return;
+            }
             pendingClientCalls.current += 1;
             const input = toolCall.input as {
                 code?: string;
@@ -852,7 +889,13 @@ function SubagentRun({
                               input,
                               linuxScopeId,
                           )
-                      : runBrowserPython(input.code ?? "");
+                      : runBrowserPython(
+                            input.code ?? "",
+                            collectPythonInputFiles(
+                                ((chatRef.current as unknown as { messages?: unknown[] } | null)
+                                    ?.messages ?? []),
+                            ),
+                        );
             void taskPromise.then(
                 (result) => {
                     const output =

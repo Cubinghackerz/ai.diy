@@ -29,6 +29,7 @@ import {
 } from "@phosphor-icons/react";
 import { cn } from "~/lib/utils";
 import { localProviderKey } from "~/lib/provider-credentials";
+import { ToolAccessPicker } from "~/components/settings/ToolAccessPicker";
 
 const CREDENTIAL_HINTS: Partial<Record<ProviderId, string>> = {
     bedrock:
@@ -39,7 +40,7 @@ const CREDENTIAL_HINTS: Partial<Record<ProviderId, string>> = {
 };
 
 export function SetupGate() {
-    const { settings, loaded, updateProvider, updateChat, updateSettings } =
+    const { settings, loaded, updateProvider, updateChat, updateSettings, updateToolAccess } =
         useSettings();
     const { isAuthenticated, user } = useLoginWithChatGPT();
 
@@ -84,6 +85,17 @@ export function SetupGate() {
         setVerified(false);
         setError(null);
     }, [provider]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => {
+        if (!isAuthenticated || provider !== "chatgpt" || settings.setupComplete) return;
+        const chatGptModel =
+            settings.chat.model ||
+            DEFAULT_MODELS.chatgpt?.find((item) => item.id === "gpt-5.6-luna")?.id ||
+            "gpt-5.6-luna";
+        setModels(DEFAULT_MODELS.chatgpt ?? []);
+        setModel(chatGptModel);
+        setVerified(true);
+    }, [isAuthenticated, provider, settings.chat.model, settings.setupComplete]);
 
     useEffect(() => {
         if (!loaded || !isAuthenticated || settings.setupComplete) return;
@@ -186,16 +198,15 @@ export function SetupGate() {
     }, [updateChat, updateProvider, updateSettings]);
 
     const refreshAfterChatGPTLogin = useCallback(() => {
-        updateSettings({ setupComplete: true });
         window.setTimeout(() => window.location.reload(), 500);
-    }, [updateSettings]);
+    }, []);
 
     const providerLabel = useMemo(
         () => PROVIDER_DEFAULTS[provider].name,
         [provider],
     );
 
-    const step = !keyReady ? 1 : !verified ? 2 : 3;
+    const step = !keyReady ? 1 : !verified ? 2 : model ? 4 : 3;
 
     if (!loaded) {
         return (
@@ -259,13 +270,14 @@ export function SetupGate() {
                         className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),transparent)]"
                     />
 
-                    <div className="relative mb-5 grid grid-cols-3 gap-2">
+                    <div className="relative mb-5 grid grid-cols-4 gap-2">
                         {[
                             { n: 1, label: "Provider" },
                             { n: 2, label: "Verify" },
                             { n: 3, label: "Model" },
+                            { n: 4, label: "Tools" },
                         ].map((item) => {
-                            const done = step > item.n || (item.n === 3 && verified);
+                            const done = step > item.n;
                             const active = step === item.n;
                             return (
                                 <div
@@ -291,11 +303,11 @@ export function SetupGate() {
                                             done || active ? "text-white" : "text-zinc-500",
                                         )}
                                     >
-                                        {item.label}
+                                {item.label}
                                     </p>
-                                </div>
-                            );
-                        })}
+                            </div>
+                        );
+                    })}
                     </div>
 
                     <div className="relative flex flex-col gap-5">
@@ -451,6 +463,16 @@ export function SetupGate() {
                                     : "Models unlock after a successful live test call to this provider (same key + endpoint you entered)."}
                             </p>
                         )}
+
+                        {verified ? (
+                            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3.5 sm:p-4">
+                                <ToolAccessPicker
+                                    value={settings.toolAccess}
+                                    onChange={updateToolAccess}
+                                    dark
+                                />
+                            </div>
+                        ) : null}
 
                         <Button
                             type="button"

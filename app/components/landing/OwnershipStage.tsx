@@ -1,4 +1,5 @@
 import { HardDrives, Key, PlugsConnected } from "@phosphor-icons/react";
+import { MaskedHeading } from "./MaskedHeading";
 import { TrustBoundary } from "./TrustBoundary";
 
 const CALLOUTS = [
@@ -26,10 +27,10 @@ export function OwnershipStage() {
             className="relative mx-auto max-w-6xl scroll-mt-28 px-5 py-20 sm:px-8 sm:py-28"
             data-anim-gate="ownership-stage"
         >
-            <div className="grid gap-8 md:grid-cols-[0.8fr_1.2fr] md:items-end">
-                <h2 className="max-w-[12ch] text-4xl font-medium tracking-[-0.04em] text-white sm:text-5xl">
+            <div className="grid gap-6 md:grid-cols-[0.85fr_1.15fr] md:items-end md:gap-12">
+                <MaskedHeading className="max-w-[12ch] text-4xl font-medium tracking-[-0.04em] text-white sm:text-5xl">
                     Your keys stay under your control.
-                </h2>
+                </MaskedHeading>
                 <p className="max-w-xl text-[15px] leading-relaxed text-zinc-400 md:justify-self-end">
                     Provider credentials stay in your browser&apos;s storage and are relayed per
                     request. Threads, Canvas, memory, and knowledge persist in IndexedDB. The
@@ -37,16 +38,16 @@ export function OwnershipStage() {
                 </p>
             </div>
 
-            <div className="mt-12">
+            <div className="mt-10">
                 <TrustBoundary />
             </div>
 
-            <div className="mt-10 grid gap-10 border-t border-white/[0.08] pt-10 md:grid-cols-3 md:gap-8">
+            <div className="mt-12 grid gap-10 border-t border-white/[0.08] pt-10 md:grid-cols-3 md:gap-8">
                 {CALLOUTS.map((item) => {
                     const Icon = item.icon;
                     return (
                         <article key={item.title}>
-                            <Icon weight="light" className="size-6 text-zinc-300" />
+                            <Icon weight="light" className="size-5 text-zinc-300" />
                             <h3 className="mt-5 text-[16px] font-medium tracking-tight text-white">
                                 {item.title}
                             </h3>

@@ -1,9 +1,9 @@
 /**
- * THESIS: Make local-first ownership visible; reject the centered SaaS-card hero.
- * OWN-WORLD: OLED blackspace, editorial type, hairline structure, one mint live signal.
- * STORY: See the owned workspace and no-store relay, then open it or self-host it.
- * FIRST VIEWPORT: Asymmetric copy and action beside a real, luminous product surface.
- * FORM: Approved asymmetric instrumentation comp, rebuilt as responsive product proof.
+ * THESIS: The product is the proof — a black, flat, Vercel-grade workspace in the first viewport; rejects the text-left/media-right SaaS hero.
+ * OWN-WORLD: #000 canvas, #0a0a0a surfaces, white/10 hairlines, flat mint signal, Geist Sans/Mono, zero gradients; depth from borders and soft shadows.
+ * STORY: See the browser-owned workspace at full size, then open it or self-host it.
+ * FIRST VIEWPORT: Centered cipher headline and actions above a full-width product window with the real workspace screenshot.
+ * FORM: User-pinned canon (Vercel/Resend fidelity), built as responsive product proof.
  * FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md.
  */
 import type { HeadersFunction, LinksFunction, MetaFunction } from "react-router";

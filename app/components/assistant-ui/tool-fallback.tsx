@@ -50,6 +50,7 @@ const AUTO_EXECUTED_CLIENT_TOOL_NAMES = new Set([
   "linux_background_start",
   "linux_list_processes",
   "linux_kill_process",
+  "npm_project",
   "memory",
   "knowledge_search",
   "knowledge_list",
@@ -220,6 +221,11 @@ function parseToolArgs(argsText?: string): Record<string, unknown> | null {
 
 function linuxCardTitle(toolName: string, args: Record<string, unknown> | null): string | null {
   if (toolName === "linux_environment_skill") return "Linux environment";
+  if (toolName === "npm_project") {
+    const action = typeof args?.action === "string" ? args.action : "work";
+    const project = typeof args?.project === "string" ? args.project : "project";
+    return `NPM ${action}: ${project}`;
+  }
   if (!isLinuxClientTool(toolName)) return null;
   const description =
     typeof args?.description === "string" ? args.description.trim() : "";

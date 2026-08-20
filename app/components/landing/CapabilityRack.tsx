@@ -5,6 +5,7 @@ import {
     TerminalWindow,
 } from "@phosphor-icons/react";
 import { Reveal } from "./DoubleBezel";
+import { MaskedHeading } from "./MaskedHeading";
 import { EASE_OUT } from "./motion";
 import { StatusPill } from "./StatusPill";
 import { cn } from "~/lib/utils";
@@ -49,14 +50,12 @@ export function CapabilityRack() {
             className="mx-auto max-w-6xl scroll-mt-28 px-5 py-20 sm:px-8 sm:py-24"
             data-anim-gate="capabilities"
         >
-            <Reveal>
-                <h2 className="max-w-[18ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
-                    Tools, storage, and deployment on your terms.
-                </h2>
-            </Reveal>
+            <MaskedHeading className="max-w-[18ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
+                Tools, storage, and deployment on your terms.
+            </MaskedHeading>
 
             <Reveal delayMs={40} className="mt-12">
-                <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02]">
+                <div className="rounded-2xl border border-white/[0.1] bg-[#0a0a0a]">
                     <div className="flex min-h-[24rem] flex-col md:flex-row">
                         <div
                             role="tablist"
@@ -78,8 +77,8 @@ export function CapabilityRack() {
                                         className={cn(
                                             "inline-flex min-h-11 shrink-0 items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[14px] transition-[background-color,color,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.98]",
                                             selected
-                                                ? "bg-white/[0.1] text-white"
-                                                : "text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-100",
+                                                ? "bg-white/[0.08] text-white"
+                                                : "text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100",
                                         )}
                                         style={{ transitionTimingFunction: EASE_OUT }}
                                     >
@@ -128,7 +127,7 @@ export function CapabilityRack() {
                                     ].map((row) => (
                                         <div
                                             key={row.k}
-                                            className="rounded-lg border border-white/[0.08] bg-black/40 px-3.5 py-3"
+                                            className="rounded-lg border border-white/[0.08] bg-black px-3.5 py-3"
                                         >
                                             <p className="font-mono text-[10px] tracking-wide text-zinc-500">
                                                 {row.k}
@@ -142,7 +141,7 @@ export function CapabilityRack() {
                             ) : null}
 
                             {active.id === "storage" ? (
-                                <pre className="mt-8 overflow-x-auto rounded-lg border border-white/[0.08] bg-[#0e0e11] p-4 font-mono text-[11px] leading-relaxed text-zinc-400 sm:text-[12px]">
+                                <pre className="mt-8 overflow-x-auto rounded-lg border border-white/[0.08] bg-black p-4 font-mono text-[11px] leading-relaxed text-zinc-400 sm:text-[12px]">
                                     <code>
                                         {`browser/
   localStorage  → encrypted settings payload
@@ -157,7 +156,7 @@ server/
                             ) : null}
 
                             {active.id === "deploy" ? (
-                                <pre className="mt-8 overflow-x-auto rounded-lg border border-white/[0.08] bg-[#0e0e11] p-4 font-mono text-[12px] leading-relaxed text-zinc-400">
+                                <pre className="mt-8 overflow-x-auto rounded-lg border border-white/[0.08] bg-black p-4 font-mono text-[12px] leading-relaxed text-zinc-400">
                                     <code>
                                         <span className="text-zinc-500">$ </span>
                                         npm run build && npm start

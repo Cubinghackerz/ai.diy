@@ -2,7 +2,7 @@
 
 ## Direction
 
-The landing page is **OLED editorial blackspace**: a product-led, asymmetric first viewport pairs ownership copy with the real ai.diy workspace instead of enclosing the offer in a conventional centered hero card. The page then proves the claim through the Local Data Plane, provider freedom, private workflows, capability controls, and a real deploy terminal. Structure comes from typography, spacing, and hairlines rather than decorative frames.
+The landing page is **Vercel/Resend blackfield**: a centered product-window first viewport. Ownership copy and actions sit above the real ai.diy workspace screenshot, not beside it. The page then proves the claim through the Local Data Plane, provider freedom, private workflows, capability controls, and a real deploy terminal. Structure comes from typography, spacing, and hairlines. No gradients.
 
 ## Mode
 
@@ -10,12 +10,12 @@ Persuade. Understand BYOK local-first ownership, then open `/workspace` or deplo
 
 ## Palette
 
-- Canvas: OLED `#050505` (`--landing-canvas`)
-- Surfaces: `#0c0c0f` / `#08080a`, used only where containment communicates product or terminal structure
+- Canvas: `#000000` (`--landing-canvas`)
+- Surfaces: `#0a0a0a` / `#111111`, used where containment communicates product or terminal structure
 - Type: white headings, zinc-400 body, zinc-500/600 metadata
-- Borders: restrained `white/[0.08–0.1]` hairlines
+- Borders: `white/[0.08–0.1]` hairlines
 - Primary CTA: solid white pill with nested icon circle (`LandingCta`)
-- Live signal: mint `#3DFFB0`, reserved for status dots, request routes, and a subtle product underglow
+- Live signal: mint `#3DFFB0`, reserved for status dots, cipher glyphs, and the Local Data Plane packet
 - Provider shelf: static official marks with grayscale-to-color hover; no pill containers or marquee loop
 
 ## Typography
@@ -27,19 +27,19 @@ Persuade. Understand BYOK local-first ownership, then open `/workspace` or deplo
 
 ## Shape And Depth
 
-- The page canvas is open; most evidence uses no card shell
-- Product and terminal surfaces earn rounded containment and soft offset shadows
-- One ambient white glow at the top and one restrained mint product signal provide depth
-- Hairlines divide information; decorative dot fields, SVG noise, stage rails, crosshairs, dashed frames, and nested bezels are not page scaffolding
+- The page canvas is open black; evidence uses hairline containment, not decorative frames
+- Product and terminal surfaces earn rounded-2xl shells and a single large offset shadow
+- The product bezel may take a gentle pointer tilt (≤3°)
+- Hairlines divide information; decorative dot fields, SVG noise, stage rails, crosshairs, dashed frames, nested bezels, and gradients are not page scaffolding
 - Floating island navigation remains the primary chrome
 
 ## Composition
 
 1. Floating island navigation
-2. Asymmetric ownership hero with real workspace proof and primary actions
-3. Local Data Plane trust boundary with one moving request packet
+2. Centered ownership hero with cipher headline, actions, and a full-width product window
+3. Local Data Plane trust boundary with one mint transit packet
 4. Static provider shelf
-5. Flat private-workflow evidence
+5. Private-workflow evidence as hairline cards
 6. Interactive capability lanes
 7. Copyable self-host terminal
 8. FAQ
@@ -48,10 +48,12 @@ Persuade. Understand BYOK local-first ownership, then open `/workspace` or deplo
 ## Motion
 
 - Custom ease `cubic-bezier(0.32, 0.72, 0, 1)` / GSAP power3
-- Hero: one blur-up stagger across the reading order
-- Local Data Plane: one mint request packet traverses the relay boundary
-- Section reveals remain subtle and one-time (`Reveal`)
-- No perpetual decorative floaters; honor `prefers-reduced-motion`
+- Focal moment: the hero ownership headline decrypts under the cursor (Canvas UI DecryptReveal, mint on `#000`). Hover-capable pointers only; touch and reduced-motion see crisp type
+- Remaining hero steps keep the blur-up stagger; the headline is excluded so the cipher owns the entrance
+- CTAs magnet toward the pointer; product window tilts
+- Section headings use a one-time masked word reveal (`MaskedHeading`); other section reveals stay subtle (`Reveal`)
+- Local Data Plane: one mint packet traverses the header band
+- No perpetual decorative floaters beyond the single packet; honor `prefers-reduced-motion`
 
 ## Icons
 
@@ -61,10 +63,10 @@ Persuade. Understand BYOK local-first ownership, then open `/workspace` or deplo
 
 - Semantic landmarks, visible focus rings, and at least 40px interactive targets
 - Real GitHub stars and deploy commands; no fabricated metrics, testimonials, or customers
-- Zinc text contrast is evaluated against `#050505` without route-level color overrides
+- Zinc text contrast is evaluated against `#000000` without route-level color overrides
 - Reduced-motion visitors receive visible static final states
 
 ## Form Contract
 
-- THESIS: Ownership is a visible mechanism, not a privacy slogan
-- FORM: OLED editorial blackspace × asymmetric product proof × hairline instrumentation
+- THESIS: The product is the proof — a black, flat, Vercel-grade workspace in the first viewport
+- FORM: Vercel/Resend blackfield × centered product window × hairline instrumentation

@@ -1,4 +1,5 @@
 import { PROVIDER_LOGOS } from "./constants";
+import { MaskedHeading } from "./MaskedHeading";
 import { Reveal } from "./DoubleBezel";
 
 export function ProviderMarquee() {
@@ -9,17 +10,15 @@ export function ProviderMarquee() {
             data-anim-gate="marquee"
             aria-label="Supported providers"
         >
-            <Reveal>
-                <div className="mx-auto grid max-w-6xl gap-8 px-5 sm:px-8 md:grid-cols-[0.85fr_1.15fr] md:items-end md:gap-12">
-                    <h2 className="max-w-[13ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
-                        Bring any model into the same thread.
-                    </h2>
-                    <p className="max-w-xl text-[15px] leading-relaxed text-zinc-400 md:justify-self-end">
-                        Connect 20+ cloud and local providers, then switch models without moving
-                        your workspace or copying context between apps.
-                    </p>
-                </div>
-            </Reveal>
+            <div className="mx-auto grid max-w-6xl gap-6 px-5 sm:px-8 md:grid-cols-[0.85fr_1.15fr] md:items-end md:gap-12">
+                <MaskedHeading className="max-w-[13ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
+                    Bring any model into the same thread.
+                </MaskedHeading>
+                <p className="max-w-xl text-[15px] leading-relaxed text-zinc-400 md:justify-self-end">
+                    Connect 20+ cloud and local providers, then switch models without moving
+                    your workspace or copying context between apps.
+                </p>
+            </div>
 
             <Reveal delayMs={40} className="mt-12">
                 <ul className="mx-auto grid max-w-6xl grid-cols-2 border-y border-white/[0.08] px-5 sm:grid-cols-3 sm:px-8 lg:grid-cols-5">
@@ -31,9 +30,9 @@ export function ProviderMarquee() {
                             <img
                                 src={logo.src}
                                 alt={logo.label}
-                                width={24}
-                                height={24}
-                                className="size-6 shrink-0 object-contain opacity-60 grayscale transition-[filter,opacity] duration-300 hover:opacity-100 hover:grayscale-0"
+                                width={20}
+                                height={20}
+                                className="size-5 shrink-0 object-contain opacity-55 grayscale transition-[filter,opacity] duration-300 hover:opacity-100 hover:grayscale-0"
                                 loading="lazy"
                             />
                             <span className="text-sm text-zinc-300">{logo.label}</span>

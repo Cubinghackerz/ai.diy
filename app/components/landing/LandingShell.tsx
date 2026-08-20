@@ -31,19 +31,14 @@ export function LandingShell({ children }: { children: ReactNode }) {
     return (
         <div
             ref={rootRef}
-            className={cn(
-                "landing-pinnacle relative min-h-[100dvh] w-full overflow-x-hidden text-zinc-50",
-            )}
+            className={cn("landing-pinnacle relative min-h-[100dvh] w-full overflow-x-hidden text-zinc-50")}
             style={{
                 backgroundColor: LANDING.canvas,
                 fontFamily: '"Geist Sans", "Geist", ui-sans-serif, system-ui, sans-serif',
+                ["--landing-canvas" as string]: LANDING.canvas,
+                ["--landing-mint" as string]: LANDING.mint,
             }}
         >
-            <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_-10%,rgba(255,255,255,0.09),transparent_60%)]"
-            />
-
             <div className="relative z-[2]">{children}</div>
         </div>
     );

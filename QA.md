@@ -122,3 +122,22 @@ Marked unchecked items were not runtime-exercised in this pass.
 - OG image regenerated from `public/og-image.svg` (`20+ PROVIDERS`, 1200×630)
 
 Mark **Status** as `pass`, `fail`, or `blocked`. File GitHub issues for every `fail`.
+
+## Browser-Local NPM Project Smoke
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| Project-name and path traversal validation | pass | `npm run smoke:npm-project` |
+| Registry-only package validation | pass | Rejects git, shell, file, and tarball specs; accepts scoped and exact-version packages. |
+| Lifecycle-script protection | pass | Install plan always includes `--ignore-scripts`. |
+| Bounded file writes | pass | 48 files max, 200 KiB per file, 1 MiB total. |
+| Allowlisted npm scripts | pass | Only build/dev/start/preview/test/lint/typecheck/check/format. |
+| WebContainer init/install/run/export flow | pass | Browser E2E covers init, write, registry install of `is-number@7.0.0`, npm run, inspect, read artifact, and tar export. |
+
+## Tool Access & Token Budget
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| Setup/Settings capability allowlist | pass | `npm run smoke:tool-access` — disabled tools map to capability gates. |
+| Historical tool-output projection | pass | `npm run smoke:token-efficiency` — recent turns stay intact; old tool dumps are bounded. |
+| Bundled search MCP is deferred | pass | Parallel/Firecrawl load only on search intent or prior MCP use. |

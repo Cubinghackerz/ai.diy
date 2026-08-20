@@ -7,7 +7,10 @@
         "dev": "react-router dev",
         "build": "react-router build",
         "start": "react-router-serve ./build/server/index.js",
-        "typecheck": "react-router typegen && tsc"
+        "typecheck": "react-router typegen && tsc",
+        "smoke:npm-project": "node scripts/npm-project-smoke.mjs",
+        "smoke:tool-access": "node scripts/tool-access-smoke.mjs",
+        "smoke:token-efficiency": "node scripts/token-efficiency-smoke.mjs"
     },
     "dependencies": {
         "@ai-sdk/amazon-bedrock": "^5.0.40",
@@ -58,6 +61,7 @@
         "@radix-ui/react-tooltip": "^1.1.7",
         "@upstash/redis": "^1.38.2",
         "@vercel/connect": "^0.8.0",
+        "@webcontainer/api": "^1.6.1",
         "@xterm/addon-fit": "^0.11.0",
         "@xterm/xterm": "^6.0.0",
         "ai": "^7.0.44",
@@ -79,6 +83,7 @@
         "motion": "^13.1.0",
         "ogl": "^1.0.11",
         "openai": "^6.49.0",
+        "pdfjs-dist": "^6.2.108",
         "pyodide": "^314.0.3",
         "react": "^19.2.8",
         "react-dom": "^19.2.8",

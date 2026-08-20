@@ -14,30 +14,44 @@ import {
 } from "ai";
 import { createChatGPTProxyProvider } from "@opencoredev/loginwithchatgpt-ai";
 import { buildChatTools } from "~/lib/server/chat-tools";
-import { closeMcpClients, loadMcpTools } from "~/lib/server/mcp-tools";
+import {
+    closeMcpClients,
+    loadMcpTools,
+    selectMcpServersForRequest,
+} from "~/lib/server/mcp-tools";
 import { buildChatSystemPromptParts } from "~/lib/server/prompt";
 import {
     ensureCompactionSkill,
     ensureFrontendSkill,
     ensureLinuxSkill,
+    ensureNpmProjectSkill,
     ensureResearchSkill,
+    detectResearchIntent,
     ensureUrlDoctorSkill,
     lastUserTextFromMessages,
     resolveRequiredSkillTools,
+    toolNameForForcedSkill,
     toolInvokedInThread,
     type ForcedSkill,
 } from "~/lib/skill-command";
 import {
+    normalizeToolAccess,
+    toolAccessKeyForTool,
+} from "~/lib/tool-access";
+import {
     compactUiMessages,
     estimateTokensFromText,
+    projectUiMessagesForModel,
     resolveModelContextWindow,
 } from "~/lib/server/context-compaction";
+import { estimatePromptBudget } from "~/lib/server/prompt-budget";
 import { normalizeUsage } from "~/lib/usage";
 import {
     buildReasoningProviderOptions,
     type ReasoningEffort,
 } from "~/lib/reasoning";
 import type { ConnectorConfig, McpServerConfig, ProviderId } from "~/lib/types";
+import type { ToolAccessSettings } from "~/lib/tool-access";
 import {
     createChatModel,
     createImageModel,
@@ -82,6 +96,7 @@ interface ChatRequestBody {
     chatId?: string;
     baseUrl?: string;
     systemPrompt?: string;
+    advancedSystemPrompt?: string;
     system?: string;
     projectInstructions?: string;
     temperature?: number;
@@ -101,6 +116,7 @@ interface ChatRequestBody {
         knowledgeEnabled?: boolean;
         subagentsEnabled?: boolean;
         tokenMode?: TokenMode;
+        toolAccess?: Partial<ToolAccessSettings>;
     };
     mcpServers?: McpServerConfig[];
     imageSettings?: {
@@ -514,16 +530,57 @@ export async function action({ request }: ActionFunctionArgs) {
     try {
         const mode = normalizeTokenMode(body.toolSettings?.tokenMode);
         const policy = tokenModePolicy(mode);
+        const toolAccess = normalizeToolAccess(body.toolSettings?.toolAccess, {
+            webSearch: body.toolSettings?.webSearchEnabled !== false,
+            calculator: body.toolSettings?.calculatorEnabled !== false,
+            python: body.toolSettings?.pythonEnabled !== false,
+            linux: body.toolSettings?.linuxEnvironment !== false,
+            skills: body.toolSettings?.skillsEnabled !== false,
+            memory: body.toolSettings?.memoryAvailable === true,
+            knowledge: body.toolSettings?.knowledgeEnabled !== false,
+            subagents: body.toolSettings?.subagentsEnabled === true,
+        });
+        const userText = lastUserTextFromMessages(body.messages);
+        const activeSearchConnector = toolAccess.connectors
+            ? findEnabledSearchConnector(body.toolSettings?.connectors)
+            : undefined;
+        const mcpToolAlreadyUsed = body.messages.some((message) =>
+            (message.parts ?? []).some((part) => {
+                const raw = part as unknown as {
+                    toolName?: unknown;
+                    type?: unknown;
+                };
+                const name =
+                    typeof raw.toolName === "string"
+                        ? raw.toolName
+                        : typeof raw.type === "string" && raw.type.startsWith("tool-")
+                          ? raw.type.slice(5)
+                          : "";
+                return name.startsWith("mcp_");
+            }),
+        );
+        const searchIntent =
+            detectResearchIntent(userText) ||
+            /\b(search|browse|look\s*up|find\s+(?:sources?|pages?|results?))\b/i.test(
+                userText,
+            );
 
         if (body.previewMode !== true) {
-            const loadedMcp = await loadMcpTools(body.mcpServers, policy);
+            const selectedMcpServers = toolAccess.mcp
+                ? selectMcpServersForRequest(body.mcpServers, {
+                      searchIntent,
+                      activeSearchConnector: Boolean(activeSearchConnector),
+                      webSearchEnabled:
+                          toolAccess.webSearch &&
+                          body.toolSettings?.webSearchEnabled !== false,
+                      mcpToolAlreadyUsed,
+                  })
+                : [];
+            const loadedMcp = await loadMcpTools(selectedMcpServers, policy);
             mcpTools = loadedMcp.tools;
             mcpClients = loadedMcp.clients;
         }
         const modelInstance = createChatModel({ ...body, request });
-        const activeSearchConnector = findEnabledSearchConnector(
-            body.toolSettings?.connectors,
-        );
         if (activeSearchConnector) {
             for (const name of Object.keys(mcpTools)) {
                 if (
@@ -540,7 +597,6 @@ export async function action({ request }: ActionFunctionArgs) {
         );
 
         // Slash-selected skills + auto Research / Frontend / URL Doctor when intent is clear.
-        const userText = lastUserTextFromMessages(body.messages);
         // Once-per-conversation skills: don't re-inject the forced skill when
         // its tool already ran in this thread (contract is already in context).
         const researchInvokedThisChat = toolInvokedInThread(body.messages, [
@@ -549,32 +605,54 @@ export async function action({ request }: ActionFunctionArgs) {
         const linuxInvokedThisChat = toolInvokedInThread(body.messages, [
             "linux_environment_skill",
         ]);
-        const activeSkills: ForcedSkill[] =
+        const npmProjectInvokedThisChat = toolInvokedInThread(body.messages, [
+            "npm_project_skill",
+        ]);
+        const detectedSkills: ForcedSkill[] =
             body.previewMode === true
                 ? []
-                : ensureLinuxSkill(
-                      ensureCompactionSkill(
-                          ensureUrlDoctorSkill(
-                              ensureFrontendSkill(
-                                  ensureResearchSkill(body.customSkills, userText, {
-                                      webSearchEnabled: body.toolSettings?.webSearchEnabled,
-                                      alreadyInvoked: researchInvokedThisChat,
-                                  }),
+                : ensureNpmProjectSkill(
+                      ensureLinuxSkill(
+                          ensureCompactionSkill(
+                              ensureUrlDoctorSkill(
+                                  ensureFrontendSkill(
+                                      ensureResearchSkill(body.customSkills, userText, {
+                                          webSearchEnabled:
+                                              toolAccess.webSearch &&
+                                              body.toolSettings?.webSearchEnabled,
+                                          alreadyInvoked: researchInvokedThisChat,
+                                      }),
+                                      userText,
+                                  ),
                                   userText,
+                                  {
+                                      webSearchEnabled:
+                                          toolAccess.webSearch &&
+                                          body.toolSettings?.webSearchEnabled,
+                                  },
                               ),
                               userText,
-                              {
-                                  webSearchEnabled: body.toolSettings?.webSearchEnabled,
-                              },
                           ),
                           userText,
+                          {
+                              linuxEnvironment:
+                                  toolAccess.linux && body.toolSettings?.linuxEnvironment,
+                              alreadyInvoked: linuxInvokedThisChat,
+                          },
                       ),
                       userText,
                       {
-                          linuxEnvironment: body.toolSettings?.linuxEnvironment,
-                          alreadyInvoked: linuxInvokedThisChat,
+                          linuxEnvironment:
+                              toolAccess.linux && body.toolSettings?.linuxEnvironment,
+                          npmProjectEnabled: toolAccess.npmProject,
+                          alreadyInvoked: npmProjectInvokedThisChat,
                       },
                   );
+        const activeSkills = detectedSkills.filter((skill) => {
+            const skillTool = toolNameForForcedSkill(skill.name);
+            const accessKey = skillTool ? toolAccessKeyForTool(skillTool) : null;
+            return accessKey ? toolAccess[accessKey] : toolAccess.skills;
+        });
         const requiredSkillTools = resolveRequiredSkillTools(activeSkills);
 
         const builtIn = await buildChatTools(
@@ -601,7 +679,7 @@ export async function action({ request }: ActionFunctionArgs) {
         const reserveTokens = Math.max(2_048, body.maxTokens ?? 4_096);
         // Draft prompt length for budget estimate (tools reminder added after).
         const draftPromptParts = buildChatSystemPromptParts(
-            body.system || body.systemPrompt || undefined,
+            body.advancedSystemPrompt || body.system || undefined,
             body.memoryContext,
             activeSkills,
             body.subagentMode === true ? "subagent" : "main",
@@ -609,10 +687,16 @@ export async function action({ request }: ActionFunctionArgs) {
             body.previewMode === true ? false : body.agentMode === true,
             mode,
             Object.keys(tools),
+            toolAccess,
+            body.systemPrompt,
         );
         // Auto-compact only near the context limit. Forced /Compaction must call
         // compaction_skill instead of silently rewriting history into plain text.
-        const compacted = compactUiMessages(body.messages, {
+        const projectedMessages = projectUiMessagesForModel(body.messages, {
+            keepRecent: policy.historyKeepRecent,
+            compactToolResults: policy.compactHistoricalToolResults,
+        });
+        const compacted = compactUiMessages(projectedMessages, {
             contextWindow,
             reserveTokens,
             systemTokens: estimateTokensFromText(draftPromptParts.full),
@@ -623,7 +707,7 @@ export async function action({ request }: ActionFunctionArgs) {
         const promptMessages = forceCompaction ? body.messages : compacted.messages;
 
         const promptParts = buildChatSystemPromptParts(
-            body.system || body.systemPrompt || undefined,
+            body.advancedSystemPrompt || body.system || undefined,
             body.memoryContext,
             activeSkills,
             body.subagentMode === true ? "subagent" : "main",
@@ -631,9 +715,17 @@ export async function action({ request }: ActionFunctionArgs) {
             body.previewMode === true ? false : body.agentMode === true,
             mode,
             Object.keys(tools),
+            toolAccess,
+            body.systemPrompt,
         );
 
         const modelMessages = await convertToModelMessages(promptMessages);
+        const promptBudget = estimatePromptBudget({
+            systemText: promptParts.full,
+            messages: promptMessages,
+            builtInTools: builtIn,
+            mcpTools,
+        });
         const effort = body.reasoningEffort ?? "medium";
         const providerOptions = buildReasoningProviderOptions(
             body.provider,
@@ -851,6 +943,7 @@ export async function action({ request }: ActionFunctionArgs) {
                             ttftMs,
                             durationMs: Math.max(0, finishedAt - streamStartedAt),
                         },
+                        promptBudget,
                     };
                 },
             }),

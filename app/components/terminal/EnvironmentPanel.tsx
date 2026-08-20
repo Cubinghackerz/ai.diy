@@ -77,7 +77,8 @@ export function EnvironmentPanel({
     onClose: () => void;
 }) {
     const { settings } = useSettings();
-    const enabled = settings.linuxEnvironment !== false;
+    const enabled =
+        settings.linuxEnvironment !== false && settings.toolAccess.linux !== false;
     const isolated = typeof window !== "undefined" && cheerpxAvailable();
     const [status, setStatus] = useState<"idle" | "booting" | "ready" | "error">(
         "idle",
@@ -311,7 +312,7 @@ export function EnvironmentPanel({
             <div className="flex min-h-0 flex-1 flex-col bg-background">
                 {!enabled ? (
                     <div className="m-4 rounded-xl border border-dashed border-border bg-card p-6 text-sm text-muted-foreground">
-                        Enable <span className="font-medium text-foreground">Linux environment</span> under Settings → Experimental to boot a Debian VM in this browser.
+                        Enable <span className="font-medium text-foreground">Linux environment</span> under Settings → Experimental to boot a Debian VM in this browser. npm projects use the separate browser-native WebContainer runtime.
                     </div>
                 ) : (
                     <>
@@ -329,7 +330,7 @@ export function EnvironmentPanel({
                             </p>
                         ) : (
                             <p className="border-b border-border px-4 py-2 text-[11px] text-muted-foreground">
-                                Tailscale networking is opt-in from Settings → Experimental. Files persist with this chat.
+                                Tailscale networking is opt-in from Settings → Experimental for Linux VM commands. WebContainer npm projects live in this browser tab.
                             </p>
                         )}
                         <div
