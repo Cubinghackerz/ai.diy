@@ -25,17 +25,17 @@ export function ProviderMarquee() {
                     {PROVIDER_LOGOS.map((logo) => (
                         <li
                             key={logo.id}
-                            className="flex min-h-16 items-center gap-3 border-b border-white/[0.08] px-2 py-4 sm:px-3 lg:min-h-[4.5rem] lg:[&:nth-child(-n+5)]:border-t-0"
+                            className="group flex min-h-16 items-center gap-3 border-b border-white/[0.08] px-2 py-4 transition-colors duration-300 hover:bg-white/[0.02] sm:px-3 lg:min-h-[4.5rem] lg:[&:nth-child(-n+5)]:border-t-0"
                         >
                             <img
                                 src={logo.src}
                                 alt={logo.label}
                                 width={20}
                                 height={20}
-                                className="size-5 shrink-0 object-contain opacity-55 grayscale transition-[filter,opacity] duration-300 hover:opacity-100 hover:grayscale-0"
+                                className="size-5 shrink-0 object-contain opacity-55 grayscale transition-[filter,opacity] duration-700 ease-out group-hover:opacity-100 group-hover:grayscale-0"
                                 loading="lazy"
                             />
-                            <span className="text-sm text-zinc-300">{logo.label}</span>
+                            <span className="text-sm text-zinc-300 transition-colors duration-300 group-hover:text-white">{logo.label}</span>
                         </li>
                     ))}
                 </ul>

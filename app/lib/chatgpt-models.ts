@@ -54,10 +54,12 @@ export function chatgptModelsFromSlugs(slugs: string[]): ModelInfo[] {
             id,
             name: id,
             provider: "chatgpt",
-            supportsTools: true,
-            supportsVision: true,
+            supportsTools: !/image|tts|whisper|embedding|dall/i.test(id),
+            supportsVision: !/tts|whisper|embedding/i.test(id),
             supportsStreaming: true,
-            supportsReasoning: /gpt-5|o[1-5]|reason|codex/i.test(id),
+            // Codex models always reason; keep account-specific slugs such as
+            // reserve and auto-review selectable in the same effort menu.
+            supportsReasoning: !/image|tts|whisper|embedding|dall/i.test(id),
             ...( /image/i.test(id) ? { supportsImageGeneration: true } : {}),
         }),
     );

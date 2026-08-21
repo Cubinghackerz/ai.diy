@@ -47,7 +47,7 @@ export function CapabilityRack() {
     return (
         <section
             id="capabilities"
-            className="mx-auto max-w-6xl scroll-mt-28 px-5 py-20 sm:px-8 sm:py-24"
+            className="mx-auto max-w-6xl scroll-mt-28 px-5 py-28 sm:px-8 sm:py-36"
             data-anim-gate="capabilities"
         >
             <MaskedHeading className="max-w-[18ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
@@ -90,10 +90,11 @@ export function CapabilityRack() {
                         </div>
 
                         <div
+                            key={active.id}
                             role="tabpanel"
                             id={`cap-panel-${active.id}`}
                             aria-labelledby={`cap-tab-${active.id}`}
-                            className="min-w-0 flex-1 p-6 sm:p-8"
+                            className="min-w-0 flex-1 animate-slide-up p-6 [animation-duration:0.4s] sm:p-8"
                         >
                             <div className="flex flex-wrap items-center gap-2">
                                 <StatusPill tone="live" pulse>
@@ -127,7 +128,7 @@ export function CapabilityRack() {
                                     ].map((row) => (
                                         <div
                                             key={row.k}
-                                            className="rounded-lg border border-white/[0.08] bg-black px-3.5 py-3"
+                                            className="rounded-lg border border-white/[0.08] bg-black px-3.5 py-3 transition-[border-color,background-color] duration-300 hover:border-white/[0.14] hover:bg-white/[0.02]"
                                         >
                                             <p className="font-mono text-[10px] tracking-wide text-zinc-500">
                                                 {row.k}

@@ -19,7 +19,10 @@ import type { ImageModel, SpeechModel } from "ai";
 import { experimental_generateVideo } from "ai";
 import type { ProviderConfig, ProviderId } from "~/lib/types";
 import { parseProviderCredentials } from "~/lib/provider-credentials";
-import { modelSupportsReasoning } from "~/lib/reasoning";
+import {
+    modelSupportsReasoning,
+    type ReasoningEffort,
+} from "~/lib/reasoning";
 import { getChatGPTHandler } from "~/lib/server/chatgpt-auth";
 import { normalizeProviderBaseUrl } from "~/lib/server/provider-url";
 import { createCompatibleFetch } from "~/lib/server/compatible-fetch";
@@ -30,6 +33,7 @@ export type ModelRequest = {
     baseUrl?: string;
     model: string;
     openAICompatible?: ProviderConfig["openAICompatible"];
+    reasoningEffort?: ReasoningEffort;
     /** Required for provider === "chatgpt" (session cookie via proxyFetch). */
     request?: Request;
 };
@@ -48,8 +52,18 @@ export function createChatModel(body: ModelRequest) {
                     "ChatGPT subscription requires an authenticated HTTP request (session cookie).",
                 );
             }
+            const headers: Record<string, string> = {};
+            if (body.reasoningEffort) {
+                headers["x-login-with-chatgpt-reasoning-effort"] =
+                    body.reasoningEffort === "off"
+                        ? "none"
+                        : body.reasoningEffort === "minimal"
+                          ? "low"
+                          : body.reasoningEffort;
+            }
             const chatgpt = createChatGPTProxyProvider({
                 fetch: getChatGPTHandler().proxyFetch(body.request),
+                ...(Object.keys(headers).length ? { headers } : {}),
             });
             return chatgpt(model);
         }
@@ -182,6 +196,7 @@ export function shouldUseOpenAIResponses(
 ): boolean {
     if (openAICompatible?.apiMode === "responses") return true;
     if (openAICompatible?.apiMode === "chat") return false;
+    if (provider === "chatgpt") return true;
     if (provider !== "openai" || !modelSupportsReasoning(provider, model)) {
         return false;
     }

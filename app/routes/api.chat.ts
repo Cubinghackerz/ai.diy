@@ -50,7 +50,11 @@ import {
     buildReasoningProviderOptions,
     type ReasoningEffort,
 } from "~/lib/reasoning";
-import type { ConnectorConfig, McpServerConfig, ProviderId } from "~/lib/types";
+import type {
+    ConnectorConfig,
+    McpServerConfig,
+    ProviderId,
+} from "~/lib/types";
 import type { ToolAccessSettings } from "~/lib/tool-access";
 import {
     createChatModel,
@@ -677,8 +681,9 @@ export async function action({ request }: ActionFunctionArgs) {
             toolAccess,
             body.systemPrompt,
         );
-        // Auto-compact only near the context limit. Forced /Compaction must call
-        // compaction_skill instead of silently rewriting history into plain text.
+        // Auto-compact once estimated context usage reaches 85% of the window.
+        // Forced /Compaction must call compaction_skill instead of silently
+        // rewriting history into plain text.
         const projectedMessages = projectUiMessagesForModel(body.messages, {
             keepRecent: policy.historyKeepRecent,
             compactToolResults: policy.compactHistoricalToolResults,

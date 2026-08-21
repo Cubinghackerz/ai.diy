@@ -64,7 +64,7 @@ export const ReasoningEffortSelector: FC<ReasoningEffortSelectorProps> = ({
 
     const activeOption =
         options.find((option) => option.id === configuredEffort) ??
-        options.find((option) => option.id === "high") ??
+        options.find((option) => option.id === "medium") ??
         options[0];
 
     return (

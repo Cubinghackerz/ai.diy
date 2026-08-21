@@ -27,7 +27,7 @@ export function UseCases() {
     return (
         <section
             id="use-cases"
-            className="mx-auto max-w-6xl scroll-mt-28 px-5 py-16 sm:px-8 sm:py-20"
+            className="mx-auto max-w-6xl scroll-mt-28 px-5 py-24 sm:px-8 sm:py-32"
             data-anim-gate="use-cases"
         >
             <MaskedHeading className="max-w-[16ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
@@ -40,7 +40,7 @@ export function UseCases() {
                         return (
                             <li
                                 key={item.title}
-                                className="rounded-2xl border border-white/[0.08] bg-[#0a0a0a] p-6 transition-[border-color,background-color] duration-200 hover:border-white/[0.16] hover:bg-[#111]"
+                                className="rounded-2xl border border-white/[0.08] bg-[#0a0a0a] p-6 transition-[transform,border-color,background-color,box-shadow] duration-500 hover:-translate-y-0.5 hover:border-white/[0.16] hover:bg-[#111] hover:shadow-[0_24px_60px_-24px_rgba(0,0,0,0.85)]"
                                 style={{ transitionTimingFunction: EASE_OUT }}
                             >
                                 <Icon weight="light" className="size-5 text-zinc-300" />

@@ -116,7 +116,13 @@ export interface ModelInfo {
 }
 
 /** Reasoning / thinking effort when the selected model supports it. */
-export type ReasoningEffort = "off" | "minimal" | "low" | "medium" | "high";
+export type ReasoningEffort =
+    | "off"
+    | "minimal"
+    | "low"
+    | "medium"
+    | "high"
+    | "xhigh";
 
 export interface ChatSettings {
     systemPrompt: string;

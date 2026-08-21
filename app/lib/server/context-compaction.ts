@@ -37,8 +37,8 @@ export type CompactionResult = {
 };
 
 const DEFAULT_CONTEXT_WINDOW = 128_000;
-/** Leave headroom for system prompt, tools, and the upcoming reply. */
-const CONTEXT_SOFT_RATIO = 0.72;
+/** Auto-compaction triggers once estimated usage reaches 85% of the model context window. */
+const CONTEXT_SOFT_RATIO = 0.85;
 const KEEP_RECENT_MESSAGES = 8;
 const MAX_SUMMARY_CHARS = 3_500;
 const MAX_TURN_EXTRACT_CHARS = 420;

@@ -19,8 +19,9 @@ export const REASONING_EFFORT_OPTIONS: ReasoningEffortOption[] = [
     { id: "off", label: "Think off" },
     { id: "minimal", label: "Think minimal" },
     { id: "low", label: "Think low" },
-    { id: "medium", label: "Think med" },
+    { id: "medium", label: "Think medium" },
     { id: "high", label: "Think high" },
+    { id: "xhigh", label: "Think xhigh" },
 ];
 
 /**
@@ -33,6 +34,7 @@ export const REASONING_EFFORT_OPTIONS: ReasoningEffortOption[] = [
  *  - Anthropic (Claude): enabled/disabled + a numeric thinking budget
  */
 const OPENAI_EFFORTS: ReasoningEffort[] = ["minimal", "low", "medium", "high"];
+const CHATGPT_EFFORTS: ReasoningEffort[] = ["off", "low", "medium", "high", "xhigh"];
 const XAI_EFFORTS: ReasoningEffort[] = ["off", "low", "medium", "high"];
 const GEMINI_EFFORTS: ReasoningEffort[] = ["off", "minimal", "low", "medium", "high"];
 const ANTHROPIC_EFFORTS: ReasoningEffort[] = ["off", "low", "medium", "high"];
@@ -60,6 +62,9 @@ export function getReasoningEffortOptions(
     if (!modelSupportsReasoning(provider, modelId)) return [];
     let ids: ReasoningEffort[];
     switch (provider) {
+        case "chatgpt":
+            ids = CHATGPT_EFFORTS;
+            break;
         case "openai":
         case "openrouter":
         case "groq":
@@ -119,6 +124,12 @@ export function modelSupportsReasoning(
     if (known?.supportsReasoning != null) return known.supportsReasoning;
 
     const id = modelId.toLowerCase();
+
+    // Codex models always use the Responses API and expose the full Codex
+    // reasoning ladder, including accounts whose live slug is not GPT-named.
+    if (provider === "chatgpt" && !/image|tts|whisper|embedding|dall/i.test(id)) {
+        return true;
+    }
 
     if (
         /(?:^|[/:-])(o[1-5])(?:[-/:]|$)/.test(id) ||
@@ -236,6 +247,14 @@ export function buildReasoningProviderOptions(
     }
 
     switch (provider) {
+        case "chatgpt":
+            return {
+                openai: {
+                    reasoningEffort:
+                        effort === "minimal" ? "low" : effort,
+                    reasoningSummary: "auto",
+                },
+            };
         case "openai":
         case "openrouter":
         case "groq":

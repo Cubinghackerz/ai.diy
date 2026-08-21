@@ -6,7 +6,7 @@ export function ClosingBand() {
     return (
         <section
             data-anim-gate="closing"
-            className="relative border-t border-white/[0.08] px-5 py-24 sm:px-8 sm:py-32"
+            className="relative border-t border-white/[0.08] px-5 py-32 sm:px-8 sm:py-44"
         >
             <div className="relative mx-auto max-w-3xl text-center">
                 <MaskedHeading className="text-[clamp(2.4rem,5.5vw,4.25rem)] font-medium leading-[1.04] tracking-[-0.04em] text-white">

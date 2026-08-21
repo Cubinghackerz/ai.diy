@@ -24,9 +24,9 @@ import {
     CheckCircle,
     Key,
     ShieldCheck,
-    SpinnerGap,
     XCircle,
 } from "@phosphor-icons/react";
+import { LoaderIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { ToolAccessPicker } from "~/components/settings/ToolAccessPicker";
@@ -215,7 +215,7 @@ export function SetupGate() {
                     aria-hidden
                     className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_0%,rgba(255,255,255,0.08),transparent_55%)]"
                 />
-                <SpinnerGap className="size-6 animate-spin text-zinc-400" />
+                <LoaderIcon className="size-6 animate-spin [animation-duration:0.6s] text-zinc-400" />
             </div>
         );
     }
@@ -417,8 +417,8 @@ export function SetupGate() {
                         >
                             {testing ? (
                                 <>
-                                    <SpinnerGap
-                                        className="animate-spin"
+                                    <LoaderIcon
+                                        className="size-3.5 shrink-0 animate-spin [animation-duration:0.6s]"
                                         data-icon="inline-start"
                                     />
                                     {local ? "Testing endpoint…" : "Testing key…"}

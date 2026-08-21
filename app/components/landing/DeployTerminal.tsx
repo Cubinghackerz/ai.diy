@@ -16,7 +16,7 @@ export function DeployTerminal() {
     return (
         <section
             id="deploy"
-            className="mx-auto max-w-6xl scroll-mt-28 px-5 pb-20 sm:px-8 sm:pb-24"
+            className="mx-auto max-w-6xl scroll-mt-28 px-5 pb-28 sm:px-8 sm:pb-36"
             data-anim-gate="deploy"
         >
             <Reveal>
@@ -65,6 +65,7 @@ export function DeployTerminal() {
                                         {line}
                                     </span>
                                 ))}
+                                <span aria-hidden className="ml-1 inline-block h-[1.05em] w-[0.55em] translate-y-[0.22em] animate-pulse bg-[var(--landing-mint,#3DFFB0)] motion-reduce:animate-none" />
                             </code>
                         </pre>
                         <span className="absolute right-4 top-4 inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-white/[0.12] bg-black/50 px-2.5 font-mono text-[11px] text-zinc-300">
