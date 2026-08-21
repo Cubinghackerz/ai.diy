@@ -350,7 +350,19 @@ export function lastUserTextFromMessages(
     }> | undefined,
 ): string {
     if (!messages?.length) return "";
-    const lastUser = [...messages].reverse().find((message) => message.role === "user");
+    let lastUser:
+        | {
+              role?: string;
+              parts?: Array<{ type?: string; text?: string }>;
+              content?: string | Array<{ type?: string; text?: string }>;
+          }
+        | undefined;
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+        if (messages[index]?.role === "user") {
+            lastUser = messages[index];
+            break;
+        }
+    }
     if (!lastUser) return "";
 
     if (Array.isArray(lastUser.parts)) {
@@ -376,11 +388,58 @@ export function lastUserTextFromMessages(
 const EXPLICIT_RESEARCH_WORDING =
     /\b(research|investigate|look\s*up|look\s+into|find\s+out|web\s*search|google\s+for|continue\s+(the\s+)?(research|search|lookup))\b/;
 
-/**
- * Whether any listed tool was already invoked in the thread messages
- * (assistant tool-call parts or AIMessage toolCalls). Used to skip re-injecting
- * once-per-conversation skills on follow-up turns.
- */
+export type InvokedToolNameIndex = {
+    /** All names, including AIMessage toolCalls, for skill deduplication. */
+    all: Set<string>;
+    /** Names represented in UI message parts for MCP selection. */
+    parts: Set<string>;
+};
+
+/** Collect tool names already invoked in assistant parts or AIMessage toolCalls. */
+export function toolNamesInvokedInThread(
+    messages: Array<{
+        parts?: Array<{
+            type?: string;
+            toolName?: string;
+            toolInvocation?: { toolName?: string };
+        }>;
+        toolCalls?: Array<{ name?: string }>;
+    }> | undefined,
+): InvokedToolNameIndex {
+    const all = new Set<string>();
+    const parts = new Set<string>();
+    for (const message of messages ?? []) {
+        if (!message || typeof message !== "object") continue;
+        if (Array.isArray(message.toolCalls)) {
+            for (const call of message.toolCalls) {
+                if (typeof call?.name === "string" && call.name) all.add(call.name);
+            }
+        }
+        if (Array.isArray(message.parts)) {
+            for (const part of message.parts) {
+                if (!part || typeof part !== "object") continue;
+                const directName =
+                    typeof part.toolName === "string" ? part.toolName : "";
+                const invocationName =
+                    typeof part.toolInvocation?.toolName === "string"
+                        ? part.toolInvocation.toolName
+                        : "";
+                const type = typeof part.type === "string" ? part.type : "";
+                const typedName = type.startsWith("tool-") ? type.slice(5) : "";
+                const toolName =
+                    directName ||
+                    invocationName ||
+                    typedName;
+                if (toolName) all.add(toolName);
+                const partName = directName || typedName;
+                if (partName) parts.add(partName);
+            }
+        }
+    }
+    return { all, parts };
+}
+
+/** Whether any listed tool was already invoked in the thread messages. */
 export function toolInvokedInThread(
     messages: Array<{
         role?: string;

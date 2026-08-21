@@ -2,5 +2,14 @@ import type { Config } from "@react-router/dev/config";
 
 export default {
     ssr: true,
-    prerender: false,
+    prerender: [
+        "/",
+        "/privacy",
+        "/terms",
+        "/agents",
+        "/local-ai",
+        "/mcp",
+        "/multi-model",
+        "/self-hosted-ai",
+    ],
 } satisfies Config;

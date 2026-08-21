@@ -31,7 +31,7 @@ import {
     lastUserTextFromMessages,
     resolveRequiredSkillTools,
     toolNameForForcedSkill,
-    toolInvokedInThread,
+    toolNamesInvokedInThread,
     type ForcedSkill,
 } from "~/lib/skill-command";
 import {
@@ -544,21 +544,15 @@ export async function action({ request }: ActionFunctionArgs) {
         const activeSearchConnector = toolAccess.connectors
             ? findEnabledSearchConnector(body.toolSettings?.connectors)
             : undefined;
-        const mcpToolAlreadyUsed = body.messages.some((message) =>
-            (message.parts ?? []).some((part) => {
-                const raw = part as unknown as {
-                    toolName?: unknown;
-                    type?: unknown;
-                };
-                const name =
-                    typeof raw.toolName === "string"
-                        ? raw.toolName
-                        : typeof raw.type === "string" && raw.type.startsWith("tool-")
-                          ? raw.type.slice(5)
-                          : "";
-                return name.startsWith("mcp_");
-            }),
-        );
+        const invokedToolNameIndex = toolNamesInvokedInThread(body.messages);
+        const invokedToolNames = invokedToolNameIndex.all;
+        let mcpToolAlreadyUsed = false;
+        for (const name of invokedToolNameIndex.parts) {
+            if (name.startsWith("mcp_")) {
+                mcpToolAlreadyUsed = true;
+                break;
+            }
+        }
         const searchIntent =
             detectResearchIntent(userText) ||
             /\b(search|browse|look\s*up|find\s+(?:sources?|pages?|results?))\b/i.test(
@@ -599,15 +593,9 @@ export async function action({ request }: ActionFunctionArgs) {
         // Slash-selected skills + auto Research / Frontend / URL Doctor when intent is clear.
         // Once-per-conversation skills: don't re-inject the forced skill when
         // its tool already ran in this thread (contract is already in context).
-        const researchInvokedThisChat = toolInvokedInThread(body.messages, [
-            "research_skill",
-        ]);
-        const linuxInvokedThisChat = toolInvokedInThread(body.messages, [
-            "linux_environment_skill",
-        ]);
-        const npmProjectInvokedThisChat = toolInvokedInThread(body.messages, [
-            "npm_project_skill",
-        ]);
+        const researchInvokedThisChat = invokedToolNames.has("research_skill");
+        const linuxInvokedThisChat = invokedToolNames.has("linux_environment_skill");
+        const npmProjectInvokedThisChat = invokedToolNames.has("npm_project_skill");
         const detectedSkills: ForcedSkill[] =
             body.previewMode === true
                 ? []
@@ -677,8 +665,7 @@ export async function action({ request }: ActionFunctionArgs) {
         const forceCompaction = requiredSkillTools.includes("compaction_skill");
         const contextWindow = resolveModelContextWindow(body.provider, body.model);
         const reserveTokens = Math.max(2_048, body.maxTokens ?? 4_096);
-        // Draft prompt length for budget estimate (tools reminder added after).
-        const draftPromptParts = buildChatSystemPromptParts(
+        const promptParts = buildChatSystemPromptParts(
             body.advancedSystemPrompt || body.system || undefined,
             body.memoryContext,
             activeSkills,
@@ -699,25 +686,12 @@ export async function action({ request }: ActionFunctionArgs) {
         const compacted = compactUiMessages(projectedMessages, {
             contextWindow,
             reserveTokens,
-            systemTokens: estimateTokensFromText(draftPromptParts.full),
+            systemTokens: estimateTokensFromText(promptParts.full),
             force: false,
             reason: "auto context limit",
             keepRecent: 8,
         });
         const promptMessages = forceCompaction ? body.messages : compacted.messages;
-
-        const promptParts = buildChatSystemPromptParts(
-            body.advancedSystemPrompt || body.system || undefined,
-            body.memoryContext,
-            activeSkills,
-            body.subagentMode === true ? "subagent" : "main",
-            body.projectInstructions,
-            body.previewMode === true ? false : body.agentMode === true,
-            mode,
-            Object.keys(tools),
-            toolAccess,
-            body.systemPrompt,
-        );
 
         const modelMessages = await convertToModelMessages(promptMessages);
         const promptBudget = estimatePromptBudget({
