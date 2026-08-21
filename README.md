@@ -3,6 +3,8 @@
 [![Clone repository](https://img.shields.io/badge/Clone-GitHub-181717?logo=github)](https://github.com/Cubinghackerz/ai.diy)
 [![Deploy a preview](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FCubinghackerz%2Fai.diy&project-name=ai-diy-preview)
 
+<a href="https://www.producthunt.com/products/ai-diy?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-ai-diy" target="_blank" rel="noopener noreferrer"><img alt="ai.diy - Browser-owned AI workspace for cloud and local models | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1227638&amp;theme=light&amp;t=1787299303731"></a>
+
 **Your AI workspace lives in your browser.**
 
 **Live demo:** [tryaidiy.com](https://tryaidiy.com/)

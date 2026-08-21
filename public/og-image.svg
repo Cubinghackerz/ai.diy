@@ -25,9 +25,4 @@
   <path d="M72 388H548" stroke="url(#rule)" stroke-width="2"/>
   <text x="72" y="439" fill="#a1a1aa" font-family="Arial, Helvetica, sans-serif" font-size="24">Local-first. Bring your own key. Self-host it.</text>
   <text x="72" y="505" fill="#71717a" font-family="Courier New, monospace" font-size="14" letter-spacing="1.2">BYOK   /   20+ PROVIDERS   /   BROWSER-PERSISTED DATA</text>
-  <g transform="translate(980 470)">
-    <rect width="148" height="76" rx="20" fill="#fff"/>
-    <path d="M34 20h80v12H50v10h48v12H50v8h64v12H34z" fill="#050505"/>
-    <circle cx="118" cy="20" r="6" fill="#71717a"/>
-  </g>
 </svg>
