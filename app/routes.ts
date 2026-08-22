@@ -16,6 +16,7 @@ export default [
     route("sitemap.xml", "routes/sitemap[.]xml.ts"),
     route("robots.txt", "routes/robots[.]txt.ts"),
     route("workspace", "routes/home.tsx"),
+    route("buildlist", "routes/buildlist.tsx"),
     route("api/chat", "routes/api.chat.ts"),
     route("api/chatgpt/*", "routes/api.chatgpt.$.ts"),
     route("api/grok/*", "routes/api.grok.$.ts"),
