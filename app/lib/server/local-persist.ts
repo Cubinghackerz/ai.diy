@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { MemoryStore, type KeyValueStore } from "@opencoredev/loginwithchatgpt-core";
 import { Redis } from "@upstash/redis";
+import { EncryptedKeyValueStore } from "~/lib/server/store-crypto";
 
 const DATA_DIR = join(process.cwd(), ".data");
 const SECRET_PATH = join(DATA_DIR, "lwc-secret");
@@ -93,19 +94,24 @@ export class RedisKeyValueStore<T> implements KeyValueStore<T> {
 /**
  * Select storage by runtime: Redis when configured, memory on serverless
  * without Redis (never the read-only deployment filesystem), and the durable
- * local JSON store for Node/Docker.
+ * local JSON store for Node/Docker. Persistent stores are wrapped with
+ * AES-256-GCM at-rest encryption (see store-crypto).
  */
 export function resolveChatGPTSessionStore<T>(filename: string): KeyValueStore<T> {
     const redisUrl =
         process.env.UPSTASH_REDIS_REST_URL?.trim() || process.env.KV_REST_API_URL?.trim();
     const redisToken =
         process.env.UPSTASH_REDIS_REST_TOKEN?.trim() || process.env.KV_REST_API_TOKEN?.trim();
+    const secret = resolveChatGPTSecret();
 
     if (redisUrl && redisToken) {
         console.info("[chatgpt] Using Upstash Redis for session persistence.");
-        return new RedisKeyValueStore<T>(
-            new Redis({ url: redisUrl, token: redisToken }),
-            `ai.diy:${filename}:`,
+        return new EncryptedKeyValueStore<T>(
+            new RedisKeyValueStore<string>(
+                new Redis({ url: redisUrl, token: redisToken }),
+                `ai.diy:${filename}:`,
+            ),
+            secret,
         );
     }
 
@@ -116,7 +122,10 @@ export function resolveChatGPTSessionStore<T>(filename: string): KeyValueStore<T
         return new MemoryStore<T>();
     }
 
-    return new FileKeyValueStore<T>(filename);
+    return new EncryptedKeyValueStore<T>(
+        new FileKeyValueStore<string>(filename),
+        secret,
+    );
 }
 
 interface FileStoreEntry<T> {

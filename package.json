@@ -9,6 +9,7 @@
         "start": "react-router-serve ./build/server/index.js",
         "typecheck": "react-router typegen && tsc",
         "smoke:npm-project": "node scripts/npm-project-smoke.mjs",
+        "smoke:session-store": "node scripts/session-store-smoke.mjs",
         "smoke:tool-access": "node scripts/tool-access-smoke.mjs",
         "smoke:token-efficiency": "node scripts/token-efficiency-smoke.mjs"
     },
