@@ -36,7 +36,7 @@ export function parseProviderCredentials(
 }
 
 export function providerNeedsKey(provider: ProviderId): boolean {
-    return !["ollama", "custom", "lmstudio", "chatgpt"].includes(provider);
+    return !["ollama", "custom", "lmstudio", "chatgpt", "grok"].includes(provider);
 }
 
 export function localProviderKey(provider: ProviderId): string {
@@ -49,6 +49,8 @@ export function localProviderKey(provider: ProviderId): string {
             return "custom";
         case "chatgpt":
             return "chatgpt-subscription";
+        case "grok":
+            return "grok-build-subscription";
         default:
             return "";
     }

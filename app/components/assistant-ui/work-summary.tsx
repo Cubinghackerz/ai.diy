@@ -534,7 +534,7 @@ export const ReasoningWorkSummary: FC<{ indices: readonly number[] }> = ({ indic
                 active={running}
                 label={
                     <span className="text-xs font-medium">
-                        {running ? "Working…" : collapsedLabel}
+                        {running ? "Reasoning…" : collapsedLabel}
                     </span>
                 }
                 icon={

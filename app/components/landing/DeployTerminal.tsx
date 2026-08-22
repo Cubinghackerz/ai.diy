@@ -1,17 +1,53 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, CopySimple } from "@phosphor-icons/react";
 import { DEPLOY_TABS, VERCEL_DEPLOY_URL, type DeployTabId } from "./constants";
 import { Reveal } from "./DoubleBezel";
 import { useCopy } from "./hooks";
 import { LandingCta } from "./LandingCta";
 import { MaskedHeading } from "./MaskedHeading";
-import { EASE_OUT } from "./motion";
 import { cn } from "~/lib/utils";
 
 export function DeployTerminal() {
     const [tab, setTab] = useState<DeployTabId>("npm");
     const active = DEPLOY_TABS.find((t) => t.id === tab) ?? DEPLOY_TABS[0];
     const { copied, copy } = useCopy(active.command);
+    const tabsRef = useRef<HTMLDivElement>(null);
+    const pillRef = useRef<HTMLSpanElement>(null);
+    const measuredRef = useRef(false);
+
+    const placePill = useCallback(
+        (animate: boolean) => {
+            const bar = tabsRef.current;
+            const pill = pillRef.current;
+            if (!bar || !pill) return;
+            const button = bar.querySelector<HTMLElement>(`[data-tab="${tab}"]`);
+            if (!button) return;
+            const previous = pill.style.transition;
+            if (!animate) pill.style.transition = "none";
+            pill.style.transform = `translateX(${button.offsetLeft}px)`;
+            pill.style.width = `${button.offsetWidth}px`;
+            if (!animate) {
+                void pill.offsetWidth;
+                pill.style.transition = previous;
+            }
+        },
+        [tab],
+    );
+
+    useEffect(() => {
+        if (!measuredRef.current) {
+            placePill(false);
+            measuredRef.current = true;
+            return;
+        }
+        placePill(true);
+    }, [placePill]);
+
+    useEffect(() => {
+        const onResize = () => placePill(false);
+        window.addEventListener("resize", onResize);
+        return () => window.removeEventListener("resize", onResize);
+    }, [placePill]);
 
     return (
         <section
@@ -33,19 +69,24 @@ export function DeployTerminal() {
 
             <Reveal delayMs={40} className="mt-8">
                 <div className="overflow-hidden rounded-2xl border border-white/[0.1] bg-[#0a0a0a]">
-                    <div className="flex items-center gap-1 border-b border-white/[0.08] bg-[#0a0a0a] px-2 pt-1.5">
+                    <div
+                        ref={tabsRef}
+                        role="tablist"
+                        aria-label="Deployment method"
+                        className="t-tabs flex items-center gap-1 border-b border-white/[0.08] bg-[#0a0a0a] px-2 pt-1.5"
+                    >
+                        <span ref={pillRef} className="t-tabs-pill" aria-hidden />
                         {DEPLOY_TABS.map((t) => (
                             <button
                                 key={t.id}
                                 type="button"
+                                role="tab"
+                                data-tab={t.id}
+                                aria-selected={tab === t.id}
                                 onClick={() => setTab(t.id)}
                                 className={cn(
-                                    "min-h-10 rounded-t-lg px-3 py-2 font-mono text-[11px] transition-[color,background-color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40",
-                                    tab === t.id
-                                        ? "bg-black text-zinc-100"
-                                        : "text-zinc-500 hover:text-zinc-300",
+                                    "t-tab min-h-10 rounded-t-lg px-3 py-2 font-mono text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40",
                                 )}
-                                style={{ transitionTimingFunction: EASE_OUT }}
                             >
                                 {t.label}
                             </button>
@@ -69,11 +110,18 @@ export function DeployTerminal() {
                             </code>
                         </pre>
                         <span className="absolute right-4 top-4 inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-white/[0.12] bg-black/50 px-2.5 font-mono text-[11px] text-zinc-300">
-                            {copied ? (
-                                <Check weight="bold" className="size-3.5" />
-                            ) : (
-                                <CopySimple weight="light" className="size-3.5" />
-                            )}
+                            <span
+                                className="t-icon-swap"
+                                data-state={copied ? "b" : "a"}
+                                aria-hidden
+                            >
+                                <span className="t-icon" data-icon="a">
+                                    <CopySimple weight="light" className="size-3.5" />
+                                </span>
+                                <span className="t-icon" data-icon="b">
+                                    <Check weight="bold" className="size-3.5" />
+                                </span>
+                            </span>
                             {copied ? "Copied" : "Copy"}
                         </span>
                     </button>

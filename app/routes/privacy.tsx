@@ -63,6 +63,7 @@ export default function PrivacyPage() {
                 <LegalList>
                     <li>The landing page reads public GitHub profile and repository statistics from the GitHub API. It does not request a GitHub token.</li>
                     <li>Login with ChatGPT is an experimental beta integration. It uses a session cookie and third-party community SDK; enable it only after reviewing its consent flow.</li>
+                    <li>Grok subscription is an experimental browser-login integration. OAuth tokens are kept in an encrypted server session and sent only to the Grok Build chat proxy for the request you make.</li>
                     <li>Hosting providers may process normal operational data such as IP addresses, request timing, and server logs according to their policies.</li>
                 </LegalList>
             </LegalSection>

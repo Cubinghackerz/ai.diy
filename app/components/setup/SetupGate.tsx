@@ -9,6 +9,10 @@ import { Input } from "~/components/ui/input";
 import { SearchableModelSelect } from "~/components/ui/ModelPicker";
 import { ProviderPicker } from "~/components/ui/ProviderPicker";
 import { ChatGPTConnectionRefreshDialog } from "~/components/settings/ChatGPTConnectionRefreshDialog";
+import {
+    GrokSubscriptionSettings,
+    useGrokBuildSession,
+} from "~/components/settings/GrokSubscriptionSettings";
 import { haptic, hapticConfirm, hapticSelect } from "~/lib/haptics";
 import { testProviderKey } from "~/lib/key-test";
 import { useSettings } from "~/lib/providers/SettingsProvider";
@@ -43,6 +47,7 @@ export function SetupGate() {
     const { settings, loaded, updateProvider, updateChat, updateSettings, updateToolAccess } =
         useSettings();
     const { isAuthenticated, user } = useLoginWithChatGPT();
+    const { session: grokSession } = useGrokBuildSession();
 
     const [provider, setProvider] = useState<ProviderId>(
         settings.chat.provider || "chatgpt",
@@ -74,7 +79,11 @@ export function SetupGate() {
     }, []);
 
     const local = isLocalProvider(provider);
-    const keyReady = local || apiKey.trim().length > 0;
+    const grokAuthenticated = grokSession.status === "authenticated";
+    const keyReady =
+        provider === "grok"
+            ? grokAuthenticated
+            : local || apiKey.trim().length > 0;
 
     useEffect(() => {
         const cfg = settings.providers[provider];
@@ -96,6 +105,28 @@ export function SetupGate() {
         setModel(chatGptModel);
         setVerified(true);
     }, [isAuthenticated, provider, settings.chat.model, settings.setupComplete]);
+
+    useEffect(() => {
+        if (!grokAuthenticated || provider !== "grok" || settings.setupComplete) return;
+        let cancelled = false;
+        const fallback = DEFAULT_MODELS.grok ?? [];
+        setModels(fallback);
+        setModel(fallback[0]?.id || "grok-build");
+        setVerified(fallback.length > 0);
+        setError(null);
+        void testProviderKey({ provider: "grok", apiKey: "" }).then((result) => {
+            if (cancelled || result.models.length === 0) return;
+            setModels(result.models);
+            setModel((current) =>
+                result.models.some((item) => item.id === current)
+                    ? current
+                    : result.models[0]?.id || current,
+            );
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [grokAuthenticated, provider, settings.setupComplete]);
 
     useEffect(() => {
         if (!loaded || !isAuthenticated || settings.setupComplete) return;
@@ -154,13 +185,19 @@ export function SetupGate() {
     const handleContinue = useCallback(() => {
         if (!canContinue) return;
         hapticConfirm();
-        const storedKey = local
-            ? apiKey.trim() || localProviderKey(provider)
-            : apiKey.trim();
+        const storedKey =
+            provider === "grok"
+                ? ""
+                : local
+                  ? apiKey.trim() || localProviderKey(provider)
+                  : apiKey.trim();
 
         updateProvider(provider, {
             apiKey: storedKey,
-            baseUrl: baseUrl.trim() || PROVIDER_DEFAULTS[provider].baseUrl,
+            baseUrl:
+                provider === "grok"
+                    ? ""
+                    : baseUrl.trim() || PROVIDER_DEFAULTS[provider].baseUrl,
             enabled: true,
             ...(provider === "custom"
                 ? {
@@ -173,7 +210,10 @@ export function SetupGate() {
                 : {}),
         });
         updateChat({ provider, model });
-        updateSettings({ setupComplete: true });
+        updateSettings({
+            setupComplete: true,
+            ...(provider === "grok" ? { grokBuildLoginEnabled: true } : {}),
+        });
     }, [
         canContinue,
         local,
@@ -196,6 +236,13 @@ export function SetupGate() {
         updateChat({ provider: "chatgpt", model: chatGptModel });
         setChatGptRefreshOpen(true);
     }, [updateChat, updateProvider, updateSettings]);
+
+    const handleGrokBuildConnected = useCallback(() => {
+        setModels(DEFAULT_MODELS.grok ?? []);
+        setModel(DEFAULT_MODELS.grok?.[0]?.id || "grok-build");
+        setVerified(true);
+        setError(null);
+    }, []);
 
     const refreshAfterChatGPTLogin = useCallback(() => {
         window.setTimeout(() => window.location.reload(), 500);
@@ -325,6 +372,12 @@ export function SetupGate() {
                             </p>
                         </div>
 
+                        {provider === "grok" ? (
+                            <GrokSubscriptionSettings
+                                onConnected={handleGrokBuildConnected}
+                            />
+                        ) : null}
+
                         <div className="flex flex-col gap-3 rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.04] p-3.5">
                             <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
@@ -355,7 +408,7 @@ export function SetupGate() {
                             ) : null}
                         </div>
 
-                        {!local ? (
+                        {!local && provider !== "grok" ? (
                             <div className="flex flex-col gap-2">
                                 <label
                                     htmlFor="setup-api-key"
@@ -389,7 +442,7 @@ export function SetupGate() {
                             </div>
                         ) : null}
 
-                        <div className="flex flex-col gap-2">
+                        {provider !== "grok" ? <div className="flex flex-col gap-2">
                             <label
                                 htmlFor="setup-base-url"
                                 className="text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500"
@@ -406,9 +459,9 @@ export function SetupGate() {
                                 }}
                                 className="h-11 rounded-xl border-white/10 bg-white/[0.04] font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus-visible:border-white/25"
                             />
-                        </div>
+                        </div> : null}
 
-                        <Button
+                        {provider !== "grok" ? <Button
                             type="button"
                             variant="outline"
                             disabled={!keyReady || testing}
@@ -426,7 +479,7 @@ export function SetupGate() {
                             ) : (
                                 "Test connection"
                             )}
-                        </Button>
+                        </Button> : null}
 
                         {error ? (
                             <p className="flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-xs leading-relaxed text-red-300">

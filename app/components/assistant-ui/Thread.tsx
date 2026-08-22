@@ -742,9 +742,9 @@ const AssistantMessage: FC = () => {
               case "text":
                 return <MarkdownText />;
               case "reasoning":
-                // The parent group owns the single disclosure. Rendering a
-                // second ReasoningRoot here creates nested reasoning panels.
-                return <MarkdownText />;
+                // ReasoningWorkSummary above owns the single disclosure. Do
+                // not render the raw reasoning part as normal answer text.
+                return null;
               case "tool-call":
                 return null;
               case "file":

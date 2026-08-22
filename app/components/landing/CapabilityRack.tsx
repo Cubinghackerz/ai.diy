@@ -77,7 +77,7 @@ export function CapabilityRack() {
                                         className={cn(
                                             "inline-flex min-h-11 shrink-0 items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[14px] transition-[background-color,color,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.98]",
                                             selected
-                                                ? "bg-white/[0.08] text-white"
+                                                ? "bg-white/[0.08] text-white shadow-[inset_0_1px_0_rgba(61,255,176,0.25)]"
                                                 : "text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100",
                                         )}
                                         style={{ transitionTimingFunction: EASE_OUT }}
@@ -122,9 +122,9 @@ export function CapabilityRack() {
                             {active.id === "tools" ? (
                                 <div className="mt-8 grid gap-2 sm:grid-cols-3">
                                     {[
-                                        { k: "Search", v: "DuckDuckGo · Firecrawl · Parallel" },
-                                        { k: "Runtime", v: "Browser Pyodide · Web Speech" },
-                                        { k: "Agents", v: "Skills · Subagents · MCP" },
+                                        { k: "Search", v: "DuckDuckGo, Firecrawl, Parallel" },
+                                        { k: "Runtime", v: "Browser Pyodide, Web Speech" },
+                                        { k: "Agents", v: "Skills, Subagents, MCP" },
                                     ].map((row) => (
                                         <div
                                             key={row.k}
@@ -151,7 +151,7 @@ export function CapabilityRack() {
                   knowledge, usage ledger
 server/
   /api/*        → relay + enabled services
-                 · no persistent LLM secrets`}
+                 - no persistent LLM secrets`}
                                     </code>
                                 </pre>
                             ) : null}

@@ -42,11 +42,14 @@ export function OwnershipStage() {
                 <TrustBoundary />
             </div>
 
-            <div className="mt-12 grid gap-10 border-t border-white/[0.08] pt-10 md:grid-cols-3 md:gap-8">
-                {CALLOUTS.map((item) => {
+            <div className="mt-12 grid gap-3 border-t border-white/[0.08] pt-10 md:grid-cols-2">
+                {CALLOUTS.slice(0, 2).map((item) => {
                     const Icon = item.icon;
                     return (
-                        <article key={item.title}>
+                        <article
+                            key={item.title}
+                            className="rounded-2xl border border-white/[0.08] bg-[#0a0a0a] p-6 transition-[border-color,background-color] duration-300 hover:border-white/[0.16] hover:bg-[#111]"
+                        >
                             <Icon weight="light" className="size-5 text-zinc-300" />
                             <h3 className="mt-5 text-[16px] font-medium tracking-tight text-white">
                                 {item.title}
@@ -57,6 +60,15 @@ export function OwnershipStage() {
                         </article>
                     );
                 })}
+                <article className="rounded-2xl border border-white/[0.08] bg-black p-6 md:col-span-2">
+                    <PlugsConnected weight="light" className="size-5 text-zinc-300" />
+                    <h3 className="mt-5 text-[16px] font-medium tracking-tight text-white">
+                        {CALLOUTS[2].title}
+                    </h3>
+                    <p className="mt-2.5 max-w-2xl text-[14px] leading-relaxed text-zinc-400">
+                        {CALLOUTS[2].body}
+                    </p>
+                </article>
             </div>
         </section>
     );

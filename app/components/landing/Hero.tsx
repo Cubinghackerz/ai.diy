@@ -6,8 +6,6 @@ import { LandingCta } from "./LandingCta";
 import { ProductBezel } from "./ProductBezel";
 import { cn } from "~/lib/utils";
 
-const FACTS = ["LOCAL-FIRST", "20+ PROVIDERS", "MIT LICENSED", "NO PERSISTENT LLM KEYS"] as const;
-
 export function Hero() {
     const reduced = usePrefersReducedMotion();
 
@@ -15,7 +13,7 @@ export function Hero() {
         <section
             aria-labelledby="hero-heading"
             data-anim-gate="hero"
-            className="relative mx-auto max-w-6xl px-5 pb-16 pt-28 sm:px-8 sm:pt-32 lg:pb-20 lg:pt-36"
+            className="relative mx-auto max-w-6xl px-5 pb-16 pt-20 sm:px-8 sm:pt-24 lg:pb-20"
         >
             <div className="mx-auto max-w-3xl text-center">
                 <CipherHeadline id="hero-heading">
@@ -51,25 +49,6 @@ export function Hero() {
                             View on GitHub
                     </LandingCta>
                 </div>
-
-                <ul
-                    className={cn(
-                        "mt-12 flex flex-wrap items-center justify-center gap-x-7 gap-y-3 font-mono text-[10px] tracking-[0.16em] text-zinc-500 sm:text-[11px]",
-                        !reduced && "landing-hero-step opacity-0",
-                    )}
-                    data-hero-step="4"
-                    aria-label="Key facts"
-                >
-                    {FACTS.map((fact) => (
-                        <li key={fact} className="flex items-center gap-2">
-                            <span
-                                aria-hidden
-                                className="size-1 rounded-full bg-[var(--landing-mint,#3DFFB0)]"
-                            />
-                            {fact}
-                        </li>
-                    ))}
-                </ul>
             </div>
 
             <div

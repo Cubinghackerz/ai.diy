@@ -1,7 +1,14 @@
 import { Link } from "react-router";
 import { ArrowSquareOut, XLogo } from "@phosphor-icons/react";
 import { BrandMark } from "./BrandMark";
-import { DOCS_URL, GITHUB_URL, SUPPORT_EMAIL, SUPPORT_MAILTO, TWITTER_URL } from "./constants";
+import {
+    CHANGELOG_URL,
+    DOCS_URL,
+    GITHUB_URL,
+    SUPPORT_EMAIL,
+    SUPPORT_MAILTO,
+    TWITTER_URL,
+} from "./constants";
 import { SEO_GUIDES } from "~/lib/seo-pages";
 
 const linkClass =
@@ -67,6 +74,11 @@ export function LandingFooter() {
                             <li>
                                 <a href={DOCS_URL} target="_blank" rel="noreferrer" className={linkClass}>
                                     Docs
+                                </a>
+                            </li>
+                            <li>
+                                <a href="#changelog" className={linkClass}>
+                                    Changelog
                                 </a>
                             </li>
                             <li>

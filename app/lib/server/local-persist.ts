@@ -13,6 +13,7 @@ import { EncryptedKeyValueStore } from "~/lib/server/store-crypto";
 
 const DATA_DIR = join(process.cwd(), ".data");
 const SECRET_PATH = join(DATA_DIR, "lwc-secret");
+const GROK_SECRET_PATH = join(DATA_DIR, "grok-secret");
 
 export function isServerlessRuntime(): boolean {
     return process.env.VERCEL === "1" || Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
@@ -22,39 +23,48 @@ function ensureDataDir() {
     if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
 }
 
-/**
- * Stable cookie-signing secret for local / single-node self-host.
- * Prefer LWC_SECRET. Otherwise persist a generated secret so ChatGPT
- * sessions survive `npm start` restarts.
- */
-export function resolveChatGPTSecret(): string {
-    const fromEnv = process.env.LWC_SECRET?.trim();
+function resolvePersistentSecret(
+    envName: string,
+    secretPath: string,
+    label: string,
+): string {
+    const fromEnv = process.env[envName]?.trim() || process.env.LWC_SECRET?.trim();
     if (fromEnv) return fromEnv;
     if (isServerlessRuntime()) {
         console.warn(
-            "[chatgpt] LWC_SECRET is not set on a serverless runtime. Set it in Vercel so the session cookie remains valid across instances.",
+            `[${label}] ${envName} is not set on a serverless runtime. Set it in Vercel so the session cookie remains valid across instances.`,
         );
         return randomBytes(32).toString("hex");
     }
     try {
         ensureDataDir();
-        if (existsSync(SECRET_PATH)) {
-            const stored = readFileSync(SECRET_PATH, "utf8").trim();
+        if (existsSync(secretPath)) {
+            const stored = readFileSync(secretPath, "utf8").trim();
             if (stored.length >= 32) return stored;
         }
         const generated = randomBytes(32).toString("hex");
-        writeFileSync(SECRET_PATH, `${generated}\n`, { mode: 0o600 });
+        writeFileSync(secretPath, `${generated}\n`, { mode: 0o600 });
         console.info(
-            "[chatgpt] Wrote a local session secret to .data/lwc-secret so ChatGPT login survives restarts. Set LWC_SECRET for multi-instance production.",
+            `[${label}] Wrote a local session secret so ${label} login survives restarts. Set ${envName} (or LWC_SECRET) for multi-instance production.`,
         );
         return generated;
     } catch (error) {
         console.warn(
-            "[chatgpt] Could not persist a local session secret; ChatGPT login will reset on restart.",
+            `[${label}] Could not persist a local session secret; ${label} login will reset on restart.`,
             error instanceof Error ? error.message : error,
         );
         return randomBytes(32).toString("hex");
     }
+}
+
+/** Stable secret for local / single-node ChatGPT sessions. */
+export function resolveChatGPTSecret(): string {
+    return resolvePersistentSecret("LWC_SECRET", SECRET_PATH, "chatgpt");
+}
+
+/** Stable secret for local / single-node Grok Build sessions. */
+export function resolveGrokSecret(): string {
+    return resolvePersistentSecret("GROK_SECRET", GROK_SECRET_PATH, "grok");
 }
 
 /**
@@ -112,6 +122,10 @@ export function resolveChatGPTSessionStore<T>(filename: string): KeyValueStore<T
                 `ai.diy:${filename}:`,
             ),
             secret,
+            {
+                label: "chatgpt",
+                keyContext: "ai.diy:chatgpt-session-store:v1:",
+            },
         );
     }
 
@@ -125,6 +139,54 @@ export function resolveChatGPTSessionStore<T>(filename: string): KeyValueStore<T
     return new EncryptedKeyValueStore<T>(
         new FileKeyValueStore<string>(filename),
         secret,
+        {
+            label: "chatgpt",
+            keyContext: "ai.diy:chatgpt-session-store:v1:",
+        },
+    );
+}
+
+/**
+ * Session storage for Grok Build OAuth state and credentials. It follows the
+ * same Redis/local-runtime selection as ChatGPT but uses an isolated key and
+ * encryption context.
+ */
+export function resolveGrokSessionStore<T>(filename: string): KeyValueStore<T> {
+    const redisUrl =
+        process.env.UPSTASH_REDIS_REST_URL?.trim() || process.env.KV_REST_API_URL?.trim();
+    const redisToken =
+        process.env.UPSTASH_REDIS_REST_TOKEN?.trim() || process.env.KV_REST_API_TOKEN?.trim();
+    const secret = resolveGrokSecret();
+
+    if (redisUrl && redisToken) {
+        console.info("[grok] Using Upstash Redis for session persistence.");
+        return new EncryptedKeyValueStore<T>(
+            new RedisKeyValueStore<string>(
+                new Redis({ url: redisUrl, token: redisToken }),
+                `ai.diy:grok:${filename}:`,
+            ),
+            secret,
+            {
+                label: "grok",
+                keyContext: "ai.diy:grok-build-session-store:v1:",
+            },
+        );
+    }
+
+    if (isServerlessRuntime()) {
+        console.warn(
+            "[grok] No Redis REST credentials found; using in-memory sessions for this serverless instance. Configure Upstash Redis for reliable logins across cold starts.",
+        );
+        return new MemoryStore<T>();
+    }
+
+    return new EncryptedKeyValueStore<T>(
+        new FileKeyValueStore<string>(filename),
+        secret,
+        {
+            label: "grok",
+            keyContext: "ai.diy:grok-build-session-store:v1:",
+        },
     );
 }
 

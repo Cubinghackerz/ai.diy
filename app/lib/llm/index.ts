@@ -29,6 +29,7 @@ providers.set("cerebras", new OpenAIProvider("cerebras"));
 providers.set("fireworks", new OpenAIProvider("fireworks"));
 providers.set("openrouter", new OpenAIProvider("openrouter"));
 providers.set("xai", new OpenAIProvider("xai"));
+providers.set("grok", new OpenAIProvider("grok"));
 providers.set("deepseek", new OpenAIProvider("deepseek"));
 providers.set("togetherai", new OpenAIProvider("togetherai"));
 providers.set("mistral", new OpenAIProvider("mistral"));

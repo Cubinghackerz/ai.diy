@@ -1,5 +1,6 @@
 export const GITHUB_REPO = "Cubinghackerz/ai.diy";
 export const GITHUB_URL = `https://github.com/${GITHUB_REPO}`;
+export const CHANGELOG_URL = `${GITHUB_URL}/commits/main`;
 export const DOCS_URL = `${GITHUB_URL}#readme`;
 export const TWITTER_URL = "https://x.com/HeckingHacker";
 export const SUPPORT_EMAIL = "support@tryaidiy.com";
@@ -10,9 +11,9 @@ export const VERCEL_DEPLOY_URL =
 /** Featured provider marks for landing shelves (no infinite marquee). */
 export const PROVIDER_LOGOS: Array<{ src: string; label: string; id: string }> = [
     { id: "openai", src: "/landing-logos/openai-mark.png", label: "OpenAI" },
-    { id: "grok", src: "/landing-logos/anthropic-mark.png", label: "Grok" },
+    { id: "grok", src: "/landing-logos/xai-lobe.png", label: "Grok" },
     { id: "gemini", src: "/landing-logos/gemini.png", label: "Gemini" },
-    { id: "claude", src: "/landing-logos/groq.png", label: "Claude" },
+    { id: "claude", src: "/landing-logos/anthropic-lobe.png", label: "Claude" },
     { id: "openrouter", src: "/landing-logos/openrouter-lobe.png", label: "OpenRouter" },
     { id: "deepseek", src: "/landing-logos/deepseek-lobe.png", label: "DeepSeek" },
     { id: "ollama", src: "/landing-logos/ollama-lobe.png", label: "Ollama" },

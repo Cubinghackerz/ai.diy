@@ -7,6 +7,11 @@ import { localProviderKey } from "~/lib/provider-credentials";
 import { corsPreflight, withCors } from "~/lib/server/cors";
 import { chatgptModelsFromSlugs } from "~/lib/chatgpt-models";
 import { getChatGPTHandler } from "~/lib/server/chatgpt-auth";
+import {
+    getGrokBuildSession,
+    listGrokBuildModels,
+    grokBuildProxyUrl,
+} from "~/lib/server/grok-build-auth";
 import { normalizeProviderBaseUrl } from "~/lib/server/provider-url";
 import {
     classifyProviderError,
@@ -123,6 +128,80 @@ export async function action({ request }: ActionFunctionArgs) {
                         live: false,
                         error: message,
                         fetchedAt: Date.now(),
+                    },
+                    { headers: { "Cache-Control": "no-store" } },
+                ),
+            );
+        }
+    }
+
+    if (body.provider === "grok") {
+        const session = await getGrokBuildSession(request);
+        const fallback = (DEFAULT_MODELS.grok ?? []).map((m) =>
+            enrichModelInfo({ ...m, provider: "grok" }),
+        );
+        if (session.status !== "authenticated") {
+            return withCors(
+                request,
+                Response.json(
+                    {
+                        error: "Sign in with Grok Build under Settings.",
+                        models: fallback,
+                        live: false,
+                    },
+                    {
+                        status: 401,
+                        headers: { "Cache-Control": "no-store" },
+                    },
+                ),
+            );
+        }
+        try {
+            const live = await listGrokBuildModels(request);
+            const models =
+                live.length > 0
+                    ? live.map((model) =>
+                          enrichModelInfo({
+                              ...model,
+                              provider: "grok",
+                          }),
+                      )
+                    : fallback;
+            return withCors(
+                request,
+                Response.json(
+                    {
+                        models,
+                        live: live.length > 0,
+                        fetchedAt: Date.now(),
+                        resolvedBaseUrl: grokBuildProxyUrl(),
+                        checks: {
+                            keyValid: true,
+                            modelsListed: models.length > 0,
+                            provider: "grok",
+                        },
+                    },
+                    { headers: { "Cache-Control": "no-store" } },
+                ),
+            );
+        } catch (error) {
+            console.warn(
+                "[grok/models] Live discovery failed; using fallback catalog:",
+                error instanceof Error ? error.message : error,
+            );
+            return withCors(
+                request,
+                Response.json(
+                    {
+                        models: fallback,
+                        live: false,
+                        fetchedAt: Date.now(),
+                        resolvedBaseUrl: grokBuildProxyUrl(),
+                        checks: {
+                            keyValid: true,
+                            modelsListed: fallback.length > 0,
+                            provider: "grok",
+                        },
                     },
                     { headers: { "Cache-Control": "no-store" } },
                 ),

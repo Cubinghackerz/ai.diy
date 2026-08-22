@@ -10,6 +10,7 @@ import { providerNeedsKey } from "~/lib/provider-credentials";
 import { inferModelSupportsImageGeneration } from "~/lib/model-capabilities";
 import { corsPreflight, withCors } from "~/lib/server/cors";
 import { getChatGPTHandler } from "~/lib/server/chatgpt-auth";
+import { getGrokBuildSession } from "~/lib/server/grok-build-auth";
 import {
     checkRateLimit,
     rateLimitKeyFromRequest,
@@ -77,7 +78,11 @@ export async function action({ request }: ActionFunctionArgs) {
 
     const rateKey = rateLimitKeyFromRequest(
         request,
-        body.provider === "chatgpt" ? "chatgpt-subscription" : body.apiKey,
+        body.provider === "chatgpt"
+            ? "chatgpt-subscription"
+            : body.provider === "grok"
+              ? "grok-build-subscription"
+              : body.apiKey,
     );
     const rateCheck = checkRateLimit(rateKey);
     if (!rateCheck.ok) {
@@ -101,6 +106,14 @@ export async function action({ request }: ActionFunctionArgs) {
 
     if (body.provider === "chatgpt") {
         const session = await getChatGPTHandler().getSession(request);
+        if (session.status !== "authenticated") {
+            return withCors(
+                request,
+                Response.json({ title: fallbackTitle(message), fallback: true }),
+            );
+        }
+    } else if (body.provider === "grok") {
+        const session = await getGrokBuildSession(request);
         if (session.status !== "authenticated") {
             return withCors(
                 request,

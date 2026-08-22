@@ -10,11 +10,11 @@ export function ProviderMarquee() {
             data-anim-gate="marquee"
             aria-label="Supported providers"
         >
-            <div className="mx-auto grid max-w-6xl gap-6 px-5 sm:px-8 md:grid-cols-[0.85fr_1.15fr] md:items-end md:gap-12">
+            <div className="mx-auto max-w-6xl px-5 sm:px-8">
                 <MaskedHeading className="max-w-[13ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
                     Bring any model into the same thread.
                 </MaskedHeading>
-                <p className="max-w-xl text-[15px] leading-relaxed text-zinc-400 md:justify-self-end">
+                <p className="mt-5 max-w-2xl text-[15px] leading-relaxed text-zinc-400">
                     Connect 20+ cloud and local providers, then switch models without moving
                     your workspace or copying context between apps.
                 </p>
@@ -32,15 +32,16 @@ export function ProviderMarquee() {
                                 alt={logo.label}
                                 width={20}
                                 height={20}
-                                className="size-5 shrink-0 object-contain opacity-55 grayscale transition-[filter,opacity] duration-700 ease-out group-hover:opacity-100 group-hover:grayscale-0"
+                                className="size-5 shrink-0 object-contain opacity-55 grayscale transition-[filter,opacity] duration-300 ease-out group-hover:opacity-100 group-hover:grayscale-0"
                                 loading="lazy"
                             />
                             <span className="text-sm text-zinc-300 transition-colors duration-300 group-hover:text-white">{logo.label}</span>
                         </li>
                     ))}
                 </ul>
-                <p className="mx-auto mt-7 max-w-6xl px-5 font-mono text-[10px] leading-relaxed tracking-[0.12em] text-zinc-600 sm:px-8 sm:text-[11px]">
-                    ALSO AVAILABLE: ANTHROPIC · GROQ · MISTRAL · BEDROCK · AZURE · VERTEX · TOGETHER · HUGGING FACE · LM STUDIO · CUSTOM ENDPOINTS
+                <p className="mx-auto mt-6 max-w-6xl px-5 text-[13px] leading-relaxed text-zinc-500 sm:px-8">
+                    Also supported: Anthropic, Groq, Mistral, Bedrock, Azure, Vertex, Together,
+                    Hugging Face, LM Studio, and custom OpenAI-compatible endpoints.
                 </p>
             </Reveal>
         </section>

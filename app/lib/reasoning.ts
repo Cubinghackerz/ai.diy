@@ -84,6 +84,7 @@ export function getReasoningEffortOptions(
             ids = COHERE_EFFORTS;
             break;
         case "xai":
+        case "grok":
             ids = XAI_EFFORTS;
             break;
         case "gemini":
@@ -124,6 +125,11 @@ export function modelSupportsReasoning(
     if (known?.supportsReasoning != null) return known.supportsReasoning;
 
     const id = modelId.toLowerCase();
+
+    if (provider === "grok") {
+        if (/non[-_]?reasoning|nonreasoning/.test(id)) return false;
+        if (/reasoning|think/.test(id)) return true;
+    }
 
     // Codex models always use the Responses API and expose the full Codex
     // reasoning ladder, including accounts whose live slug is not GPT-named.
@@ -216,6 +222,11 @@ export function buildReasoningProviderOptions(
         if (provider === "xai") {
             return { xai: { reasoningEffort: "none" } };
         }
+        if (provider === "grok") {
+            // The Grok Build proxy rejects reasoning_effort "none"; omitting
+            // the knob lets the model use its default behavior.
+            return undefined;
+        }
         if (
             provider === "openai" ||
             provider === "openrouter" ||
@@ -268,6 +279,13 @@ export function buildReasoningProviderOptions(
         case "xai":
             return {
                 xai: {
+                    reasoningEffort: effort,
+                    reasoningSummary: "auto",
+                },
+            };
+        case "grok":
+            return {
+                openai: {
                     reasoningEffort: effort,
                     reasoningSummary: "auto",
                 },

@@ -34,20 +34,31 @@ export function UseCases() {
                 Browser-owned by default. Capable by design.
             </MaskedHeading>
             <Reveal delayMs={40} className="mt-12">
-                <ul className="grid gap-3 md:grid-cols-3">
-                    {CASES.map((item) => {
+                <ul className="grid gap-3 md:grid-cols-2">
+                    {CASES.map((item, i) => {
                         const Icon = item.icon;
+                        const flagship = i === 0;
                         return (
                             <li
                                 key={item.title}
-                                className="rounded-2xl border border-white/[0.08] bg-[#0a0a0a] p-6 transition-[transform,border-color,background-color,box-shadow] duration-500 hover:-translate-y-0.5 hover:border-white/[0.16] hover:bg-[#111] hover:shadow-[0_24px_60px_-24px_rgba(0,0,0,0.85)]"
+                                className={
+                                    flagship
+                                        ? "rounded-2xl border border-white/[0.08] bg-[#0a0a0a] p-7 transition-[border-color,background-color,box-shadow] duration-500 hover:border-white/[0.16] hover:bg-[#111] hover:shadow-[0_24px_60px_-24px_rgba(0,0,0,0.85)] md:col-span-2"
+                                        : "rounded-2xl border border-white/[0.08] bg-[#0a0a0a] p-6 transition-[transform,border-color,background-color,box-shadow] duration-500 hover:-translate-y-0.5 hover:border-white/[0.16] hover:bg-[#111] hover:shadow-[0_24px_60px_-24px_rgba(0,0,0,0.85)]"
+                                }
                                 style={{ transitionTimingFunction: EASE_OUT }}
                             >
                                 <Icon weight="light" className="size-5 text-zinc-300" />
-                                <h3 className="mt-5 text-[16px] font-medium tracking-tight text-white">
+                                <h3
+                                    className={
+                                        flagship
+                                            ? "mt-5 text-lg font-medium tracking-tight text-white"
+                                            : "mt-5 text-[16px] font-medium tracking-tight text-white"
+                                    }
+                                >
                                     {item.title}
                                 </h3>
-                                <p className="mt-2.5 text-[14px] leading-relaxed text-zinc-400">
+                                <p className="mt-2.5 max-w-2xl text-[14px] leading-relaxed text-zinc-400">
                                     {item.body}
                                 </p>
                             </li>

@@ -37,6 +37,9 @@ export default function TermsPage() {
                 <p>
                     ai.diy does not provide LLM access, provider credits, or a guarantee that a provider will accept a request. Provider availability, pricing, safety rules, and data handling are controlled by each provider.
                 </p>
+                <p>
+                    The experimental Grok subscription connector is an unofficial, unstable browser-login bridge. You are responsible for using an authorized SuperGrok account, following Grok and xAI terms, and understanding that subscription usage pools or account access may change without notice. Do not use it to bypass provider limits or access controls.
+                </p>
             </LegalSection>
 
             <LegalSection title="Acceptable use">

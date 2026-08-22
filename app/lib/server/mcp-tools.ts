@@ -32,8 +32,10 @@ export function isBundledSearchMcpServer(server: McpServerConfig): boolean {
 }
 
 /**
- * Avoid connecting the bundled search MCP servers for ordinary turns. Custom
- * MCP servers remain user-controlled and are loaded whenever enabled.
+ * The bundled search MCP servers (Parallel Search / Firecrawl) load whenever
+ * web search is enabled and no BYOK search connector is active, so live
+ * research is served through them instead of the built-in DuckDuckGo fallback.
+ * Custom MCP servers remain user-controlled and are loaded whenever enabled.
  */
 export function selectMcpServersForRequest(
     servers: McpServerConfig[] | undefined,
@@ -48,7 +50,7 @@ export function selectMcpServersForRequest(
         if (server.enabled === false) return false;
         if (!isBundledSearchMcpServer(server)) return true;
         if (!options.webSearchEnabled || options.activeSearchConnector) return false;
-        return options.searchIntent || options.mcpToolAlreadyUsed;
+        return true;
     });
 }
 

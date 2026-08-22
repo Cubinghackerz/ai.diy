@@ -24,6 +24,10 @@ import {
     type ReasoningEffort,
 } from "~/lib/reasoning";
 import { getChatGPTHandler } from "~/lib/server/chatgpt-auth";
+import {
+    grokBuildProxyFetch,
+    grokBuildProxyUrl,
+} from "~/lib/server/grok-build-auth";
 import { normalizeProviderBaseUrl } from "~/lib/server/provider-url";
 import { createCompatibleFetch } from "~/lib/server/compatible-fetch";
 
@@ -109,6 +113,23 @@ export function createChatModel(body: ModelRequest) {
             })(model);
         case "xai":
             return createXai({ apiKey: key, baseURL: resolvedBaseUrl || "https://api.x.ai/v1" }).chat(model);
+        case "grok": {
+            if (!body.request) {
+                throw new Error(
+                    "Grok Build requires an authenticated HTTP request (session cookie).",
+                );
+            }
+            const grok = createOpenAI({
+                apiKey: "grok-build-session",
+                baseURL: grokBuildProxyUrl(),
+                headers: {
+                    "X-XAI-Token-Auth": "xai-grok-cli",
+                    "x-grok-model-override": model,
+                },
+                fetch: grokBuildProxyFetch(body.request, model),
+            });
+            return grok.chat(model);
+        }
         case "openrouter":
             return createOpenAI({ apiKey: key, baseURL: resolvedBaseUrl || "https://openrouter.ai/api/v1", headers: compatibleHeaders }).chat(model);
         case "deepseek":
@@ -233,6 +254,8 @@ export function createImageModel(body: ModelRequest): ImageModel {
                 apiKey: key,
                 baseURL: resolvedBaseUrl,
             }).imageModel(model);
+        case "grok":
+            throw new Error("Grok Build image generation is not exposed by the chat proxy.");
         case "gemini":
             return createGoogleGenerativeAI({ apiKey: key }).image(model);
         case "gateway":

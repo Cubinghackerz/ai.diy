@@ -8,9 +8,11 @@
  */
 import type { HeadersFunction, LinksFunction, MetaFunction } from "react-router";
 import { CapabilityRack } from "~/components/landing/CapabilityRack";
+import { ChangelogSection } from "~/components/landing/ChangelogSection";
 import { ClosingBand } from "~/components/landing/ClosingBand";
 import { DeployTerminal } from "~/components/landing/DeployTerminal";
 import { FAQ_ITEMS, Faq } from "~/components/landing/Faq";
+import { FactsBand } from "~/components/landing/FactsBand";
 import { Hero } from "~/components/landing/Hero";
 import { IslandNav } from "~/components/landing/IslandNav";
 import { LandingFooter } from "~/components/landing/LandingFooter";
@@ -184,12 +186,14 @@ export default function LandingPage() {
             <IslandNav />
             <main id="main-content">
                 <Hero />
+                <FactsBand />
                 <OwnershipStage />
                 <ProviderMarquee />
                 <UseCases />
                 <CapabilityRack />
                 <DeployTerminal />
                 <Faq />
+                <ChangelogSection />
                 <ClosingBand />
             </main>
             <LandingFooter />

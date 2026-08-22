@@ -37,6 +37,7 @@ const BRAND: Record<
     huggingface: { logo: "huggingface", letter: "H", bg: "#ffd21e", fg: "#1a1a1a", label: "Hugging Face" },
     lmstudio: { logo: "lmstudio", letter: "L", bg: "#8b5cf6", fg: "#ffffff", label: "LM Studio" },
     xai: { logo: "x", letter: "X", bg: "#111111", fg: "#ffffff", label: "xAI" },
+    grok: { logo: "x", letter: "G", bg: "#111111", fg: "#ffffff", label: "Grok subscription" },
     ollama: { logo: "ollama", letter: "O", bg: "#2563eb", fg: "#ffffff", label: "Ollama" },
     custom: { logo: "openai", letter: "O", bg: "#10a37f", fg: "#ffffff", label: "OpenAI Compatible" },
 };
@@ -71,6 +72,22 @@ export function ModelLogo({
     className?: string;
 }) {
     const brand = resolveBrand(provider, modelId);
+
+    if (provider === "grok") {
+        return (
+            <img
+                src="/landing-logos/xai-lobe.png"
+                alt={brand.label}
+                width={size}
+                height={size}
+                className={cn(
+                    "inline-block shrink-0 select-none object-contain opacity-75 invert dark:opacity-80 dark:invert-0",
+                    className,
+                )}
+            />
+        );
+    }
+
     const mark = brand.logo ? BRAND_LOGO_PATHS[brand.logo] : undefined;
     const paths = typeof mark === "string" ? [mark] : mark ?? [];
 

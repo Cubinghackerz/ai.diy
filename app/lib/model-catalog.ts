@@ -26,6 +26,7 @@ export const PROVIDER_MAP: Partial<Record<ProviderId, string>> = {
     huggingface: "huggingface",
     lmstudio: "lmstudio",
     xai: "xai",
+    grok: "xai",
 };
 
 export interface CatalogCost {

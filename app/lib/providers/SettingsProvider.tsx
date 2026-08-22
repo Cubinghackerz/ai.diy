@@ -20,6 +20,7 @@ import {
 } from "react";
 import {
     DEFAULT_SETTINGS,
+    DEFAULT_MODELS,
     FREE_SEARCH_MCP_PRESETS,
     type AppSettings,
     type ProviderId,
@@ -83,21 +84,41 @@ function mergeLoadedSettings(parsed: Partial<AppSettings>): AppSettings {
         knowledge: parsed.knowledgeEnabled ?? DEFAULT_TOOL_ACCESS.knowledge,
         subagents: parsed.subagentsEnabled ?? DEFAULT_TOOL_ACCESS.subagents,
     });
+    const loadedChat = {
+        ...DEFAULT_SETTINGS.chat,
+        ...parsed.chat,
+        lastModelsByProvider: {
+            ...DEFAULT_SETTINGS.chat.lastModelsByProvider,
+            ...(parsed.chat?.provider && parsed.chat?.model
+                ? { [parsed.chat.provider]: parsed.chat.model }
+                : {}),
+            ...parsed.chat?.lastModelsByProvider,
+        },
+    };
+    const savedGrokModel =
+        loadedChat.lastModelsByProvider?.grok ||
+        (loadedChat.provider === "grok" ? loadedChat.model : "");
+    const grokModel =
+        savedGrokModel && savedGrokModel !== "grok-build"
+            ? savedGrokModel
+            : DEFAULT_MODELS.grok[0]?.id || "grok-build";
+    const chat =
+        loadedChat.provider === "grok" || loadedChat.lastModelsByProvider?.grok
+            ? {
+                  ...loadedChat,
+                  model: loadedChat.provider === "grok" ? grokModel : loadedChat.model,
+                  lastModelsByProvider: {
+                      ...loadedChat.lastModelsByProvider,
+                      grok: grokModel,
+                  },
+              }
+            : loadedChat;
+
     return {
         ...DEFAULT_SETTINGS,
         ...parsed,
         mcpServers,
-        chat: {
-            ...DEFAULT_SETTINGS.chat,
-            ...parsed.chat,
-            lastModelsByProvider: {
-                ...DEFAULT_SETTINGS.chat.lastModelsByProvider,
-                ...(parsed.chat?.provider && parsed.chat?.model
-                    ? { [parsed.chat.provider]: parsed.chat.model }
-                    : {}),
-                ...parsed.chat?.lastModelsByProvider,
-            },
-        },
+        chat,
         providers: {
             ...DEFAULT_SETTINGS.providers,
             ...parsed.providers,
@@ -116,6 +137,7 @@ function mergeLoadedSettings(parsed: Partial<AppSettings>): AppSettings {
         subagentsEnabled: toolAccess.subagents,
         toolAccess,
         chatgptLoginEnabled: parsed.chatgptLoginEnabled ?? false,
+        grokBuildLoginEnabled: parsed.grokBuildLoginEnabled ?? false,
         tokenMode:
             parsed.tokenMode === "efficient" ||
             parsed.tokenMode === "balanced" ||

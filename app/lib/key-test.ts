@@ -48,6 +48,10 @@ export function looksLikeApiKey(provider: ProviderId, key: string): boolean {
     if (provider === "xai") {
         return k.startsWith("xai-") && k.length > 20;
     }
+    if (provider === "grok") {
+        // SuperGrok/OIDC tokens are not xAI API keys and have no stable prefix.
+        return k.length >= 16;
+    }
     if (provider === "togetherai") {
         return k.startsWith("tgp_v1_") && k.length > 20;
     }
@@ -78,7 +82,7 @@ export async function testProviderKey(options: {
     const { provider, apiKey, baseUrl, headers, timeoutMs, maxRetries, authMode } = options;
     const key = apiKey.trim();
 
-    if (!isLocalProvider(provider) && !key) {
+    if (provider !== "grok" && !isLocalProvider(provider) && !key) {
         return {
             ok: false,
             models: [],
@@ -89,7 +93,7 @@ export async function testProviderKey(options: {
         };
     }
 
-    if (!isLocalProvider(provider) && !looksLikeApiKey(provider, key)) {
+    if (provider !== "grok" && !isLocalProvider(provider) && !looksLikeApiKey(provider, key)) {
         return {
             ok: false,
             models: [],
@@ -108,7 +112,9 @@ export async function testProviderKey(options: {
             body: JSON.stringify({
                 provider,
                     apiKey:
-                        provider === "custom"
+                        provider === "grok"
+                            ? ""
+                            : provider === "custom"
                             ? key
                             : key || localProviderKey(provider),
                     baseUrl: baseUrl || undefined,

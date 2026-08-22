@@ -5,7 +5,7 @@ const NODES = [
         id: "browser",
         label: "Your browser",
         status: "OWNED",
-        body: "Keys, threads, Canvas, memory — IndexedDB.",
+        body: "Keys, threads, Canvas, memory. All local via IndexedDB.",
     },
     {
         id: "relay",

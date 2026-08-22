@@ -9,6 +9,7 @@
 export type ProviderId =
     | "openai"
     | "chatgpt"
+    | "grok"
     | "anthropic"
     | "gemini"
     | "groq"
@@ -211,6 +212,11 @@ export interface AppSettings {
      * Not an API key — spends the signed-in user's ChatGPT plan via /api/chatgpt.
      */
     chatgptLoginEnabled: boolean;
+    /**
+     * Grok Build subscription login (HttpOnly session).
+     * Not an xAI API key — routes the signed-in session through Grok Build.
+     */
+    grokBuildLoginEnabled: boolean;
     preview: PreviewSettings;
     usageLimits: UsageLimitsConfig;
     // MCP settings
@@ -386,6 +392,11 @@ export const PROVIDER_DEFAULTS: Record<ProviderId, Omit<ProviderConfig, "apiKey"
         name: "ChatGPT (subscription)",
         baseUrl: "",
     },
+    grok: {
+        id: "grok",
+        name: "Grok (SuperGrok)",
+        baseUrl: "",
+    },
     anthropic: {
         id: "anthropic",
         name: "Anthropic",
@@ -492,6 +503,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     providers: {
         openai: { ...PROVIDER_DEFAULTS.openai, apiKey: "", enabled: false },
         chatgpt: { ...PROVIDER_DEFAULTS.chatgpt, apiKey: "", enabled: false },
+        grok: { ...PROVIDER_DEFAULTS.grok, apiKey: "", enabled: false },
         anthropic: { ...PROVIDER_DEFAULTS.anthropic, apiKey: "", enabled: false },
         gemini: { ...PROVIDER_DEFAULTS.gemini, apiKey: "", enabled: false },
         groq: { ...PROVIDER_DEFAULTS.groq, apiKey: "", enabled: false },
@@ -562,6 +574,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     },
     agentModeEnabled: false,
     chatgptLoginEnabled: false,
+    grokBuildLoginEnabled: false,
     preview: {
         enabled: false,
         primaryModels: [],
@@ -611,6 +624,21 @@ export const DEFAULT_MODELS: Record<ProviderId, ModelInfo[]> = {
         { id: "gpt-5.3-codex", name: "GPT-5.3 Codex", provider: "chatgpt", contextWindow: 200000, supportsTools: true, supportsVision: true, supportsReasoning: true },
         { id: "gpt-4o", name: "GPT-4o", provider: "chatgpt", contextWindow: 128000, supportsTools: true, supportsVision: true },
         { id: "gpt-image-1", name: "GPT Image 1", provider: "chatgpt", supportsImageGeneration: true },
+    ],
+    grok: [
+        { id: "grok-4-1-fast-reasoning", name: "Grok 4.1 Fast Reasoning", provider: "grok", contextWindow: 262144, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "grok-4-1-fast-non-reasoning", name: "Grok 4.1 Fast", provider: "grok", contextWindow: 131072, supportsTools: true, supportsVision: true, supportsReasoning: false },
+        { id: "grok-4-fast-reasoning", name: "Grok 4 Fast Reasoning", provider: "grok", contextWindow: 262144, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "grok-4-fast-non-reasoning", name: "Grok 4 Fast", provider: "grok", contextWindow: 262144, supportsTools: true, supportsVision: true, supportsReasoning: false },
+        { id: "grok-4.5", name: "Grok 4.5", provider: "grok", contextWindow: 500000, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "grok-4", name: "Grok 4", provider: "grok", contextWindow: 262144, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "grok-3", name: "Grok 3", provider: "grok", contextWindow: 131072, supportsTools: true, supportsReasoning: true },
+        { id: "grok-3-mini", name: "Grok 3 Mini", provider: "grok", contextWindow: 131072, supportsTools: true, supportsReasoning: true },
+        { id: "grok-3-mini-fast", name: "Grok 3 Mini Fast", provider: "grok", contextWindow: 131072, supportsTools: true, supportsReasoning: true },
+        { id: "grok-code-fast-1", name: "Grok Code Fast 1", provider: "grok", contextWindow: 262144, supportsTools: true, supportsReasoning: true },
+        { id: "grok-2-vision-1212", name: "Grok 2 Vision", provider: "grok", contextWindow: 131072, supportsTools: true, supportsVision: true },
+        { id: "grok-2-image-1212", name: "Grok 2 Image", provider: "grok", supportsImageGeneration: true },
+        { id: "grok-build", name: "Grok Build", provider: "grok", supportsTools: true },
     ],
     anthropic: [
         { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet", provider: "anthropic", contextWindow: 200000, supportsTools: true },

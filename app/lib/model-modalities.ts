@@ -42,6 +42,16 @@ export function inferModelSupportsVision(
         return true;
     }
 
+    // Grok's current 3/4 chat families accept image parts through the
+    // OpenAI-compatible subscription proxy; code and mini variants remain text-only.
+    if (
+        provider === "grok" &&
+        /grok-(?:3|4)(?:[.\-]|$)/.test(id) &&
+        !/(?:mini|code)/.test(id)
+    ) {
+        return true;
+    }
+
     if (provider) {
         const known = (DEFAULT_MODELS[provider] ?? []).find(
             (m) => m.id === modelId,
@@ -58,6 +68,9 @@ export function inferModelSupportsDocuments(
     modelId: string,
     provider?: ProviderId,
 ): boolean {
+    // The Grok Build proxy accepts image parts, while PDF/binary parts are
+    // more portable when extracted to text locally before sending.
+    if (provider === "grok") return false;
     const id = modelId.toLowerCase();
     if (/claude|gpt-4o|gpt-4\.1|gpt-5|gemini|o[1-4]/.test(id)) return true;
     return inferModelSupportsVision(modelId, provider);

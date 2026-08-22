@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Play, X } from "@phosphor-icons/react";
 import { cn } from "~/lib/utils";
@@ -8,9 +8,13 @@ import { StatusPill } from "./StatusPill";
 import { TiltedCard } from "./TiltedCard";
 
 const DEMO_VIDEO_SRC = "/AI-DIY_DEMO.mp4";
+/** Matches --modal-close-dur in app/styles/app.css. */
+const MODAL_CLOSE_MS = 150;
 
 export function ProductBezel({ className }: { className?: string }) {
     const [open, setOpen] = useState(false);
+    const [closing, setClosing] = useState(false);
+    const [shown, setShown] = useState(false);
     const [mounted, setMounted] = useState(false);
     const reduced = usePrefersReducedMotion();
     const modalVideoRef = useRef<HTMLVideoElement>(null);
@@ -23,10 +27,26 @@ export function ProductBezel({ className }: { className?: string }) {
 
     useEffect(() => {
         if (!open) return;
+        const raf = window.requestAnimationFrame(() => setShown(true));
+        return () => window.cancelAnimationFrame(raf);
+    }, [open]);
+
+    const closeModal = useCallback(() => {
+        if (closing) return;
+        setClosing(true);
+        window.setTimeout(() => {
+            setOpen(false);
+            setClosing(false);
+            setShown(false);
+        }, MODAL_CLOSE_MS);
+    }, [closing]);
+
+    useEffect(() => {
+        if (!open) return;
         const prevOverflow = document.body.style.overflow;
         document.body.style.overflow = "hidden";
         const onKey = (e: KeyboardEvent) => {
-            if (e.key === "Escape") setOpen(false);
+            if (e.key === "Escape") closeModal();
         };
         window.addEventListener("keydown", onKey);
         const t = window.setTimeout(() => closeRef.current?.focus(), 20);
@@ -35,7 +55,7 @@ export function ProductBezel({ className }: { className?: string }) {
             window.removeEventListener("keydown", onKey);
             window.clearTimeout(t);
         };
-    }, [open]);
+    }, [open, closeModal]);
 
     useEffect(() => {
         const video = modalVideoRef.current;
@@ -56,7 +76,7 @@ export function ProductBezel({ className }: { className?: string }) {
                         <span className="size-2 rounded-full bg-zinc-700" />
                         <span className="size-2 rounded-full bg-zinc-700" />
                         <span className="ml-3 font-mono text-[10px] tracking-wide text-zinc-500">
-                            ai.diy — workspace
+                            ai.diy workspace
                         </span>
                         <div className="ml-auto flex items-center gap-2">
                             <StatusPill tone="live" pulse>
@@ -97,23 +117,31 @@ export function ProductBezel({ className }: { className?: string }) {
                 </div>
             </TiltedCard>
             <p className="mt-4 text-center font-mono text-[10px] tracking-[0.16em] text-zinc-600">
-                Real workspace · click to expand
+                Real workspace. Click to expand
             </p>
 
             {mounted && open
                 ? createPortal(
                       <div
-                          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/92 p-2 sm:p-4"
+                          className={cn(
+                              "landing-modal-backdrop fixed inset-0 z-[80] flex items-center justify-center bg-black/92 p-2 sm:p-4",
+                              shown && "is-open",
+                              closing && "is-closing",
+                          )}
                           role="dialog"
                           aria-modal="true"
                           aria-labelledby={titleId}
-                          onClick={() => setOpen(false)}
+                          onClick={closeModal}
                       >
                           <h2 id={titleId} className="sr-only">
                               ai.diy workspace demo
                           </h2>
                           <div
-                              className="relative flex h-full w-full max-h-[100dvh] max-w-[100vw] items-center justify-center"
+                              className={cn(
+                                  "t-modal relative flex h-full w-full max-h-[100dvh] max-w-[100vw] items-center justify-center",
+                                  shown && "is-open",
+                                  closing && "is-closing",
+                              )}
                               onClick={(e) => e.stopPropagation()}
                           >
                               <video
@@ -127,7 +155,7 @@ export function ProductBezel({ className }: { className?: string }) {
                               <button
                                   ref={closeRef}
                                   type="button"
-                                  onClick={() => setOpen(false)}
+                                  onClick={closeModal}
                                   className="absolute right-3 top-3 inline-flex size-11 items-center justify-center rounded-full border border-white/20 bg-black/70 text-white transition-colors hover:bg-black/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 sm:right-5 sm:top-5"
                                   aria-label="Close fullscreen demo"
                               >

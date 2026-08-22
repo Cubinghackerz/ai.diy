@@ -22,6 +22,7 @@ import {
     DialogTitle,
 } from "~/components/ui/dialog";
 import { ChatGPTLoginSettings } from "~/components/settings/ChatGPTLoginSettings";
+import { GrokSubscriptionSettings } from "~/components/settings/GrokSubscriptionSettings";
 import { ToolAccessPicker } from "~/components/settings/ToolAccessPicker";
 import { haptic, hapticConfirm, hapticSelect } from "~/lib/haptics";
 import {
@@ -4099,7 +4100,11 @@ function PreviewModelRow({
 function KeysSection() {
     const { settings, updateProvider, updateSettings } =
         useSettings();
-    const [active, setActive] = useState<ProviderId>(settings.chat.provider);
+    const [active, setActive] = useState<ProviderId>(
+        settings.chat.provider === "chatgpt" || settings.chat.provider === "grok"
+            ? "openai"
+            : settings.chat.provider,
+    );
     const [draftName, setDraftName] = useState(
         settings.providers[active]?.name || PROVIDER_DEFAULTS[active].name,
     );
@@ -4299,6 +4304,7 @@ function KeysSection() {
     return (
         <div className="flex flex-col gap-3">
             <ChatGPTLoginSettings />
+            <GrokSubscriptionSettings />
             <p className="text-[11px] leading-relaxed text-muted-foreground">
                 Keys stay in this browser. Test makes a live{" "}
                 <span className="font-medium text-foreground">/models</span>{" "}
@@ -4307,7 +4313,7 @@ function KeysSection() {
 
             <div className="flex flex-wrap gap-1">
                 {(Object.keys(PROVIDER_DEFAULTS) as ProviderId[])
-                    .filter((id) => id !== "chatgpt")
+                    .filter((id) => id !== "chatgpt" && id !== "grok")
                     .map((id) => {
                     const ready = isProviderReady(settings, id);
                     return (

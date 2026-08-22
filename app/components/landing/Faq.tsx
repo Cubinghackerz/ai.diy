@@ -2,6 +2,9 @@ import { CaretDown } from "@phosphor-icons/react";
 import { Reveal } from "./DoubleBezel";
 import { MaskedHeading } from "./MaskedHeading";
 
+/** Matches --acc-collapse / --acc-chevron in app/styles/app.css. */
+const ACC_CLOSE_MS = 250;
+
 export const FAQ_ITEMS = [
     {
         question: "What is ai.diy?",
@@ -59,18 +62,38 @@ export function Faq() {
             <Reveal delayMs={40} className="mt-8">
                 <div className="divide-y divide-white/[0.08] border-t border-white/[0.08]">
                     {FAQ_ITEMS.map((item) => (
-                        <details key={item.question} className="group py-5 first:pt-1 last:pb-1">
-                            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-5 py-4 text-left text-[16px] font-medium text-white outline-none transition-colors marker:hidden hover:text-zinc-200 focus-visible:text-zinc-200 [&::-webkit-details-marker]:hidden">
+                        <details
+                            key={item.question}
+                            className="t-acc py-5 first:pt-1 last:pb-1"
+                        >
+                            <summary
+                                onClick={(event) => {
+                                    const details = event.currentTarget.closest("details");
+                                    if (!details || !details.open) return;
+                                    event.preventDefault();
+                                    details.classList.add("is-closing");
+                                    window.setTimeout(() => {
+                                        details.open = false;
+                                        details.classList.remove("is-closing");
+                                    }, ACC_CLOSE_MS);
+                                }}
+                                className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-5 py-4 text-left text-[16px] font-medium text-white outline-none transition-colors marker:hidden hover:text-zinc-200 focus-visible:text-zinc-200 [&::-webkit-details-marker]:hidden"
+                            >
                                 {item.question}
-                                <CaretDown
-                                    weight="light"
-                                    className="size-5 shrink-0 text-zinc-400 transition-transform duration-200 group-open:rotate-180"
-                                    aria-hidden
-                                />
+                                <span className="t-acc-chevron shrink-0" aria-hidden>
+                                    <CaretDown
+                                        weight="light"
+                                        className="size-5 text-zinc-400"
+                                    />
+                                </span>
                             </summary>
-                            <p className="max-w-3xl pb-3 pr-8 text-[14px] leading-relaxed text-zinc-400">
-                                {item.answer}
-                            </p>
+                            <div className="t-acc-panel">
+                                <div className="t-acc-panel-inner">
+                                    <p className="max-w-3xl pb-3 pr-8 text-[14px] leading-relaxed text-zinc-400">
+                                        {item.answer}
+                                    </p>
+                                </div>
+                            </div>
                         </details>
                     ))}
                 </div>

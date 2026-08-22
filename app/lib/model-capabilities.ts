@@ -178,6 +178,14 @@ export function inferModelSupportsVision(
     ) {
         return true;
     }
+
+    if (
+        provider === "grok" &&
+        /grok-(?:3|4)(?:[.\-]|$)/.test(id) &&
+        !/(?:mini|code)/.test(id)
+    ) {
+        return true;
+    }
     const known = provider
         ? (DEFAULT_MODELS[provider] ?? []).find((model) => model.id === modelId)
         : undefined;

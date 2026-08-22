@@ -449,6 +449,292 @@ textarea {
     background-color: var(--landing-canvas);
 }
 
+/* ── Landing motion — transitions.dev token scale ────────────────
+   Shared duration/ease/distance/scale/blur tokens plus the semantic
+   variables used by the installed transitions below (modal, icon swap,
+   sliding tabs, accordion, skeleton reveal). */
+:root {
+    --duration-stagger: 40ms;
+    --duration-micro: 80ms;
+    --duration-quick: 150ms;
+    --duration-fast: 250ms;
+    --duration-medium: 350ms;
+    --duration-slow: 400ms;
+    --duration-very-slow: 500ms;
+
+    --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-in-out: ease-in-out;
+    --ease-out: ease-out;
+    --ease-linear: linear;
+    --ease-bounce: cubic-bezier(0.34, 1.36, 0.64, 1);
+    --ease-bounce-strong: cubic-bezier(0.34, 3.85, 0.64, 1);
+
+    --distance-micro: 4px;
+    --distance-small: 6px;
+    --distance-base: 8px;
+    --distance-medium: 12px;
+    --distance-large: 30px;
+
+    --scale-large: 0.96;
+    --scale-medium: 0.97;
+    --scale-small: 0.98;
+    --scale-tiny: 0.99;
+
+    --blur-small: 2px;
+    --blur-medium: 3px;
+    --blur-large: 8px;
+
+    /* Modal open / close */
+    --modal-open-dur: 250ms;
+    --modal-close-dur: 150ms;
+    --modal-scale: 0.96;
+    --modal-scale-close: 0.96;
+    --modal-ease: cubic-bezier(0.22, 1, 0.36, 1);
+    /* Icon swap */
+    --icon-swap-dur: 250ms;
+    --icon-swap-blur: 2px;
+    --icon-swap-start-scale: 0.25;
+    --icon-swap-ease: ease-in-out;
+    /* Tabs sliding */
+    --tabs-dur: 250ms;
+    --tabs-ease: cubic-bezier(0.22, 1, 0.36, 1);
+    /* Accordion expand */
+    --acc-expand: 250ms;
+    --acc-collapse: 250ms;
+    --acc-chevron: 250ms;
+    --acc-ease: cubic-bezier(0.22, 1, 0.36, 1);
+    /* Skeleton loader and reveal */
+    --reveal-dur: 400ms;
+    --reveal-blur: 2px;
+    --reveal-ease: ease-in-out;
+}
+
+/* Modal open / close — scales the surface up from --modal-scale on open
+   and dips to --modal-scale-close on close (close is quicker). */
+.landing-pinnacle .t-modal {
+    transform-origin: center;
+    transform: scale(var(--modal-scale));
+    opacity: 0;
+    pointer-events: none;
+    transition:
+        transform var(--modal-open-dur) var(--modal-ease),
+        opacity var(--modal-open-dur) var(--modal-ease);
+    will-change: transform, opacity;
+}
+
+.landing-pinnacle .t-modal.is-open {
+    transform: scale(1);
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.landing-pinnacle .t-modal.is-closing {
+    transform: scale(var(--modal-scale-close));
+    opacity: 0;
+    pointer-events: none;
+    transition:
+        transform var(--modal-close-dur) var(--modal-ease),
+        opacity var(--modal-close-dur) var(--modal-ease);
+}
+
+.landing-pinnacle .t-modal-backdrop {
+    opacity: 0;
+    transition: opacity var(--modal-open-dur) var(--modal-ease);
+}
+
+.landing-pinnacle .t-modal-backdrop.is-open {
+    opacity: 1;
+}
+
+.landing-pinnacle .t-modal-backdrop.is-closing {
+    opacity: 0;
+    transition: opacity var(--modal-close-dur) var(--modal-ease);
+}
+
+/* Icon swap — cross-fade two icons in the same grid slot with blur+scale. */
+.landing-pinnacle .t-icon-swap {
+    position: relative;
+    display: inline-grid;
+}
+
+.landing-pinnacle .t-icon-swap .t-icon {
+    grid-area: 1 / 1;
+    transition:
+        opacity var(--icon-swap-dur) var(--icon-swap-ease),
+        filter var(--icon-swap-dur) var(--icon-swap-ease),
+        transform var(--icon-swap-dur) var(--icon-swap-ease);
+    will-change: opacity, filter, transform;
+}
+
+.landing-pinnacle .t-icon-swap[data-state="a"] .t-icon[data-icon="a"],
+.landing-pinnacle .t-icon-swap[data-state="b"] .t-icon[data-icon="b"] {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1);
+}
+
+.landing-pinnacle .t-icon-swap[data-state="a"] .t-icon[data-icon="b"],
+.landing-pinnacle .t-icon-swap[data-state="b"] .t-icon[data-icon="a"] {
+    opacity: 0;
+    filter: blur(var(--icon-swap-blur));
+    transform: scale(var(--icon-swap-start-scale));
+}
+
+/* Tabs sliding — the active pill slides between terminal tabs. The pill's
+   width + transform are written inline by JS; CSS owns the tween. */
+.landing-pinnacle .t-tabs {
+    position: relative;
+}
+
+.landing-pinnacle .t-tabs-pill {
+    position: absolute;
+    top: 6px;
+    left: 0;
+    height: 40px;
+    width: 0;
+    background: #000000;
+    border-radius: 8px 8px 0 0;
+    transform: translateX(0);
+    transition:
+        transform var(--tabs-dur) var(--tabs-ease),
+        width var(--tabs-dur) var(--tabs-ease);
+    will-change: transform, width;
+    z-index: 0;
+    pointer-events: none;
+}
+
+.landing-pinnacle .t-tab {
+    position: relative;
+    z-index: 1;
+    background: transparent;
+    border: 0;
+    color: rgba(113, 113, 122, 0.9);
+    transition: color var(--tabs-dur) var(--tabs-ease);
+}
+
+.landing-pinnacle .t-tab:hover {
+    color: #d4d4d8;
+}
+
+.landing-pinnacle .t-tab[aria-selected="true"] {
+    color: #f4f4f5;
+}
+
+/* Accordion expand — grid-template-rows 0fr ↔ 1fr height animation with a
+   vertical chevron flip (scaleY passes through a flat line mid-flip and
+   animates in every browser, unlike CSS `d:` morphing). */
+.landing-pinnacle .t-acc-panel {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows var(--acc-collapse) var(--acc-ease);
+}
+
+.landing-pinnacle .t-acc[open] .t-acc-panel {
+    grid-template-rows: 1fr;
+    transition: grid-template-rows var(--acc-expand) var(--acc-ease);
+}
+
+.landing-pinnacle .t-acc-panel-inner {
+    overflow: hidden;
+    opacity: 0;
+    filter: blur(var(--blur-small));
+    transition:
+        opacity var(--acc-collapse) var(--acc-ease),
+        filter var(--acc-collapse) var(--acc-ease);
+}
+
+.landing-pinnacle .t-acc[open] .t-acc-panel-inner {
+    opacity: 1;
+    filter: blur(0);
+    transition:
+        opacity var(--acc-expand) var(--acc-ease),
+        filter var(--acc-expand) var(--acc-ease);
+}
+
+.landing-pinnacle .t-acc-chevron {
+    display: inline-flex;
+    transform: scaleY(1);
+    transform-origin: center;
+    transition: transform var(--acc-chevron) var(--acc-ease);
+}
+
+.landing-pinnacle .t-acc[open] .t-acc-chevron {
+    transform: scaleY(-1);
+}
+
+.landing-pinnacle .t-acc.is-closing .t-acc-panel,
+.landing-pinnacle .t-acc.is-closing .t-acc-panel-inner {
+    transition:
+        opacity var(--acc-collapse) var(--acc-ease),
+        filter var(--acc-collapse) var(--acc-ease);
+}
+
+.landing-pinnacle .t-acc.is-closing .t-acc-panel {
+    grid-template-rows: 0fr;
+}
+
+.landing-pinnacle .t-acc.is-closing .t-acc-panel-inner {
+    opacity: 0;
+    filter: blur(var(--blur-small));
+}
+
+.landing-pinnacle .t-acc.is-closing .t-acc-chevron {
+    transform: scaleY(1);
+    transition: transform var(--acc-chevron) var(--acc-ease);
+}
+
+/* Skeleton loader and reveal — the skeleton fades out + blurs while the
+   loaded content fades in + un-blurs over --reveal-dur. */
+.landing-pinnacle .t-skel-skeleton {
+    position: absolute;
+    inset: 0;
+    opacity: 1;
+    filter: blur(0);
+    transition:
+        opacity var(--reveal-dur) var(--reveal-ease),
+        filter var(--reveal-dur) var(--reveal-ease);
+}
+
+.landing-pinnacle .t-skel-skeleton.t-skel-out {
+    opacity: 0;
+    filter: blur(var(--reveal-blur));
+    pointer-events: none;
+}
+
+.landing-pinnacle .t-skel-content-in {
+    animation: t-skel-content-in var(--reveal-dur) var(--reveal-ease) both;
+}
+
+@keyframes t-skel-content-in {
+    from {
+        opacity: 0;
+        filter: blur(var(--reveal-blur));
+    }
+
+    to {
+        opacity: 1;
+        filter: blur(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .landing-pinnacle .t-modal,
+    .landing-pinnacle .t-modal-backdrop,
+    .landing-pinnacle .t-icon-swap .t-icon,
+    .landing-pinnacle .t-tabs-pill,
+    .landing-pinnacle .t-tab,
+    .landing-pinnacle .t-acc-panel,
+    .landing-pinnacle .t-acc-panel-inner,
+    .landing-pinnacle .t-acc-chevron,
+    .landing-pinnacle .t-skel-skeleton {
+        transition: none !important;
+    }
+
+    .landing-pinnacle .t-skel-content-in {
+        animation: none !important;
+    }
+}
+
 @custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
 
 @custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));

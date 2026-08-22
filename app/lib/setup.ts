@@ -23,6 +23,9 @@ export function isProviderReady(
     if (id === "chatgpt") {
         return settings.chatgptLoginEnabled === true && config.enabled === true;
     }
+    if (id === "grok") {
+        return settings.grokBuildLoginEnabled === true && config.enabled === true;
+    }
     if (isLocalProvider(id)) return true;
     return Boolean(config.apiKey?.trim());
 }

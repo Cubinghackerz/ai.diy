@@ -25,19 +25,23 @@ import {
 import type { KeyValueStore } from "@opencoredev/loginwithchatgpt-core";
 
 const STORE_ENC_PREFIX = "enc:v1:";
-const STORE_ENC_KEY_CONTEXT = "ai.diy:chatgpt-session-store:v1:";
+const CHATGPT_STORE_ENC_KEY_CONTEXT = "ai.diy:chatgpt-session-store:v1:";
 
-function deriveStoreEncryptionKey(secret: string): Buffer {
+function deriveStoreEncryptionKey(secret: string, keyContext: string): Buffer {
     return createHash("sha256")
-        .update(`${STORE_ENC_KEY_CONTEXT}${secret}`)
+        .update(`${keyContext}${secret}`)
         .digest();
 }
 
-function encryptStoreValue(secret: string, value: unknown): string {
+function encryptStoreValue(
+    secret: string,
+    value: unknown,
+    keyContext: string,
+): string {
     const iv = randomBytes(12);
     const cipher = createCipheriv(
         "aes-256-gcm",
-        deriveStoreEncryptionKey(secret),
+        deriveStoreEncryptionKey(secret, keyContext),
         iv,
     );
     const data = Buffer.from(JSON.stringify(value), "utf8");
@@ -47,7 +51,11 @@ function encryptStoreValue(secret: string, value: unknown): string {
         .toString("base64")}.${ciphertext.toString("base64")}`;
 }
 
-function decryptStoreValue(secret: string, payload: string): unknown | null {
+function decryptStoreValue(
+    secret: string,
+    payload: string,
+    keyContext: string,
+): unknown | null {
     if (!payload.startsWith(STORE_ENC_PREFIX)) return null;
     const parts = payload.slice(STORE_ENC_PREFIX.length).split(".");
     if (parts.length !== 3) return null;
@@ -56,7 +64,7 @@ function decryptStoreValue(secret: string, payload: string): unknown | null {
     try {
         const decipher = createDecipheriv(
             "aes-256-gcm",
-            deriveStoreEncryptionKey(secret),
+            deriveStoreEncryptionKey(secret, keyContext),
             Buffer.from(ivB64, "base64"),
         );
         decipher.setAuthTag(Buffer.from(tagB64, "base64"));
@@ -79,33 +87,46 @@ export class EncryptedKeyValueStore<T> implements KeyValueStore<T> {
     private warned = false;
     private readonly inner: KeyValueStore<string>;
     private readonly secret: string;
+    private readonly label: string;
+    private readonly keyContext: string;
 
-    constructor(inner: KeyValueStore<string>, secret: string) {
+    constructor(
+        inner: KeyValueStore<string>,
+        secret: string,
+        options: {
+            label?: string;
+            keyContext?: string;
+        } = {},
+    ) {
         this.inner = inner;
         this.secret = secret;
+        this.label = options.label ?? "session";
+        this.keyContext =
+            options.keyContext ?? CHATGPT_STORE_ENC_KEY_CONTEXT;
     }
 
     async get(key: string): Promise<T | undefined> {
         const raw = await this.inner.get(key);
         if (raw === undefined) return undefined;
-        // Legacy plaintext from before encryption: provably unreadable, so
-        // remove it so no credentials linger at rest.
-        if (!raw.startsWith(STORE_ENC_PREFIX)) {
+        // Legacy plaintext (string or pre-encryption object payload) from
+        // before at-rest encryption: provably unreadable, so remove it so no
+        // credentials linger at rest.
+        if (typeof raw !== "string" || !raw.startsWith(STORE_ENC_PREFIX)) {
             if (!this.warned) {
                 this.warned = true;
                 console.warn(
-                    "[chatgpt] Removed a legacy plaintext session written before at-rest encryption; a fresh sign-in is required.",
+                    `[${this.label}] Removed a legacy plaintext session written before at-rest encryption; a fresh sign-in is required.`,
                 );
             }
             await this.inner.delete(key);
             return undefined;
         }
-        const value = decryptStoreValue(this.secret, raw);
+        const value = decryptStoreValue(this.secret, raw, this.keyContext);
         if (value === null) {
             if (!this.warned) {
                 this.warned = true;
                 console.warn(
-                    "[chatgpt] A stored session could not be decrypted (LWC_SECRET changed or data corrupted); the affected login will require a fresh sign-in.",
+                    `[${this.label}] A stored session could not be decrypted (session secret changed or data corrupted); the affected login will require a fresh sign-in.`,
                 );
             }
             return undefined;
@@ -120,7 +141,7 @@ export class EncryptedKeyValueStore<T> implements KeyValueStore<T> {
     ): Promise<void> {
         await this.inner.set(
             key,
-            encryptStoreValue(this.secret, value),
+            encryptStoreValue(this.secret, value, this.keyContext),
             options,
         );
     }

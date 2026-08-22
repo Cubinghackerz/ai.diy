@@ -84,6 +84,7 @@ function providerLabel(provider?: string): string {
     const known: Record<string, string> = {
         openai: "OpenAI",
         chatgpt: "ChatGPT (subscription)",
+        grok: "Grok subscription (experimental)",
         anthropic: "Anthropic",
         gemini: "Google Gemini",
         groq: "Groq",
@@ -264,7 +265,7 @@ export function classifyProviderError(
     } else if (
         status === 401 ||
         status === 403 ||
-        /invalid.?api.?key|incorrect.?api.?key|unauthorized|forbidden|authentication|auth.?failed|not_authenticated|api key/i.test(
+        /invalid.?api.?key|incorrect.?api.?key|unauthorized|forbidden|authentication|auth.?failed|not_authenticated|api key(?!\s+required)/i.test(
             raw,
         )
     ) {
@@ -301,6 +302,7 @@ export function classifyProviderError(
 
     if (
         kind === "credits" &&
+        options?.provider !== "grok" &&
         (/usage_limit|plan_type|chatgpt/i.test(lower) ||
             options?.provider === "chatgpt" ||
             usageMeta.planType)
@@ -314,6 +316,12 @@ export function classifyProviderError(
         parts.fix = reset
             ? `Wait about ${reset} for the limit to reset, upgrade your ChatGPT plan, or switch to a BYOK provider (OpenAI API key, OpenRouter, etc.).`
             : "Upgrade your ChatGPT plan, wait for the limit to reset, or switch to a BYOK provider (OpenAI API key, OpenRouter, etc.).";
+    } else if (kind === "credits" && options?.provider === "grok") {
+        parts.what = "Grok subscription usage limit reached";
+        parts.why =
+            "The SuperGrok weekly usage pool or account entitlement rejected this request.";
+        parts.fix =
+            "Check usage in Grok, wait for the weekly reset, or switch to xAI API/BYOK. ai.diy does not have a reliable live SuperGrok quota meter.";
     } else if (kind === "rate_limit") {
         parts.what = `${label} rate limit reached`;
         parts.why = `${label} returned a 429 — too many requests.`;
@@ -330,7 +338,14 @@ export function classifyProviderError(
         parts.fix =
             options?.provider === "chatgpt"
                 ? "Reconnect under Settings → API Keys → ChatGPT subscription."
-                : `Update the key in Settings or select another provider.`;
+                : options?.provider === "grok"
+                  ? "Reconnect the Grok Build subscription under Settings, or use the separate xAI API provider."
+                  : `Update the key in Settings or select another provider.`;
+        if (options?.provider === "grok") {
+            parts.what = "Grok subscription authentication failed";
+            parts.why =
+                "The encrypted SuperGrok subscription session was rejected or has expired.";
+        }
     } else if (kind === "credits") {
         parts.what = `${label} has insufficient credits`;
         parts.why = `The ${label} account cannot bill this request.`;
@@ -344,7 +359,9 @@ export function classifyProviderError(
         parts.fix =
             options?.provider === "chatgpt"
                 ? "Open the model picker and choose a model returned for your account, or upgrade your ChatGPT plan."
-                : parts.fix;
+                : options?.provider === "grok"
+                  ? "Use a model returned by the live token test, or switch to the xAI API provider."
+                  : parts.fix;
     } else if (kind === "url" && raw.trim()) {
         parts.why = raw.trim();
     } else if (kind === "config" && raw.trim()) {

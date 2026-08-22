@@ -72,6 +72,7 @@ import { imageRequestOptions } from "~/lib/image-generation";
 import { providerNeedsKey } from "~/lib/provider-credentials";
 import { corsPreflight, withCors } from "~/lib/server/cors";
 import { getChatGPTHandler } from "~/lib/server/chatgpt-auth";
+import { getGrokBuildSession } from "~/lib/server/grok-build-auth";
 import { normalizeProviderBaseUrl } from "~/lib/server/provider-url";
 import { findEnabledSearchConnector } from "~/lib/search/connectors";
 import {
@@ -379,7 +380,11 @@ export async function action({ request }: ActionFunctionArgs) {
 
     const rateKey = rateLimitKeyFromRequest(
         request,
-        body.provider === "chatgpt" ? "chatgpt-subscription" : body.apiKey,
+        body.provider === "chatgpt"
+            ? "chatgpt-subscription"
+            : body.provider === "grok"
+              ? "grok-build-subscription"
+              : body.apiKey,
     );
     const rateCheck = checkRateLimit(rateKey);
     if (!rateCheck.ok) {
@@ -396,6 +401,22 @@ export async function action({ request }: ActionFunctionArgs) {
                         error: formatProviderError(
                             "Sign in with ChatGPT under Settings → API Keys before using the ChatGPT (subscription) provider.",
                             { provider: "chatgpt", context: "chat" },
+                        ),
+                    },
+                    { status: 401 },
+                ),
+            );
+        }
+    } else if (body.provider === "grok") {
+        const session = await getGrokBuildSession(request);
+        if (session.status !== "authenticated") {
+            return withCors(
+                request,
+                Response.json(
+                    {
+                        error: formatProviderError(
+                            "Sign in with Grok Build under Settings before using the Grok Build provider.",
+                            { provider: "grok", context: "chat" },
                         ),
                     },
                     { status: 401 },
@@ -715,6 +736,7 @@ export async function action({ request }: ActionFunctionArgs) {
         const safeProviderOptions =
             toolsEnabled &&
             body.openAICompatible?.reasoningWithTools !== "allow" &&
+            body.provider !== "grok" &&
             !shouldUseOpenAIResponses(
                 body.provider,
                 body.model,
