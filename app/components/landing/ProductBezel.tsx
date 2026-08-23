@@ -104,11 +104,11 @@ export function ProductBezel({ className }: { className?: string }) {
                             alt="ai.diy workspace: local-first chat with model switching and tools"
                             width={1280}
                             height={800}
-                            className="block h-auto w-full transition-transform duration-700 ease-out group-hover:scale-[1.02]"
+                            className="block h-auto w-full origin-center transition-transform duration-200 group-hover:scale-[1.015]"
                             style={{ transitionTimingFunction: EASE_OUT }}
                         />
-                        <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-[opacity,background-color] duration-200 group-hover:bg-black/30 group-hover:opacity-100 group-focus-visible:bg-black/30 group-focus-visible:opacity-100">
-                            <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-black/75 px-4 py-2.5 font-mono text-[11px] text-white shadow-[0_12px_40px_-16px_rgba(0,0,0,0.8)]">
+                        <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-[opacity,background-color] duration-200 group-hover:bg-black/28 group-hover:opacity-100 group-focus-visible:bg-black/28 group-focus-visible:opacity-100">
+                            <span className="inline-flex translate-y-1 scale-[0.98] items-center gap-2 rounded-full border border-white/20 bg-black/75 px-4 py-2.5 font-mono text-[11px] text-white shadow-[0_12px_40px_-16px_rgba(0,0,0,0.8)] transition-[transform,opacity] duration-200 group-hover:translate-y-0 group-hover:scale-100 group-focus-visible:translate-y-0 group-focus-visible:scale-100">
                                 <Play weight="fill" className="size-3.5" />
                                 Play fullscreen demo
                             </span>

@@ -118,7 +118,10 @@ export function formatActiveToolsReminder(toolNames: string[]): string {
     if (!names.length) {
         return "\n\nACTIVE TOOLS THIS TURN: none. Answer from conversation only; do not invent tool results.";
     }
-    return `\n\nACTIVE TOOLS THIS TURN (exact names only; do not invent others): ${names.join(", ")}\nUse a tool only when needed for a correct answer; prefer zero or one focused call.`;
+    const composio = names.some((name) => name.startsWith("mcp_composio_"))
+        ? "\nComposio apps: mcp_composio_* tools act in the user's connected SaaS apps. Read/list/get may run immediately. Before send/create/update/delete/post/share, call ask_user with options Yes / No / Yes, don't ask again. If a tool returns CONFIRMATION_REQUIRED, ask first, then re-call that same tool."
+        : "";
+    return `\n\nACTIVE TOOLS THIS TURN (exact names only; do not invent others): ${names.join(", ")}\nUse a tool only when needed for a correct answer; prefer zero or one focused call.${composio}`;
 }
 
 const SUBAGENT_PROMPT = `

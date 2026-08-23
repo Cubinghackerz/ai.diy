@@ -19,6 +19,7 @@ import {
     loadMcpTools,
     selectMcpServersForRequest,
 } from "~/lib/server/mcp-tools";
+import { wrapComposioToolsForConfirmation } from "~/lib/server/composio-guard";
 import { buildChatSystemPromptParts } from "~/lib/server/prompt";
 import {
     ensureCompactionSkill,
@@ -73,6 +74,8 @@ import { providerNeedsKey } from "~/lib/provider-credentials";
 import { corsPreflight, withCors } from "~/lib/server/cors";
 import { getChatGPTHandler } from "~/lib/server/chatgpt-auth";
 import { getGrokBuildSession } from "~/lib/server/grok-build-auth";
+import { getKimiSession } from "~/lib/server/kimi-auth";
+import { subscriptionRateLimitKey } from "~/lib/subscription-providers";
 import { normalizeProviderBaseUrl } from "~/lib/server/provider-url";
 import { findEnabledSearchConnector } from "~/lib/search/connectors";
 import {
@@ -117,6 +120,8 @@ interface ChatRequestBody {
         searxngUrl?: string;
         skillsEnabled?: boolean;
         connectors?: ConnectorConfig[];
+        composioEnabled?: boolean;
+        composioAutoApproveWrites?: boolean;
         memoryAvailable?: boolean;
         knowledgeEnabled?: boolean;
         subagentsEnabled?: boolean;
@@ -380,11 +385,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
     const rateKey = rateLimitKeyFromRequest(
         request,
-        body.provider === "chatgpt"
-            ? "chatgpt-subscription"
-            : body.provider === "grok"
-              ? "grok-build-subscription"
-              : body.apiKey,
+        subscriptionRateLimitKey(body.provider) ?? body.apiKey,
     );
     const rateCheck = checkRateLimit(rateKey);
     if (!rateCheck.ok) {
@@ -417,6 +418,22 @@ export async function action({ request }: ActionFunctionArgs) {
                         error: formatProviderError(
                             "Sign in with Grok Build under Settings before using the Grok Build provider.",
                             { provider: "grok", context: "chat" },
+                        ),
+                    },
+                    { status: 401 },
+                ),
+            );
+        }
+    } else if (body.provider === "kimi") {
+        const session = await getKimiSession(request);
+        if (session.status !== "authenticated") {
+            return withCors(
+                request,
+                Response.json(
+                    {
+                        error: formatProviderError(
+                            "Sign in with Kimi under Settings before using the Kimi membership provider.",
+                            { provider: "kimi", context: "chat" },
                         ),
                     },
                     { status: 401 },
@@ -600,6 +617,19 @@ export async function action({ request }: ActionFunctionArgs) {
             mcpClients = loadedMcp.clients;
         }
         const modelInstance = createChatModel({ ...body, request });
+        if (!toolAccess.composio || body.toolSettings?.composioEnabled === false) {
+            for (const name of Object.keys(mcpTools)) {
+                if (name.startsWith("mcp_composio_")) {
+                    delete mcpTools[name];
+                }
+            }
+        } else {
+            mcpTools = wrapComposioToolsForConfirmation(
+                mcpTools,
+                body.messages,
+                body.toolSettings?.composioAutoApproveWrites === true,
+            );
+        }
         if (activeSearchConnector) {
             for (const name of Object.keys(mcpTools)) {
                 if (
@@ -737,6 +767,7 @@ export async function action({ request }: ActionFunctionArgs) {
             toolsEnabled &&
             body.openAICompatible?.reasoningWithTools !== "allow" &&
             body.provider !== "grok" &&
+            body.provider !== "kimi" &&
             !shouldUseOpenAIResponses(
                 body.provider,
                 body.model,

@@ -27,13 +27,13 @@ export async function initLandingAnimations(
         if (heroSteps.length) {
             gsap.fromTo(
                 heroSteps,
-                { opacity: 0, y: 18, filter: "blur(6px)" },
+                { opacity: 0, y: 8, filter: "blur(3px)" },
                 {
                     opacity: 1,
                     y: 0,
                     filter: "blur(0px)",
-                    duration: 0.7,
-                    stagger: 0.06,
+                    duration: 0.5,
+                    stagger: 0.04,
                     ease: "power3.out",
                     delay: 0.04,
                     clearProps: "filter",

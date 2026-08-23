@@ -29,8 +29,12 @@ export function TrustBoundary({ className }: { className?: string }) {
             aria-label="The browser owns workspace state, the Node server relays requests, and you choose the provider."
         >
             <div className="overflow-hidden rounded-xl border border-white/[0.08]">
-                <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-2 font-mono text-[10px] tracking-[0.16em] text-zinc-600">
+                <div className="relative flex items-center justify-between overflow-hidden border-b border-white/[0.08] px-4 py-2 font-mono text-[10px] tracking-[0.16em] text-zinc-600">
                     <span>LOCAL DATA PLANE</span>
+                    <span
+                        className="landing-packet pointer-events-none absolute top-1/2 left-0 size-1.5 -translate-y-1/2 rounded-full bg-[var(--landing-mint,#3DFFB0)] motion-reduce:hidden"
+                        aria-hidden
+                    />
                     <span>TRANSIT ONLY</span>
                 </div>
 

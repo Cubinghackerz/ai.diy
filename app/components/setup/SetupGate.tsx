@@ -13,6 +13,10 @@ import {
     GrokSubscriptionSettings,
     useGrokBuildSession,
 } from "~/components/settings/GrokSubscriptionSettings";
+import {
+    KimiSubscriptionSettings,
+    useKimiSession,
+} from "~/components/settings/KimiSubscriptionSettings";
 import { haptic, hapticConfirm, hapticSelect } from "~/lib/haptics";
 import { testProviderKey } from "~/lib/key-test";
 import { useSettings } from "~/lib/providers/SettingsProvider";
@@ -48,6 +52,7 @@ export function SetupGate() {
         useSettings();
     const { isAuthenticated, user } = useLoginWithChatGPT();
     const { session: grokSession } = useGrokBuildSession();
+    const { session: kimiSession } = useKimiSession();
 
     const [provider, setProvider] = useState<ProviderId>(
         settings.chat.provider || "chatgpt",
@@ -80,10 +85,13 @@ export function SetupGate() {
 
     const local = isLocalProvider(provider);
     const grokAuthenticated = grokSession.status === "authenticated";
+    const kimiAuthenticated = kimiSession.status === "authenticated";
     const keyReady =
         provider === "grok"
             ? grokAuthenticated
-            : local || apiKey.trim().length > 0;
+            : provider === "kimi"
+              ? kimiAuthenticated
+              : local || apiKey.trim().length > 0;
 
     useEffect(() => {
         const cfg = settings.providers[provider];
@@ -111,7 +119,7 @@ export function SetupGate() {
         let cancelled = false;
         const fallback = DEFAULT_MODELS.grok ?? [];
         setModels(fallback);
-        setModel(fallback[0]?.id || "grok-build");
+        setModel(fallback[0]?.id || "grok-4.6");
         setVerified(fallback.length > 0);
         setError(null);
         void testProviderKey({ provider: "grok", apiKey: "" }).then((result) => {
@@ -127,6 +135,28 @@ export function SetupGate() {
             cancelled = true;
         };
     }, [grokAuthenticated, provider, settings.setupComplete]);
+
+    useEffect(() => {
+        if (!kimiAuthenticated || provider !== "kimi" || settings.setupComplete) return;
+        let cancelled = false;
+        const fallback = DEFAULT_MODELS.kimi ?? [];
+        setModels(fallback);
+        setModel(fallback[0]?.id || "kimi-k3");
+        setVerified(fallback.length > 0);
+        setError(null);
+        void testProviderKey({ provider: "kimi", apiKey: "" }).then((result) => {
+            if (cancelled || result.models.length === 0) return;
+            setModels(result.models);
+            setModel((current) =>
+                result.models.some((item) => item.id === current)
+                    ? current
+                    : result.models[0]?.id || current,
+            );
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [kimiAuthenticated, provider, settings.setupComplete]);
 
     useEffect(() => {
         if (!loaded || !isAuthenticated || settings.setupComplete) return;
@@ -186,7 +216,7 @@ export function SetupGate() {
         if (!canContinue) return;
         hapticConfirm();
         const storedKey =
-            provider === "grok"
+            provider === "grok" || provider === "kimi"
                 ? ""
                 : local
                   ? apiKey.trim() || localProviderKey(provider)
@@ -195,7 +225,7 @@ export function SetupGate() {
         updateProvider(provider, {
             apiKey: storedKey,
             baseUrl:
-                provider === "grok"
+                provider === "grok" || provider === "kimi"
                     ? ""
                     : baseUrl.trim() || PROVIDER_DEFAULTS[provider].baseUrl,
             enabled: true,
@@ -213,6 +243,7 @@ export function SetupGate() {
         updateSettings({
             setupComplete: true,
             ...(provider === "grok" ? { grokBuildLoginEnabled: true } : {}),
+            ...(provider === "kimi" ? { kimiLoginEnabled: true } : {}),
         });
     }, [
         canContinue,
@@ -239,7 +270,14 @@ export function SetupGate() {
 
     const handleGrokBuildConnected = useCallback(() => {
         setModels(DEFAULT_MODELS.grok ?? []);
-        setModel(DEFAULT_MODELS.grok?.[0]?.id || "grok-build");
+        setModel(DEFAULT_MODELS.grok?.[0]?.id || "grok-4.6");
+        setVerified(true);
+        setError(null);
+    }, []);
+
+    const handleKimiConnected = useCallback(() => {
+        setModels(DEFAULT_MODELS.kimi ?? []);
+        setModel(DEFAULT_MODELS.kimi?.[0]?.id || "kimi-k3");
         setVerified(true);
         setError(null);
     }, []);
@@ -378,6 +416,12 @@ export function SetupGate() {
                             />
                         ) : null}
 
+                        {provider === "kimi" ? (
+                            <KimiSubscriptionSettings
+                                onConnected={handleKimiConnected}
+                            />
+                        ) : null}
+
                         <div className="flex flex-col gap-3 rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.04] p-3.5">
                             <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
@@ -408,7 +452,7 @@ export function SetupGate() {
                             ) : null}
                         </div>
 
-                        {!local && provider !== "grok" ? (
+                        {!local && provider !== "grok" && provider !== "kimi" ? (
                             <div className="flex flex-col gap-2">
                                 <label
                                     htmlFor="setup-api-key"
@@ -442,7 +486,7 @@ export function SetupGate() {
                             </div>
                         ) : null}
 
-                        {provider !== "grok" ? <div className="flex flex-col gap-2">
+                        {provider !== "grok" && provider !== "kimi" ? <div className="flex flex-col gap-2">
                             <label
                                 htmlFor="setup-base-url"
                                 className="text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500"
@@ -461,7 +505,7 @@ export function SetupGate() {
                             />
                         </div> : null}
 
-                        {provider !== "grok" ? <Button
+                        {provider !== "grok" && provider !== "kimi" ? <Button
                             type="button"
                             variant="outline"
                             disabled={!keyReady || testing}

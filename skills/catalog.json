@@ -232,6 +232,16 @@
       "tools": ["run_python", "create_file", "generate_file", "ask_user", "memory"]
     },
     {
+      "id": "composio-apps",
+      "name": "Composio Apps",
+      "version": "1.0.0",
+      "description": "Use connected Composio apps (Gmail, GitHub, Notion, Slack, Linear, and more) from chat. Activate when the user wants to read, send, create, or update data in a connected SaaS app.",
+      "category": "general",
+      "path": "general/composio-apps/SKILL.md",
+      "popular": true,
+      "tools": ["ask_user"]
+    },
+    {
       "id": "compaction",
       "name": "Compaction",
       "version": "1.0.0",

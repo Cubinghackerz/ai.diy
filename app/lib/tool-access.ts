@@ -15,6 +15,7 @@ export const TOOL_ACCESS_KEYS = [
     "memory",
     "knowledge",
     "connectors",
+    "composio",
     "mcp",
     "subagents",
     "currentTime",
@@ -83,6 +84,11 @@ export const TOOL_ACCESS_OPTIONS: ToolAccessOption[] = [
         description: "Inspect and call explicitly configured integrations",
     },
     {
+        key: "composio",
+        label: "Composio apps",
+        description: "Use connected SaaS apps (Gmail, GitHub, Notion…) through Composio",
+    },
+    {
         key: "mcp",
         label: "MCP servers",
         description: "Load enabled external Model Context Protocol servers",
@@ -120,6 +126,7 @@ export const DEFAULT_TOOL_ACCESS: ToolAccessSettings = {
     memory: true,
     knowledge: true,
     connectors: true,
+    composio: true,
     mcp: true,
     subagents: false,
     currentTime: true,
@@ -143,6 +150,7 @@ export function normalizeToolAccess(
 export function toolAccessKeyForTool(toolName: string): ToolAccessKey | null {
     const name = toolName.trim().toLowerCase();
     if (!name) return null;
+    if (name.startsWith("mcp_composio_")) return "composio";
     if (
         name.startsWith("mcp_")
     ) return "mcp";

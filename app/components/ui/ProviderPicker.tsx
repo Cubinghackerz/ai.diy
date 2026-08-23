@@ -13,6 +13,7 @@ import { Command } from "cmdk";
 import { CaretDown, MagnifyingGlass } from "@phosphor-icons/react";
 import { hapticSelect } from "~/lib/haptics";
 import { isLocalProvider } from "~/lib/setup";
+import { isBetaSubscriptionProvider } from "~/lib/subscription-providers";
 import { PROVIDER_DEFAULTS, type ProviderId } from "~/lib/types";
 import { ModelLogo } from "~/components/ui/ModelLogo";
 import { cn } from "~/lib/utils";
@@ -45,6 +46,7 @@ export function ProviderPicker({
                 id,
                 name: PROVIDER_DEFAULTS[id].name,
                 local: isLocalProvider(id),
+                beta: isLocalProvider(id) || isBetaSubscriptionProvider(id),
             })),
         [],
     );
@@ -104,7 +106,7 @@ export function ProviderPicker({
                     />
                 ) : null}
                 <span className="truncate">{selected?.name || value}</span>
-                {isLocalProvider(value) ? (
+                {isLocalProvider(value) || isBetaSubscriptionProvider(value) ? (
                     <span className="rounded-full border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.08em] text-primary">
                         Beta
                     </span>
@@ -120,9 +122,9 @@ export function ProviderPicker({
                     <div
                         ref={menuRef}
                         style={menuStyle}
-                        className="overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg"
+                        className="flex max-h-[inherit] flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg"
                     >
-                    <Command className="flex max-h-72 flex-col" label="Search providers">
+                    <Command className="flex min-h-0 flex-1 flex-col overflow-hidden" label="Search providers">
                         <div className="flex items-center gap-2 border-b border-border px-3">
                             <MagnifyingGlass
                                 size={14}
@@ -134,7 +136,7 @@ export function ProviderPicker({
                                 autoFocus
                             />
                         </div>
-                        <Command.List className="overflow-y-auto p-1">
+                        <Command.List className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1">
                             <Command.Empty className="px-3 py-6 text-center text-xs text-muted-foreground">
                                 No providers match.
                             </Command.Empty>
@@ -161,9 +163,9 @@ export function ProviderPicker({
                                             {p.name}
                                         </span>
                                     </span>
-                                     {p.local ? (
+                                     {p.beta ? (
                                          <span className="rounded-full border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-primary">
-                                             Experimental
+                                             Beta
                                          </span>
                                      ) : null}
                                 </Command.Item>

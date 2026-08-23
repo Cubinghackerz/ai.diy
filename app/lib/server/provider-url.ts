@@ -9,6 +9,9 @@ const OPENAI_COMPATIBLE_PROVIDERS = new Set<ProviderId>([
     "openrouter",
     "xai",
     "grok",
+    "kimi",
+    "glm",
+    "minimax",
     "deepseek",
     "togetherai",
     "mistral",
@@ -53,7 +56,7 @@ export function normalizeProviderBaseUrl(
     provider: ProviderId,
     raw?: string,
 ): string | undefined {
-    if (provider === "grok") return undefined;
+    if (provider === "grok" || provider === "kimi") return undefined;
     if (!raw?.trim()) return undefined;
     const url = assertConfiguredHttpUrl(raw);
     if (OPENAI_COMPATIBLE_PROVIDERS.has(provider)) {

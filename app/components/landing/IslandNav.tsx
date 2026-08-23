@@ -10,6 +10,7 @@ import { EASE_IN, EASE_OUT } from "./motion";
 const LINKS = [
     { href: "#demo", label: "Demo" },
     { href: "#features", label: "Ownership" },
+    { href: "#apps", label: "Apps" },
     { href: "#capabilities", label: "Capabilities" },
     { href: "#faq", label: "FAQ" },
     { href: "#deploy", label: "Deploy" },
@@ -135,8 +136,8 @@ export function IslandNav() {
             <div
                 id={menuId}
                 className={cn(
-                    "fixed inset-0 z-30 bg-black/82 backdrop-blur-3xl transition-[opacity,visibility] duration-200 lg:hidden",
-                    open ? "visible opacity-100" : "invisible opacity-0",
+                    "fixed inset-0 z-30 bg-black/82 backdrop-blur-3xl transition-[opacity,visibility] lg:hidden",
+                    open ? "visible opacity-100 duration-200" : "invisible opacity-0 duration-150",
                 )}
                 style={{ transitionTimingFunction: open ? EASE_OUT : EASE_IN }}
                 aria-hidden={!open}
@@ -145,7 +146,7 @@ export function IslandNav() {
                     {[...LINKS, ...EXTERNAL].map((link, i) => {
                         const className = cn(
                             "block rounded-xl px-3 py-3 text-2xl font-medium text-zinc-100 transition-[opacity,transform] duration-200",
-                            open ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0",
+                            open ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0",
                         );
                         const style = {
                             transitionTimingFunction: EASE_OUT,

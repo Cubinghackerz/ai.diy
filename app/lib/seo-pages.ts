@@ -7,7 +7,7 @@ export const SEO_GUIDES = [
         description:
             "Learn how to run ai.diy as a self-hosted AI workspace with Node.js or Docker, browser-local data, BYOK providers, and clear deployment boundaries.",
         heading: "Self-hosted AI without giving up model choice",
-        lastModified: "2026-08-18",
+        lastModified: "2026-08-23",
     },
     {
         slug: "local-ai",
@@ -17,7 +17,7 @@ export const SEO_GUIDES = [
         description:
             "Use Ollama, LM Studio, and other local endpoints in an open-source AI workspace with model switching, browser-local context, and BYOK cloud fallback.",
         heading: "Use local models in the same AI workspace",
-        lastModified: "2026-08-18",
+        lastModified: "2026-08-23",
     },
     {
         slug: "mcp",
@@ -27,7 +27,7 @@ export const SEO_GUIDES = [
         description:
             "See how ai.diy connects remote MCP tools, keeps approvals visible, and combines web search with a self-hosted, bring-your-own-key AI workspace.",
         heading: "Connect MCP tools without losing the approval boundary",
-        lastModified: "2026-08-18",
+        lastModified: "2026-08-23",
     },
     {
         slug: "agents",
@@ -37,7 +37,7 @@ export const SEO_GUIDES = [
         description:
             "Explore ai.diy Agent Mode, approved subagents, skills, browser Python, and the in-browser Linux environment in an open-source AI agent workspace.",
         heading: "An AI agent workspace with visible tools and approvals",
-        lastModified: "2026-08-18",
+        lastModified: "2026-08-23",
     },
     {
         slug: "multi-model",
@@ -47,7 +47,17 @@ export const SEO_GUIDES = [
         description:
             "Compare up to three AI models in parallel with ai.diy Preview, then optionally use a fusion model to synthesize one answer from the results.",
         heading: "Compare models without moving the work",
-        lastModified: "2026-08-18",
+        lastModified: "2026-08-23",
+    },
+    {
+        slug: "apps",
+        path: "/apps",
+        label: "Connected apps",
+        title: "Connect Gmail, GitHub, Notion & Slack to AI | ai.diy",
+        description:
+            "Connect Gmail, GitHub, Notion, Slack, Linear, and more to ai.diy with a free Composio key. Browser-held credentials, MCP tools in chat, and write confirmation before any send or update.",
+        heading: "Connect the apps you already use",
+        lastModified: "2026-08-23",
     },
 ] as const;
 
@@ -56,7 +66,7 @@ export type SeoGuide = (typeof SEO_GUIDES)[number];
 export const INDEXABLE_PUBLIC_PAGES = [
     {
         path: "/",
-        lastModified: "2026-08-18",
+        lastModified: "2026-08-23",
         changeFrequency: "weekly",
         priority: "1.0",
         image: "/workspace-demo.png",

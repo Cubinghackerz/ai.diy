@@ -23,6 +23,8 @@ import {
 } from "~/components/ui/dialog";
 import { ChatGPTLoginSettings } from "~/components/settings/ChatGPTLoginSettings";
 import { GrokSubscriptionSettings } from "~/components/settings/GrokSubscriptionSettings";
+import { ComposioSettings } from "~/components/settings/ComposioSettings";
+import { KimiSubscriptionSettings } from "~/components/settings/KimiSubscriptionSettings";
 import { ToolAccessPicker } from "~/components/settings/ToolAccessPicker";
 import { haptic, hapticConfirm, hapticSelect } from "~/lib/haptics";
 import {
@@ -116,6 +118,7 @@ import {
     Pencil,
     Plug,
     PlugsConnected,
+    AppWindow,
     SpinnerGap,
     Sun,
     Trash,
@@ -182,6 +185,7 @@ type SettingsSection =
     | "memory"
     | "knowledge"
     | "connectors"
+    | "apps"
     | "cloud"
     | "data"
     | "usage"
@@ -244,6 +248,12 @@ const SETTINGS_GROUPS: { label: string; items: SettingsNavItem[] }[] = [
                 label: "Connectors Beta",
                 icon: HardDrives,
                 description: "Configure provider-backed search and service connectors.",
+            },
+            {
+                id: "apps",
+                label: "Apps Beta",
+                icon: AppWindow,
+                description: "Connect Gmail, GitHub, Notion, and more through Composio.",
             },
             {
                 id: "cloud",
@@ -1220,6 +1230,7 @@ function SettingsPanel({
                                     {group.items.map((item) => {
                                         const Icon = item.icon;
                                         const selected = section === item.id;
+                                        const featured = item.id === "apps";
                                         return (
                                             <div
                                                 key={item.id}
@@ -1228,6 +1239,8 @@ function SettingsPanel({
                                                     selected
                                                         ? "bg-accent text-foreground shadow-sm"
                                                         : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
+                                                    featured && !selected && "bg-primary/8 text-foreground",
+                                                    featured && selected && "ring-1 ring-primary/35",
                                                 )}
                                             >
                                                 <button
@@ -1239,10 +1252,21 @@ function SettingsPanel({
                                                     className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                                                     aria-current={selected ? "page" : undefined}
                                                 >
-                                                    <Icon size={17} className="shrink-0" />
+                                                    <Icon
+                                                        size={17}
+                                                        className={cn(
+                                                            "shrink-0",
+                                                            featured && "text-primary",
+                                                        )}
+                                                    />
                                                     <span className="min-w-0 flex-1 truncate">
                                                         {item.label}
                                                     </span>
+                                                    {featured ? (
+                                                        <span className="shrink-0 rounded-full border border-primary/30 bg-primary/15 px-1.5 py-px text-[9px] font-semibold uppercase tracking-[0.12em] text-primary">
+                                                            New
+                                                        </span>
+                                                    ) : null}
                                                 </button>
                                                 <Tooltip>
                                                     <TooltipTrigger
@@ -1537,6 +1561,7 @@ function SettingsPanel({
             {section === "knowledge" && <KnowledgeSettingsSection />}
 
             {section === "connectors" && <ConnectorsSection />}
+            {section === "apps" && <ComposioSettings />}
 
             {section === "cloud" && (
                 <CloudStorageSection onImportComplete={onImportComplete} />
@@ -4101,7 +4126,9 @@ function KeysSection() {
     const { settings, updateProvider, updateSettings } =
         useSettings();
     const [active, setActive] = useState<ProviderId>(
-        settings.chat.provider === "chatgpt" || settings.chat.provider === "grok"
+        settings.chat.provider === "chatgpt" ||
+        settings.chat.provider === "grok" ||
+        settings.chat.provider === "kimi"
             ? "openai"
             : settings.chat.provider,
     );
@@ -4305,6 +4332,7 @@ function KeysSection() {
         <div className="flex flex-col gap-3">
             <ChatGPTLoginSettings />
             <GrokSubscriptionSettings />
+            <KimiSubscriptionSettings />
             <p className="text-[11px] leading-relaxed text-muted-foreground">
                 Keys stay in this browser. Test makes a live{" "}
                 <span className="font-medium text-foreground">/models</span>{" "}
@@ -4313,7 +4341,7 @@ function KeysSection() {
 
             <div className="flex flex-wrap gap-1">
                 {(Object.keys(PROVIDER_DEFAULTS) as ProviderId[])
-                    .filter((id) => id !== "chatgpt" && id !== "grok")
+                    .filter((id) => id !== "chatgpt" && id !== "grok" && id !== "kimi")
                     .map((id) => {
                     const ready = isProviderReady(settings, id);
                     return (

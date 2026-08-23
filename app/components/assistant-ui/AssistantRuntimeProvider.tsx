@@ -272,6 +272,12 @@ export function AssistantRuntimeProvider({
                                 searxngUrl: s.searxngUrl,
                                  skillsEnabled: access.skills && s.skillsEnabled,
                                  connectors: access.connectors ? s.connectors : [],
+                                 composioEnabled:
+                                     access.composio &&
+                                     s.composio?.enabled === true &&
+                                     Boolean(s.composio.apiKey && s.composio.mcpUrl),
+                                 composioAutoApproveWrites:
+                                     s.composio?.autoApproveWrites === true,
                                 memoryAvailable,
                                 knowledgeEnabled,
                                  subagentsEnabled:
@@ -280,8 +286,25 @@ export function AssistantRuntimeProvider({
                                 tokenMode: s.tokenMode ?? "balanced",
                                 toolAccess: access,
                             },
-                            mcpServers: access.mcp
-                                ? s.mcpServers.filter((m) => m.enabled)
+                                            mcpServers: access.mcp
+                                ? [
+                                      ...s.mcpServers.filter((m) => m.enabled),
+                                      ...(access.composio &&
+                                      s.composio?.enabled &&
+                                      s.composio.apiKey &&
+                                      s.composio.mcpUrl
+                                          ? [
+                                                {
+                                                    id: "composio",
+                                                    name: "Composio",
+                                                    kind: "http" as const,
+                                                    url: s.composio.mcpUrl,
+                                                    headers: s.composio.mcpHeaders,
+                                                    enabled: true,
+                                                },
+                                            ]
+                                          : []),
+                                  ]
                                 : [],
                             memoryContext: combinedContext,
                             agentMode: s.agentModeEnabled === true,

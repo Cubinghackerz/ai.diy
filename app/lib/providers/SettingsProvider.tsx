@@ -101,7 +101,7 @@ function mergeLoadedSettings(parsed: Partial<AppSettings>): AppSettings {
     const grokModel =
         savedGrokModel && savedGrokModel !== "grok-build"
             ? savedGrokModel
-            : DEFAULT_MODELS.grok[0]?.id || "grok-build";
+            : DEFAULT_MODELS.grok[0]?.id || "grok-4.6";
     const chat =
         loadedChat.provider === "grok" || loadedChat.lastModelsByProvider?.grok
             ? {
@@ -124,6 +124,16 @@ function mergeLoadedSettings(parsed: Partial<AppSettings>): AppSettings {
             ...parsed.providers,
         },
         connectors: parsed.connectors ?? [],
+        composio: {
+            ...DEFAULT_SETTINGS.composio,
+            ...(parsed.composio ?? {}),
+            mcpHeaders:
+                (parsed.composio?.mcpHeaders && typeof parsed.composio.mcpHeaders === "object"
+                    ? parsed.composio.mcpHeaders
+                    : DEFAULT_SETTINGS.composio.mcpHeaders),
+            autoApproveWrites: parsed.composio?.autoApproveWrites === true,
+            tipDismissed: parsed.composio?.tipDismissed === true,
+        },
         customSkills: parsed.customSkills ?? [],
         agentModeEnabled: parsed.agentModeEnabled ?? false,
         webSearchEnabled: toolAccess.webSearch,
@@ -138,6 +148,8 @@ function mergeLoadedSettings(parsed: Partial<AppSettings>): AppSettings {
         toolAccess,
         chatgptLoginEnabled: parsed.chatgptLoginEnabled ?? false,
         grokBuildLoginEnabled: parsed.grokBuildLoginEnabled ?? false,
+        kimiLoginEnabled: parsed.kimiLoginEnabled ?? false,
+        computerModeEnabled: parsed.computerModeEnabled ?? false,
         tokenMode:
             parsed.tokenMode === "efficient" ||
             parsed.tokenMode === "balanced" ||

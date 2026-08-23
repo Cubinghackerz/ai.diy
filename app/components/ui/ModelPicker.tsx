@@ -132,7 +132,9 @@ export function useProviderModels(provider: ProviderId, enabled: boolean) {
                 body: JSON.stringify({
                     provider,
                     apiKey:
-                        provider === "chatgpt"
+                        provider === "chatgpt" ||
+                        provider === "grok" ||
+                        provider === "kimi"
                             ? ""
                             : provider === "custom" &&
                                 settings.providers[provider]?.openAICompatible?.authMode &&
@@ -173,7 +175,17 @@ export function useProviderModels(provider: ProviderId, enabled: boolean) {
                 );
                 // Keep live ChatGPT account models when discovery returned them;
                 // only fall back to static defaults when the list is empty.
-                if (!(provider === "chatgpt" && data.models && data.models.length > 0)) {
+                if (
+                    !(
+                        (provider === "chatgpt" ||
+                            provider === "grok" ||
+                            provider === "kimi" ||
+                            provider === "glm" ||
+                            provider === "minimax") &&
+                        data.models &&
+                        data.models.length > 0
+                    )
+                ) {
                     setModels(
                         (DEFAULT_MODELS[provider] ?? []).map(enrichModelInfo),
                     );
@@ -303,9 +315,9 @@ export function SearchableModelSelect({
                     <div
                         ref={menuRef}
                         style={menuStyle}
-                        className="overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl shadow-black/20"
+                        className="flex max-h-[inherit] flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl shadow-black/20"
                     >
-                    <Command className="flex h-full min-h-0 flex-col" label="Choose model">
+                    <Command className="flex min-h-0 flex-1 flex-col overflow-hidden" label="Choose model">
                         <div className="flex items-center gap-2 border-b border-border px-3">
                             <MagnifyingGlass
                                 size={14}
@@ -318,7 +330,7 @@ export function SearchableModelSelect({
                             />
                         </div>
                         <Command.List
-                            className="min-h-0 flex-1 overflow-y-auto p-1"
+                            className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1"
                             onMouseLeave={() => setHovered(null)}
                         >
                             <Command.Empty className="px-3 py-6 text-center text-xs text-muted-foreground">
@@ -553,10 +565,10 @@ export function ModelPicker({
                     <div
                         ref={menuRef}
                         style={menuStyle}
-                        className="overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg"
+                        className="flex max-h-[inherit] flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg"
                     >
                     <Command
-                        className="flex h-full min-h-0 flex-col"
+                        className="flex min-h-0 flex-1 flex-col overflow-hidden"
                         label="Search models"
                     >
                         <div className="flex items-center gap-2 border-b border-border px-3">
@@ -576,7 +588,7 @@ export function ModelPicker({
                             </p>
                         ) : null}
                         <Command.List
-                            className="min-h-0 flex-1 overflow-y-auto p-1"
+                            className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1"
                             onMouseLeave={() => setHovered(null)}
                         >
                             <Command.Empty className="px-3 py-6 text-center text-xs text-muted-foreground">

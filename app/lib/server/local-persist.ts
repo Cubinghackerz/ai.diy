@@ -67,6 +67,56 @@ export function resolveGrokSecret(): string {
     return resolvePersistentSecret("GROK_SECRET", GROK_SECRET_PATH, "grok");
 }
 
+export function resolveNamedSecret(envName: string, filename: string, label: string): string {
+    return resolvePersistentSecret(envName, join(DATA_DIR, filename), label);
+}
+
+export function resolveNamedSessionStore<T>(options: {
+    filename: string;
+    envSecret: string;
+    secretPathName: string;
+    label: string;
+    keyContext: string;
+    redisPrefix: string;
+}): KeyValueStore<T> {
+    const redisUrl =
+        process.env.UPSTASH_REDIS_REST_URL?.trim() || process.env.KV_REST_API_URL?.trim();
+    const redisToken =
+        process.env.UPSTASH_REDIS_REST_TOKEN?.trim() || process.env.KV_REST_API_TOKEN?.trim();
+    const secret = resolveNamedSecret(options.envSecret, options.secretPathName, options.label);
+
+    if (redisUrl && redisToken) {
+        console.info(`[${options.label}] Using Upstash Redis for session persistence.`);
+        return new EncryptedKeyValueStore<T>(
+            new RedisKeyValueStore<string>(
+                new Redis({ url: redisUrl, token: redisToken }),
+                options.redisPrefix,
+            ),
+            secret,
+            {
+                label: options.label,
+                keyContext: options.keyContext,
+            },
+        );
+    }
+
+    if (isServerlessRuntime()) {
+        console.warn(
+            `[${options.label}] No Redis REST credentials found; using in-memory sessions for this serverless instance.`,
+        );
+        return new MemoryStore<T>();
+    }
+
+    return new EncryptedKeyValueStore<T>(
+        new FileKeyValueStore<string>(options.filename),
+        secret,
+        {
+            label: options.label,
+            keyContext: options.keyContext,
+        },
+    );
+}
+
 /**
  * Redis-backed KeyValueStore for serverless deployments. Upstash's REST client
  * uses HTTP, so it works in Vercel functions without a long-lived TCP socket.

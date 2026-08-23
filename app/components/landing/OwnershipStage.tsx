@@ -48,7 +48,7 @@ export function OwnershipStage() {
                     return (
                         <article
                             key={item.title}
-                            className="rounded-2xl border border-white/[0.08] bg-[#0a0a0a] p-6 transition-[border-color,background-color] duration-300 hover:border-white/[0.16] hover:bg-[#111]"
+                            className="rounded-2xl border border-white/[0.08] bg-[#0a0a0a] p-6 transition-[transform,border-color,background-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-white/[0.16] hover:bg-[#111] hover:shadow-[0_20px_48px_-28px_rgba(0,0,0,0.9)]"
                         >
                             <Icon weight="light" className="size-5 text-zinc-300" />
                             <h3 className="mt-5 text-[16px] font-medium tracking-tight text-white">
@@ -60,7 +60,7 @@ export function OwnershipStage() {
                         </article>
                     );
                 })}
-                <article className="rounded-2xl border border-white/[0.08] bg-black p-6 md:col-span-2">
+                <article className="rounded-2xl border border-white/[0.08] bg-black p-6 transition-[border-color,background-color] duration-200 hover:border-white/[0.14] hover:bg-[#0a0a0a] md:col-span-2">
                     <PlugsConnected weight="light" className="size-5 text-zinc-300" />
                     <h3 className="mt-5 text-[16px] font-medium tracking-tight text-white">
                         {CALLOUTS[2].title}

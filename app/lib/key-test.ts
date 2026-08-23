@@ -48,8 +48,13 @@ export function looksLikeApiKey(provider: ProviderId, key: string): boolean {
     if (provider === "xai") {
         return k.startsWith("xai-") && k.length > 20;
     }
-    if (provider === "grok") {
-        // SuperGrok/OIDC tokens are not xAI API keys and have no stable prefix.
+    if (provider === "grok" || provider === "kimi") {
+        return k.length >= 16;
+    }
+    if (provider === "minimax") {
+        return k.startsWith("sk-cp-") || k.length >= 16;
+    }
+    if (provider === "glm") {
         return k.length >= 16;
     }
     if (provider === "togetherai") {
@@ -82,7 +87,7 @@ export async function testProviderKey(options: {
     const { provider, apiKey, baseUrl, headers, timeoutMs, maxRetries, authMode } = options;
     const key = apiKey.trim();
 
-    if (provider !== "grok" && !isLocalProvider(provider) && !key) {
+    if (provider !== "grok" && provider !== "kimi" && !isLocalProvider(provider) && !key) {
         return {
             ok: false,
             models: [],
@@ -93,7 +98,7 @@ export async function testProviderKey(options: {
         };
     }
 
-    if (provider !== "grok" && !isLocalProvider(provider) && !looksLikeApiKey(provider, key)) {
+    if (provider !== "grok" && provider !== "kimi" && !isLocalProvider(provider) && !looksLikeApiKey(provider, key)) {
         return {
             ok: false,
             models: [],
@@ -112,7 +117,7 @@ export async function testProviderKey(options: {
             body: JSON.stringify({
                 provider,
                     apiKey:
-                        provider === "grok"
+                        provider === "grok" || provider === "kimi"
                             ? ""
                             : provider === "custom"
                             ? key

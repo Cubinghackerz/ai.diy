@@ -28,6 +28,7 @@ import {
     grokBuildProxyFetch,
     grokBuildProxyUrl,
 } from "~/lib/server/grok-build-auth";
+import { kimiProxyFetch, kimiProxyUrl } from "~/lib/server/kimi-auth";
 import { normalizeProviderBaseUrl } from "~/lib/server/provider-url";
 import { createCompatibleFetch } from "~/lib/server/compatible-fetch";
 
@@ -130,6 +131,31 @@ export function createChatModel(body: ModelRequest) {
             });
             return grok.chat(model);
         }
+        case "kimi": {
+            if (!body.request) {
+                throw new Error(
+                    "Kimi membership requires an authenticated HTTP request (session cookie).",
+                );
+            }
+            const kimi = createOpenAI({
+                apiKey: "kimi-membership",
+                baseURL: kimiProxyUrl(),
+                fetch: kimiProxyFetch(body.request),
+            });
+            return kimi.chat(model);
+        }
+        case "glm":
+            return createOpenAI({
+                apiKey: key,
+                baseURL: resolvedBaseUrl || "https://open.bigmodel.cn/api/coding/paas/v4",
+                headers: compatibleHeaders,
+            }).chat(model);
+        case "minimax":
+            return createOpenAI({
+                apiKey: key,
+                baseURL: resolvedBaseUrl || "https://api.minimax.io/v1",
+                headers: compatibleHeaders,
+            }).chat(model);
         case "openrouter":
             return createOpenAI({ apiKey: key, baseURL: resolvedBaseUrl || "https://openrouter.ai/api/v1", headers: compatibleHeaders }).chat(model);
         case "deepseek":
@@ -256,6 +282,8 @@ export function createImageModel(body: ModelRequest): ImageModel {
             }).imageModel(model);
         case "grok":
             throw new Error("Grok Build image generation is not exposed by the chat proxy.");
+        case "kimi":
+            throw new Error("Kimi membership image generation is not exposed by the coding proxy.");
         case "gemini":
             return createGoogleGenerativeAI({ apiKey: key }).image(model);
         case "gateway":

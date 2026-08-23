@@ -18,6 +18,7 @@ import { IslandNav } from "~/components/landing/IslandNav";
 import { LandingFooter } from "~/components/landing/LandingFooter";
 import { LandingShell } from "~/components/landing/LandingShell";
 import { OwnershipStage } from "~/components/landing/OwnershipStage";
+import { ComposioApps } from "~/components/landing/ComposioApps";
 import { ProviderMarquee } from "~/components/landing/ProviderMarquee";
 import { UseCases } from "~/components/landing/UseCases";
 import { versionedAsset } from "~/lib/build";
@@ -28,6 +29,7 @@ import {
     SITE_DESCRIPTION,
     SITE_IMAGE_ALT,
     SITE_IMAGE_URL,
+    SITE_KEYWORDS,
     SITE_LAST_MODIFIED,
     SITE_LOGO_URL,
     SITE_NAME,
@@ -101,11 +103,19 @@ const STRUCTURED_DATA = {
             featureList: [
                 "Bring-your-own-key AI chat",
                 "Browser-owned chat and knowledge storage",
+                "Connect Gmail, GitHub, Notion, and Slack via Composio",
                 "Web search and MCP tools",
                 "Canvas artifacts and browser Python",
                 "20+ cloud and local AI provider integrations",
                 "Node.js and Docker self-hosting",
             ],
+            keywords: SITE_KEYWORDS,
+            offers: {
+                "@type": "Offer",
+                price: "0",
+                priceCurrency: "USD",
+                availability: "https://schema.org/InStock",
+            },
             author: { "@id": `${SITE_URL}/#organization` },
             publisher: { "@id": `${SITE_URL}/#organization` },
             mainEntityOfPage: { "@id": `${SITE_URL}/#webpage` },
@@ -189,6 +199,7 @@ export default function LandingPage() {
                 <FactsBand />
                 <OwnershipStage />
                 <ProviderMarquee />
+                <ComposioApps />
                 <UseCases />
                 <CapabilityRack />
                 <DeployTerminal />

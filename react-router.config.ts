@@ -9,6 +9,7 @@ export default {
         "/agents",
         "/local-ai",
         "/mcp",
+        "/apps",
         "/multi-model",
         "/self-hosted-ai",
     ],

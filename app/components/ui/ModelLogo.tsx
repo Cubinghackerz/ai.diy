@@ -38,6 +38,9 @@ const BRAND: Record<
     lmstudio: { logo: "lmstudio", letter: "L", bg: "#8b5cf6", fg: "#ffffff", label: "LM Studio" },
     xai: { logo: "x", letter: "X", bg: "#111111", fg: "#ffffff", label: "xAI" },
     grok: { logo: "x", letter: "G", bg: "#111111", fg: "#ffffff", label: "Grok subscription" },
+    kimi: { letter: "K", bg: "#111111", fg: "#ffffff", label: "Kimi membership" },
+    glm: { letter: "Z", bg: "#3859ff", fg: "#ffffff", label: "GLM Coding Plan" },
+    minimax: { letter: "M", bg: "#eb2f96", fg: "#ffffff", label: "MiniMax Token Plan" },
     ollama: { logo: "ollama", letter: "O", bg: "#2563eb", fg: "#ffffff", label: "Ollama" },
     custom: { logo: "openai", letter: "O", bg: "#10a37f", fg: "#ffffff", label: "OpenAI Compatible" },
 };
@@ -73,10 +76,21 @@ export function ModelLogo({
 }) {
     const brand = resolveBrand(provider, modelId);
 
-    if (provider === "grok") {
+    const raster =
+        provider === "grok"
+            ? "/landing-logos/xai-lobe.png"
+            : provider === "kimi"
+              ? "/landing-logos/moonshot-lobe.png"
+              : provider === "glm"
+                ? "/landing-logos/zhipu-lobe.png"
+                : provider === "minimax"
+                  ? "/landing-logos/minimax-lobe.png"
+                  : null;
+
+    if (raster) {
         return (
             <img
-                src="/landing-logos/xai-lobe.png"
+                src={raster}
                 alt={brand.label}
                 width={size}
                 height={size}

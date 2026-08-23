@@ -26,6 +26,9 @@ export function isProviderReady(
     if (id === "grok") {
         return settings.grokBuildLoginEnabled === true && config.enabled === true;
     }
+    if (id === "kimi") {
+        return settings.kimiLoginEnabled === true && config.enabled === true;
+    }
     if (isLocalProvider(id)) return true;
     return Boolean(config.apiKey?.trim());
 }

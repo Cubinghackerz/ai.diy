@@ -85,6 +85,9 @@ export function getReasoningEffortOptions(
             break;
         case "xai":
         case "grok":
+        case "kimi":
+        case "glm":
+        case "minimax":
             ids = XAI_EFFORTS;
             break;
         case "gemini":
@@ -131,6 +134,18 @@ export function modelSupportsReasoning(
         if (/reasoning|think/.test(id)) return true;
     }
 
+    if (provider === "kimi") {
+        if (/kimi-k3|kimi-k2/.test(id)) return true;
+    }
+
+    if (provider === "glm") {
+        if (/glm-5|glm-4\.[5-9]/.test(id)) return true;
+    }
+
+    if (provider === "minimax") {
+        if (/minimax-m[23]/.test(id)) return true;
+    }
+
     // Codex models always use the Responses API and expose the full Codex
     // reasoning ladder, including accounts whose live slug is not GPT-named.
     if (provider === "chatgpt" && !/image|tts|whisper|embedding|dall/i.test(id)) {
@@ -172,7 +187,7 @@ export function modelSupportsReasoning(
     }
 
     if (
-        /gpt-oss|zai-glm|gemma-4|kimi-k2|k2p6|minimax-m2|sonar-(reasoning|deep-research)|command-a-reasoning/.test(
+        /gpt-oss|zai-glm|glm-5|gemma-4|kimi-k[23]|k2p6|minimax-m[23]|sonar-(reasoning|deep-research)|command-a-reasoning/.test(
             id,
         )
     ) {
@@ -284,6 +299,9 @@ export function buildReasoningProviderOptions(
                 },
             };
         case "grok":
+        case "kimi":
+        case "glm":
+        case "minimax":
             return {
                 openai: {
                     reasoningEffort: effort,

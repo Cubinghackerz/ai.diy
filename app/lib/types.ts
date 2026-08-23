@@ -10,6 +10,9 @@ export type ProviderId =
     | "openai"
     | "chatgpt"
     | "grok"
+    | "kimi"
+    | "glm"
+    | "minimax"
     | "anthropic"
     | "gemini"
     | "groq"
@@ -73,6 +76,22 @@ export interface ConnectorConfig {
     bucket?: string;
     region?: string;
     options?: ConnectorSearchOptions;
+}
+
+/**
+ * Composio app integrations. The API key lives in this browser only and is
+ * relayed per request; sessions expose tools through a hosted MCP endpoint.
+ */
+export interface ComposioSettings {
+    enabled: boolean;
+    apiKey: string;
+    /** Stable per-browser identity used as the Composio user_id. */
+    userId: string;
+    sessionId: string | null;
+    mcpUrl: string | null;
+    mcpHeaders: Record<string, string>;
+    autoApproveWrites?: boolean;
+    tipDismissed?: boolean;
 }
 
 export interface ProviderConfig {
@@ -217,11 +236,21 @@ export interface AppSettings {
      * Not an xAI API key — routes the signed-in session through Grok Build.
      */
     grokBuildLoginEnabled: boolean;
+    /**
+     * Kimi Code membership login (HttpOnly session).
+     * Not a Moonshot Open Platform API key.
+     */
+    kimiLoginEnabled: boolean;
+    /**
+     * Slide-out Computer Mode panel (files + Linux terminal + AI helpers).
+     */
+    computerModeEnabled: boolean;
     preview: PreviewSettings;
     usageLimits: UsageLimitsConfig;
     // MCP settings
     mcpServers: McpServerConfig[];
     connectors: ConnectorConfig[];
+    composio: ComposioSettings;
     customSkills: CustomSkill[];
     cloudStorage: import("./cloud-storage/types").CloudStorageConfig;
 }
@@ -397,6 +426,21 @@ export const PROVIDER_DEFAULTS: Record<ProviderId, Omit<ProviderConfig, "apiKey"
         name: "Grok (SuperGrok)",
         baseUrl: "",
     },
+    kimi: {
+        id: "kimi",
+        name: "Kimi membership",
+        baseUrl: "",
+    },
+    glm: {
+        id: "glm",
+        name: "GLM Coding Plan",
+        baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4",
+    },
+    minimax: {
+        id: "minimax",
+        name: "MiniMax Token Plan",
+        baseUrl: "https://api.minimax.io/v1",
+    },
     anthropic: {
         id: "anthropic",
         name: "Anthropic",
@@ -504,6 +548,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
         openai: { ...PROVIDER_DEFAULTS.openai, apiKey: "", enabled: false },
         chatgpt: { ...PROVIDER_DEFAULTS.chatgpt, apiKey: "", enabled: false },
         grok: { ...PROVIDER_DEFAULTS.grok, apiKey: "", enabled: false },
+        kimi: { ...PROVIDER_DEFAULTS.kimi, apiKey: "", enabled: false },
+        glm: { ...PROVIDER_DEFAULTS.glm, apiKey: "", enabled: false },
+        minimax: { ...PROVIDER_DEFAULTS.minimax, apiKey: "", enabled: false },
         anthropic: { ...PROVIDER_DEFAULTS.anthropic, apiKey: "", enabled: false },
         gemini: { ...PROVIDER_DEFAULTS.gemini, apiKey: "", enabled: false },
         groq: { ...PROVIDER_DEFAULTS.groq, apiKey: "", enabled: false },
@@ -533,7 +580,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
         topP: 1,
         model: "gpt-5.6-luna",
         provider: "chatgpt",
-        lastModelsByProvider: { chatgpt: "gpt-5.6-luna" },
+        lastModelsByProvider: { chatgpt: "gpt-5.6-luna", grok: "grok-4.6" },
         reasoningEffort: "medium",
         imageSize: "1024x1024",
         imageCount: 1,
@@ -566,6 +613,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
         memory: true,
         knowledge: true,
         connectors: true,
+        composio: true,
         mcp: true,
         subagents: false,
         currentTime: true,
@@ -575,6 +623,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     agentModeEnabled: false,
     chatgptLoginEnabled: false,
     grokBuildLoginEnabled: false,
+    kimiLoginEnabled: false,
+    computerModeEnabled: false,
     preview: {
         enabled: false,
         primaryModels: [],
@@ -590,6 +640,16 @@ export const DEFAULT_SETTINGS: AppSettings = {
     },
     mcpServers: FREE_SEARCH_MCP_PRESETS,
     connectors: [],
+    composio: {
+        enabled: false,
+        apiKey: "",
+        userId: "",
+        sessionId: null,
+        mcpUrl: null,
+        mcpHeaders: {},
+        autoApproveWrites: false,
+        tipDismissed: false,
+    },
     customSkills: [],
     cloudStorage: {
         kind: "none",
@@ -626,6 +686,7 @@ export const DEFAULT_MODELS: Record<ProviderId, ModelInfo[]> = {
         { id: "gpt-image-1", name: "GPT Image 1", provider: "chatgpt", supportsImageGeneration: true },
     ],
     grok: [
+        { id: "grok-4.6", name: "Grok 4.6", provider: "grok", contextWindow: 500000, supportsTools: true, supportsVision: true, supportsReasoning: true },
         { id: "grok-4-1-fast-reasoning", name: "Grok 4.1 Fast Reasoning", provider: "grok", contextWindow: 262144, supportsTools: true, supportsVision: true, supportsReasoning: true },
         { id: "grok-4-1-fast-non-reasoning", name: "Grok 4.1 Fast", provider: "grok", contextWindow: 131072, supportsTools: true, supportsVision: true, supportsReasoning: false },
         { id: "grok-4-fast-reasoning", name: "Grok 4 Fast Reasoning", provider: "grok", contextWindow: 262144, supportsTools: true, supportsVision: true, supportsReasoning: true },
@@ -639,6 +700,34 @@ export const DEFAULT_MODELS: Record<ProviderId, ModelInfo[]> = {
         { id: "grok-2-vision-1212", name: "Grok 2 Vision", provider: "grok", contextWindow: 131072, supportsTools: true, supportsVision: true },
         { id: "grok-2-image-1212", name: "Grok 2 Image", provider: "grok", supportsImageGeneration: true },
         { id: "grok-build", name: "Grok Build", provider: "grok", supportsTools: true },
+    ],
+    kimi: [
+        { id: "kimi-k3", name: "Kimi K3", provider: "kimi", contextWindow: 1048576, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", provider: "kimi", contextWindow: 262144, supportsTools: true, supportsReasoning: true },
+        { id: "kimi-k2.7-code-highspeed", name: "Kimi K2.7 Code Highspeed", provider: "kimi", contextWindow: 262144, supportsTools: true, supportsReasoning: true },
+        { id: "kimi-k2.6", name: "Kimi K2.6", provider: "kimi", contextWindow: 262144, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "kimi-k2.5", name: "Kimi K2.5", provider: "kimi", contextWindow: 262144, supportsTools: true, supportsVision: true, supportsReasoning: true },
+    ],
+    glm: [
+        { id: "glm-5.3", name: "GLM-5.3", provider: "glm", contextWindow: 200000, supportsTools: true, supportsReasoning: true },
+        { id: "glm-5.2", name: "GLM-5.2", provider: "glm", contextWindow: 200000, supportsTools: true, supportsReasoning: true },
+        { id: "glm-5.1", name: "GLM-5.1", provider: "glm", contextWindow: 200000, supportsTools: true, supportsReasoning: true },
+        { id: "glm-5", name: "GLM-5", provider: "glm", contextWindow: 200000, supportsTools: true, supportsReasoning: true },
+        { id: "glm-5-turbo", name: "GLM-5 Turbo", provider: "glm", contextWindow: 200000, supportsTools: true, supportsReasoning: true },
+        { id: "glm-5v-turbo", name: "GLM-5V Turbo", provider: "glm", contextWindow: 200000, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "glm-4.7", name: "GLM-4.7", provider: "glm", contextWindow: 200000, supportsTools: true, supportsReasoning: true },
+        { id: "glm-4.6", name: "GLM-4.6", provider: "glm", contextWindow: 200000, supportsTools: true, supportsReasoning: true },
+        { id: "glm-4.6v", name: "GLM-4.6V", provider: "glm", contextWindow: 200000, supportsTools: true, supportsVision: true },
+        { id: "glm-4.5-air", name: "GLM-4.5 Air", provider: "glm", contextWindow: 128000, supportsTools: true },
+    ],
+    minimax: [
+        { id: "MiniMax-M3", name: "MiniMax M3", provider: "minimax", contextWindow: 1048576, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "MiniMax-M2.7", name: "MiniMax M2.7", provider: "minimax", contextWindow: 204800, supportsTools: true, supportsReasoning: true },
+        { id: "MiniMax-M2.7-highspeed", name: "MiniMax M2.7 Highspeed", provider: "minimax", contextWindow: 204800, supportsTools: true, supportsReasoning: true },
+        { id: "MiniMax-M2.5", name: "MiniMax M2.5", provider: "minimax", contextWindow: 204800, supportsTools: true, supportsVision: true, supportsReasoning: true },
+        { id: "MiniMax-M2.5-highspeed", name: "MiniMax M2.5 Highspeed", provider: "minimax", contextWindow: 204800, supportsTools: true, supportsReasoning: true },
+        { id: "MiniMax-M2.1", name: "MiniMax M2.1", provider: "minimax", contextWindow: 204800, supportsTools: true, supportsReasoning: true },
+        { id: "MiniMax-M2", name: "MiniMax M2", provider: "minimax", contextWindow: 204800, supportsTools: true, supportsReasoning: true },
     ],
     anthropic: [
         { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet", provider: "anthropic", contextWindow: 200000, supportsTools: true },

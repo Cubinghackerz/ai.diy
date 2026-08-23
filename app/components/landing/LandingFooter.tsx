@@ -52,6 +52,11 @@ export function LandingFooter() {
                                 </a>
                             </li>
                             <li>
+                                <a href="#apps" className={linkClass}>
+                                    Apps
+                                </a>
+                            </li>
+                            <li>
                                 <a href="#capabilities" className={linkClass}>
                                     Capabilities
                                 </a>

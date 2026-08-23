@@ -1,11 +1,11 @@
 "use client";
 
 import {
-  ComposerAddAttachment,
   ComposerAttachments,
   ComposerAttachmentGuard,
   UserMessageAttachments,
 } from "~/components/assistant-ui/attachment";
+import { ComposerPlusMenu } from "~/components/assistant-ui/ComposerPlusMenu";
 import { ComposerModelControls } from "~/components/assistant-ui/ComposerModelControls";
 import {
     SubagentDock,
@@ -259,6 +259,11 @@ const ThreadScrollToBottom: FC = () => {
 };
 
 const ThreadWelcome: FC = () => {
+  const { settings, updateSettings } = useSettings();
+  const composio = settings.composio;
+  const showAppsTip = composio?.tipDismissed !== true;
+  const appsReady = Boolean(composio?.enabled && composio.apiKey && composio.mcpUrl);
+
   return (
     <div className="aui-thread-welcome-root mb-8 flex flex-col items-center gap-3 px-4 text-center">
       <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-3xl font-semibold tracking-tight duration-200">
@@ -267,6 +272,27 @@ const ThreadWelcome: FC = () => {
       <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
         Your local-first workspace is ready. Ask a question, attach a file, or type <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[12px] text-foreground">/</code> to run a skill.
       </p>
+      {showAppsTip ? (
+        <div className="mt-1 flex max-w-md items-start gap-2 rounded-xl border border-primary/25 bg-primary/8 px-3 py-2 text-left text-[12px] leading-relaxed text-foreground">
+          <span className="min-w-0 flex-1">
+            {appsReady
+              ? "Apps are live. Ask the assistant to use Gmail, GitHub, Notion, Slack, and other connected Composio apps."
+              : "You can now connect Gmail, GitHub, Notion, Slack, and more with Composio. Open Settings → Apps to paste a key."}
+          </span>
+          <button
+            type="button"
+            className="shrink-0 rounded-md px-1 text-[11px] text-muted-foreground outline-none hover:text-foreground"
+            onClick={() =>
+              updateSettings({
+                composio: { ...composio, tipDismissed: true },
+              })
+            }
+            aria-label="Dismiss apps tip"
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 };
@@ -287,6 +313,10 @@ const STARTER_PROMPTS = [
   {
     label: "Make a chart",
     prompt: "Use Python to create a simple chart from this dataset: 2, 4, 3, 7, 6, 9.",
+  },
+  {
+    label: "Connect an app",
+    prompt: "/Composio Apps Help me connect Gmail or GitHub and then do something useful in that app.",
   },
 ] as const;
 
@@ -615,7 +645,7 @@ const ComposerAction: FC = () => {
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between gap-2">
       <div className="flex min-w-0 flex-1 items-center gap-1.5">
-        <ComposerAddAttachment />
+        <ComposerPlusMenu />
         <ComposerModelControls />
       </div>
       <div className="flex shrink-0 items-center gap-1.5">

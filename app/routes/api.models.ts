@@ -12,6 +12,11 @@ import {
     listGrokBuildModels,
     grokBuildProxyUrl,
 } from "~/lib/server/grok-build-auth";
+import {
+    getKimiSession,
+    listKimiModels,
+    kimiProxyUrl,
+} from "~/lib/server/kimi-auth";
 import { normalizeProviderBaseUrl } from "~/lib/server/provider-url";
 import {
     classifyProviderError,
@@ -201,6 +206,80 @@ export async function action({ request }: ActionFunctionArgs) {
                             keyValid: true,
                             modelsListed: fallback.length > 0,
                             provider: "grok",
+                        },
+                    },
+                    { headers: { "Cache-Control": "no-store" } },
+                ),
+            );
+        }
+    }
+
+    if (body.provider === "kimi") {
+        const session = await getKimiSession(request);
+        const fallback = (DEFAULT_MODELS.kimi ?? []).map((m) =>
+            enrichModelInfo({ ...m, provider: "kimi" }),
+        );
+        if (session.status !== "authenticated") {
+            return withCors(
+                request,
+                Response.json(
+                    {
+                        error: "Sign in with Kimi under Settings.",
+                        models: fallback,
+                        live: false,
+                    },
+                    {
+                        status: 401,
+                        headers: { "Cache-Control": "no-store" },
+                    },
+                ),
+            );
+        }
+        try {
+            const live = await listKimiModels(request);
+            const models =
+                live.length > 0
+                    ? live.map((model) =>
+                          enrichModelInfo({
+                              ...model,
+                              provider: "kimi",
+                          }),
+                      )
+                    : fallback;
+            return withCors(
+                request,
+                Response.json(
+                    {
+                        models,
+                        live: live.length > 0,
+                        fetchedAt: Date.now(),
+                        resolvedBaseUrl: kimiProxyUrl(),
+                        checks: {
+                            keyValid: true,
+                            modelsListed: models.length > 0,
+                            provider: "kimi",
+                        },
+                    },
+                    { headers: { "Cache-Control": "no-store" } },
+                ),
+            );
+        } catch (error) {
+            console.warn(
+                "[kimi/models] Live discovery failed; using fallback catalog:",
+                error instanceof Error ? error.message : error,
+            );
+            return withCors(
+                request,
+                Response.json(
+                    {
+                        models: fallback,
+                        live: false,
+                        fetchedAt: Date.now(),
+                        resolvedBaseUrl: kimiProxyUrl(),
+                        checks: {
+                            keyValid: true,
+                            modelsListed: fallback.length > 0,
+                            provider: "kimi",
                         },
                     },
                     { headers: { "Cache-Control": "no-store" } },

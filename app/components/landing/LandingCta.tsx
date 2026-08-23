@@ -1,7 +1,8 @@
-import type { ReactNode } from "react";
+import { useRef, type PointerEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 import { ArrowUpRight } from "@phosphor-icons/react";
 import { cn } from "~/lib/utils";
+import { useFinePointer, usePrefersReducedMotion } from "./hooks";
 import { EASE_OUT } from "./motion";
 
 type Common = {
@@ -26,6 +27,25 @@ export function LandingCta({
 }: LandingCtaProps) {
     const compact = size === "compact";
     const withCircle = variant === "primary";
+    const magnetRef = useRef<HTMLAnchorElement>(null);
+    const reduced = usePrefersReducedMotion();
+    const fine = useFinePointer();
+
+    const pull = (event: PointerEvent<HTMLAnchorElement>) => {
+        if (!fine || reduced) return;
+        const el = magnetRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const x = ((event.clientX - rect.left) / Math.max(rect.width, 1) - 0.5) * 8;
+        const y = ((event.clientY - rect.top) / Math.max(rect.height, 1) - 0.5) * 6;
+        el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+    };
+    const release = () => {
+        const el = magnetRef.current;
+        if (!el) return;
+        el.style.transform = "";
+    };
+
     const classNames = cn(
         "group inline-flex items-center font-medium transition-[transform,background-color,border-color,color] duration-200 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2",
         compact ? "min-h-10 gap-2 text-[12px]" : "min-h-12 gap-2 text-[14px]",
@@ -71,10 +91,13 @@ export function LandingCta({
     if ("to" in rest && rest.to) {
         return (
             <Link
+                ref={magnetRef}
                 to={rest.to}
                 reloadDocument={rest.to === "/workspace"}
                 className={classNames}
                 style={style}
+                onPointerMove={pull}
+                onPointerLeave={release}
             >
                 {content}
             </Link>
@@ -83,11 +106,14 @@ export function LandingCta({
 
     return (
         <a
+            ref={magnetRef}
             href={rest.href}
             target={rest.external ? "_blank" : undefined}
             rel={rest.external ? "noreferrer" : undefined}
             className={classNames}
             style={style}
+            onPointerMove={pull}
+            onPointerLeave={release}
         >
             {content}
         </a>
