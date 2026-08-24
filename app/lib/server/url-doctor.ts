@@ -3,7 +3,11 @@
  * Does not invent Lighthouse, Safe Browsing, or scheduled-monitor results.
  */
 
-import { assertPublicHttpUrl } from "~/lib/server/ssrf";
+import {
+    assertPublicHttpUrl,
+    assertPublicHttpUrlResolved,
+    fetchPublicHttpUrl,
+} from "~/lib/server/ssrf";
 
 export type UrlDoctorCategory =
     | "security"
@@ -149,10 +153,9 @@ async function publicFetch(
     bytes: number;
     ms: number;
 }> {
-    assertPublicHttpUrl(url);
     const timeoutMs = init.timeoutMs ?? 8_000;
     const started = Date.now();
-    const res = await fetch(url, {
+    const res = await fetchPublicHttpUrl(url, {
         redirect: init.redirect ?? "follow",
         method: init.method ?? "GET",
         headers: {
@@ -180,7 +183,7 @@ async function followRedirects(
     const chain: Array<{ url: string; status: number }> = [];
     let current = startUrl;
     for (let i = 0; i < maxHops; i++) {
-        assertPublicHttpUrl(current);
+        await assertPublicHttpUrlResolved(current);
         const res = await fetch(current, {
             redirect: "manual",
             method: "GET",
@@ -332,7 +335,6 @@ function find(
 }
 
 export async function runUrlDoctor(rawUrl: string): Promise<UrlDoctorReport> {
-    assertPublicHttpUrl(rawUrl);
     const fetchedAt = new Date().toISOString();
     const findings: UrlDoctorFinding[] = [];
     const checks: UrlDoctorCheck[] = [];
@@ -354,7 +356,7 @@ export async function runUrlDoctor(rawUrl: string): Promise<UrlDoctorReport> {
     const repDeduct: number[] = [];
 
     const started = Date.now();
-    const res = await fetch(rawUrl, {
+    const res = await fetchPublicHttpUrl(rawUrl, {
         redirect: "follow",
         headers: {
             "User-Agent": UA,

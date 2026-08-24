@@ -1,6 +1,5 @@
 import { reactRouter } from "@react-router/dev/vite";
 import tailwindcss from "@tailwindcss/vite";
-import tsconfigPaths from "vite-tsconfig-paths";
 import { defineConfig } from "vite";
 
 const buildId =
@@ -14,6 +13,8 @@ export default defineConfig({
     plugins: [
         reactRouter(),
         tailwindcss(),
-        tsconfigPaths(),
     ],
+    resolve: {
+        tsconfigPaths: true,
+    },
 });

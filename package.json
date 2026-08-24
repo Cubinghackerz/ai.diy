@@ -9,6 +9,8 @@
         "start": "react-router-serve ./build/server/index.js",
         "typecheck": "react-router typegen && tsc",
         "smoke:npm-project": "node scripts/npm-project-smoke.mjs",
+        "smoke:security": "node scripts/security-smoke.mjs",
+        "smoke:composio-guard": "node scripts/composio-guard-smoke.mjs",
         "smoke:session-store": "node scripts/session-store-smoke.mjs",
         "smoke:tool-access": "node scripts/tool-access-smoke.mjs",
         "smoke:token-efficiency": "node scripts/token-efficiency-smoke.mjs"
@@ -114,7 +116,6 @@
         "@types/react-dom": "^19.2.4",
         "tailwindcss": "^4.3.3",
         "typescript": "^6.0.2",
-        "vite": "^8.2.0",
-        "vite-tsconfig-paths": "^6.1.1"
+        "vite": "^8.2.0"
     }
 }

@@ -1,4 +1,7 @@
-import { assertPublicHttpUrl } from "~/lib/server/ssrf";
+import {
+    assertPublicHttpUrl,
+    assertPublicHttpUrlResolved,
+} from "~/lib/server/ssrf";
 import type { ProviderId } from "~/lib/types";
 
 const OPENAI_COMPATIBLE_PROVIDERS = new Set<ProviderId>([
@@ -24,7 +27,7 @@ const OPENAI_COMPATIBLE_PROVIDERS = new Set<ProviderId>([
 const OPENAI_ENDPOINT_SUFFIX = /\/(?:chat\/completions|responses|models|embeddings)\/?$/i;
 
 function privateNetworkUrlsAllowed(): boolean {
-    return process.env.NODE_ENV !== "production" || process.env.ALLOW_PRIVATE_PROVIDER_URLS === "true";
+    return process.env.NODE_ENV === "development" || process.env.ALLOW_PRIVATE_PROVIDER_URLS === "true";
 }
 
 /**
@@ -45,6 +48,12 @@ export function assertConfiguredHttpUrl(raw: string): URL {
         throw new Error("Credentials must not be embedded in the URL.");
     }
     if (!privateNetworkUrlsAllowed()) assertPublicHttpUrl(url.toString());
+    return url;
+}
+
+export async function assertConfiguredHttpUrlResolved(raw: string): Promise<URL> {
+    const url = assertConfiguredHttpUrl(raw);
+    if (!privateNetworkUrlsAllowed()) await assertPublicHttpUrlResolved(url.toString());
     return url;
 }
 

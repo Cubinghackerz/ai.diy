@@ -119,7 +119,7 @@ export function formatActiveToolsReminder(toolNames: string[]): string {
         return "\n\nACTIVE TOOLS THIS TURN: none. Answer from conversation only; do not invent tool results.";
     }
     const composio = names.some((name) => name.startsWith("mcp_composio_"))
-        ? "\nComposio apps: mcp_composio_* tools act in the user's connected SaaS apps. Read/list/get may run immediately. Before send/create/update/delete/post/share, call ask_user with options Yes / No / Yes, don't ask again. If a tool returns CONFIRMATION_REQUIRED, ask first, then re-call that same tool."
+        ? "\nComposio apps: mcp_composio_* tools act in the user's connected SaaS apps. Use read/list/search/get tools for browsing and do not invent tools that are not active. Facebook and Instagram require the supported connected Page or Business/Creator account. Use youtube_transcript for public YouTube video summaries. Facebook Marketplace has no Composio connector; use web research only for public listings and state when sign-in or access limits block the result. Read tools may run immediately. Before send/create/update/delete/post/share, call ask_user with options Yes / No / Yes, don't ask again. If a tool returns CONFIRMATION_REQUIRED, ask first, then re-call that same tool."
         : "";
     return `\n\nACTIVE TOOLS THIS TURN (exact names only; do not invent others): ${names.join(", ")}\nUse a tool only when needed for a correct answer; prefer zero or one focused call.${composio}`;
 }

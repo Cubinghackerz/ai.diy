@@ -6,7 +6,7 @@ import {
     connectCredentialHint,
     requestConnectToken,
 } from "~/lib/server/connect";
-import { assertConfiguredHttpUrl } from "~/lib/server/provider-url";
+import { assertConfiguredHttpUrlResolved } from "~/lib/server/provider-url";
 import type { TokenModePolicy } from "~/lib/token-mode";
 import {
     focusSearchQuery,
@@ -18,6 +18,29 @@ import {
 export type McpClientHandle = {
     close: () => Promise<void>;
 };
+
+/**
+ * @ai-sdk/mcp's model-output adapter expects every MCP execution result to
+ * have a content array. Keep that contract when local wrappers synthesize a
+ * result or compact a primitive returned by a remote server.
+ */
+export function ensureMcpToolResult(
+    value: unknown,
+    options: { isError?: boolean } = {},
+): unknown {
+    if (isMcpContentEnvelope(value)) {
+        return options.isError ? { ...value, isError: true } : value;
+    }
+
+    const text =
+        typeof value === "string"
+            ? value
+            : safeJsonStringify(value) || String(value ?? "");
+    return {
+        ...(options.isError ? { isError: true } : {}),
+        content: [{ type: "text", text }],
+    };
+}
 
 /** The two bundled search servers are optional discovery infrastructure. */
 export function isBundledSearchMcpServer(server: McpServerConfig): boolean {
@@ -31,11 +54,16 @@ export function isBundledSearchMcpServer(server: McpServerConfig): boolean {
     );
 }
 
+/** The Composio session is an MCP transport, but has its own user-facing gate. */
+export function isComposioMcpServer(server: McpServerConfig): boolean {
+    return server.id.trim().toLowerCase() === "composio";
+}
+
 /**
- * The bundled search MCP servers (Parallel Search / Firecrawl) load whenever
- * web search is enabled and no BYOK search connector is active, so live
- * research is served through them instead of the built-in DuckDuckGo fallback.
- * Custom MCP servers remain user-controlled and are loaded whenever enabled.
+ * The bundled search MCP servers (Parallel Search / Firecrawl) load only for
+ * research requests, or when a previous turn already used an MCP tool and the
+ * conversation needs to continue it. Custom MCP servers remain user-controlled
+ * and are loaded whenever enabled.
  */
 export function selectMcpServersForRequest(
     servers: McpServerConfig[] | undefined,
@@ -50,7 +78,7 @@ export function selectMcpServersForRequest(
         if (server.enabled === false) return false;
         if (!isBundledSearchMcpServer(server)) return true;
         if (!options.webSearchEnabled || options.activeSearchConnector) return false;
-        return true;
+        return options.searchIntent || options.mcpToolAlreadyUsed;
     });
 }
 
@@ -114,11 +142,13 @@ export function wrapMcpToolForBudget(
 ): ToolSet[string] {
     const original = mcpTool as ToolSet[string] & {
         execute?: (...args: unknown[]) => unknown;
+        toModelOutput?: (...args: unknown[]) => unknown;
     };
     if (typeof original.execute !== "function") return mcpTool;
 
     const kind = classifyMcpTool(toolName);
     const execute = original.execute.bind(original);
+    const usesMcpOutputAdapter = typeof original.toModelOutput === "function";
     const snippetChars = policy.maxSnippetChars ?? 160;
     // Keep page scrapes usable; search listings are formatted first so we never
     // truncate mid-JSON before extraction (Parallel/Firecrawl payloads are rich).
@@ -134,34 +164,48 @@ export function wrapMcpToolForBudget(
     return {
         ...original,
         execute: async (...callArgs: unknown[]) => {
-            const [rawArgs, ...rest] = callArgs;
-            const args =
-                kind === "search"
-                    ? clampMcpSearchArgs(rawArgs, policy, original)
-                    : rawArgs;
-            const result = await execute(args, ...rest);
-            if (kind === "search") {
-                // Format from the full payload first — compacting JSON before
-                // extraction produces truncated garbage the model cannot use.
-                const formatted = formatMcpSearchToolOutput(result, {
-                    query: extractMcpSearchQuery(args),
-                    maxItems: policy.maxSearchResults,
+            try {
+                const [rawArgs, ...rest] = callArgs;
+                const args =
+                    kind === "search"
+                        ? clampMcpSearchArgs(rawArgs, policy, original)
+                        : rawArgs;
+                const result = await execute(args, ...rest);
+                if (kind === "search") {
+                    const formatted = formatMcpSearchToolOutput(result, {
+                        query: extractMcpSearchQuery(args),
+                        maxItems: policy.maxSearchResults,
+                        maxSnippetChars: snippetChars,
+                        includeSnippets: true,
+                    });
+                    if (formatted !== result) {
+                        return usesMcpOutputAdapter
+                            ? ensureMcpToolResult(formatted)
+                            : formatted;
+                    }
+                }
+                const compacted = compactMcpToolResult(result, resultBudget, {
+                    maxItems: kind === "search" ? Math.max(policy.maxSearchResults * 2, 8) : undefined,
                     maxSnippetChars: snippetChars,
-                    includeSnippets: true,
+                    maxBodyChars: bodyChars,
                 });
-                if (formatted !== result) return formatted;
+                return usesMcpOutputAdapter
+                    ? ensureMcpToolResult(compacted)
+                    : compacted;
+            } catch (error) {
+                const message = error instanceof Error ? error.message : "unknown error";
+                const failure = `Tool ${toolName} failed: ${message.slice(0, 300)}`;
+                return usesMcpOutputAdapter
+                    ? ensureMcpToolResult(failure, { isError: true })
+                    : failure;
             }
-            return compactMcpToolResult(result, resultBudget, {
-                maxItems: kind === "search" ? Math.max(policy.maxSearchResults * 2, 8) : undefined,
-                maxSnippetChars: snippetChars,
-                maxBodyChars: bodyChars,
-            });
         },
     } as ToolSet[string];
 }
 
 function classifyMcpTool(toolName: string): "search" | "fetch" | "other" {
     const name = toolName.toLowerCase();
+    if (name.includes("composio")) return "other";
     if (/search|web_search|find/.test(name) && !/scrape|fetch|parse|crawl|read/.test(name)) {
         return "search";
     }
@@ -570,7 +614,7 @@ async function connectMcpServer(
     }
 
     if (!server.url?.trim()) return null;
-    const url = assertConfiguredHttpUrl(server.url);
+    const url = await assertConfiguredHttpUrlResolved(server.url);
     const type = server.kind === "http" ? "http" : "sse";
     let headers = sanitizeHeaders(server.headers);
     if (server.vercelAuth) {

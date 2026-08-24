@@ -41,11 +41,6 @@ import {
     hasLocalMemoryEntries,
     readLocalMemory,
 } from "~/lib/memory";
-import {
-    buildLocalKnowledgeContext,
-    listKnowledgeDocuments,
-    readLocalKnowledge,
-} from "~/lib/knowledge/store.client";
 import { askUserInChat } from "~/lib/ask-user";
 import { forcedSkillStore, toolNameForForcedSkill } from "~/lib/skill-command";
 import {
@@ -221,7 +216,10 @@ export function AssistantRuntimeProvider({
                             .join(" ") ?? "";
                     const knowledgeContext =
                         knowledgeEnabled && lastUserText.trim()
-                            ? await buildLocalKnowledgeContext(lastUserText)
+                            ? await import("~/lib/knowledge/store.client").then(
+                                  ({ buildLocalKnowledgeContext }) =>
+                                      buildLocalKnowledgeContext(lastUserText),
+                              )
                             : "";
                     const combinedContext = [memoryContext, knowledgeContext]
                         .filter(Boolean)
@@ -286,26 +284,26 @@ export function AssistantRuntimeProvider({
                                 tokenMode: s.tokenMode ?? "balanced",
                                 toolAccess: access,
                             },
-                                            mcpServers: access.mcp
-                                ? [
-                                      ...s.mcpServers.filter((m) => m.enabled),
-                                      ...(access.composio &&
-                                      s.composio?.enabled &&
-                                      s.composio.apiKey &&
-                                      s.composio.mcpUrl
-                                          ? [
-                                                {
-                                                    id: "composio",
-                                                    name: "Composio",
-                                                    kind: "http" as const,
-                                                    url: s.composio.mcpUrl,
-                                                    headers: s.composio.mcpHeaders,
-                                                    enabled: true,
-                                                },
-                                            ]
-                                          : []),
-                                  ]
-                                : [],
+                             mcpServers: [
+                                 ...(access.mcp
+                                     ? s.mcpServers.filter((m) => m.enabled)
+                                     : []),
+                                 ...(access.composio &&
+                                 s.composio?.enabled &&
+                                 s.composio.apiKey &&
+                                 s.composio.mcpUrl
+                                     ? [
+                                           {
+                                               id: "composio",
+                                               name: "Composio",
+                                               kind: "http" as const,
+                                               url: s.composio.mcpUrl,
+                                               headers: s.composio.mcpHeaders,
+                                               enabled: true,
+                                           },
+                                       ]
+                                     : []),
+                             ],
                             memoryContext: combinedContext,
                             agentMode: s.agentModeEnabled === true,
                             ...(forcedSkills.length ? { customSkills: forcedSkills } : {}),
@@ -432,22 +430,28 @@ export function AssistantRuntimeProvider({
                         ? settingsRef.current.memoryEnabled !== false
                             ? readLocalMemory(input.query)
                             : Promise.resolve("Memory is disabled for this chat.")
-                        : toolCall.toolName === "knowledge_list"
-                          ? settingsRef.current.knowledgeEnabled !== false
-                              ? listKnowledgeDocuments().then((docs) =>
-                                    docs.length
-                                        ? docs
-                                              .map(
-                                                  (d, i) =>
-                                                      `${i + 1}. ${d.name} (${d.chunkCount} chunks)`,
-                                              )
-                                              .join("\n")
-                                        : "Knowledge base is empty.",
+                          : toolCall.toolName === "knowledge_list"
+                            ? settingsRef.current.knowledgeEnabled !== false
+                              ? import("~/lib/knowledge/store.client").then(
+                                    ({ listKnowledgeDocuments }) =>
+                                        listKnowledgeDocuments().then((docs) =>
+                                            docs.length
+                                                ? docs
+                                                      .map(
+                                                          (d, i) =>
+                                                              `${i + 1}. ${d.name} (${d.chunkCount} chunks)`,
+                                                      )
+                                                      .join("\n")
+                                                : "Knowledge base is empty.",
+                                        ),
                                 )
                               : Promise.resolve("Knowledge base is disabled.")
-                         : toolCall.toolName === "knowledge_search"
-                            ? settingsRef.current.knowledgeEnabled !== false
-                                ? readLocalKnowledge(input.query)
+                          : toolCall.toolName === "knowledge_search"
+                             ? settingsRef.current.knowledgeEnabled !== false
+                                ? import("~/lib/knowledge/store.client").then(
+                                      ({ readLocalKnowledge }) =>
+                                          readLocalKnowledge(input.query),
+                                  )
                                 : Promise.resolve("Knowledge base is disabled.")
                              : toolCall.toolName === "npm_project"
                                ? executeNpmProjectClientTool(

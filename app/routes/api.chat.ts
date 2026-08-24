@@ -16,6 +16,7 @@ import { createChatGPTProxyProvider } from "@opencoredev/loginwithchatgpt-ai";
 import { buildChatTools } from "~/lib/server/chat-tools";
 import {
     closeMcpClients,
+    isComposioMcpServer,
     loadMcpTools,
     selectMcpServersForRequest,
 } from "~/lib/server/mcp-tools";
@@ -76,7 +77,10 @@ import { getChatGPTHandler } from "~/lib/server/chatgpt-auth";
 import { getGrokBuildSession } from "~/lib/server/grok-build-auth";
 import { getKimiSession } from "~/lib/server/kimi-auth";
 import { subscriptionRateLimitKey } from "~/lib/subscription-providers";
-import { normalizeProviderBaseUrl } from "~/lib/server/provider-url";
+import {
+    assertConfiguredHttpUrlResolved,
+    normalizeProviderBaseUrl,
+} from "~/lib/server/provider-url";
 import { findEnabledSearchConnector } from "~/lib/search/connectors";
 import {
     formatProviderError,
@@ -353,6 +357,24 @@ async function generateAudioResponse(
     return createUIMessageStreamResponse({ stream });
 }
 
+function attachStreamCleanup(response: Response, cleanup: () => Promise<void>): Response {
+    if (!response.body) {
+        void cleanup().catch(() => undefined);
+        return response;
+    }
+    const { readable, writable } = new TransformStream();
+    void response.body
+        .pipeTo(writable)
+        .catch(() => undefined)
+        .finally(() => cleanup())
+        .catch(() => undefined);
+    return new Response(readable, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+    });
+}
+
 export function loader({ request }: LoaderFunctionArgs) {
     const preflight = corsPreflight(request);
     if (preflight) return preflight;
@@ -485,6 +507,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
     try {
         body.baseUrl = normalizeProviderBaseUrl(body.provider, body.baseUrl);
+        if (body.baseUrl) await assertConfiguredHttpUrlResolved(body.baseUrl);
     } catch (err) {
         return withCors(
             request,
@@ -602,16 +625,17 @@ export async function action({ request }: ActionFunctionArgs) {
             );
 
         if (body.previewMode !== true) {
-            const selectedMcpServers = toolAccess.mcp
-                ? selectMcpServersForRequest(body.mcpServers, {
+            const allowedMcpServers = (body.mcpServers ?? []).filter((server) =>
+                isComposioMcpServer(server) ? toolAccess.composio : toolAccess.mcp,
+            );
+            const selectedMcpServers = selectMcpServersForRequest(allowedMcpServers, {
                       searchIntent,
                       activeSearchConnector: Boolean(activeSearchConnector),
                       webSearchEnabled:
                           toolAccess.webSearch &&
                           body.toolSettings?.webSearchEnabled !== false,
                       mcpToolAlreadyUsed,
-                  })
-                : [];
+                  });
             const loadedMcp = await loadMcpTools(selectedMcpServers, policy);
             mcpTools = loadedMcp.tools;
             mcpClients = loadedMcp.clients;
@@ -922,63 +946,60 @@ export async function action({ request }: ActionFunctionArgs) {
                     },
                 };
             },
-            onFinish: async () => {
-                await closeLoadedMcp();
-            },
-            onAbort: async () => {
-                await closeLoadedMcp();
-            },
         });
 
         return withCors(
             request,
-            result.toUIMessageStreamResponse({
-                sendReasoning: true,
-                onError: (error) => publicChatError(error, body.provider),
-                // Attach real provider-reported usage plus the model/provider
-                // used for this request to the assistant message metadata so
-                // the client can persist and aggregate it (usage analytics).
-                messageMetadata: ({ part }) => {
-                    // TTFT ends at the first model response activity: text,
-                    // reasoning, or a tool call/input stream.
-                    if (
-                        (part.type === "text-delta" ||
-                            part.type === "reasoning-delta" ||
-                            part.type === "tool-call" ||
-                            part.type === "tool-result" ||
-                            part.type === "tool-error" ||
-                            part.type === "tool-approval-request") &&
-                        firstTokenAt == null
-                    ) {
-                        firstTokenAt = Date.now();
-                    }
-                    if (part.type !== "finish") return undefined;
-                    const finishedAt = Date.now();
-                    const ttftMs =
-                        firstTokenAt != null
-                            ? Math.max(0, firstTokenAt - streamStartedAt)
-                            : Math.max(0, finishedAt - streamStartedAt);
-                    const rawUsage =
-                        part.totalUsage ?? (part as { usage?: unknown }).usage;
-                    const usage = normalizeUsage(rawUsage) ?? rawUsage;
-                    return {
-                        usage,
-                        model: body.model,
-                        provider: body.provider,
-                        // Use serverTiming (not timing) so assistant-ui's
-                        // MessageTiming merge does not overwrite TTFT/duration.
-                        serverTiming: {
-                            ttftMs,
-                            durationMs: Math.max(0, finishedAt - streamStartedAt),
-                        },
-                        timing: {
-                            ttftMs,
-                            durationMs: Math.max(0, finishedAt - streamStartedAt),
-                        },
-                        promptBudget,
-                    };
-                },
-            }),
+            attachStreamCleanup(
+                result.toUIMessageStreamResponse({
+                    sendReasoning: true,
+                    onError: (error) => publicChatError(error, body.provider),
+                    // Attach real provider-reported usage plus the model/provider
+                    // used for this request to the assistant message metadata so
+                    // the client can persist and aggregate it (usage analytics).
+                    messageMetadata: ({ part }) => {
+                        // TTFT ends at the first model response activity: text,
+                        // reasoning, or a tool call/input stream.
+                        if (
+                            (part.type === "text-delta" ||
+                                part.type === "reasoning-delta" ||
+                                part.type === "tool-call" ||
+                                part.type === "tool-result" ||
+                                part.type === "tool-error" ||
+                                part.type === "tool-approval-request") &&
+                            firstTokenAt == null
+                        ) {
+                            firstTokenAt = Date.now();
+                        }
+                        if (part.type !== "finish") return undefined;
+                        const finishedAt = Date.now();
+                        const ttftMs =
+                            firstTokenAt != null
+                                ? Math.max(0, firstTokenAt - streamStartedAt)
+                                : Math.max(0, finishedAt - streamStartedAt);
+                        const rawUsage =
+                            part.totalUsage ?? (part as { usage?: unknown }).usage;
+                        const usage = normalizeUsage(rawUsage) ?? rawUsage;
+                        return {
+                            usage,
+                            model: body.model,
+                            provider: body.provider,
+                            // Use serverTiming (not timing) so assistant-ui's
+                            // MessageTiming merge does not overwrite TTFT/duration.
+                            serverTiming: {
+                                ttftMs,
+                                durationMs: Math.max(0, finishedAt - streamStartedAt),
+                            },
+                            timing: {
+                                ttftMs,
+                                durationMs: Math.max(0, finishedAt - streamStartedAt),
+                            },
+                            promptBudget,
+                        };
+                    },
+                }),
+                closeLoadedMcp,
+            ),
         );
     } catch (err) {
         await closeLoadedMcp();

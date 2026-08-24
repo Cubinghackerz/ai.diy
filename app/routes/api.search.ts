@@ -5,7 +5,7 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { webSearch } from "~/lib/search";
 import { corsPreflight, withCors } from "~/lib/server/cors";
-import { assertConfiguredHttpUrl } from "~/lib/server/provider-url";
+import { assertConfiguredHttpUrlResolved } from "~/lib/server/provider-url";
 import {
     checkRateLimit,
     rateLimitKeyFromRequest,
@@ -63,7 +63,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
     if (body.engine === "searxng" && body.searxngUrl?.trim()) {
         try {
-            assertConfiguredHttpUrl(body.searxngUrl);
+            await assertConfiguredHttpUrlResolved(body.searxngUrl);
         } catch (err) {
             return withCors(
                 request,

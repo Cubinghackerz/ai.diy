@@ -716,6 +716,7 @@ export async function searxngSearch(
             Accept: "application/json",
             "User-Agent": "Mozilla/5.0 (compatible; ai.diy/0.1)",
         },
+        redirect: "manual",
         signal: AbortSignal.timeout(12_000),
     });
 

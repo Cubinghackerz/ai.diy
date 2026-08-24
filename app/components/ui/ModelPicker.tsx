@@ -151,6 +151,7 @@ export function useProviderModels(provider: ProviderId, enabled: boolean) {
             const data = (await res.json()) as {
                 models?: ModelInfo[];
                 error?: string;
+                authenticated?: boolean;
             };
             const raw =
                 data.models && data.models.length > 0
@@ -169,7 +170,7 @@ export function useProviderModels(provider: ProviderId, enabled: boolean) {
                     : (DEFAULT_MODELS[provider] ?? []).map(enrichModelInfo);
             const next = raw;
             setModels(next);
-            if (!res.ok || data.error) {
+            if (data.authenticated !== false && (!res.ok || data.error)) {
                 setError(
                     data.error || `Failed to load models (HTTP ${res.status})`,
                 );

@@ -133,10 +133,11 @@ export async function testProviderKey(options: {
             models?: ModelInfo[];
             error?: string;
             live?: boolean;
+            authenticated?: boolean;
             resolvedBaseUrl?: string;
         };
 
-        if (!res.ok || data.error) {
+        if (data.authenticated === false || !res.ok || data.error) {
             return {
                 ok: false,
                 models: [],

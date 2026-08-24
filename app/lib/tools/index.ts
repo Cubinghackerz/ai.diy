@@ -8,6 +8,8 @@
 
 import type { LLMTool } from "~/lib/llm/types";
 import { duckDuckGoSearch, formatCompactSearchResults } from "~/lib/search";
+import { formatMathResult } from "~/lib/math-evaluator";
+import { fetchPublicHttpUrl } from "~/lib/server/ssrf";
 
 export interface ToolExecutor {
     name: string;
@@ -97,38 +99,7 @@ export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
 
     calculator: {
         name: "calculator",
-        execute: async (args) => {
-            const expr = String(args.expression ?? "");
-            if (!expr) return "Error: No expression provided";
-
-            try {
-                const sanitized = expr.replace(/[^0-9+\-*/().,\s\w]/g, "");
-                const mathScope: Record<string, unknown> = {
-                    sqrt: Math.sqrt,
-                    sin: Math.sin,
-                    cos: Math.cos,
-                    tan: Math.tan,
-                    log: Math.log,
-                    log2: Math.log2,
-                    log10: Math.log10,
-                    pow: Math.pow,
-                    abs: Math.abs,
-                    round: Math.round,
-                    floor: Math.floor,
-                    ceil: Math.ceil,
-                    min: Math.min,
-                    max: Math.max,
-                    PI: Math.PI,
-                    E: Math.E,
-                    exp: Math.exp,
-                };
-                const fn = new Function(...Object.keys(mathScope), `"use strict"; return (${sanitized});`);
-                const result = fn(...Object.values(mathScope));
-                return `Result: ${result}`;
-            } catch (err) {
-                return `Error evaluating expression: ${err instanceof Error ? err.message : String(err)}`;
-            }
-        },
+        execute: async (args) => formatMathResult(args.expression),
     },
 
     fetch_url: {
@@ -136,12 +107,8 @@ export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
         execute: async (args) => {
             const url = String(args.url ?? "");
             if (!url) return "Error: No URL provided";
-            if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                return "Error: URL must start with http:// or https://";
-            }
-
             try {
-                const res = await fetch(url, {
+                const res = await fetchPublicHttpUrl(url, {
                     headers: {
                         "User-Agent": "Mozilla/5.0 (compatible; ai.diy/0.1)",
                         "Accept": "text/html,application/json,text/plain",

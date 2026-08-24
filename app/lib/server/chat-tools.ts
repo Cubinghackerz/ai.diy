@@ -17,7 +17,7 @@ import {
 } from "~/lib/search";
 import { connectorSearch, findEnabledSearchConnector } from "~/lib/search/connectors";
 import type { ConnectorConfig } from "~/lib/types";
-import { assertPublicHttpUrl } from "~/lib/server/ssrf";
+import { fetchPublicHttpUrl } from "~/lib/server/ssrf";
 import {
     connectAvailable,
     inspectConnectConnector,
@@ -26,7 +26,10 @@ import {
     resolveConnectConnector,
     startConnectAuthorization,
 } from "~/lib/server/connect";
-import { assertConfiguredHttpUrl } from "~/lib/server/provider-url";
+import {
+    assertConfiguredHttpUrlResolved,
+} from "~/lib/server/provider-url";
+import { formatMathResult } from "~/lib/math-evaluator";
 import { compactMcpToolResult } from "~/lib/server/mcp-tools";
 import {
     formatUrlDoctorReport,
@@ -75,41 +78,6 @@ export type ToolSettings = {
     /** Tool ids that must be registered this turn even outside full-suite mode. */
     forceToolNames?: string[];
 };
-
-function evaluateMath(expression: string): string {
-    const expr = String(expression ?? "").trim();
-    if (!expr) return "Error: No expression provided";
-    const sanitized = expr.replace(/[^0-9+\-*/().,\s\w^%]/g, "");
-    const mathScope: Record<string, unknown> = {
-        sqrt: Math.sqrt,
-        sin: Math.sin,
-        cos: Math.cos,
-        tan: Math.tan,
-        log: Math.log,
-        log2: Math.log2,
-        log10: Math.log10,
-        pow: Math.pow,
-        abs: Math.abs,
-        round: Math.round,
-        floor: Math.floor,
-        ceil: Math.ceil,
-        min: Math.min,
-        max: Math.max,
-        PI: Math.PI,
-        E: Math.E,
-        exp: Math.exp,
-    };
-    try {
-        const fn = new Function(
-            ...Object.keys(mathScope),
-            `"use strict"; return (${sanitized});`,
-        );
-        const result = fn(...Object.values(mathScope));
-        return `Result: ${result}`;
-    } catch (err) {
-        return `Error: ${err instanceof Error ? err.message : String(err)}`;
-    }
-}
 
 function normalizeEncodedArtifactContent(
     content: string,
@@ -1297,13 +1265,13 @@ export async function buildChatTools(
                         let target: URL;
                         const raw = path.trim();
                         if (/^https?:\/\//i.test(raw)) {
-                            target = assertConfiguredHttpUrl(raw);
+                            target = await assertConfiguredHttpUrlResolved(raw);
                         } else {
                             if (!entry.baseUrl) {
                                 return `A relative path was given but no CONNECT_BASE_URL_${entry.key} is configured for this connector. Pass an absolute https URL instead.`;
                             }
                             const base = entry.baseUrl.endsWith("/") ? entry.baseUrl : `${entry.baseUrl}/`;
-                            target = assertConfiguredHttpUrl(new URL(raw, base).toString());
+                            target = await assertConfiguredHttpUrlResolved(new URL(raw, base).toString());
                         }
                         const tokenResult = await requestConnectToken(entry.connectorId, entry.scopes);
                         if (!tokenResult.ok) {
@@ -1346,10 +1314,21 @@ export async function buildChatTools(
 
     if (enableSearch) {
         const engine = settings.webSearchEngine ?? "duckduckgo";
+        let searxngUrl = settings.searxngUrl?.trim();
+        let searchConfigurationError: string | null = null;
+        if (engine === "searxng" && searxngUrl) {
+            try {
+                searxngUrl = (await assertConfiguredHttpUrlResolved(searxngUrl)).toString();
+            } catch (err) {
+                searchConfigurationError =
+                    err instanceof Error ? err.message : "Invalid SearXNG URL";
+                searxngUrl = undefined;
+            }
+        }
         const activeConnector = findEnabledSearchConnector(settings.connectors);
         const engineLabel =
             activeConnector?.name ||
-            (engine === "searxng" && settings.searxngUrl?.trim()
+            (engine === "searxng" && searxngUrl
                 ? "SearXNG"
                 : "DuckDuckGo");
 
@@ -1367,13 +1346,15 @@ export async function buildChatTools(
         };
 
         const builtInSearch = async (query: string, maxResults: number) =>
-            formatResults(
-                await webSearch(query, {
-                    maxResults,
-                    engine,
-                    searxngUrl: settings.searxngUrl,
-                }),
-            );
+            searchConfigurationError
+                ? Promise.reject(new Error(searchConfigurationError))
+                : formatResults(
+                      await webSearch(query, {
+                          maxResults,
+                          engine,
+                          searxngUrl,
+                      }),
+                  );
 
         const defaultHits = policy.defaultSearchResults;
         const maxHits = policy.maxSearchResults;
@@ -1407,7 +1388,7 @@ export async function buildChatTools(
                         : await webSearch(normalizedQuery, {
                               maxResults: hits,
                               engine,
-                              searxngUrl: settings.searxngUrl,
+                               searxngUrl,
                           });
                     return formatResults(results);
                 } catch (err) {
@@ -1455,8 +1436,7 @@ export async function buildChatTools(
             }),
             execute: async ({ url }) => {
                 try {
-                    assertPublicHttpUrl(url);
-                    const res = await fetch(url, {
+                    const res = await fetchPublicHttpUrl(url, {
                         headers: {
                             "User-Agent":
                                 "Mozilla/5.0 (compatible; ai.diy/0.1)",
@@ -1533,7 +1513,7 @@ export async function buildChatTools(
             inputSchema: z.object({
                 expression: z.string(),
             }),
-            execute: async ({ expression }) => evaluateMath(expression),
+            execute: async ({ expression }) => formatMathResult(expression),
         });
         if (exposeLegacyAlias("calculate")) tools.calculate = tools.calculator;
     }

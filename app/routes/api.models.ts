@@ -17,7 +17,10 @@ import {
     listKimiModels,
     kimiProxyUrl,
 } from "~/lib/server/kimi-auth";
-import { normalizeProviderBaseUrl } from "~/lib/server/provider-url";
+import {
+    assertConfiguredHttpUrlResolved,
+    normalizeProviderBaseUrl,
+} from "~/lib/server/provider-url";
 import {
     classifyProviderError,
     formatProviderError,
@@ -89,8 +92,9 @@ export async function action({ request }: ActionFunctionArgs) {
                                 enrichModelInfo({ ...m, provider: "chatgpt" }),
                             ),
                             live: false,
+                            authenticated: false,
                         },
-                        { status: 401, headers: { "Cache-Control": "no-store" } },
+                        { headers: { "Cache-Control": "no-store" } },
                     ),
                 );
             }
@@ -153,9 +157,9 @@ export async function action({ request }: ActionFunctionArgs) {
                         error: "Sign in with Grok Build under Settings.",
                         models: fallback,
                         live: false,
+                        authenticated: false,
                     },
                     {
-                        status: 401,
                         headers: { "Cache-Control": "no-store" },
                     },
                 ),
@@ -227,9 +231,9 @@ export async function action({ request }: ActionFunctionArgs) {
                         error: "Sign in with Kimi under Settings.",
                         models: fallback,
                         live: false,
+                        authenticated: false,
                     },
                     {
-                        status: 401,
                         headers: { "Cache-Control": "no-store" },
                     },
                 ),
@@ -302,6 +306,7 @@ export async function action({ request }: ActionFunctionArgs) {
     let baseUrl: string | undefined;
     try {
         baseUrl = normalizeProviderBaseUrl(body.provider, body.baseUrl);
+        if (baseUrl) await assertConfiguredHttpUrlResolved(baseUrl);
     } catch (err) {
         return withCors(
             request,

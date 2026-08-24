@@ -1,16 +1,77 @@
 import type { ToolSet } from "ai";
 import type { UIMessage } from "ai";
 
-const WRITE_RE =
-    /(send|create|update|delete|write|post|put|patch|remove|trash|archive|invite|share|publish|upload|edit|modify|insert|replace|rename|assign|merge|approve|reject|block|kick|ban|comment|reply|forward|draft|schedule)/i;
-const READ_RE =
-    /(search|list|get_|fetch|read|find|lookup|describe|status|check|count|preview|show|view|browse)/i;
+const WRITE_ACTIONS = new Set([
+    "send",
+    "create",
+    "update",
+    "delete",
+    "write",
+    "post",
+    "put",
+    "patch",
+    "remove",
+    "trash",
+    "archive",
+    "invite",
+    "share",
+    "publish",
+    "upload",
+    "edit",
+    "modify",
+    "insert",
+    "replace",
+    "rename",
+    "assign",
+    "merge",
+    "approve",
+    "reject",
+    "block",
+    "kick",
+    "ban",
+    "comment",
+    "reply",
+    "forward",
+    "draft",
+    "schedule",
+    "add",
+    "like",
+    "react",
+    "follow",
+    "unfollow",
+    "subscribe",
+]);
+const READ_ACTIONS = new Set([
+    "search",
+    "list",
+    "get",
+    "fetch",
+    "read",
+    "find",
+    "lookup",
+    "describe",
+    "status",
+    "check",
+    "count",
+    "preview",
+    "show",
+    "view",
+    "browse",
+    "retrieve",
+]);
 
 export function isMutatingComposioTool(name: string): boolean {
     const n = name.toLowerCase();
     if (!n.startsWith("mcp_composio_")) return false;
-    if (READ_RE.test(n) && !WRITE_RE.test(n)) return false;
-    return WRITE_RE.test(n);
+    const tokens = n
+        .slice("mcp_composio_".length)
+        .split(/[^a-z0-9]+/)
+        .filter(Boolean);
+    const action = tokens.find((token) => READ_ACTIONS.has(token) || WRITE_ACTIONS.has(token));
+    // The first verb is the operation; later tokens are usually nouns (for
+    // example, "get_posts" and "list_comments"). Unknown operations fail
+    // closed and still require confirmation.
+    return action ? WRITE_ACTIONS.has(action) : true;
 }
 
 function stringifyOutput(value: unknown): string {
@@ -79,6 +140,10 @@ function confirmationOutput(toolName: string): string {
     ].join("\n");
 }
 
+function mcpTextResult(text: string): { content: [{ type: "text"; text: string }] } {
+    return { content: [{ type: "text", text }] };
+}
+
 export function wrapComposioToolsForConfirmation(
     tools: ToolSet,
     messages: UIMessage[] | undefined,
@@ -97,10 +162,12 @@ export function wrapComposioToolsForConfirmation(
             ...original,
             execute: async (...callArgs: unknown[]) => {
                 if (decision === "deny") {
-                    return "Canceled by the user. Do not retry this write.";
+                    return mcpTextResult(
+                        "Canceled by the user. Do not retry this write.",
+                    );
                 }
                 if (decision === "ask") {
-                    return confirmationOutput(name);
+                    return mcpTextResult(confirmationOutput(name));
                 }
                 return execute(...callArgs);
             },

@@ -15,6 +15,8 @@ const APPS: Array<{ slug: string; label: string }> = [
     { slug: "discord", label: "Discord" },
     { slug: "trello", label: "Trello" },
     { slug: "airtable", label: "Airtable" },
+    { slug: "facebook", label: "Facebook" },
+    { slug: "instagram", label: "Instagram" },
     { slug: "youtube", label: "YouTube" },
     { slug: "todoist", label: "Todoist" },
     { slug: "twitter", label: "X" },

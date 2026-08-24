@@ -179,6 +179,51 @@ try {
             mcpToolAlreadyUsed: false,
         }).length === 1,
     );
+
+    const mcpOutputAdapter = ({ output }) =>
+        output &&
+        typeof output === "object" &&
+        Array.isArray(output.content);
+    const mcpPolicy = {
+        defaultSearchResults: 5,
+        maxSearchResults: 10,
+        maxMcpResultChars: 8_000,
+        maxSnippetChars: 160,
+    };
+    const budgetedMcp = mcp.wrapMcpToolForBudget(
+        "mcp_composio_gmail_send_email",
+        {
+            inputSchema: {},
+            toModelOutput: mcpOutputAdapter,
+            execute: async () => "raw tool output",
+        },
+        mcpPolicy,
+    );
+    const budgetedResult = await budgetedMcp.execute({});
+    check(
+        "MCP primitive results preserve content envelopes",
+        mcpOutputAdapter({ output: budgetedResult }) &&
+            budgetedResult.content[0]?.text === "raw tool output",
+    );
+
+    const failingMcp = mcp.wrapMcpToolForBudget(
+        "mcp_composio_gmail_send_email",
+        {
+            inputSchema: {},
+            toModelOutput: mcpOutputAdapter,
+            execute: async () => {
+                throw new Error("temporary MCP failure");
+            },
+        },
+        mcpPolicy,
+    );
+    const failedResult = await failingMcp.execute({});
+    check(
+        "MCP execution failures stay inside the tool protocol",
+        mcpOutputAdapter({ output: failedResult }) &&
+            failedResult.isError === true &&
+            failedResult.content[0]?.text.includes("temporary MCP failure"),
+    );
 } finally {
     await vite.close();
 }
