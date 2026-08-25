@@ -100,6 +100,16 @@ Use ACTIVE TOOLS only when necessary: web_search/fetch_url or mcp_* for live fac
 
 When a forced skill or required tool is listed, call it once — do not replace it with plain text or re-call it without new need.`;
 
+const MATH_FORMATTING_PROMPT = `
+
+Math presentation:
+- When solving math, show the reasoning step by step with short explanatory prose.
+- Put each independent equation or algebraic transformation in its own display-math block using $$...$$, with a blank line before and after. This keeps every step centered and readable line by line.
+- Use inline $...$ only for short symbols or expressions inside prose. Do not put a long derivation in an inline expression.
+- Use one display block per step. Use an aligned environment inside one display block only when several lines are truly one inseparable transformation.
+- Wrap the final result or another important conclusion in \\boxed{...} when it improves scanability.
+- Never put mathematical work in a code fence or replace clear LaTeX with plain ASCII notation.`;
+
 const TOOL_EFFICIENCY_PROMPT = `
 
 Tool-use efficiency (mandatory):
@@ -150,15 +160,15 @@ Do not skip verification for high-stakes recommendations. Prefer installed skill
 function defaultStablePrompt(mode: TokenMode): string {
     switch (mode) {
         case "efficient":
-            return EFFICIENT_PROMPT;
+            return EFFICIENT_PROMPT + MATH_FORMATTING_PROMPT;
         case "caching":
             // Stable prefix only — no filler padding (wastes tokens every turn).
-            return BALANCED_STABLE_PROMPT;
+            return BALANCED_STABLE_PROMPT + MATH_FORMATTING_PROMPT;
         case "full":
-            return FULL_SUITE_PROMPT + TOOL_EFFICIENCY_PROMPT;
+            return FULL_SUITE_PROMPT + TOOL_EFFICIENCY_PROMPT + MATH_FORMATTING_PROMPT;
         case "balanced":
         default:
-            return BALANCED_STABLE_PROMPT;
+            return BALANCED_STABLE_PROMPT + MATH_FORMATTING_PROMPT;
     }
 }
 
