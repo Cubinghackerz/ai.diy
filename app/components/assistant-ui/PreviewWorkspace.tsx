@@ -38,6 +38,16 @@ import {
 } from "~/components/assistant-ui/ChatThreadSync";
 import { Thread } from "~/components/assistant-ui/Thread";
 import { createAttachmentAdapter } from "~/lib/attachments";
+import {
+    BINARY_DOCUMENT_EXTENSIONS,
+    DEFAULT_ATTACHMENT_POLICY,
+    TEXT_ATTACHMENT_EXTENSIONS,
+    attachmentLimitHint,
+    getAttachmentPolicy,
+    normalizeAttachmentMimeType,
+    validateAttachmentDescriptors,
+    type AttachmentPolicy,
+} from "~/lib/attachment-policy";
 import { getModelModalities } from "~/lib/model-modalities";
 import { ModelLogo } from "~/components/ui/ModelLogo";
 import { ModelPicker } from "~/components/ui/ModelPicker";
@@ -136,6 +146,7 @@ type PreviewFile = {
     url: string;
     mediaType: string;
     filename: string;
+    sizeBytes?: number;
 };
 
 async function fileToPreviewPart(file: File): Promise<PreviewFile> {
@@ -148,18 +159,56 @@ async function fileToPreviewPart(file: File): Promise<PreviewFile> {
     return {
         type: "file",
         url,
-        mediaType: file.type || "application/octet-stream",
+        mediaType: normalizeAttachmentMimeType(file.type, file.name),
         filename: file.name,
+        sizeBytes: file.size,
     };
 }
 
-function fileSupportedForRun(file: PreviewFile, config: PreviewModelConfig): boolean {
-    const modalities = getModelModalities(config.model, config.provider);
-    if (file.mediaType.startsWith("image/")) return modalities.vision;
-    if (file.mediaType === "application/pdf" || !file.mediaType.startsWith("text/")) {
-        return modalities.documents;
-    }
-    return true;
+function previewFileDescriptor(file: PreviewFile) {
+    return {
+        name: file.filename,
+        mediaType: file.mediaType,
+        sizeBytes: file.sizeBytes,
+        dataUrl: file.url,
+    };
+}
+
+function filesForRun(
+    files: PreviewFile[],
+    config: PreviewModelConfig,
+): { files: PreviewFile[]; uploadNotice?: string } {
+    const validation = validateAttachmentDescriptors(
+        files.map(previewFileDescriptor),
+        getAttachmentPolicy(config.provider, config.model),
+    );
+    if (validation.valid) return { files };
+    const invalid = new Set(validation.invalidIndexes);
+    return {
+        files: files.filter((_, index) => !invalid.has(index)),
+        uploadNotice: validation.message,
+    };
+}
+
+function broadestPreviewPolicy(configs: PreviewModelConfig[]): AttachmentPolicy {
+    if (configs.length === 0) return DEFAULT_ATTACHMENT_POLICY;
+    const policies = configs.map((config) =>
+        getAttachmentPolicy(config.provider, config.model),
+    );
+    return {
+        ...policies[0]!,
+        modalities: {
+            tools: policies.some((policy) => policy.modalities.tools),
+            vision: policies.some((policy) => policy.modalities.vision),
+            documents: policies.some((policy) => policy.modalities.documents),
+            reasoning: policies.some((policy) => policy.modalities.reasoning),
+            imageGeneration: policies.some((policy) => policy.modalities.imageGeneration),
+        },
+        contextWindow: Math.max(...policies.map((policy) => policy.contextWindow)),
+        maxFiles: Math.max(...policies.map((policy) => policy.maxFiles)),
+        maxFileBytes: Math.max(...policies.map((policy) => policy.maxFileBytes)),
+        maxTotalBytes: Math.max(...policies.map((policy) => policy.maxTotalBytes)),
+    };
 }
 
 type PreviewSession = {
@@ -185,6 +234,11 @@ type StoredPreviewSession = {
 };
 
 const PREVIEW_SESSION_ID = "last-preview-session";
+const PREVIEW_FILE_ACCEPT = [
+    "image/*",
+    ...BINARY_DOCUMENT_EXTENSIONS.map((extension) => `.${extension}`),
+    ...TEXT_ATTACHMENT_EXTENSIONS.map((extension) => `.${extension}`),
+].join(",");
 
 function responseText(messages: UIMessage[]): string {
     return messages
@@ -464,22 +518,23 @@ export const PreviewWorkspace: FC = () => {
         previewHydrated.current = true;
         const id = `preview_${Date.now()}`;
         const now = Date.now();
-        const primaryRuns = selections.map((config, index): PreviewRun => ({
-            id: `${id}_model_${index + 1}`,
-            kind: "primary",
-            slotIndex: index,
-            label: shortModelName(config.model),
-            prompt: input,
-            config: resolveConfig(config),
-            status: "running",
-            output: "",
-            artifacts: [],
-            files: files.filter((file) => fileSupportedForRun(file, config)),
-            uploadNotice: files.some((file) => !fileSupportedForRun(file, config))
-                ? "Some files were skipped because this model does not support their modality."
-                : undefined,
-            startedAt: now,
-        }));
+        const primaryRuns = selections.map((config, index): PreviewRun => {
+            const preparedFiles = filesForRun(files, config);
+            return {
+                id: `${id}_model_${index + 1}`,
+                kind: "primary",
+                slotIndex: index,
+                label: shortModelName(config.model),
+                prompt: input,
+                config: resolveConfig(config),
+                status: "running",
+                output: "",
+                artifacts: [],
+                files: preparedFiles.files,
+                uploadNotice: preparedFiles.uploadNotice,
+                startedAt: now,
+            };
+        });
 
         setConfigurationError(null);
         setSession({
@@ -497,8 +552,42 @@ export const PreviewWorkspace: FC = () => {
     const addFiles = async (selected: FileList | null) => {
         if (!selected?.length) return;
         previewHydrated.current = true;
-        const next = await Promise.all([...selected].map(fileToPreviewPart));
-        setFiles((current) => [...current, ...next].slice(0, 8));
+        const policy = broadestPreviewPolicy(primaryModels);
+        const selectedFiles = [...selected];
+        const selectedValidation = validateAttachmentDescriptors(
+            selectedFiles.map((file) => ({
+                name: file.name,
+                type: file.type,
+                sizeBytes: file.size,
+            })),
+            policy,
+        );
+        const selectedInvalid = new Set(selectedValidation.invalidIndexes);
+        const acceptedFiles = selectedFiles.filter(
+            (_, index) => !selectedInvalid.has(index),
+        );
+        if (acceptedFiles.length === 0) {
+            setConfigurationError(
+                selectedValidation.message ??
+                    `No files were added. This comparison accepts ${attachmentLimitHint(policy)}.`,
+            );
+            return;
+        }
+        const next = await Promise.all(acceptedFiles.map(fileToPreviewPart));
+        const combined = [...previewStateRef.current.files, ...next];
+        const combinedValidation = validateAttachmentDescriptors(
+            combined.map(previewFileDescriptor),
+            policy,
+        );
+        const invalid = new Set(combinedValidation.invalidIndexes);
+        setFiles(combined.filter((_, index) => !invalid.has(index)));
+        if (!selectedValidation.valid || !combinedValidation.valid) {
+            setConfigurationError(
+                combinedValidation.message ?? selectedValidation.message ?? null,
+            );
+        } else {
+            setConfigurationError(null);
+        }
     };
 
     const markComplete = (runId: string, messages: UIMessage[]) => {
@@ -744,7 +833,7 @@ export const PreviewWorkspace: FC = () => {
             status: "running",
             output: "",
             artifacts: [],
-            files: files.filter((file) => fileSupportedForRun(file, config)),
+            ...filesForRun(files, config),
             startedAt: Date.now(),
         };
         setRuns((current) => [
@@ -943,6 +1032,7 @@ export const PreviewWorkspace: FC = () => {
                     onStop={stopAll}
                     running={running}
                     configurationError={configurationError}
+                    uploadHint={attachmentLimitHint(broadestPreviewPolicy(primaryModels))}
                     files={files}
                     onFiles={addFiles}
                     onRemoveFile={(filename) => {
@@ -1322,6 +1412,7 @@ const PreviewComposer: FC<{
     onStop: () => void;
     running: boolean;
     configurationError: string | null;
+    uploadHint: string;
     files: PreviewFile[];
     onFiles: (files: FileList | null) => void;
     onRemoveFile: (filename: string) => void;
@@ -1332,6 +1423,7 @@ const PreviewComposer: FC<{
     onStop,
     running,
     configurationError,
+    uploadHint,
     files,
     onFiles,
     onRemoveFile,
@@ -1368,12 +1460,15 @@ const PreviewComposer: FC<{
                     </div>
                 ) : null}
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5 px-1">
-                    <label className="inline-flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground">
+                    <label
+                        className="inline-flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+                        title={`Add files (${uploadHint})`}
+                    >
                         <Paperclip size={15} />
                         <input
                             type="file"
                             multiple
-                            accept="image/*,.pdf,.txt,.md,.csv,.json,.js,.jsx,.ts,.tsx,.css,.html,.xml,.yaml,.yml"
+                            accept={PREVIEW_FILE_ACCEPT}
                             className="sr-only"
                             onChange={(event) => {
                                 void onFiles(event.target.files);
@@ -1430,9 +1525,22 @@ const PreviewRunPanel: FC<{
     const settingsRef = useRef(settings);
     settingsRef.current = settings;
     const modalities = getModelModalities(run.config.model, run.config.provider);
+    const attachmentPolicy = getAttachmentPolicy(
+        run.config.provider,
+        run.config.model,
+    );
     const adapters = useMemo(
-        () => ({ attachments: createAttachmentAdapter(modalities) }),
-        [modalities.documents, modalities.tools, modalities.vision],
+        () => ({
+            attachments: createAttachmentAdapter(modalities, attachmentPolicy),
+        }),
+        [
+            attachmentPolicy.maxFileBytes,
+            attachmentPolicy.maxFiles,
+            attachmentPolicy.maxTotalBytes,
+            modalities.documents,
+            modalities.tools,
+            modalities.vision,
+        ],
     );
     const transport = useMemo(
         () =>

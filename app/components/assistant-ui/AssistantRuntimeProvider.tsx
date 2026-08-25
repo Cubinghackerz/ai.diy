@@ -21,6 +21,7 @@ import {
 import { ChatThreadSync } from "~/components/assistant-ui/ChatThreadSync";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import { createAttachmentAdapter } from "~/lib/attachments";
+import { getAttachmentPolicy } from "~/lib/attachment-policy";
 import { getModelModalities } from "~/lib/model-modalities";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { collectPythonInputFiles, runBrowserPython } from "~/lib/pyodide";
@@ -610,6 +611,10 @@ export function AssistantRuntimeProvider({
         settings.chat.model,
         settings.chat.provider,
     );
+    const attachmentPolicy = getAttachmentPolicy(
+        settings.chat.provider,
+        settings.chat.model,
+    );
     const dictation = useMemo(() => {
         if (
             typeof window === "undefined" ||
@@ -622,10 +627,18 @@ export function AssistantRuntimeProvider({
 
     const adapters = useMemo(
         () => ({
-            attachments: createAttachmentAdapter(modalities),
+            attachments: createAttachmentAdapter(modalities, attachmentPolicy),
             dictation,
         }),
-        [dictation, modalities.vision, modalities.documents, modalities.tools],
+        [
+            attachmentPolicy.maxFileBytes,
+            attachmentPolicy.maxFiles,
+            attachmentPolicy.maxTotalBytes,
+            dictation,
+            modalities.documents,
+            modalities.tools,
+            modalities.vision,
+        ],
     );
 
     const runtime = useAISDKRuntime(chat, { adapters });

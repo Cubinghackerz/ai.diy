@@ -300,16 +300,64 @@ export async function authorizeComposioToolkit(options: {
     userId: string;
     toolkit: string;
 }): Promise<string> {
-    const request = await getClient(options.apiKey).toolkits.authorize(
+    const composio = getClient(options.apiKey);
+    const authConfigId = await resolveAuthConfigId(composio, options.toolkit);
+    const request = await composio.connectedAccounts.link(
         options.userId,
-        options.toolkit,
-        undefined,
+        authConfigId,
+        { allowMultiple: true },
         requestOptions(AUTHORIZE_TIMEOUT_MS),
     );
     if (!request.redirectUrl) {
         throw new Error(`Composio did not return a connect link for ${options.toolkit}.`);
     }
     return request.redirectUrl;
+}
+
+async function resolveAuthConfigId(
+    composio: Composio,
+    toolkit: string,
+): Promise<string> {
+    const managedConfigs = await composio.authConfigs.list(
+        { toolkit, isComposioManaged: true, limit: 20 },
+        requestOptions(AUTHORIZE_TIMEOUT_MS),
+    );
+    const enabledManaged = managedConfigs.items.find(
+        (config) => config.status === "ENABLED",
+    );
+    if (enabledManaged?.id) return enabledManaged.id;
+
+    // Projects can use a custom OAuth config, so preserve that path if no
+    // managed config is available for the toolkit.
+    const allConfigs = await composio.authConfigs.list(
+        { toolkit, limit: 20 },
+        requestOptions(AUTHORIZE_TIMEOUT_MS),
+    );
+    const enabledConfig = allConfigs.items.find(
+        (config) => config.status === "ENABLED",
+    );
+    if (enabledConfig?.id) return enabledConfig.id;
+
+    const toolkitInfo = await composio.toolkits.get(
+        toolkit,
+        requestOptions(AUTHORIZE_TIMEOUT_MS),
+    );
+    if (!toolkitInfo.authConfigDetails?.length) {
+        throw new Error(`No auth config found for Composio toolkit ${toolkit}.`);
+    }
+
+    const created = await composio.authConfigs.create(
+        toolkit,
+        {
+            type: "use_composio_managed_auth",
+            name: `${toolkitInfo.name} Auth Config`,
+        },
+        requestOptions(AUTHORIZE_TIMEOUT_MS),
+    );
+    if (!created.id) {
+        throw new Error(`Composio did not return an auth config for ${toolkit}.`);
+    }
+    return created.id;
 }
 
 function accountIdFromItem(item: { id?: unknown; nanoid?: unknown } | undefined): string {

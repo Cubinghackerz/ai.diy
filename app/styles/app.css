@@ -336,6 +336,50 @@ input:focus-visible,
     color: var(--color-muted-foreground);
 }
 
+/* KaTeX: keep inline equations aligned with prose and display equations readable on mobile. */
+.aui-md .math-inline {
+    display: inline-block;
+    max-width: 100%;
+    vertical-align: baseline;
+}
+
+.aui-md .math-display {
+    max-width: 100%;
+    margin: 1.25rem 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.25rem 0.5rem;
+    text-align: center;
+    -webkit-overflow-scrolling: touch;
+}
+
+.aui-md .math-display > .katex-display {
+    margin: 0;
+    padding: 0;
+}
+
+.aui-md .katex {
+    font-size: 1.04em;
+}
+
+.aui-md .katex-display {
+    overflow-x: auto;
+    overflow-y: hidden;
+    text-align: center;
+}
+
+@media (max-width: 640px) {
+    .aui-md .math-display {
+        margin: 1rem -0.25rem;
+        padding-inline: 0.25rem;
+        text-align: start;
+    }
+
+    .aui-md .katex-display {
+        text-align: start;
+    }
+}
+
 /* Smooth transitions on interactive elements */
 button,
 a,

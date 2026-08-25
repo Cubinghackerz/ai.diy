@@ -98,6 +98,10 @@ import {
     rateLimitKeyFromRequest,
     rateLimitResponse,
 } from "~/lib/server/rate-limit";
+import {
+    getAttachmentPolicy,
+    validateIncomingAttachmentMessages,
+} from "~/lib/attachment-policy";
 
 interface ChatRequestBody {
     messages: UIMessage[];
@@ -501,6 +505,32 @@ export async function action({ request }: ActionFunctionArgs) {
                     }),
                 },
                 { status: 400 },
+            ),
+        );
+    }
+
+    const attachmentValidation = validateIncomingAttachmentMessages(
+        body.messages,
+        getAttachmentPolicy(body.provider, body.model),
+    );
+    if (!attachmentValidation.valid) {
+        const status =
+            attachmentValidation.code === "unsupported-image" ||
+            attachmentValidation.code === "unsupported-document" ||
+            attachmentValidation.code === "unsupported-format" ||
+            attachmentValidation.code === "invalid-data"
+                ? 400
+                : 413;
+        return withCors(
+            request,
+            Response.json(
+                {
+                    error:
+                        attachmentValidation.message ??
+                        "One or more attachments are not supported by this model.",
+                    code: attachmentValidation.code,
+                },
+                { status },
             ),
         );
     }

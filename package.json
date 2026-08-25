@@ -11,9 +11,11 @@
         "smoke:npm-project": "node scripts/npm-project-smoke.mjs",
         "smoke:security": "node scripts/security-smoke.mjs",
         "smoke:composio-guard": "node scripts/composio-guard-smoke.mjs",
+        "smoke:composio-connect": "node scripts/composio-connect-smoke.mjs",
         "smoke:session-store": "node scripts/session-store-smoke.mjs",
         "smoke:tool-access": "node scripts/tool-access-smoke.mjs",
-        "smoke:token-efficiency": "node scripts/token-efficiency-smoke.mjs"
+        "smoke:token-efficiency": "node scripts/token-efficiency-smoke.mjs",
+        "smoke:attachments": "node scripts/attachment-smoke.mjs"
     },
     "dependencies": {
         "@ai-sdk/amazon-bedrock": "^5.0.40",

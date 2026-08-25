@@ -38,6 +38,11 @@ import { Avatar, AvatarImage, AvatarFallback } from "~/components/ui/avatar";
 import { TooltipIconButton } from "~/components/assistant-ui/tooltip-icon-button";
 import { cn } from "~/lib/utils";
 import { attachmentAcceptHint } from "~/lib/attachments";
+import {
+  getAttachmentPolicy,
+  isExtractableDocument,
+  validateAttachmentDescriptors,
+} from "~/lib/attachment-policy";
 import { getModelModalities } from "~/lib/model-modalities";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 
@@ -285,58 +290,60 @@ export const ComposerAttachmentGuard: FC = () => {
     settings.chat.model,
     settings.chat.provider,
   );
+  const policy = getAttachmentPolicy(settings.chat.provider, settings.chat.model);
   const attachments = useAuiState((state) => state.composer.attachments);
   const [notice, setNotice] = useState<string | null>(null);
+  const validation = validateAttachmentDescriptors(
+    attachments.map((attachment) => ({
+      name: attachment.name,
+      mediaType: attachment.contentType,
+      type: attachment.type,
+      sizeBytes: attachment.file?.size,
+    })),
+    policy,
+    { allowTextExtraction: true },
+  );
+  const invalidKey = validation.invalidIndexes.join(",");
 
   useEffect(() => {
-    const unsupported = attachments
-      .map((attachment, index) => ({ attachment, index }))
-      .filter(({ attachment }) => {
-        if (attachment.type === "image") return !modalities.vision;
-        if (modalities.documents) return false;
-        const contentType = attachment.contentType?.toLowerCase() ?? "";
-        const name = attachment.name.toLowerCase();
-        if (contentType === "application/pdf" || /\.(pdf|docx?)$/.test(name)) {
-          return false;
-        }
-        const textLike =
-          contentType.startsWith("text/") ||
-          /json|javascript|typescript|xml|csv|markdown|yaml/.test(contentType) ||
-          /\.(txt|md|markdown|csv|json|js|jsx|ts|tsx|css|html|xml|yaml|yml)$/.test(name);
-        return !textLike;
-      });
-
-    if (unsupported.length === 0) return;
-    for (const { index } of [...unsupported].reverse()) {
+    if (validation.invalidIndexes.length === 0) return;
+    for (const index of [...validation.invalidIndexes].reverse()) {
       void aui.composer.attachment({ index }).remove();
     }
 
-    const removedImages = unsupported.some(({ attachment }) => attachment.type === "image");
-    const removedDocuments = unsupported.some(({ attachment }) => attachment.type !== "image");
-    const kinds = [
-      removedImages ? "images" : "",
-      removedDocuments ? "PDF/binary files" : "",
-    ].filter(Boolean).join(" and ");
     setNotice(
-      `Removed ${unsupported.length} unsupported attachment${unsupported.length === 1 ? "" : "s"}: this model cannot process ${kinds}.`,
+      `Removed ${validation.invalidIndexes.length} attachment${validation.invalidIndexes.length === 1 ? "" : "s"}: ${validation.message ?? "the upload is not supported by this model."}`,
     );
     const timer = window.setTimeout(() => setNotice(null), 7000);
     return () => window.clearTimeout(timer);
-  }, [aui.composer, attachments, modalities.documents, modalities.vision]);
+  }, [
+    aui.composer,
+    invalidKey,
+    modalities.documents,
+    modalities.vision,
+    settings.chat.model,
+    settings.chat.provider,
+    validation.invalidIndexes.length,
+    validation.message,
+  ]);
 
   useEffect(() => {
-    if (modalities.vision) return;
-    const documentWithPossibleImages = attachments.some(({ name, contentType }) =>
-      contentType?.toLowerCase() === "application/pdf" ||
-      /\.(pdf|docx?)$/i.test(name),
+    if (modalities.documents) return;
+    const documentWithPossibleImages = attachments.some((attachment) =>
+      isExtractableDocument({
+        name: attachment.name,
+        mediaType: attachment.contentType,
+      }),
     );
     if (!documentWithPossibleImages) return;
     setNotice(
-      "This model cannot see embedded images in PDF/Word attachments. Readable text is still sent.",
+      modalities.vision
+        ? "This model can see image files but not embedded images in PDF/Word attachments. Readable text is still sent."
+        : "This model cannot see embedded images in PDF/Word attachments. Readable text is still sent.",
     );
     const timer = window.setTimeout(() => setNotice(null), 7000);
     return () => window.clearTimeout(timer);
-  }, [attachments, modalities.vision]);
+  }, [attachments, modalities.documents, modalities.vision]);
 
   if (!notice) return null;
   return (
@@ -352,7 +359,8 @@ export const ComposerAddAttachment: FC = () => {
     settings.chat.model,
     settings.chat.provider,
   );
-  const hint = attachmentAcceptHint(modalities);
+  const policy = getAttachmentPolicy(settings.chat.provider, settings.chat.model);
+  const hint = attachmentAcceptHint(modalities, policy);
 
   return (
     <ComposerPrimitive.AddAttachment

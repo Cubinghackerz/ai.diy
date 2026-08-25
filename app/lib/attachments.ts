@@ -9,6 +9,18 @@ import {
 } from "@assistant-ui/core";
 import type { ModelModalities } from "~/lib/model-modalities";
 import { extractKnowledgeText } from "~/lib/knowledge/extract.client";
+import {
+    BINARY_DOCUMENT_EXTENSIONS,
+    DEFAULT_ATTACHMENT_POLICY,
+    TEXT_ATTACHMENT_EXTENSIONS,
+    attachmentLimitHint,
+    isExtractableDocument,
+    isTextAttachment,
+    normalizeAttachmentMimeType,
+    validateAttachmentFile,
+    type AttachmentDescriptor,
+    type AttachmentPolicy,
+} from "~/lib/attachment-policy";
 
 async function fileToDataURL(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -28,64 +40,17 @@ async function fileToDataURL(file: File): Promise<string> {
 }
 
 function getFileMimeType(file: File): string {
-    if (file.type) return file.type.split(";", 1)[0];
-    const extension = file.name.split(".").pop()?.toLowerCase();
-    return (
-        {
-            pdf: "application/pdf",
-            doc: "application/msword",
-            docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            rtf: "application/rtf",
-        } as Record<string, string>
-    )[extension ?? ""] ?? "application/octet-stream";
+    return normalizeAttachmentMimeType(file.type, file.name);
 }
 
-const DOCUMENT_ACCEPT = [
-    "application/pdf",
-    ".pdf",
-    "application/msword",
-    ".doc",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ".docx",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    ".pptx",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    ".xlsx",
-    "application/rtf",
-    ".rtf",
-].join(",");
+const DOCUMENT_ACCEPT = BINARY_DOCUMENT_EXTENSIONS.flatMap((extension) => [
+    `.${extension}`,
+]).join(",");
 
-const TEXT_EXT_ACCEPT = [
-    "text/markdown",
-    ".md",
-    ".markdown",
-    "text/csv",
-    ".csv",
-    "application/json",
-    ".json",
-    "text/plain",
-    ".txt",
-    ".ts",
-    ".tsx",
-    ".js",
-    ".jsx",
-    ".py",
-    ".css",
-    ".html",
-    ".xml",
-    ".yaml",
-    ".yml",
-].join(",");
+const TEXT_EXT_ACCEPT = TEXT_ATTACHMENT_EXTENSIONS.map((extension) => `.${extension}`).join(",");
 
 function isTextLike(file: File): boolean {
-    return (
-        file.type.startsWith("text/") ||
-        /\.(md|markdown|txt|csv|json|ts|tsx|js|jsx|py|css|html|xml|ya?ml)$/i.test(
-            file.name,
-        )
-    );
+    return isTextAttachment({ name: file.name, type: file.type });
 }
 
 const textDocumentAdapter = {
@@ -154,13 +119,7 @@ const imageAttachmentAdapter = {
 } satisfies AttachmentAdapter;
 
 function isPdfOrWord(file: File): boolean {
-    return (
-        file.type === "application/pdf" ||
-        file.type === "application/msword" ||
-        file.type ===
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-        /\.(pdf|docx?)$/i.test(file.name)
-    );
+    return isExtractableDocument({ name: file.name, type: file.type });
 }
 
 function createBinaryDocumentAdapter(supportsDocuments: boolean): AttachmentAdapter {
@@ -232,19 +191,42 @@ function createBinaryDocumentAdapter(supportsDocuments: boolean): AttachmentAdap
 
 export function createAttachmentAdapter(
     modalities: ModelModalities,
+    policy: AttachmentPolicy = {
+        ...DEFAULT_ATTACHMENT_POLICY,
+        modalities,
+    },
 ): CompositeAttachmentAdapter {
-    const adapters: AttachmentAdapter[] = [new SimpleTextAttachmentAdapter()];
+    const guardAdapter = (adapter: AttachmentAdapter): AttachmentAdapter => ({
+        ...adapter,
+        add({ file }) {
+            const error = validateAttachmentFile(
+                {
+                    name: file.name,
+                    type: file.type,
+                    sizeBytes: file.size,
+                } satisfies AttachmentDescriptor,
+                policy,
+                { allowTextExtraction: true },
+            );
+            if (error) return Promise.reject(new Error(error));
+            return adapter.add({ file });
+        },
+    });
+
+    const adapters: AttachmentAdapter[] = [
+        guardAdapter(new SimpleTextAttachmentAdapter()),
+    ];
 
     if (modalities.vision) {
-        adapters.unshift(imageAttachmentAdapter);
+        adapters.unshift(guardAdapter(imageAttachmentAdapter));
     }
 
     // Always allow text-like docs (inlined as text — works with any chat model).
-    adapters.push(textDocumentAdapter);
+    adapters.push(guardAdapter(textDocumentAdapter));
 
     // Text-only models receive a local text extraction instead of a file part.
     // Vision/document-capable models retain the original binary attachment.
-    adapters.push(createBinaryDocumentAdapter(modalities.documents));
+    adapters.push(guardAdapter(createBinaryDocumentAdapter(modalities.documents)));
 
     return new CompositeAttachmentAdapter(adapters);
 }
@@ -258,9 +240,13 @@ export const prismiumAttachmentAdapter = createAttachmentAdapter({
     imageGeneration: true,
 });
 
-export function attachmentAcceptHint(modalities: ModelModalities): string {
+export function attachmentAcceptHint(
+    modalities: ModelModalities,
+    policy: AttachmentPolicy = { ...DEFAULT_ATTACHMENT_POLICY, modalities },
+): string {
     const parts = ["text", "markdown"];
     if (modalities.vision) parts.unshift("images");
-    parts.push("PDF", "Word");
-    return `Add files (${parts.join(", ")}…)`;
+    if (modalities.documents) parts.push("PDF, Word, slides, spreadsheets");
+    else parts.push("PDF/Word text extraction");
+    return `Add files (${parts.join(", ")}; ${attachmentLimitHint(policy)})`;
 }

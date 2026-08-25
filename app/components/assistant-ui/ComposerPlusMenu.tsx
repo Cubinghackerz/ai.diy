@@ -7,8 +7,13 @@ import { Paperclip, Plus } from "@phosphor-icons/react";
 import { hapticSelect } from "~/lib/haptics";
 import { useAnchoredMenu } from "~/lib/use-anchored-menu";
 import { cn } from "~/lib/utils";
+import { attachmentAcceptHint } from "~/lib/attachments";
+import { getAttachmentPolicy } from "~/lib/attachment-policy";
+import { getModelModalities } from "~/lib/model-modalities";
+import { useSettings } from "~/lib/providers/SettingsProvider";
 
 export function ComposerPlusMenu() {
+    const { settings } = useSettings();
     const [open, setOpen] = useState(false);
     const rootRef = useRef<HTMLDivElement>(null);
     const triggerRef = useRef<HTMLButtonElement>(null);
@@ -41,6 +46,14 @@ export function ComposerPlusMenu() {
         align: "left",
         zIndex: 100,
     });
+    const modalities = getModelModalities(
+        settings.chat.model,
+        settings.chat.provider,
+    );
+    const attachmentHint = attachmentAcceptHint(
+        modalities,
+        getAttachmentPolicy(settings.chat.provider, settings.chat.model),
+    );
 
     return (
         <div ref={rootRef} className="relative shrink-0">
@@ -75,6 +88,8 @@ export function ComposerPlusMenu() {
                                   <button
                                       type="button"
                                       role="menuitem"
+                                      title={attachmentHint}
+                                      aria-label={attachmentHint}
                                       className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs outline-none hover:bg-accent"
                                       onClick={() => setOpen(false)}
                                   />
