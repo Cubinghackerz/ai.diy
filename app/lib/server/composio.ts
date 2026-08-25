@@ -4,6 +4,7 @@
  * can load hosted mcp_composio_* tools.
  */
 import { Composio } from "@composio/core";
+import { createHash } from "node:crypto";
 
 const COMPOSIO_API_BASE = "https://backend.composio.dev/api/v3.1";
 const TOOLKIT_PAGE_LIMIT = 100;
@@ -46,8 +47,10 @@ type CatalogCache = {
     complete: boolean;
 };
 
-let catalogCache: CatalogCache | null = null;
-let catalogFill: Promise<void> | null = null;
+const catalogCaches = new Map<string, CatalogCache>();
+const catalogFills = new Map<string, Promise<void>>();
+const authConfigResolutions = new Map<string, Promise<string>>();
+const connectionLinkRequests = new Map<string, Promise<string>>();
 
 function requestOptions(timeoutMs: number) {
     return { signal: AbortSignal.timeout(timeoutMs) };
@@ -55,6 +58,38 @@ function requestOptions(timeoutMs: number) {
 
 function getClient(apiKey: string): Composio {
     return new Composio({ apiKey, disableVersionCheck: true, allowTracking: false });
+}
+
+function apiKeyFingerprint(apiKey: string): string {
+    return createHash("sha256").update(apiKey).digest("hex");
+}
+
+export function composioErrorMetadata(error: unknown): {
+    status?: number;
+    requestId?: string;
+} {
+    const queue: unknown[] = [error];
+    const seen = new Set<unknown>();
+    let status: number | undefined;
+    let requestId: string | undefined;
+    for (let depth = 0; queue.length > 0 && depth < 12; depth += 1) {
+        const current = queue.shift();
+        if (!current || typeof current !== "object" || seen.has(current)) continue;
+        seen.add(current);
+        const record = current as Record<string, unknown>;
+        const currentStatus = [record.status, record.statusCode].find(
+            (value): value is number => typeof value === "number",
+        );
+        status = status ?? currentStatus;
+        const directRequestId = record.requestId ?? record.request_id;
+        if (typeof directRequestId === "string" && directRequestId) {
+            requestId = directRequestId;
+        }
+        const headers = record.headers as { get?: (name: string) => string | null } | undefined;
+        requestId = requestId ?? headers?.get?.("x-request-id") ?? undefined;
+        queue.push(record.cause, record.error);
+    }
+    return { status, requestId };
 }
 
 async function composioRest(
@@ -74,13 +109,60 @@ async function composioRest(
     });
 }
 
+function composioResponseError(response: Response, message: string): Error {
+    return Object.assign(new Error(message), {
+        status: response.status,
+        requestId: response.headers.get("x-request-id") ?? undefined,
+    });
+}
+
+async function assertComposioSessionOwner(
+    apiKey: string,
+    sessionId: string,
+    userId: string,
+): Promise<void> {
+    const response = await composioRest(
+        apiKey,
+        `/tool_router/session/${encodeURIComponent(sessionId)}`,
+        { timeoutMs: SESSION_TIMEOUT_MS },
+    );
+    if (!response.ok) {
+        throw composioResponseError(
+            response,
+            `Composio session lookup failed (HTTP ${response.status}).`,
+        );
+    }
+    let payload: unknown;
+    try {
+        payload = await response.json();
+    } catch {
+        throw composioResponseError(response, "Composio returned an invalid session response.");
+    }
+    const owner =
+        payload && typeof payload === "object"
+            ? (payload as { config?: { user_id?: unknown } }).config?.user_id
+            : undefined;
+    if (typeof owner !== "string" || owner !== userId) {
+        throw Object.assign(
+            new Error("This Composio session belongs to a different user."),
+            {
+                status: 403,
+                requestId: response.headers.get("x-request-id") ?? undefined,
+            },
+        );
+    }
+}
+
 export async function testComposioKey(apiKey: string): Promise<void> {
     const response = await composioRest(apiKey, "/toolkits?limit=1");
     if (!response.ok) {
-        throw new Error(
-            response.status === 401 || response.status === 403
+        throw composioResponseError(
+            response,
+            response.status === 401
                 ? "Invalid Composio API key."
-                : `Composio rejected the key (HTTP ${response.status}).`,
+                : response.status === 403
+                  ? "Composio accepted the key, but it cannot read this project's toolkits."
+                  : `Composio rejected the key (HTTP ${response.status}).`,
         );
     }
 }
@@ -90,7 +172,6 @@ async function createSession(apiKey: string, userId: string): Promise<ComposioSe
         userId,
         {
             mcp: true,
-            tags: { disable: ["destructiveHint"] },
             sandbox: { enable: false },
         },
         requestOptions(SESSION_TIMEOUT_MS),
@@ -109,15 +190,11 @@ export async function ensureComposioSession(options: {
     apiKey: string;
     userId: string;
     sessionId?: string | null;
-    mcpUrl?: string | null;
-    mcpHeaders?: Record<string, string>;
 }): Promise<ComposioSessionInfo> {
-    const { apiKey, userId, sessionId, mcpUrl, mcpHeaders } = options;
-    if (sessionId && mcpUrl) {
-        return { sessionId, mcpUrl, mcpHeaders: mcpHeaders ?? {} };
-    }
+    const { apiKey, userId, sessionId } = options;
     if (sessionId) {
         try {
+            await assertComposioSessionOwner(apiKey, sessionId, userId);
             const reused = await getClient(apiKey).use(
                 sessionId,
                 { mcp: true },
@@ -130,20 +207,52 @@ export async function ensureComposioSession(options: {
                     mcpHeaders: (reused.mcp.headers ?? {}) as Record<string, string>,
                 };
             }
-        } catch {
-            /* create a replacement below */
+        } catch (error) {
+            // Replace only sessions Composio confirms are gone. Authentication,
+            // permission, rate-limit, timeout, and upstream errors must surface.
+            if (composioErrorMetadata(error).status !== 404) throw error;
         }
     }
     return createSession(apiKey, userId);
 }
 
-function rememberCatalog(items: unknown[], complete: boolean): CatalogCache {
-    catalogCache = {
+export async function deleteComposioSession(options: {
+    apiKey: string;
+    sessionId: string;
+    userId: string;
+}): Promise<void> {
+    try {
+        await assertComposioSessionOwner(options.apiKey, options.sessionId, options.userId);
+        await getClient(options.apiKey).sessions.delete(
+            options.sessionId,
+            requestOptions(REQUEST_TIMEOUT_MS),
+        );
+    } catch (error) {
+        // Local removal is idempotent: an expired/deleted session is already safe.
+        if (composioErrorMetadata(error).status !== 404) throw error;
+    }
+}
+
+function rememberCatalog(
+    cacheKey: string,
+    items: unknown[],
+    complete: boolean,
+): CatalogCache {
+    const cache = {
         items,
         complete,
         expiresAt: Date.now() + (complete ? CATALOG_TTL_MS : CATALOG_PARTIAL_TTL_MS),
     };
-    return catalogCache;
+    catalogCaches.set(cacheKey, cache);
+    for (const [key, value] of catalogCaches) {
+        if (value.expiresAt <= Date.now()) catalogCaches.delete(key);
+    }
+    while (catalogCaches.size > 20) {
+        const oldest = catalogCaches.keys().next().value;
+        if (typeof oldest !== "string") break;
+        catalogCaches.delete(oldest);
+    }
+    return cache;
 }
 
 async function fetchCatalogPage(
@@ -154,7 +263,10 @@ async function fetchCatalogPage(
     if (cursor) query.set("cursor", cursor);
     const response = await composioRest(apiKey, `/toolkits?${query.toString()}`);
     if (!response.ok) {
-        throw new Error(`Composio toolkit catalog failed (HTTP ${response.status}).`);
+        throw composioResponseError(
+            response,
+            `Composio toolkit catalog failed (HTTP ${response.status}).`,
+        );
     }
     const payload = (await response.json()) as CatalogPage | unknown[];
     const items = Array.isArray(payload)
@@ -172,7 +284,12 @@ async function fetchCatalogPage(
     return { items, nextCursor };
 }
 
-async function fillCatalog(apiKey: string, seed: unknown[], cursor: string): Promise<void> {
+async function fillCatalog(
+    apiKey: string,
+    cacheKey: string,
+    seed: unknown[],
+    cursor: string,
+): Promise<void> {
     const items = [...seed];
     let next = cursor;
     for (let page = 1; page < MAX_TOOLKIT_PAGES; page += 1) {
@@ -180,30 +297,33 @@ async function fillCatalog(apiKey: string, seed: unknown[], cursor: string): Pro
             const result = await fetchCatalogPage(apiKey, next);
             items.push(...result.items);
             if (!result.nextCursor || result.items.length === 0) {
-                rememberCatalog(items, true);
+                rememberCatalog(cacheKey, items, true);
                 return;
             }
             next = result.nextCursor;
-            rememberCatalog(items, false);
+            rememberCatalog(cacheKey, items, false);
         } catch {
-            rememberCatalog(items, false);
+            rememberCatalog(cacheKey, items, false);
             return;
         }
     }
-    rememberCatalog(items, false);
+    rememberCatalog(cacheKey, items, false);
 }
 
 async function listCatalog(apiKey: string): Promise<{ items: unknown[]; complete: boolean }> {
+    const cacheKey = apiKeyFingerprint(apiKey);
+    const catalogCache = catalogCaches.get(cacheKey);
     if (catalogCache && catalogCache.expiresAt > Date.now()) {
         return { items: catalogCache.items, complete: catalogCache.complete };
     }
     const first = await fetchCatalogPage(apiKey);
     const complete = !first.nextCursor || first.items.length === 0;
-    const cached = rememberCatalog(first.items, complete);
-    if (!complete && first.nextCursor && !catalogFill) {
-        catalogFill = fillCatalog(apiKey, first.items, first.nextCursor).finally(() => {
-            catalogFill = null;
+    const cached = rememberCatalog(cacheKey, first.items, complete);
+    if (!complete && first.nextCursor && !catalogFills.has(cacheKey)) {
+        const fill = fillCatalog(apiKey, cacheKey, first.items, first.nextCursor).finally(() => {
+            catalogFills.delete(cacheKey);
         });
+        catalogFills.set(cacheKey, fill);
     }
     return { items: cached.items, complete: cached.complete };
 }
@@ -214,25 +334,27 @@ async function listConnections(
 ): Promise<{ states: Map<string, ToolkitConnection>; known: boolean }> {
     const states = new Map<string, ToolkitConnection>();
     let cursor: string | undefined;
-    try {
-        const composio = getClient(apiKey);
-        for (let page = 0; page < 2; page += 1) {
-            const result = await composio.connectedAccounts.list(
-                { userIds: [userId], limit: 100, cursor },
-                requestOptions(CONNECTIONS_TIMEOUT_MS),
-            );
-            for (const account of result.items) {
-                const slug = account.toolkit?.slug;
-                if (typeof slug !== "string" || account.status !== "ACTIVE") continue;
-                states.set(slug, { connected: true, connectedAccountId: account.id });
+    const composio = getClient(apiKey);
+    for (let page = 0; page < MAX_TOOLKIT_PAGES; page += 1) {
+        const result = await composio.connectedAccounts.list(
+            { userIds: [userId], limit: 100, cursor },
+            requestOptions(CONNECTIONS_TIMEOUT_MS),
+        );
+        for (const account of result.items) {
+            const slug = account.toolkit?.slug;
+            if (
+                typeof slug !== "string" ||
+                account.status !== "ACTIVE" ||
+                states.has(slug)
+            ) {
+                continue;
             }
-            if (!result.nextCursor) break;
-            cursor = result.nextCursor;
+            states.set(slug, { connected: true, connectedAccountId: account.id });
         }
-        return { states, known: true };
-    } catch {
-        return { states, known: states.size > 0 };
+        if (!result.nextCursor) return { states, known: true };
+        cursor = result.nextCursor;
     }
+    return { states, known: false };
 }
 
 function normalizeToolkits(
@@ -257,12 +379,7 @@ function normalizeToolkits(
         result.push({
             slug: value.slug,
             name: typeof value.name === "string" ? value.name : value.slug,
-            logo:
-                typeof value.logo === "string"
-                    ? value.logo
-                    : typeof meta?.logo === "string"
-                      ? meta.logo
-                      : `https://logos.composio.dev/api/${value.slug}`,
+            logo: `https://logos.composio.dev/api/${encodeURIComponent(value.slug)}`,
             connected: connection?.connected === true,
             connectedAccountId: connection?.connectedAccountId ?? null,
         });
@@ -285,7 +402,10 @@ export async function listComposioToolkits(options: {
 }> {
     const [catalog, connections] = await Promise.all([
         listCatalog(options.apiKey),
-        listConnections(options.apiKey, options.userId),
+        listConnections(options.apiKey, options.userId).catch(() => ({
+            states: new Map<string, ToolkitConnection>(),
+            known: false,
+        })),
     ]);
     return {
         items: normalizeToolkits(catalog.items, connections.states),
@@ -300,18 +420,57 @@ export async function authorizeComposioToolkit(options: {
     userId: string;
     toolkit: string;
 }): Promise<string> {
+    const requestKey = `${apiKeyFingerprint(options.apiKey)}:${options.userId}:${options.toolkit}`;
+    const existing = connectionLinkRequests.get(requestKey);
+    if (existing) return existing;
+
+    const pending = authorizeComposioToolkitOnce(options);
+    connectionLinkRequests.set(requestKey, pending);
+    try {
+        return await pending;
+    } finally {
+        connectionLinkRequests.delete(requestKey);
+    }
+}
+
+async function authorizeComposioToolkitOnce(options: {
+    apiKey: string;
+    userId: string;
+    toolkit: string;
+}): Promise<string> {
     const composio = getClient(options.apiKey);
-    const authConfigId = await resolveAuthConfigId(composio, options.toolkit);
+    const authConfigId = await resolveAuthConfigIdOnce(
+        composio,
+        options.apiKey,
+        options.toolkit,
+    );
     const request = await composio.connectedAccounts.link(
         options.userId,
         authConfigId,
-        { allowMultiple: true },
+        { allowMultiple: false },
         requestOptions(AUTHORIZE_TIMEOUT_MS),
     );
     if (!request.redirectUrl) {
         throw new Error(`Composio did not return a connect link for ${options.toolkit}.`);
     }
     return request.redirectUrl;
+}
+
+async function resolveAuthConfigIdOnce(
+    composio: Composio,
+    apiKey: string,
+    toolkit: string,
+): Promise<string> {
+    const key = `${apiKeyFingerprint(apiKey)}:${toolkit}`;
+    const existing = authConfigResolutions.get(key);
+    if (existing) return existing;
+    const pending = resolveAuthConfigId(composio, toolkit);
+    authConfigResolutions.set(key, pending);
+    try {
+        return await pending;
+    } finally {
+        authConfigResolutions.delete(key);
+    }
 }
 
 async function resolveAuthConfigId(
@@ -368,40 +527,30 @@ function accountIdFromItem(item: { id?: unknown; nanoid?: unknown } | undefined)
 
 async function findConnectedAccountId(options: {
     apiKey: string;
-    toolkit?: string;
-    userId?: string;
+    toolkit: string;
+    userId: string;
+    requestedId?: string;
 }): Promise<string> {
-    if (!options.toolkit) return "";
     const composio = getClient(options.apiKey);
-    const queries = [
-        {
-            toolkitSlugs: [options.toolkit],
-            userIds: options.userId ? [options.userId] : undefined,
-            statuses: ["ACTIVE"] as Array<"ACTIVE">,
-            limit: 10,
-        },
-        {
-            toolkitSlugs: [options.toolkit],
-            userIds: options.userId ? [options.userId] : undefined,
-            limit: 10,
-        },
-        {
-            toolkitSlugs: [options.toolkit],
-            limit: 10,
-        },
-    ];
-    for (const query of queries) {
-        try {
-            const listed = await composio.connectedAccounts.list(
-                query,
-                requestOptions(REQUEST_TIMEOUT_MS),
-            );
-            const active = listed.items.find((item) => item.status === "ACTIVE");
-            const accountId = accountIdFromItem(active ?? listed.items[0]);
-            if (accountId) return accountId;
-        } catch {
-            /* try the next query shape */
-        }
+    let cursor: string | undefined;
+    for (let page = 0; page < MAX_TOOLKIT_PAGES; page += 1) {
+        const listed = await composio.connectedAccounts.list(
+            {
+                toolkitSlugs: [options.toolkit],
+                userIds: [options.userId],
+                statuses: ["ACTIVE"],
+                limit: 100,
+                cursor,
+            },
+            requestOptions(REQUEST_TIMEOUT_MS),
+        );
+        const match = options.requestedId
+            ? listed.items.find((item) => accountIdFromItem(item) === options.requestedId)
+            : listed.items[0];
+        const accountId = accountIdFromItem(match);
+        if (accountId) return accountId;
+        if (!listed.nextCursor) break;
+        cursor = listed.nextCursor;
     }
     return "";
 }
@@ -414,35 +563,30 @@ function isConnectedAccountsWriteDenied(error: unknown): boolean {
 export async function disconnectComposioToolkit(options: {
     apiKey: string;
     connectedAccountId?: string | null;
-    toolkit?: string;
-    userId?: string;
+    toolkit: string;
+    userId: string;
 }): Promise<void> {
     const composio = getClient(options.apiKey);
-    let accountId = options.connectedAccountId?.trim() || "";
+    const requestedId = options.connectedAccountId?.trim() || undefined;
+    const accountId = await findConnectedAccountId({ ...options, requestedId });
     if (!accountId) {
-        accountId = await findConnectedAccountId(options);
-    }
-    if (!accountId) {
-        throw new Error("No connected account found to disconnect.");
+        throw Object.assign(
+            new Error("No matching connected account found for this user and toolkit."),
+            { status: 404 },
+        );
     }
     try {
         await composio.connectedAccounts.delete(accountId, requestOptions(REQUEST_TIMEOUT_MS));
-        return;
     } catch (error) {
         if (isConnectedAccountsWriteDenied(error)) {
-            throw new Error(
-                "This Composio key can list apps but cannot disconnect them. In dashboard.composio.dev, edit the key and grant connected_accounts write access.",
+            throw Object.assign(
+                new Error(
+                    "This Composio key can list apps but cannot disconnect them. In dashboard.composio.dev, grant connected_accounts write access.",
+                    { cause: error },
+                ),
+                { ...composioErrorMetadata(error), status: 403 },
             );
         }
-        try {
-            await composio.connectedAccounts.disable(accountId, requestOptions(REQUEST_TIMEOUT_MS));
-        } catch (disableError) {
-            if (isConnectedAccountsWriteDenied(disableError)) {
-                throw new Error(
-                    "This Composio key can list apps but cannot disconnect them. In dashboard.composio.dev, edit the key and grant connected_accounts write access.",
-                );
-            }
-            throw error;
-        }
+        throw error;
     }
 }

@@ -9,6 +9,7 @@ const DEFAULT_RPM = 60;
 const WINDOW_MS = 60_000;
 
 const windows = new Map<string, number[]>();
+let lastSweepAt = 0;
 
 function configuredRpm(): number {
     if (process.env.RATE_LIMIT_DISABLED === "true") return Infinity;
@@ -50,6 +51,14 @@ export function checkRateLimit(key: string): {
 
     const now = Date.now();
     const windowStart = now - WINDOW_MS;
+    if (now - lastSweepAt >= WINDOW_MS) {
+        lastSweepAt = now;
+        for (const [storedKey, values] of windows) {
+            const active = values.filter((timestamp) => timestamp > windowStart);
+            if (active.length > 0) windows.set(storedKey, active);
+            else windows.delete(storedKey);
+        }
+    }
     const timestamps = (windows.get(key) ?? []).filter((t) => t > windowStart);
 
     if (timestamps.length >= limit) {

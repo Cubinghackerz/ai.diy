@@ -37,11 +37,13 @@ type ComposioApiResponse = {
     catalogComplete?: boolean;
     connectionsKnown?: boolean;
     redirectUrl?: string;
+    code?: string;
+    requestId?: string;
 };
 
 const DASHBOARD_KEYS_URL =
     "https://dashboard.composio.dev/~/project/settings/api-keys";
-const CATALOG_CACHE_KEY = "aidiy.composio.catalog.v2";
+const CATALOG_CACHE_KEY = "aidiy.composio.catalog.v3";
 
 const FEATURED_APPS: ToolkitInfo[] = [
     { slug: "facebook", name: "Facebook", logo: "https://logos.composio.dev/api/facebook", connected: false, connectedAccountId: null },
@@ -85,13 +87,35 @@ const BROWSE_DESTINATIONS = [
     },
 ] as const;
 
-function readCachedCatalog(): { items: ToolkitInfo[]; complete: boolean } {
+async function catalogStorageKey(apiKey: string): Promise<string | null> {
+    if (!apiKey || typeof window === "undefined") return null;
     try {
-        const raw = sessionStorage.getItem(CATALOG_CACHE_KEY);
+        const digest = await window.crypto.subtle.digest(
+            "SHA-256",
+            new TextEncoder().encode(apiKey),
+        );
+        const fingerprint = Array.from(new Uint8Array(digest), (byte) =>
+            byte.toString(16).padStart(2, "0"),
+        ).join("");
+        return `${CATALOG_CACHE_KEY}.${fingerprint}`;
+    } catch {
+        return null;
+    }
+}
+
+function readCachedCatalog(storageKey: string): { items: ToolkitInfo[]; complete: boolean } {
+    try {
+        const raw = sessionStorage.getItem(storageKey);
         if (!raw) return { items: [], complete: false };
         const parsed = JSON.parse(raw) as { items?: ToolkitInfo[]; complete?: boolean };
         return {
-            items: Array.isArray(parsed.items) ? parsed.items : [],
+            items: Array.isArray(parsed.items)
+                ? parsed.items.map((item) => ({
+                      ...item,
+                      connected: false,
+                      connectedAccountId: null,
+                  }))
+                : [],
             complete: parsed.complete === true,
         };
     } catch {
@@ -99,9 +123,19 @@ function readCachedCatalog(): { items: ToolkitInfo[]; complete: boolean } {
     }
 }
 
-function writeCachedCatalog(items: ToolkitInfo[], complete: boolean) {
+async function writeCachedCatalog(apiKey: string, items: ToolkitInfo[], complete: boolean) {
+    const storageKey = await catalogStorageKey(apiKey);
+    if (!storageKey) return;
     try {
-        sessionStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify({ items, complete }));
+        const catalogOnly = items.map((item) => ({
+            ...item,
+            connected: false,
+            connectedAccountId: null,
+        }));
+        sessionStorage.setItem(
+            storageKey,
+            JSON.stringify({ items: catalogOnly, complete }),
+        );
     } catch {
         /* ignore quota */
     }
@@ -109,7 +143,12 @@ function writeCachedCatalog(items: ToolkitInfo[], complete: boolean) {
 
 function clearCachedCatalog() {
     try {
-        sessionStorage.removeItem(CATALOG_CACHE_KEY);
+        for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
+            const key = sessionStorage.key(index);
+            if (key?.startsWith(`${CATALOG_CACHE_KEY}.`)) {
+                sessionStorage.removeItem(key);
+            }
+        }
     } catch {
         /* ignore */
     }
@@ -159,31 +198,48 @@ export function ComposioSettings() {
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const [oauthLink, setOauthLink] = useState<string | null>(null);
-    const [toolkits, setToolkits] = useState<ToolkitInfo[]>(() => {
-        const cached = typeof sessionStorage !== "undefined" ? readCachedCatalog() : { items: [], complete: false };
-        return cached.items.length > 0 ? cached.items : FEATURED_APPS;
-    });
-    const [catalogComplete, setCatalogComplete] = useState(() => {
-        const cached = typeof sessionStorage !== "undefined" ? readCachedCatalog() : { items: [], complete: false };
-        return cached.complete;
-    });
+    const [toolkits, setToolkits] = useState<ToolkitInfo[]>(FEATURED_APPS);
+    const [catalogComplete, setCatalogComplete] = useState(false);
     const [catalogLoading, setCatalogLoading] = useState(false);
     const [dropActive, setDropActive] = useState(false);
     const [showKey, setShowKey] = useState(false);
     const [appSearch, setAppSearch] = useState("");
 
+    const toolkitsRef = useRef(toolkits);
+    toolkitsRef.current = toolkits;
     const pollRef = useRef<number | null>(null);
     const catalogPollRef = useRef<number | null>(null);
-    const toolkitRequestRef = useRef(false);
+    const toolkitRequestRef = useRef<{
+        id: number;
+        key: string;
+        generation: number;
+    } | null>(null);
+    const toolkitRequestSequenceRef = useRef(0);
+    const integrationGenerationRef = useRef(0);
+    const oauthAttemptRef = useRef(0);
+    const mountedRef = useRef(true);
+    const previousApiKeyRef = useRef(composio.apiKey);
     const composioRef = useRef(composio);
-    const apiKeyDraftRef = useRef(apiKeyDraft);
     composioRef.current = composio;
-    apiKeyDraftRef.current = apiKeyDraft;
 
-    useEffect(() => () => {
-        if (pollRef.current != null) window.clearInterval(pollRef.current);
-        if (catalogPollRef.current != null) window.clearInterval(catalogPollRef.current);
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+            integrationGenerationRef.current += 1;
+            toolkitRequestSequenceRef.current += 1;
+            toolkitRequestRef.current = null;
+            oauthAttemptRef.current += 1;
+            if (pollRef.current != null) window.clearInterval(pollRef.current);
+            if (catalogPollRef.current != null) window.clearInterval(catalogPollRef.current);
+            pollRef.current = null;
+            catalogPollRef.current = null;
+        };
     }, []);
+
+    useEffect(() => {
+        setApiKeyDraft(composio.apiKey);
+    }, [composio.apiKey]);
 
     const patchComposio = useCallback(
         (patch: Partial<typeof composio>) => {
@@ -194,13 +250,16 @@ export function ComposioSettings() {
         [updateSettings],
     );
 
-    const callApi = useCallback(async (payload: Record<string, unknown>): Promise<ComposioApiResponse> => {
+    const callApi = useCallback(async (
+        payload: Record<string, unknown>,
+        options: { apiKey?: string } = {},
+    ): Promise<ComposioApiResponse> => {
         const current = composioRef.current;
         const response = await fetch("/api/composio", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                apiKey: apiKeyDraftRef.current.trim() || current.apiKey,
+                apiKey: options.apiKey ?? current.apiKey,
                 userId: current.userId || undefined,
                 sessionId: current.sessionId,
                 ...payload,
@@ -213,20 +272,32 @@ export function ComposioSettings() {
             throw new Error(`Composio request failed (${response.status}).`);
         }
         if (!response.ok || data.ok === false) {
-            throw new Error(data.error || `Composio request failed (${response.status}).`);
+            const requestHint = data.requestId ? ` (Composio request ${data.requestId})` : "";
+            throw Object.assign(new Error(
+                `${data.error || `Composio request failed (${response.status}).`}${requestHint}`,
+            ), {
+                code: data.code,
+                status: response.status,
+                requestId: data.requestId,
+            });
         }
         return data;
     }, []);
 
-    const applyToolkitPayload = useCallback((data: ComposioApiResponse) => {
+    const applyToolkitPayload = useCallback((
+        data: ComposioApiResponse,
+        requestedKey: string,
+    ) => {
         const items = data.items ?? [];
         if (items.length === 0) return items;
-        let next = items;
-        setToolkits((prev) => {
-            next = mergeToolkits(items, prev, data.connectionsKnown !== false);
-            return next;
-        });
-        writeCachedCatalog(next, data.catalogComplete === true);
+        const next = mergeToolkits(
+            items,
+            toolkitsRef.current,
+            data.connectionsKnown !== false,
+        );
+        toolkitsRef.current = next;
+        setToolkits(next);
+        void writeCachedCatalog(requestedKey, next, data.catalogComplete === true);
         setCatalogComplete(data.catalogComplete === true);
         if (data.catalogComplete === true) setCatalogLoading(false);
         if (data.userId && data.userId !== composioRef.current.userId) {
@@ -237,28 +308,93 @@ export function ComposioSettings() {
 
     const refreshToolkits = useCallback(
         async (silent = false): Promise<ToolkitInfo[] | undefined> => {
-            if (toolkitRequestRef.current) return;
+            const requestedKey = composioRef.current.apiKey;
+            const requestedGeneration = integrationGenerationRef.current;
+            if (!requestedKey) return;
+            const pending = toolkitRequestRef.current;
+            if (
+                pending?.key === requestedKey &&
+                pending.generation === requestedGeneration
+            ) {
+                return;
+            }
+            const requestId = ++toolkitRequestSequenceRef.current;
+            toolkitRequestRef.current = {
+                id: requestId,
+                key: requestedKey,
+                generation: requestedGeneration,
+            };
             if (!silent) setBusy("toolkits");
-            toolkitRequestRef.current = true;
             try {
                 const data = await callApi({ action: "toolkits" });
-                return applyToolkitPayload(data);
+                if (
+                    requestId !== toolkitRequestSequenceRef.current ||
+                    requestedGeneration !== integrationGenerationRef.current ||
+                    requestedKey !== composioRef.current.apiKey
+                ) {
+                    return;
+                }
+                return applyToolkitPayload(data, requestedKey);
             } catch (err) {
-                if (!silent) setError(err instanceof Error ? err.message : "Could not load apps.");
+                if (
+                    !silent &&
+                    requestId === toolkitRequestSequenceRef.current &&
+                    requestedGeneration === integrationGenerationRef.current
+                ) {
+                    setError(err instanceof Error ? err.message : "Could not load apps.");
+                }
             } finally {
-                toolkitRequestRef.current = false;
-                if (!silent) setBusy(null);
+                if (toolkitRequestRef.current?.id === requestId) {
+                    toolkitRequestRef.current = null;
+                }
+                if (
+                    !silent &&
+                    requestId === toolkitRequestSequenceRef.current &&
+                    requestedGeneration === integrationGenerationRef.current
+                ) {
+                    setBusy(null);
+                }
             }
         },
         [applyToolkitPayload, callApi],
     );
 
     useEffect(() => {
-        if (!composio.apiKey) return;
+        const keyChanged = previousApiKeyRef.current !== composio.apiKey;
+        previousApiKeyRef.current = composio.apiKey;
+        if (keyChanged) {
+            toolkitRequestSequenceRef.current += 1;
+            toolkitRequestRef.current = null;
+            toolkitsRef.current = FEATURED_APPS;
+            setToolkits(FEATURED_APPS);
+            setCatalogComplete(false);
+        }
+        if (!composio.apiKey) {
+            setCatalogLoading(false);
+            return;
+        }
         setCatalogLoading(!catalogComplete);
-        void refreshToolkits(true);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [composio.apiKey]);
+        let cancelled = false;
+        void (async () => {
+            const storageKey = await catalogStorageKey(composio.apiKey);
+            if (cancelled || composioRef.current.apiKey !== composio.apiKey) return;
+            if (storageKey) {
+                const cached = readCachedCatalog(storageKey);
+                if (cached.items.length > 0) {
+                    toolkitsRef.current = cached.items;
+                    setToolkits(cached.items);
+                    setCatalogComplete(cached.complete);
+                    setCatalogLoading(!cached.complete);
+                }
+            }
+            if (!cancelled) {
+                void refreshToolkits(true);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [composio.apiKey, refreshToolkits]);
 
     useEffect(() => {
         if (!composio.apiKey || catalogComplete) {
@@ -292,27 +428,55 @@ export function ComposioSettings() {
         };
     }, [catalogComplete, composio.apiKey, refreshToolkits]);
 
-    const startSessionInBackground = useCallback(async () => {
+    const startSessionInBackground = useCallback(async (generation: number) => {
         const current = composioRef.current;
+        const requestedKey = current.apiKey;
         try {
             const session = await callApi({
                 action: "session",
                 userId: current.userId || undefined,
-                mcpUrl: current.mcpUrl,
-                mcpHeaders: current.mcpHeaders,
             });
+            if (
+                generation !== integrationGenerationRef.current ||
+                requestedKey !== composioRef.current.apiKey
+            ) {
+                if (
+                    session.sessionId &&
+                    composioRef.current.sessionId !== session.sessionId
+                ) {
+                    void callApi(
+                        {
+                            action: "remove",
+                            sessionId: session.sessionId,
+                            userId: current.userId || undefined,
+                        },
+                        { apiKey: requestedKey },
+                    ).catch(() => undefined);
+                }
+                return;
+            }
+            const latest = composioRef.current;
+            const preserveEnabled = Boolean(latest.mcpUrl);
             patchComposio({
-                enabled: Boolean(session.mcpUrl),
-                userId: session.userId || current.userId,
+                enabled: Boolean(session.mcpUrl) &&
+                    (preserveEnabled ? latest.enabled : true),
+                userId: session.userId || latest.userId || current.userId,
                 sessionId: session.sessionId ?? null,
                 mcpUrl: session.mcpUrl ?? null,
                 mcpHeaders: session.mcpHeaders ?? {},
             });
             setNotice("Composio is live. Connect an app below, then ask the assistant to use it.");
         } catch (err) {
-            if (composioRef.current.mcpUrl) return;
+            if (generation !== integrationGenerationRef.current) return;
             const msg = err instanceof Error ? err.message : "";
-            if (/read-only access|read access/.test(msg)) {
+            const code =
+                err && typeof err === "object" && "code" in err
+                    ? (err as { code?: unknown }).code
+                    : undefined;
+            if (
+                code === "composio_insufficient_permissions" ||
+                /cannot create sessions|read-only access|read access/i.test(msg)
+            ) {
                 setNotice(
                     "Key saved. This key only has read-only access — browse apps below, but chat needs the key granted \"sessions\" write access.",
                 );
@@ -334,33 +498,96 @@ export function ComposioSettings() {
         }
         const userId =
             composioRef.current.userId || `aidiy-${crypto.randomUUID().slice(0, 12)}`;
+        const generation = ++integrationGenerationRef.current;
         setBusy("connect");
         setError(null);
         setOauthLink(null);
         setNotice("Checking key…");
         try {
-            const tested = await callApi({ action: "test", apiKey: key, userId });
+            const tested = await callApi(
+                { action: "test", userId },
+                { apiKey: key },
+            );
+            if (generation !== integrationGenerationRef.current) return;
             const resolvedUserId = tested.userId || userId;
-            patchComposio({ apiKey: key, userId: resolvedUserId });
+            const previous = composioRef.current;
+            const keyChanged = key !== previous.apiKey;
+            patchComposio({
+                apiKey: key,
+                userId: resolvedUserId,
+                ...(keyChanged
+                    ? {
+                          enabled: false,
+                          sessionId: null,
+                          mcpUrl: null,
+                          mcpHeaders: {},
+                          autoApproveWrites: false,
+                      }
+                    : {}),
+            });
+            if (keyChanged) {
+                clearCachedCatalog();
+                toolkitsRef.current = FEATURED_APPS;
+                setToolkits(FEATURED_APPS);
+                setCatalogComplete(false);
+                toolkitRequestSequenceRef.current += 1;
+                toolkitRequestRef.current = null;
+                oauthAttemptRef.current += 1;
+                if (pollRef.current != null) window.clearInterval(pollRef.current);
+                pollRef.current = null;
+                if (previous.apiKey && previous.sessionId) {
+                    void callApi(
+                        {
+                            action: "remove",
+                            sessionId: previous.sessionId,
+                            userId: previous.userId || undefined,
+                        },
+                        { apiKey: previous.apiKey },
+                    ).catch((err) => {
+                        if (
+                            mountedRef.current &&
+                            generation === integrationGenerationRef.current
+                        ) {
+                            setNotice(
+                                `New key saved, but the previous remote session could not be revoked: ${err instanceof Error ? err.message : "unknown error"}`,
+                            );
+                        }
+                    });
+                }
+            }
             setNotice("Key saved. Loading apps…");
-            setBusy(null);
             setCatalogLoading(true);
             void refreshToolkits(true);
-            void startSessionInBackground();
+            void startSessionInBackground(generation);
         } catch (err) {
+            if (generation !== integrationGenerationRef.current) return;
             setError(err instanceof Error ? err.message : "Could not connect Composio.");
-            setBusy(null);
+        } finally {
+            if (generation === integrationGenerationRef.current) setBusy(null);
         }
     }, [apiKeyDraft, callApi, patchComposio, refreshToolkits, startSessionInBackground]);
 
     const startToolkitAuth = useCallback(
         async (slug: string) => {
+            const generation = integrationGenerationRef.current;
+            const requestedKey = composioRef.current.apiKey;
+            const attempt = ++oauthAttemptRef.current;
             setBusy(`auth-${slug}`);
             setError(null);
             setOauthLink(null);
+            if (pollRef.current != null) window.clearInterval(pollRef.current);
+            pollRef.current = null;
             const authWindow = openAuthWindow();
             try {
                 const data = await callApi({ action: "authorize", toolkit: slug });
+                if (
+                    attempt !== oauthAttemptRef.current ||
+                    generation !== integrationGenerationRef.current ||
+                    requestedKey !== composioRef.current.apiKey
+                ) {
+                    authWindow?.close();
+                    return;
+                }
                 if (data.userId && data.userId !== composioRef.current.userId) {
                     patchComposio({ userId: data.userId });
                 }
@@ -373,26 +600,58 @@ export function ComposioSettings() {
                     setOauthLink(data.redirectUrl);
                     setNotice("Popup blocked. Use the sign-in link below.");
                 }
-                if (pollRef.current != null) window.clearInterval(pollRef.current);
                 let attempts = 0;
-                pollRef.current = window.setInterval(async () => {
+                let pollId: number | null = null;
+                const stopPoll = () => {
+                    if (pollId != null) window.clearInterval(pollId);
+                    if (pollRef.current === pollId) pollRef.current = null;
+                };
+                pollId = window.setInterval(async () => {
+                    if (
+                        attempt !== oauthAttemptRef.current ||
+                        generation !== integrationGenerationRef.current ||
+                        requestedKey !== composioRef.current.apiKey
+                    ) {
+                        stopPoll();
+                        return;
+                    }
                     attempts += 1;
                     const next = await refreshToolkits(true);
+                    if (
+                        attempt !== oauthAttemptRef.current ||
+                        generation !== integrationGenerationRef.current ||
+                        requestedKey !== composioRef.current.apiKey
+                    ) {
+                        stopPoll();
+                        return;
+                    }
                     const hit = next?.find((toolkit) => toolkit.slug === slug && toolkit.connected);
-                    if (hit || attempts > 20) {
-                        if (pollRef.current != null) window.clearInterval(pollRef.current);
-                        pollRef.current = null;
+                    if (hit || attempts >= 20) {
+                        stopPoll();
                         if (hit) {
                             setNotice(`${hit.name} connected.`);
                             setOauthLink(null);
+                        } else {
+                            setNotice("Sign-in is still pending. Reopen the app sign-in link and try again.");
                         }
                     }
                 }, 3000);
+                pollRef.current = pollId;
             } catch (err) {
                 authWindow?.close();
-                setError(err instanceof Error ? err.message : "Could not start sign-in.");
+                if (
+                    attempt === oauthAttemptRef.current &&
+                    generation === integrationGenerationRef.current
+                ) {
+                    setError(err instanceof Error ? err.message : "Could not start sign-in.");
+                }
             } finally {
-                setBusy(null);
+                if (
+                    attempt === oauthAttemptRef.current &&
+                    generation === integrationGenerationRef.current
+                ) {
+                    setBusy(null);
+                }
             }
         },
         [callApi, patchComposio, refreshToolkits],
@@ -400,6 +659,8 @@ export function ComposioSettings() {
 
     const disconnectToolkit = useCallback(
         async (toolkit: ToolkitInfo) => {
+            const generation = integrationGenerationRef.current;
+            const requestedKey = composioRef.current.apiKey;
             setBusy(`disc-${toolkit.slug}`);
             setError(null);
             setNotice(null);
@@ -409,47 +670,95 @@ export function ComposioSettings() {
                     connectedAccountId: toolkit.connectedAccountId,
                     toolkit: toolkit.slug,
                 });
-                setToolkits((prev) => {
-                    const next = prev.map((item) =>
-                        item.slug === toolkit.slug
-                            ? { ...item, connected: false, connectedAccountId: null }
-                            : item,
-                    );
-                    writeCachedCatalog(next, catalogComplete);
-                    return next;
-                });
+                if (
+                    generation !== integrationGenerationRef.current ||
+                    requestedKey !== composioRef.current.apiKey
+                ) {
+                    return;
+                }
+                const next = toolkitsRef.current.map((item) =>
+                    item.slug === toolkit.slug
+                        ? { ...item, connected: false, connectedAccountId: null }
+                        : item,
+                );
+                toolkitsRef.current = next;
+                setToolkits(next);
+                void writeCachedCatalog(requestedKey, next, catalogComplete);
                 setNotice(`${toolkit.name} disconnected.`);
                 void refreshToolkits(true);
             } catch (err) {
-                setError(err instanceof Error ? err.message : "Could not disconnect.");
+                if (generation === integrationGenerationRef.current) {
+                    setError(err instanceof Error ? err.message : "Could not disconnect.");
+                }
             } finally {
-                setBusy(null);
+                if (generation === integrationGenerationRef.current) setBusy(null);
             }
         },
         [callApi, catalogComplete, refreshToolkits],
     );
 
-    const removeIntegration = useCallback(() => {
+    const removeIntegration = useCallback(async () => {
+        const current = composioRef.current;
+        const generation = ++integrationGenerationRef.current;
+        toolkitRequestSequenceRef.current += 1;
+        toolkitRequestRef.current = null;
+        oauthAttemptRef.current += 1;
+        if (pollRef.current != null) window.clearInterval(pollRef.current);
+        if (catalogPollRef.current != null) window.clearInterval(catalogPollRef.current);
+        pollRef.current = null;
+        catalogPollRef.current = null;
+        setBusy("remove");
+        setError(null);
+        setNotice(null);
         patchComposio({
             enabled: false,
             apiKey: "",
+            userId: current.userId,
             sessionId: null,
             mcpUrl: null,
             mcpHeaders: {},
+            autoApproveWrites: false,
         });
         setApiKeyDraft("");
+        toolkitsRef.current = FEATURED_APPS;
         setToolkits(FEATURED_APPS);
         setCatalogComplete(false);
         setCatalogLoading(false);
         setOauthLink(null);
-        setNotice(null);
-        setError(null);
         clearCachedCatalog();
-    }, [patchComposio]);
+        let remoteError: unknown = null;
+        if (current.apiKey && current.sessionId) {
+            try {
+                await callApi(
+                    {
+                        action: "remove",
+                        sessionId: current.sessionId,
+                        userId: current.userId || undefined,
+                    },
+                    { apiKey: current.apiKey },
+                );
+            } catch (err) {
+                remoteError = err;
+            }
+        }
+        if (
+            !mountedRef.current ||
+            generation !== integrationGenerationRef.current
+        ) {
+            return;
+        }
+        setNotice(
+            remoteError
+                ? `Composio access removed. The remote session could not be revoked: ${remoteError instanceof Error ? remoteError.message : "unknown error"}`
+                : "Composio access removed.",
+        );
+        setBusy(null);
+    }, [callApi, patchComposio]);
 
     const readFileAsKey = useCallback(async (file: File) => {
         try {
             const text = (await file.text()).trim();
+            if (!mountedRef.current) return;
             const match = text.match(/["']?([A-Za-z0-9_\-]{20,})["']?/);
             if (match?.[1]) {
                 setApiKeyDraft(match[1]);
@@ -471,6 +780,7 @@ export function ComposioSettings() {
     );
 
     const normalizedAppSearch = appSearch.trim().toLowerCase();
+    const hasUnsavedKey = apiKeyDraft.trim() !== composio.apiKey;
     const visibleToolkits = normalizedAppSearch
         ? toolkits.filter(
               (toolkit) =>
@@ -511,6 +821,7 @@ export function ComposioSettings() {
             <div className="space-y-2">
                 <div
                     onDragOver={(e) => {
+                        if (busy !== null) return;
                         e.preventDefault();
                         setDropActive(true);
                     }}
@@ -518,6 +829,7 @@ export function ComposioSettings() {
                     onDrop={(e) => {
                         e.preventDefault();
                         setDropActive(false);
+                        if (busy !== null) return;
                         const file = e.dataTransfer.files?.[0];
                         if (file) void readFileAsKey(file);
                     }}
@@ -527,13 +839,18 @@ export function ComposioSettings() {
                     )}
                 >
                     <div className="flex gap-2">
+                        <label htmlFor="composio-api-key" className="sr-only">
+                            Composio API key
+                        </label>
                         <Input
+                            id="composio-api-key"
                             type={showKey ? "text" : "password"}
                             value={apiKeyDraft}
                             onChange={(e) => setApiKeyDraft(e.target.value)}
                             placeholder="Paste your Composio API key…"
                             autoComplete="off"
                             spellCheck={false}
+                            disabled={busy !== null}
                         />
                         <Button
                             type="button"
@@ -556,13 +873,41 @@ export function ComposioSettings() {
                         </a>{" "}
                         — or drag the key file here.
                     </p>
+                    <div className="mt-2">
+                        <input
+                            id="composio-key-file"
+                            type="file"
+                            accept=".txt,.json,.env,text/plain,application/json"
+                            className="sr-only"
+                            disabled={busy !== null}
+                            onChange={(event) => {
+                                const file = event.target.files?.[0];
+                                event.target.value = "";
+                                if (file) void readFileAsKey(file);
+                            }}
+                        />
+                        <label
+                            htmlFor="composio-key-file"
+                            className={cn(
+                                "inline-flex cursor-pointer rounded-md border border-border/70 px-2 py-1 text-[11px] font-medium hover:bg-accent",
+                                busy !== null && "pointer-events-none opacity-50",
+                            )}
+                        >
+                            Import key file
+                        </label>
+                    </div>
+                    {hasUnsavedKey && composio.apiKey ? (
+                        <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+                            Unsaved key change. Save it before managing apps.
+                        </p>
+                    ) : null}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
                     <Button
                         type="button"
                         size="sm"
-                        disabled={busy === "connect"}
+                        disabled={busy !== null}
                         onClick={() => void handleConnectAccount()}
                     >
                         {busy === "connect" ? (
@@ -585,26 +930,49 @@ export function ComposioSettings() {
                                 />
                                 Use in chat
                             </label>
+                            <label className="flex cursor-pointer select-none items-center gap-1.5 text-[12px]">
+                                <input
+                                    type="checkbox"
+                                    checked={!composio.autoApproveWrites}
+                                    onChange={(event) =>
+                                        patchComposio({ autoApproveWrites: !event.target.checked })
+                                    }
+                                    className="accent-current"
+                                />
+                                Confirm writes
+                            </label>
                             <Button
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                onClick={removeIntegration}
+                                disabled={busy !== null}
+                                onClick={() => void removeIntegration()}
                             >
                                 Remove
                             </Button>
                         </>
                     ) : null}
+                    {composio.apiKey && !composio.mcpUrl ? (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={busy !== null}
+                            onClick={() => void removeIntegration()}
+                        >
+                            Remove
+                        </Button>
+                    ) : null}
                 </div>
 
                 {error ? (
-                    <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-destructive">
+                    <p role="alert" className="flex items-start gap-1.5 text-[11px] leading-relaxed text-destructive">
                         <WarningCircle className="mt-0.5 size-3.5 shrink-0" />
                         {error}
                     </p>
                 ) : null}
                 {notice ? (
-                    <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                    <p role="status" aria-live="polite" className="flex items-start gap-1.5 text-[11px] leading-relaxed text-muted-foreground">
                         <CheckCircle className="mt-0.5 size-3.5 shrink-0" />
                         {notice}
                     </p>
@@ -636,7 +1004,7 @@ export function ComposioSettings() {
                             type="button"
                             variant="ghost"
                             size="sm"
-                            disabled={busy === "toolkits"}
+                            disabled={hasUnsavedKey || busy === "toolkits"}
                             onClick={() => void refreshToolkits()}
                         >
                             {busy === "toolkits" ? (
@@ -731,6 +1099,7 @@ export function ComposioSettings() {
                                         width={18}
                                         height={18}
                                         loading="lazy"
+                                        referrerPolicy="no-referrer"
                                         className="size-[18px] shrink-0 object-contain"
                                     />
                                 ) : (
@@ -752,7 +1121,10 @@ export function ComposioSettings() {
                                             variant="ghost"
                                             size="sm"
                                             className="h-6 px-1.5 text-[11px]"
-                                            disabled={busy === `disc-${toolkit.slug}`}
+                                            disabled={
+                                                hasUnsavedKey ||
+                                                busy === `disc-${toolkit.slug}`
+                                            }
                                             onClick={() => void disconnectToolkit(toolkit)}
                                         >
                                             Disconnect
@@ -764,7 +1136,10 @@ export function ComposioSettings() {
                                         variant="outline"
                                         size="sm"
                                         className="h-6 px-2 text-[11px]"
-                                        disabled={busy === `auth-${toolkit.slug}`}
+                                        disabled={
+                                            hasUnsavedKey ||
+                                            busy?.startsWith("auth-") === true
+                                        }
                                         onClick={() => void startToolkitAuth(toolkit.slug)}
                                     >
                                         {busy === `auth-${toolkit.slug}` ? (

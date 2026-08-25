@@ -91,18 +91,25 @@ export async function loadMcpTools(
         | "maxMcpResultChars"
         | "maxSnippetChars"
     >,
+    signal?: AbortSignal,
 ): Promise<{ tools: ToolSet; clients: McpClientHandle[] }> {
     const tools: ToolSet = {};
     const clients: McpClientHandle[] = [];
     const enabled = (servers ?? []).filter((s) => s.enabled !== false);
 
     for (const server of enabled) {
+        let client: (McpClientHandle & { tools: () => Promise<ToolSet> }) | null = null;
         try {
-            const client = await connectMcpServer(server);
+            client = await connectMcpServer(server, signal);
             if (!client) continue;
-            clients.push(client);
             const serverTools = await client.tools();
-            const prefix = slugify(server.name || server.id);
+            clients.push(client);
+            const requestedPrefix = slugify(server.name || server.id);
+            const prefix = isComposioMcpServer(server)
+                ? "composio"
+                : requestedPrefix === "composio"
+                  ? "custom_composio"
+                  : requestedPrefix;
             for (const [name, t] of Object.entries(serverTools)) {
                 const key = `mcp_${prefix}_${name}`.replace(/[^a-zA-Z0-9_-]/g, "_");
                 const wrapped = policy
@@ -111,9 +118,10 @@ export async function loadMcpTools(
                 tools[key] = wrapped;
             }
         } catch (err) {
+            if (client) await client.close().catch(() => undefined);
             console.warn(
-                `[mcp] Failed to connect ${server.name}:`,
-                err instanceof Error ? err.message : err,
+                `[mcp] Failed to initialize ${isComposioMcpServer(server) ? "Composio" : "an MCP server"}:`,
+                err instanceof Error ? err.name : "UnknownError",
             );
         }
     }
@@ -607,6 +615,7 @@ function dedupeSearchResults(results: SearchResult[]): SearchResult[] {
 
 async function connectMcpServer(
     server: McpServerConfig,
+    signal?: AbortSignal,
 ): Promise<(McpClientHandle & { tools: () => Promise<ToolSet> }) | null> {
     if (server.kind === "stdio") {
         // Browser-controlled settings must never execute commands on the host.
@@ -652,6 +661,7 @@ async function connectMcpServer(
             redirect: "error",
         },
         clientName: `prismium-${slugify(server.name)}`,
+        initializationOptions: { timeout: 8_000, signal },
     });
     return {
         tools: () => client.tools() as Promise<ToolSet>,

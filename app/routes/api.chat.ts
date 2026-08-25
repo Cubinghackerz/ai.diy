@@ -20,7 +20,10 @@ import {
     loadMcpTools,
     selectMcpServersForRequest,
 } from "~/lib/server/mcp-tools";
-import { wrapComposioToolsForConfirmation } from "~/lib/server/composio-guard";
+import {
+    isMutatingComposioTool,
+    wrapComposioToolsForConfirmation,
+} from "~/lib/server/composio-guard";
 import { buildChatSystemPromptParts } from "~/lib/server/prompt";
 import {
     ensureCompactionSkill,
@@ -656,7 +659,9 @@ export async function action({ request }: ActionFunctionArgs) {
 
         if (body.previewMode !== true) {
             const allowedMcpServers = (body.mcpServers ?? []).filter((server) =>
-                isComposioMcpServer(server) ? toolAccess.composio : toolAccess.mcp,
+                isComposioMcpServer(server)
+                    ? toolAccess.composio && body.toolSettings?.composioEnabled === true
+                    : toolAccess.mcp,
             );
             const selectedMcpServers = selectMcpServersForRequest(allowedMcpServers, {
                       searchIntent,
@@ -666,7 +671,11 @@ export async function action({ request }: ActionFunctionArgs) {
                           body.toolSettings?.webSearchEnabled !== false,
                       mcpToolAlreadyUsed,
                   });
-            const loadedMcp = await loadMcpTools(selectedMcpServers, policy);
+            const loadedMcp = await loadMcpTools(
+                selectedMcpServers,
+                policy,
+                request.signal,
+            );
             mcpTools = loadedMcp.tools;
             mcpClients = loadedMcp.clients;
         }
@@ -676,6 +685,13 @@ export async function action({ request }: ActionFunctionArgs) {
                 if (name.startsWith("mcp_composio_")) {
                     delete mcpTools[name];
                 }
+            }
+        } else if (
+            !toolAccess.askUser &&
+            body.toolSettings?.composioAutoApproveWrites !== true
+        ) {
+            for (const name of Object.keys(mcpTools)) {
+                if (isMutatingComposioTool(name)) delete mcpTools[name];
             }
         } else {
             mcpTools = wrapComposioToolsForConfirmation(

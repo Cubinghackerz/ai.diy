@@ -378,13 +378,34 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const resetSettings = useCallback(() => {
+        const previousComposio = latestRef.current.composio;
         recoveryRef.current = false;
+        latestRef.current = DEFAULT_SETTINGS;
         setSettings(DEFAULT_SETTINGS);
+        if (previousComposio.apiKey && previousComposio.sessionId) {
+            void fetch("/api/composio", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({
+                    action: "remove",
+                    apiKey: previousComposio.apiKey,
+                    userId: previousComposio.userId || undefined,
+                    sessionId: previousComposio.sessionId,
+                }),
+            }).catch(() => undefined);
+        }
         try {
             localStorage.removeItem(SETTINGS_ENC_KEY);
             localStorage.removeItem(SETTINGS_ENC_BACKUP_KEY);
             localStorage.removeItem(SETTINGS_STORAGE_KEY);
             localStorage.removeItem(SETTINGS_THEME_KEY);
+            for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
+                const key = sessionStorage.key(index);
+                if (key?.startsWith("aidiy.composio.catalog.")) {
+                    sessionStorage.removeItem(key);
+                }
+            }
         } catch {
             // Ignore
         }

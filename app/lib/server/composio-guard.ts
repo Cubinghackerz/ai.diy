@@ -67,11 +67,10 @@ export function isMutatingComposioTool(name: string): boolean {
         .slice("mcp_composio_".length)
         .split(/[^a-z0-9]+/)
         .filter(Boolean);
-    const action = tokens.find((token) => READ_ACTIONS.has(token) || WRITE_ACTIONS.has(token));
-    // The first verb is the operation; later tokens are usually nouns (for
-    // example, "get_posts" and "list_comments"). Unknown operations fail
-    // closed and still require confirmation.
-    return action ? WRITE_ACTIONS.has(action) : true;
+    if (tokens.some((token) => WRITE_ACTIONS.has(token))) return true;
+    if (tokens.some((token) => READ_ACTIONS.has(token))) return false;
+    // Unknown and mixed operations fail closed.
+    return true;
 }
 
 function stringifyOutput(value: unknown): string {
@@ -84,58 +83,103 @@ function stringifyOutput(value: unknown): string {
     }
 }
 
-export function lastAskUserAnswer(messages: UIMessage[] | undefined): string | null {
+function canonicalize(value: unknown, seen = new WeakSet<object>()): string {
+    if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "undefined";
+    if (seen.has(value)) return '"[Circular]"';
+    seen.add(value);
+    if (Array.isArray(value)) {
+        return `[${value.map((item) => canonicalize(item, seen)).join(",")}]`;
+    }
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+        .sort()
+        .map((key) => `${JSON.stringify(key)}:${canonicalize(record[key], seen)}`)
+        .join(",")}}`;
+}
+
+export function composioCallFingerprint(toolName: string, args: unknown): string {
+    const input = `${toolName}\n${canonicalize(args)}`;
+    let hash = 0x811c9dc5;
+    for (let index = 0; index < input.length; index += 1) {
+        hash ^= input.charCodeAt(index);
+        hash = Math.imul(hash, 0x01000193);
+    }
+    return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+type ComposioApproval = {
+    toolName: string;
+    fingerprint: string;
+    decision: "allow" | "deny";
+};
+
+function latestComposioApproval(messages: UIMessage[] | undefined): ComposioApproval | null {
     if (!messages?.length) return null;
-    for (let i = messages.length - 1; i >= 0; i -= 1) {
-        const message = messages[i];
-        const parts = Array.isArray(message.parts) ? message.parts : [];
-        for (let j = parts.length - 1; j >= 0; j -= 1) {
-            const part = parts[j] as {
-                type?: string;
-                toolName?: string;
-                state?: string;
-                output?: unknown;
-                result?: unknown;
-            };
-            const type = part.type ?? "";
-            const isAsk =
-                type === "tool-ask_user" ||
-                type === "dynamic-tool" && part.toolName === "ask_user" ||
-                /ask_user/i.test(type);
-            if (!isAsk) continue;
-            if (part.state && part.state !== "output-available") continue;
-            const raw = stringifyOutput(part.output ?? part.result).trim();
-            if (raw) return raw;
+    const message = messages[messages.length - 1];
+    if (message?.role !== "assistant" || !Array.isArray(message.parts)) return null;
+
+    let marker: Omit<ComposioApproval, "decision"> | null = null;
+    let approval: ComposioApproval | null = null;
+    let consumed = false;
+    for (const rawPart of message.parts) {
+        const part = rawPart as {
+            type?: string;
+            toolName?: string;
+            state?: string;
+            output?: unknown;
+            result?: unknown;
+        };
+        const output = stringifyOutput(part.output ?? part.result);
+        const type = part.type ?? "";
+        const match = output.match(
+            /COMPOSIO_CONFIRMATION\s+tool=([a-zA-Z0-9_-]+)\s+fingerprint=([a-f0-9]{8})/,
+        );
+        const partIsNamedTool = (toolName: string) =>
+            type === `tool-${toolName}` ||
+            (type === "dynamic-tool" && part.toolName === toolName);
+        if (match && partIsNamedTool(match[1]!)) {
+            marker = { toolName: match[1]!, fingerprint: match[2]! };
+            continue;
+        }
+        const consumedMatch = output.match(
+            /COMPOSIO_CONFIRMATION_CONSUMED\s+tool=([a-zA-Z0-9_-]+)\s+fingerprint=([a-f0-9]{8})/,
+        );
+        if (
+            consumedMatch &&
+            partIsNamedTool(consumedMatch[1]!) &&
+            marker?.toolName === consumedMatch[1] &&
+            marker.fingerprint === consumedMatch[2]
+        ) {
+            consumed = true;
+            continue;
+        }
+        const isAsk =
+            type === "tool-ask_user" ||
+            (type === "dynamic-tool" && part.toolName === "ask_user") ||
+            /ask_user/i.test(type);
+        if (!marker || !isAsk || (part.state && part.state !== "output-available")) continue;
+        const answer = output.trim().toLowerCase();
+        if (/\bno\b|cancel/.test(answer)) {
+            approval = { ...marker, decision: "deny" };
+            continue;
+        }
+        if (/\byes\b|proceed|run it|execute/.test(answer)) {
+            approval = { ...marker, decision: "allow" };
         }
     }
-    return null;
+    return consumed ? null : approval;
 }
 
-export type ConfirmDecision = "allow" | "always" | "deny" | "ask";
-
-export function resolveComposioConfirmation(
-    messages: UIMessage[] | undefined,
-    autoApproveWrites: boolean,
-): ConfirmDecision {
-    if (autoApproveWrites) return "allow";
-    const answer = lastAskUserAnswer(messages);
-    if (!answer) return "ask";
-    const a = answer.toLowerCase();
-    if (/don'?t ask|always allow|always/.test(a)) return "always";
-    if (/\bno\b|cancel/.test(a)) return "deny";
-    if (/\byes\b|proceed|run it|execute/.test(a)) return "allow";
-    return "ask";
-}
-
-function confirmationOutput(toolName: string): string {
+function confirmationOutput(toolName: string, fingerprint: string): string {
     const action = toolName.replace(/^mcp_composio_/i, "").replace(/_/g, " ");
     return [
         "CONFIRMATION_REQUIRED",
+        `COMPOSIO_CONFIRMATION tool=${toolName} fingerprint=${fingerprint}`,
         `This action modifies data (${action}).`,
         "Call ask_user now with:",
         '- question: a one-line summary of the exact action',
         '- questionType: "single"',
-        '- options: ["Yes", "No", "Yes, don\'t ask again"]',
+        '- options: ["Yes", "No"]',
         "Do not invent a result. After the user answers, re-call this same tool with the same arguments.",
     ].join("\n");
 }
@@ -144,12 +188,40 @@ function mcpTextResult(text: string): { content: [{ type: "text"; text: string }
     return { content: [{ type: "text", text }] };
 }
 
+function markApprovalConsumed(
+    value: unknown,
+    toolName: string,
+    fingerprint: string,
+): { content: Array<{ type: "text"; text: string }> } {
+    const marker = `COMPOSIO_CONFIRMATION_CONSUMED tool=${toolName} fingerprint=${fingerprint}`;
+    if (
+        value &&
+        typeof value === "object" &&
+        Array.isArray((value as { content?: unknown }).content)
+    ) {
+        return {
+            ...(value as object),
+            content: [
+                ...((value as { content: Array<{ type: "text"; text: string }> }).content),
+                { type: "text", text: marker },
+            ],
+        };
+    }
+    return {
+        content: [
+            { type: "text", text: stringifyOutput(value) },
+            { type: "text", text: marker },
+        ],
+    };
+}
+
 export function wrapComposioToolsForConfirmation(
     tools: ToolSet,
     messages: UIMessage[] | undefined,
     autoApproveWrites: boolean,
 ): ToolSet {
-    const decision = resolveComposioConfirmation(messages, autoApproveWrites);
+    const approval = latestComposioApproval(messages);
+    let approvalConsumed = false;
     const next: ToolSet = { ...tools };
     for (const [name, tool] of Object.entries(tools)) {
         if (!isMutatingComposioTool(name)) continue;
@@ -161,15 +233,27 @@ export function wrapComposioToolsForConfirmation(
         next[name] = {
             ...original,
             execute: async (...callArgs: unknown[]) => {
-                if (decision === "deny") {
+                if (autoApproveWrites) return execute(...callArgs);
+                const fingerprint = composioCallFingerprint(name, callArgs[0]);
+                const matchesApproval =
+                    !approvalConsumed &&
+                    approval?.toolName === name &&
+                    approval.fingerprint === fingerprint;
+                if (matchesApproval && approval.decision === "deny") {
+                    approvalConsumed = true;
                     return mcpTextResult(
                         "Canceled by the user. Do not retry this write.",
                     );
                 }
-                if (decision === "ask") {
-                    return mcpTextResult(confirmationOutput(name));
+                if (matchesApproval && approval.decision === "allow") {
+                    approvalConsumed = true;
+                    return markApprovalConsumed(
+                        await execute(...callArgs),
+                        name,
+                        fingerprint,
+                    );
                 }
-                return execute(...callArgs);
+                return mcpTextResult(confirmationOutput(name, fingerprint));
             },
         } as ToolSet[string];
     }

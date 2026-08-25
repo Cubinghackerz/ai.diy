@@ -6,22 +6,13 @@ import {
     skipAskUser,
     subscribeAskUser,
 } from "~/lib/ask-user";
-import { useSettings } from "~/lib/providers/SettingsProvider";
 import { cn } from "~/lib/utils";
 
 export function AskUserCard({ toolCallId }: { toolCallId: string }) {
-    const { settings, updateSettings } = useSettings();
     const [, setTick] = useState(0);
     const [draft, setDraft] = useState("");
     const [selected, setSelected] = useState<string[]>([]);
     const pending = getPendingAsk(toolCallId);
-
-    const persistAutoApprove = (answer: string) => {
-        if (!/don'?t ask|always allow/i.test(answer)) return;
-        updateSettings({
-            composio: { ...settings.composio, autoApproveWrites: true },
-        });
-    };
 
     useEffect(() => subscribeAskUser(() => setTick((value) => value + 1)), []);
 
@@ -44,13 +35,11 @@ export function AskUserCard({ toolCallId }: { toolCallId: string }) {
         if (type === "short") {
             const answer = draft.trim();
             if (!answer) return;
-            persistAutoApprove(answer);
             answerAskUser(toolCallId, answer);
             return;
         }
         if (selected.length === 0) return;
         const choice = selected.join(", ");
-        persistAutoApprove(choice);
         answerAskUser(toolCallId, choice);
     };
 
