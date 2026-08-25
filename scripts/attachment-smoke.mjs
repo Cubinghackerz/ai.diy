@@ -28,12 +28,45 @@ try {
         validateAttachmentDescriptors,
         validateIncomingAttachmentMessages,
     } = policyModule;
+    const attachmentsModule = await vite.ssrLoadModule(
+        path.join(root, "app/lib/attachments.ts"),
+    );
+    const { createAttachmentAdapter, attachmentAcceptForPolicy } = attachmentsModule;
 
     const multimodal = getAttachmentPolicy("openai", "gpt-4o");
     const textOnly = getAttachmentPolicy("openai", "gpt-3.5-turbo");
+    const multimodalAdapter = createAttachmentAdapter(
+        multimodal.modalities,
+        multimodal,
+    );
+    const textOnlyAdapter = createAttachmentAdapter(textOnly.modalities, textOnly);
+    const textOnlyAdapterAcceptTypes = new Set(textOnlyAdapter.accept.split(","));
+    const textOnlyAccept = attachmentAcceptForPolicy(textOnly, {
+        allowTextExtraction: true,
+    });
+    const textOnlyAcceptTypes = new Set(textOnlyAccept.split(","));
 
     check("multimodal models expose vision and document support", multimodal.modalities.vision && multimodal.modalities.documents);
     check("text-only models do not expose image support", !textOnly.modalities.vision);
+    check(
+        "multimodal adapter exposes images and binary documents",
+        multimodalAdapter.accept.includes("image/*") &&
+            multimodalAdapter.accept.includes(".pptx"),
+    );
+    check(
+        "text-only adapter hides unsupported images and binary documents",
+        !textOnlyAdapterAcceptTypes.has("image/*") &&
+            !textOnlyAdapterAcceptTypes.has(".pptx") &&
+            !textOnlyAdapterAcceptTypes.has(".doc"),
+    );
+    check(
+        "text-only adapter keeps locally extractable documents",
+        textOnlyAcceptTypes.has(".pdf") && textOnlyAcceptTypes.has(".docx"),
+    );
+    check(
+        "text-only adapter accepts additional text formats",
+        textOnlyAcceptTypes.has(".graphql") && textOnlyAcceptTypes.has(".ipynb"),
+    );
     check(
         "supported image passes for multimodal model",
         validateAttachmentDescriptors(

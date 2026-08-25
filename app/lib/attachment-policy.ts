@@ -59,6 +59,37 @@ export const TEXT_ATTACHMENT_EXTENSIONS = [
     "sh",
     "bash",
     "zsh",
+    "tex",
+    "bib",
+    "r",
+    "rmd",
+    "jl",
+    "lua",
+    "pl",
+    "pm",
+    "dart",
+    "ex",
+    "exs",
+    "erl",
+    "hrl",
+    "fs",
+    "fsx",
+    "vb",
+    "vue",
+    "svelte",
+    "astro",
+    "graphql",
+    "gql",
+    "proto",
+    "diff",
+    "patch",
+    "env",
+    "properties",
+    "dockerfile",
+    "bat",
+    "ps1",
+    "fish",
+    "ipynb",
 ] as const;
 
 export const BINARY_DOCUMENT_EXTENSIONS = [
@@ -75,7 +106,7 @@ export const BINARY_DOCUMENT_EXTENSIONS = [
     "odp",
 ] as const;
 
-export const EXTRACTABLE_DOCUMENT_EXTENSIONS = ["pdf", "doc", "docx"] as const;
+export const EXTRACTABLE_DOCUMENT_EXTENSIONS = ["pdf", "docx"] as const;
 
 const TEXT_MIME_TYPES = new Set([
     "application/json",

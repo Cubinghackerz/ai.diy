@@ -37,11 +37,12 @@ import {
     type SyncedArtifact,
 } from "~/components/assistant-ui/ChatThreadSync";
 import { Thread } from "~/components/assistant-ui/Thread";
-import { createAttachmentAdapter } from "~/lib/attachments";
 import {
-    BINARY_DOCUMENT_EXTENSIONS,
+    attachmentAcceptForPolicy,
+    createAttachmentAdapter,
+} from "~/lib/attachments";
+import {
     DEFAULT_ATTACHMENT_POLICY,
-    TEXT_ATTACHMENT_EXTENSIONS,
     attachmentLimitHint,
     getAttachmentPolicy,
     normalizeAttachmentMimeType,
@@ -234,12 +235,6 @@ type StoredPreviewSession = {
 };
 
 const PREVIEW_SESSION_ID = "last-preview-session";
-const PREVIEW_FILE_ACCEPT = [
-    "image/*",
-    ...BINARY_DOCUMENT_EXTENSIONS.map((extension) => `.${extension}`),
-    ...TEXT_ATTACHMENT_EXTENSIONS.map((extension) => `.${extension}`),
-].join(",");
-
 function responseText(messages: UIMessage[]): string {
     return messages
         .filter((message) => message.role === "assistant")
@@ -1033,6 +1028,9 @@ export const PreviewWorkspace: FC = () => {
                     running={running}
                     configurationError={configurationError}
                     uploadHint={attachmentLimitHint(broadestPreviewPolicy(primaryModels))}
+                    uploadAccept={attachmentAcceptForPolicy(
+                        broadestPreviewPolicy(primaryModels),
+                    )}
                     files={files}
                     onFiles={addFiles}
                     onRemoveFile={(filename) => {
@@ -1413,6 +1411,7 @@ const PreviewComposer: FC<{
     running: boolean;
     configurationError: string | null;
     uploadHint: string;
+    uploadAccept: string;
     files: PreviewFile[];
     onFiles: (files: FileList | null) => void;
     onRemoveFile: (filename: string) => void;
@@ -1424,6 +1423,7 @@ const PreviewComposer: FC<{
     running,
     configurationError,
     uploadHint,
+    uploadAccept,
     files,
     onFiles,
     onRemoveFile,
@@ -1468,7 +1468,7 @@ const PreviewComposer: FC<{
                         <input
                             type="file"
                             multiple
-                            accept={PREVIEW_FILE_ACCEPT}
+                            accept={uploadAccept}
                             className="sr-only"
                             onChange={(event) => {
                                 void onFiles(event.target.files);

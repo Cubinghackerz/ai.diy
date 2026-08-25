@@ -601,7 +601,7 @@ function ChatsPanel({
                     : undefined
             }
             className={cn(
-                "group flex cursor-pointer items-center justify-between rounded-lg px-2.5 py-2 text-xs font-medium outline-none transition-colors",
+                "group flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium outline-none transition-colors",
                 isActive
                     ? "bg-accent text-foreground"
                     : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
@@ -663,17 +663,17 @@ function ChatsPanel({
                     ))}
                 </select>
             ) : (
-                <div className="flex min-w-0 items-center gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
                     <ChatCircleDots size={14} className="shrink-0" />
-                    <span className="truncate">{thread.title}</span>
+                    <span className="min-w-0 truncate">{thread.title}</span>
                 </div>
             )}
             {editingId !== thread.id && movingId !== thread.id ? (
-                <>
+                <div className="flex shrink-0 items-center gap-0.5">
                     <button
                         type="button"
                         onClick={(event) => openExportMenu(event, thread.id)}
-                        className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity outline-none hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
+                        className="flex size-6 shrink-0 items-center justify-center rounded-md p-1 text-muted-foreground opacity-0 transition-opacity outline-none hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
                         title="Export chat"
                         aria-label={`Export ${thread.title}`}
                     >
@@ -686,7 +686,7 @@ function ChatsPanel({
                             hapticSelect();
                             setMovingId(thread.id);
                         }}
-                        className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity outline-none hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
+                        className="flex size-6 shrink-0 items-center justify-center rounded-md p-1 text-muted-foreground opacity-0 transition-opacity outline-none hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
                         title="Move to project"
                         aria-label={`Move ${thread.title} to a project`}
                     >
@@ -699,7 +699,7 @@ function ChatsPanel({
                             hapticSelect();
                             beginEditing(thread);
                         }}
-                        className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity outline-none hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
+                        className="flex size-6 shrink-0 items-center justify-center rounded-md p-1 text-muted-foreground opacity-0 transition-opacity outline-none hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
                         title="Rename chat"
                         aria-label={`Rename ${thread.title}`}
                     >
@@ -712,13 +712,13 @@ function ChatsPanel({
                             haptic();
                             onDeleteThread(thread.id);
                         }}
-                        className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity outline-none hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
+                        className="flex size-6 shrink-0 items-center justify-center rounded-md p-1 text-muted-foreground opacity-0 transition-opacity outline-none hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
                         title="Delete chat"
                         aria-label={`Delete ${thread.title}`}
                     >
                         <Trash size={13} />
                     </button>
-                </>
+                </div>
             ) : null}
         </div>
     );

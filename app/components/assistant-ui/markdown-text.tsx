@@ -18,6 +18,7 @@ import { CheckIcon, CopyIcon } from "lucide-react";
 
 import { TooltipIconButton } from "~/components/assistant-ui/tooltip-icon-button";
 import { useOptionalCanvas } from "~/lib/canvas";
+import { normalizeMathDelimiters } from "~/lib/markdown-math";
 import { cn } from "~/lib/utils";
 
 function collectText(node: ReactNode): string {
@@ -114,6 +115,7 @@ const MarkdownTextImpl = () => {
     <MarkdownTextPrimitive
       remarkPlugins={[remarkGfm, remarkMath]}
       rehypePlugins={[rehypeRaw, rehypeKatex]}
+      preprocess={normalizeMathDelimiters}
       className="aui-md"
       components={defaultComponents}
     />

@@ -12,6 +12,7 @@ import { extractKnowledgeText } from "~/lib/knowledge/extract.client";
 import {
     BINARY_DOCUMENT_EXTENSIONS,
     DEFAULT_ATTACHMENT_POLICY,
+    EXTRACTABLE_DOCUMENT_EXTENSIONS,
     TEXT_ATTACHMENT_EXTENSIONS,
     attachmentLimitHint,
     isExtractableDocument,
@@ -43,18 +44,52 @@ function getFileMimeType(file: File): string {
     return normalizeAttachmentMimeType(file.type, file.name);
 }
 
-const DOCUMENT_ACCEPT = BINARY_DOCUMENT_EXTENSIONS.flatMap((extension) => [
-    `.${extension}`,
-]).join(",");
+const DOCUMENT_MIME_ACCEPT = [
+    "application/pdf",
+    "application/msword",
+    "application/rtf",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.oasis.opendocument.text",
+    "application/vnd.oasis.opendocument.spreadsheet",
+    "application/vnd.oasis.opendocument.presentation",
+].join(",");
 
-const TEXT_EXT_ACCEPT = TEXT_ATTACHMENT_EXTENSIONS.map((extension) => `.${extension}`).join(",");
+const DOCUMENT_ACCEPT = [
+    ...BINARY_DOCUMENT_EXTENSIONS.map((extension) => `.${extension}`),
+    DOCUMENT_MIME_ACCEPT,
+].join(",");
+
+const EXTRACTABLE_DOCUMENT_ACCEPT = [
+    ...EXTRACTABLE_DOCUMENT_EXTENSIONS.map((extension) => `.${extension}`),
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+].join(",");
+
+const TEXT_MIME_ACCEPT = [
+    "text/*",
+    "application/json",
+    "application/javascript",
+    "application/x-javascript",
+    "application/xml",
+    "application/x-yaml",
+    "application/sql",
+].join(",");
+
+const TEXT_EXT_ACCEPT = TEXT_ATTACHMENT_EXTENSIONS.map(
+    (extension) => `.${extension}`,
+).join(",");
+const TEXT_ATTACHMENT_ACCEPT = `${TEXT_MIME_ACCEPT},${TEXT_EXT_ACCEPT}`;
 
 function isTextLike(file: File): boolean {
     return isTextAttachment({ name: file.name, type: file.type });
 }
 
 const textDocumentAdapter = {
-    accept: TEXT_EXT_ACCEPT,
+    accept: TEXT_ATTACHMENT_ACCEPT,
     async add({ file }) {
         return {
             id: crypto.randomUUID(),
@@ -118,13 +153,13 @@ const imageAttachmentAdapter = {
     async remove() {},
 } satisfies AttachmentAdapter;
 
-function isPdfOrWord(file: File): boolean {
+function isPdfOrDocx(file: File): boolean {
     return isExtractableDocument({ name: file.name, type: file.type });
 }
 
 function createBinaryDocumentAdapter(supportsDocuments: boolean): AttachmentAdapter {
     return {
-        accept: DOCUMENT_ACCEPT,
+        accept: supportsDocuments ? DOCUMENT_ACCEPT : EXTRACTABLE_DOCUMENT_ACCEPT,
         async add({ file }) {
             if (isTextLike(file)) {
                 return textDocumentAdapter.add({ file });
@@ -150,7 +185,7 @@ function createBinaryDocumentAdapter(supportsDocuments: boolean): AttachmentAdap
             if (!supportsDocuments) {
                 let extracted = "";
                 try {
-                    if (isPdfOrWord(file)) {
+                    if (isPdfOrDocx(file)) {
                         extracted = (await extractKnowledgeText(file)).text;
                     }
                 } catch (error) {
@@ -249,4 +284,18 @@ export function attachmentAcceptHint(
     if (modalities.documents) parts.push("PDF, Word, slides, spreadsheets");
     else parts.push("PDF/Word text extraction");
     return `Add files (${parts.join(", ")}; ${attachmentLimitHint(policy)})`;
+}
+
+export function attachmentAcceptForPolicy(
+    policy: AttachmentPolicy,
+    options: { allowTextExtraction?: boolean } = {},
+): string {
+    const accepts = [TEXT_ATTACHMENT_ACCEPT];
+    if (policy.modalities.vision) accepts.unshift("image/*");
+    if (policy.modalities.documents) {
+        accepts.push(DOCUMENT_ACCEPT);
+    } else if (options.allowTextExtraction) {
+        accepts.push(EXTRACTABLE_DOCUMENT_ACCEPT);
+    }
+    return accepts.join(",");
 }
