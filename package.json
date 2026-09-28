@@ -15,7 +15,12 @@
         "smoke:session-store": "node scripts/session-store-smoke.mjs",
         "smoke:tool-access": "node scripts/tool-access-smoke.mjs",
         "smoke:token-efficiency": "node scripts/token-efficiency-smoke.mjs",
-        "smoke:attachments": "node scripts/attachment-smoke.mjs"
+        "smoke:attachments": "node scripts/attachment-smoke.mjs",
+        "smoke:shell-text": "node scripts/shell-text-smoke.mjs",
+        "smoke:interop": "node scripts/interop-smoke.mjs",
+        "smoke:usage": "node scripts/usage-smoke.mjs",
+        "smoke:s3-sign": "node scripts/s3-sign-smoke.mjs",
+        "smoke": "npm run smoke:npm-project && npm run smoke:security && npm run smoke:composio-guard && npm run smoke:composio-connect && npm run smoke:session-store && npm run smoke:tool-access && npm run smoke:token-efficiency && npm run smoke:attachments && npm run smoke:shell-text && npm run smoke:interop && npm run smoke:usage && npm run smoke:s3-sign"
     },
     "dependencies": {
         "@ai-sdk/amazon-bedrock": "^5.0.40",
@@ -84,6 +89,7 @@
         "isbot": "^5",
         "jose": "^6.2.5",
         "json-schema": "^0.4.0",
+        "just-bash": "^3.4.2",
         "katex": "^0.18.1",
         "lucide-react": "^1.28.0",
         "motion": "^13.1.0",

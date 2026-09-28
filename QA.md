@@ -37,7 +37,7 @@ Pass/fail matrix derived from README “Available” features. Test from a **cle
 | 15 | Local memory | Save entry; appears in prompt | Disable memory toggle | blocked | Same. |
 | 16 | Image generation | Image model returns image | Bad key / unsupported | blocked | Same. |
 | 17 | Voice dictation | Mic → transcript (Chromium) | Deny permission / Firefox hide | blocked | Requires workspace + mic. |
-| 18 | Import | ChatGPT/Claude ZIP / Markdown | Corrupt file preview | blocked | Settings/data UI behind setup. `scripts/interop-smoke.mjs` currently fails to resolve importer module. |
+| 18 | Import | ChatGPT/Claude ZIP / Markdown | Corrupt file preview | blocked | Settings/data UI behind setup. `node scripts/interop-smoke.mjs` passes (import/export round-trips verified 2026-09-26). |
 | 19 | Export | Per-chat MD/JSON + ZIP all | Large history | blocked | No chat history in a clean profile. |
 | 20 | Cloud backup | S3 / WebDAV / Drive backup+restore | Bad credentials | blocked | `scripts/s3-sign-smoke.mjs` pass (signing only). Live backup not run. |
 | 21 | Settings | Persist across reload | Clear storage | blocked | Settings panel behind setup. |

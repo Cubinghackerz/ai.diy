@@ -3,7 +3,14 @@
  *
  * Runtime loads from the Leaning Technologies CDN (do not self-host).
  * Persistent writes go to an IndexedDB overlay keyed by conversation scope.
+ *
+ * Text/file/data commands additionally run on an instant in-memory shell
+ * fast path (see ~/lib/shell-text.client.ts): no VM boot, no isolation
+ * requirement. Compilers, runtimes, networking, and servers stay on the VM.
  */
+
+import { needsHeavyToolchain } from "~/lib/shell-text";
+import { readShellTextFile, runShellTextCommand } from "~/lib/shell-text.client";
 
 export type LinuxArtifact = {
     filename: string;
@@ -367,6 +374,42 @@ function deleteIndexedDb(name: string): Promise<void> {
 
 async function wipeOverlay(scopeId: string): Promise<void> {
     await deleteIndexedDb(overlayDbName(scopeId));
+}
+
+/**
+ * Delete every IndexedDB overlay left by a conversation scope.
+ * Thread deletion must remove the Linux VM filesystem too — otherwise a
+ * deleted chat's /home/user files survive in a separate IDB database.
+ * Covers crash-recovery epoch suffixes (`<base>-<scope>-<n>`) from prior
+ * page loads, where the in-memory epoch counter has reset to 0.
+ */
+export async function deleteLinuxOverlayForScope(scopeId: string): Promise<void> {
+    if (typeof indexedDB === "undefined") return;
+    if (booted?.scopeId === scopeId) resetRuntime();
+    const prefix = `${OVERLAY_DB_BASE}-${sanitizeScopeId(scopeId || "draft")}`;
+    try {
+        if (typeof indexedDB.databases === "function") {
+            const names = (await indexedDB.databases())
+                .map((entry) => entry.name)
+                .filter(
+                    (name): name is string =>
+                        typeof name === "string" &&
+                        (name === prefix || name.startsWith(`${prefix}-`)),
+                );
+            if (names.length > 0) {
+                await Promise.all(names.map((name) => deleteIndexedDb(name)));
+                return;
+            }
+        }
+    } catch {
+        // Fall through to direct deletes below.
+    }
+    await deleteIndexedDb(prefix).catch(() => undefined);
+    await Promise.all(
+        Array.from({ length: 10 }, (_, index) =>
+            deleteIndexedDb(`${prefix}-${index + 1}`).catch(() => undefined),
+        ),
+    );
 }
 
 /** Abort a boot or command so Stop works while "Waiting for Linux VM…". */
@@ -1271,6 +1314,51 @@ function formatCommandOutput(result: LinuxCommandResult): string {
     return capOutput(parts.join("\n\n") || "Command completed with no output.");
 }
 
+/**
+ * Attempt a tool call on the in-memory shell fast path.
+ *
+ * Returns a result when the fast path handles the call, and null when the VM
+ * should take over (shell failed to load, or a read missed the session FS).
+ * A missing command is returned as-is — re-running the script on the VM would
+ * double-apply side effects already committed to the session shell. Commands
+ * the browser shell cannot run (compilers, gzip, servers) are routed to the
+ * VM up front by needsHeavyToolchain.
+ */
+async function runShellTextAttempt(
+    name: LinuxToolName,
+    input: {
+        command?: string;
+        cwd?: string;
+        path?: string;
+        maxBytes?: number;
+        pid?: number;
+        timeoutSec?: number;
+    },
+    scopeId: string,
+): Promise<LinuxClientResult | null> {
+    if (linuxToolKind(name) === "read_file") {
+        const read = await readShellTextFile(scopeId, input.path ?? "", input.maxBytes);
+        if (read) return read;
+        // Not in the session shell. If the VM cannot run, it cannot have the
+        // file either — don't report the isolation error for a missing read.
+        if (!cheerpxAvailable() || Date.now() < linuxUnavailableUntil) {
+            const target = String(input.path ?? "").trim() || "(no path)";
+            return { output: `read_file error: ${target} does not exist.`, artifacts: [] };
+        }
+        return null;
+    }
+    const attempt = await runShellTextCommand(scopeId, input.command ?? "", {
+        cwd: input.cwd,
+        timeoutSec: input.timeoutSec,
+        signal: generationAbort?.signal,
+    });
+    if (!attempt) return null;
+    if (attempt.result.exitCode === 130) {
+        return { output: "Stopped by user.", artifacts: [] };
+    }
+    return { output: formatCommandOutput(attempt.result), artifacts: [] };
+}
+
 export function prefetchCheerpX(): void {
     if (typeof window === "undefined" || !cheerpxAvailable()) return;
     void loadCheerpX()
@@ -1303,19 +1391,29 @@ export async function executeLinuxClientTool(
     },
     scopeId: string,
 ): Promise<LinuxClientResult> {
-    if (!cheerpxAvailable()) {
-        return { output: UNAVAILABLE_MESSAGE, artifacts: [] };
-    }
-    if (Date.now() < linuxUnavailableUntil) {
-        return {
-            output: `Linux environment is temporarily unavailable after a VM failure: ${lastLinuxFailure || "startup failed"}. Do not retry Linux tools in this turn; use browser Python or answer without execution.`,
-            artifacts: [],
-        };
-    }
+    const background = isBackgroundTool(name);
+    const shellEligible =
+        !background &&
+        (linuxToolKind(name) === "read_file" || !needsHeavyToolchain(input.command ?? ""));
     generationAbort = new AbortController();
     return withCommandLock(async () => {
         try {
             throwIfStopped();
+            // Fast path first: instant in-memory shell for text/file/data work.
+            // Runs even when the VM is unavailable or cooling down.
+            if (shellEligible && typeof window !== "undefined") {
+                const fast = await runShellTextAttempt(name, input, scopeId);
+                if (fast) return fast;
+            }
+            if (!cheerpxAvailable()) {
+                return { output: UNAVAILABLE_MESSAGE, artifacts: [] };
+            }
+            if (Date.now() < linuxUnavailableUntil) {
+                return {
+                    output: `Linux environment is temporarily unavailable after a VM failure: ${lastLinuxFailure || "startup failed"}. Do not retry Linux tools in this turn; use browser Python or answer without execution.`,
+                    artifacts: [],
+                };
+            }
             return await withDeadline(
                 (async () => {
                     const cx = await bootCheerpX(scopeId);

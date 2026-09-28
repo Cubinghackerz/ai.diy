@@ -8,6 +8,8 @@ import type { ThreadData, MessageData, MemoryEntry, Project } from "~/lib/types"
 import type { Artifact } from "~/lib/canvas";
 import type { UsageEvent } from "~/lib/usage";
 import type { KbChunk, KbDocument } from "~/lib/knowledge/types";
+import { deleteLinuxOverlayForScope } from "~/lib/cheerpx";
+import { dropShellTextScope } from "~/lib/shell-text.client";
 
 interface PrismiumDB extends DBSchema {
     threads: {
@@ -220,6 +222,16 @@ export async function deleteThreadFromDB(threadId: string): Promise<void> {
     }
     await tx.done;
     await deleteArtifactsForScope(threadId);
+    // Drop the tab-local fast-path shell too (session-only, but no reason to
+    // keep a deleted conversation's files in memory).
+    dropShellTextScope(threadId);
+    // The in-browser Linux VM keeps its filesystem in a separate IndexedDB
+    // overlay per scope — remove it so deleted chats leave no VM files behind.
+    try {
+        await deleteLinuxOverlayForScope(threadId);
+    } catch {
+        // Quota / private-mode failures: main thread data is already gone.
+    }
 }
 
 export async function getArtifactsForScope(scopeId: string): Promise<Artifact[]> {
@@ -419,6 +431,46 @@ export async function appendUsageEventToDB(event: UsageEvent): Promise<void> {
     const existing = await db.get("usageEvents", event.id);
     if (existing) return;
     await db.put("usageEvents", event);
+    // Best-effort prune so the ledger cannot grow without bound. Never throws —
+    // usage recording must not break chat on quota or private-mode failures.
+    try {
+        await pruneUsageEvents(db);
+    } catch {
+        // Ignore — next append retries.
+    }
+}
+
+/**
+ * Keep the usage ledger bounded: drop events older than the retention window
+ * and cap the total row count (oldest first). Runs after each append.
+ */
+async function pruneUsageEvents(
+    db: IDBPDatabase<PrismiumDB>,
+    now = Date.now(),
+): Promise<void> {
+    const RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
+    const MAX_EVENTS = 5000;
+    const cutoff = now - RETENTION_MS;
+    const all = await db.getAll("usageEvents");
+    if (all.length === 0) return;
+    const staleIds = all
+        .filter((event) => event.createdAt < cutoff)
+        .map((event) => event.id);
+    let overflowIds: string[] = [];
+    const retainedCount = all.length - staleIds.length;
+    if (retainedCount > MAX_EVENTS) {
+        overflowIds = all
+            .filter((event) => event.createdAt >= cutoff)
+            .sort((a, b) => a.createdAt - b.createdAt)
+            .slice(0, retainedCount - MAX_EVENTS)
+            .map((event) => event.id);
+    }
+    if (staleIds.length === 0 && overflowIds.length === 0) return;
+    const tx = db.transaction("usageEvents", "readwrite");
+    for (const id of [...staleIds, ...overflowIds]) {
+        await tx.store.delete(id);
+    }
+    await tx.done;
 }
 
 export async function getUsageEventsSinceFromDB(

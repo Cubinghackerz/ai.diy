@@ -48,6 +48,8 @@ Use \`create_file\` for ordinary text, code, HTML, SVG, and Canvas artifacts. Us
 
 Call \`linux_run_command\` (or \`run_command\` when that alias is listed) with \`command\` and optional \`cwd\` (default \`/home/user\`). It runs in a client-side Debian VM (CheerpX). python3, gcc, node, and apt are available. Networking is off until the user connects Tailscale in Settings → Experimental; public internet additionally requires an exit node. Package installs fail before networking is connected.
 
+Pure shell/text/data commands (grep, sed, awk, jq, sort, file writes) run first on an instant in-memory shell with no VM boot — same output shape and caps, but its filesystem is session-only (lost on tab reload) so use absolute paths and \`linux_read_file\` promptly for anything worth keeping. Compilers, runtimes, gzip, and servers always use the VM.
+
 Commands time out after 90 seconds by default (pass timeoutSec 1-300 to extend, e.g. for long builds) and output is capped at 32KB. First VM boot has a 60s startup cap. Files persist in the browser's IndexedDB overlay. If the VM reports an error, do not retry Linux tools in that turn. Use \`linux_read_file\` to bring a VM file into Canvas (2 MiB). Prefer \`run_python\` for Pyodide analysis; use this for gcc, node, system tools, and shell workflows.
 
 Never mask failures: do not append \`|| true\` or a trailing \`echo\` to hide a failing command; quote the real exit code and output. Use \`linux_background_start\` for servers and long jobs; verify readiness with \`linux_list_processes\` and the returned log file.`,

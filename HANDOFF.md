@@ -17,10 +17,10 @@ Copy everything below the `---` line and paste it to your next AI agent session 
 ### What Is Already Completed
 
 1. **Vercel AI SDK Backend (`app/routes/api.chat.ts`)**:
-   - Uses `streamText` + `toTextStreamResponse()`
-   - Supports 7 providers: OpenAI, Anthropic, Google Gemini, Groq, OpenRouter, Ollama (Local `http://localhost:11434/v1`), and Custom Proxy (`http://localhost:1234/v1`).
-   - Enables multi-turn tool calling (`stopWhen: stepCountIs(5)`) for `web_search` (DuckDuckGo), `fetch_url`, `calculator`, `run_python`, and `create_file`.
-   - Includes default privacy-first AI system prompt.
+    - Uses `streamText` + `toTextStreamResponse()`
+    - Supports 20+ providers (OpenAI, Anthropic, Google Gemini, Groq, OpenRouter, Cerebras, Fireworks, Perplexity, Cohere, xAI, DeepSeek, Bedrock, Azure, Vertex, Vercel Gateway, Together, Mistral, Hugging Face, Ollama, LM Studio, custom OpenAI-compatible endpoints, plus ChatGPT/Grok/Kimi subscription paths). See README “Providers” as authority — do not trust older “7 providers” notes.
+    - Enables multi-turn tool calling (`stopWhen: stepCountIs(5)`) for `web_search` (DuckDuckGo), `fetch_url`, `calculator`, `run_python`, and `create_file`.
+    - Includes default privacy-first AI system prompt.
 
 2. **assistant-ui Integration (`app/components/assistant-ui/AssistantRuntimeProvider.tsx`)**:
    - Uses `useChatRuntime` + `AssistantChatTransport` from `@assistant-ui/react-ai-sdk` to connect directly to `/api/chat`.
@@ -50,14 +50,25 @@ Copy everything below the `---` line and paste it to your next AI agent session 
 
 ### Suggested Next Features / Next Steps
 
-1. **Local RAG / Knowledge Base**:
-   - Allow dragging & dropping PDF/text files into a local document store (IndexedDB) and injecting relevant content snippets into chat context.
-2. **Prompt Library Modal**:
-   - Add a prompt template library popup triggered by typing `/` in the composer or clicking a prompt library button.
-3. **MCP Server Tool Execution UI**:
-   - Connect added SSE/HTTP MCP server tool definitions into the assistant-ui tool stream.
-4. **Chat Export & Import**:
-   - Add export thread to JSON / Markdown / HTML button and import from ChatGPT JSON.
+> Note (2026-09-26): the four items below are already implemented — local RAG
+> (`Settings → Knowledge Base`), slash-command prompt/skills library (`/` +
+> `skills/` catalog), MCP tool execution UI (remote MCP + bundled
+> Firecrawl/Parallel), and chat export/import (ChatGPT/Claude/ShareGPT/Markdown/
+> ai.diy JSON + `scripts/interop-smoke.mjs`). See README “Available” as
+> authority. Prefer the improvement backlog below over rebuilding these.
+
+1. **Thread-delete storage hygiene**: `deleteThreadFromDB` now also wipes the
+   per-scope CheerpX overlay (`deleteLinuxOverlayForScope`) and the usage
+   ledger prunes to 90 days / 5000 events — verify on any storage-schema change.
+2. **First-5-minutes conversion**: Settings/MCP/tools reviewers still sit behind
+   the setup gate (see QA.md rows 10–17, 21–22, 26–28) — consider an
+   explore-before-setup path.
+3. **Composer `npm run dev` regression**: production build
+   (`npm run build && npm start`) remains the supported local path; dev-mode
+   input loss is still open.
+4. **Public-instance hardening**: document security headers ship by default
+   (`entry.server.tsx`); still configure `RATE_LIMIT_RPM`, HTTPS, and access
+   controls before exposure (see DEPLOYMENT.md, SECURITY.md).
 
 ---
 

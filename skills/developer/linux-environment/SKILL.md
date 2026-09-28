@@ -50,9 +50,10 @@ Run real commands in the in-browser x86 Debian VM (CheerpX / WebVM). Measure ver
 1. Load the `linux_environment_skill` contract **once per conversation**; on later turns reuse it without re-calling.
 2. Probe only if versions matter: `node --version; python3 --version; gcc --version | head -n1`.
 3. One job per `linux_run_command`. Pass a short `description` for the card title.
-4. Write under `/home/user` or `/tmp`. After a Permission denied on home, switch to `/tmp` immediately.
-5. Attach user-facing files with `linux_read_file`. Do not `create_file` the same bytes.
-6. Start servers with `linux_background_start`, then verify with `linux_list_processes` and read the returned log before claiming readiness. Stop them with `linux_kill_process <pid>`.
+4. Pure shell/text/data jobs (grep, sed, awk, jq, sort, file writes) execute on an instant in-memory shell — no VM boot, same output shape and 90s/32KB caps. That shell's filesystem is **session-only** (lost on tab reload, unlike the VM overlay): use absolute paths under `/home/user` and attach anything worth keeping with `linux_read_file` promptly.
+5. Write under `/home/user` or `/tmp`. After a Permission denied on home, switch to `/tmp` immediately.
+6. Attach user-facing files with `linux_read_file`. Do not `create_file` the same bytes.
+7. Start servers with `linux_background_start`, then verify with `linux_list_processes` and read the returned log before claiming readiness. Stop them with `linux_kill_process <pid>`.
 
 ## Decision rules
 

@@ -14,6 +14,29 @@ loadLocalEnvFiles();
 
 export const streamTimeout = 5_000;
 
+// Baseline document hardening. Route headers (e.g. workspace COOP/COEP in
+// home.tsx) win when already present. Applied up front so HEAD responses get
+// the same hardening as GET renders.
+function applyDocumentHardening(responseHeaders: Headers): void {
+  if (!responseHeaders.has("X-Content-Type-Options")) {
+    responseHeaders.set("X-Content-Type-Options", "nosniff");
+  }
+  if (!responseHeaders.has("Referrer-Policy")) {
+    responseHeaders.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  }
+  if (!responseHeaders.has("X-Frame-Options")) {
+    responseHeaders.set("X-Frame-Options", "SAMEORIGIN");
+  }
+  if (!responseHeaders.has("Permissions-Policy")) {
+    // Microphone stays available for voice dictation; everything else
+    // sensitive defaults to off at the document level.
+    responseHeaders.set(
+      "Permissions-Policy",
+      "camera=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=()",
+    );
+  }
+}
+
 export default function handleRequest(
   request: Request,
   responseStatusCode: number,
@@ -21,6 +44,7 @@ export default function handleRequest(
   routerContext: EntryContext,
   loadContext: RouterContextProvider,
 ) {
+  applyDocumentHardening(responseHeaders);
   // https://httpwg.org/specs/rfc9110.html#HEAD
   if (request.method.toUpperCase() === "HEAD") {
     return new Response(null, {
