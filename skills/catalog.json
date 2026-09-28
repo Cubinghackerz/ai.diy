@@ -112,6 +112,16 @@
       "tools": ["fetch_url", "run_python", "create_file", "ask_user", "memory"]
     },
     {
+      "id": "finance-research",
+      "name": "Finance Research",
+      "version": "1.0.0",
+      "description": "Evidence-backed personal-finance and markets research covering filings, rates, budgets, valuation, and source triangulation. Use for money, investing, earnings, taxes, inflation, mortgages, or portfolio questions that need current figures.",
+      "category": "business",
+      "path": "business/finance-research/SKILL.md",
+      "popular": false,
+      "tools": ["web_search", "fetch_url", "calculator", "run_python", "generate_file", "memory", "ask_user"]
+    },
+    {
       "id": "competitor-research",
       "name": "Competitor Research",
       "version": "1.0.0",

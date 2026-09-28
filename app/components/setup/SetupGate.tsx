@@ -36,6 +36,7 @@ import {
 } from "@phosphor-icons/react";
 import { LoaderIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
+import { pickLatestChatGPTModel } from "~/lib/chatgpt-models";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { ToolAccessPicker } from "~/components/settings/ToolAccessPicker";
 
@@ -107,7 +108,7 @@ export function SetupGate() {
         if (!isAuthenticated || provider !== "chatgpt" || settings.setupComplete) return;
         const chatGptModel =
             settings.chat.model ||
-            DEFAULT_MODELS.chatgpt?.find((item) => item.id === "gpt-5.6-luna")?.id ||
+            pickLatestChatGPTModel((DEFAULT_MODELS.chatgpt ?? []).map((item) => item.id)) ||
             "gpt-5.6-luna";
         setModels(DEFAULT_MODELS.chatgpt ?? []);
         setModel(chatGptModel);
@@ -161,7 +162,7 @@ export function SetupGate() {
     useEffect(() => {
         if (!loaded || !isAuthenticated || settings.setupComplete) return;
         const model =
-            DEFAULT_MODELS.chatgpt?.find((item) => item.id === "gpt-5.6-luna")?.id ||
+            pickLatestChatGPTModel((DEFAULT_MODELS.chatgpt ?? []).map((item) => item.id)) ||
             "gpt-5.6-luna";
         if (settings.chat.provider !== "chatgpt") {
             updateSettings({ chatgptLoginEnabled: true });
@@ -259,7 +260,7 @@ export function SetupGate() {
 
     const handleChatGPTAuthenticated = useCallback(() => {
         const chatGptModel =
-            DEFAULT_MODELS.chatgpt?.find((model) => model.id === "gpt-5.6-luna")?.id ||
+            pickLatestChatGPTModel((DEFAULT_MODELS.chatgpt ?? []).map((item) => item.id)) ||
             DEFAULT_MODELS.chatgpt?.[0]?.id ||
             "gpt-5.6-luna";
         updateSettings({ chatgptLoginEnabled: true });

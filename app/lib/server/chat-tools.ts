@@ -1377,7 +1377,7 @@ export async function buildChatTools(
                 maxResults: z.number().int().min(1).max(maxHits).optional(),
             }),
             execute: async ({ query, maxResults }) => {
-                const normalizedQuery = focusSearchQuery(query ?? "");
+                const normalizedQuery = focusSearchQuery(query ?? "", policy.maxQueryChars);
                 if (!normalizedQuery) {
                     return "Search query required. Retry with a focused 3–10 word keyword query.";
                 }
@@ -1414,7 +1414,7 @@ export async function buildChatTools(
                     maxResults: z.number().int().min(1).max(maxHits).optional(),
                 }),
                 execute: async ({ query, maxResults }) => {
-                    const normalizedQuery = focusSearchQuery(query ?? "");
+                    const normalizedQuery = focusSearchQuery(query ?? "", policy.maxQueryChars);
                     if (!normalizedQuery) {
                         return "Search query required. Retry with a focused 3–10 word keyword query.";
                     }

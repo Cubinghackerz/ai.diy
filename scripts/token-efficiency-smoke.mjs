@@ -218,6 +218,39 @@ try {
         mcpPolicy,
     );
     const failedResult = await failingMcp.execute({});
+    const modes = await vite.ssrLoadModule(path.join(root, "app/lib/token-mode.ts"));
+    const efficient = modes.tokenModePolicy("efficient");
+    const full = modes.tokenModePolicy("full");
+    const balanced = modes.tokenModePolicy("balanced");
+    check("efficient search is shorter than full", efficient.maxSearchResults < full.maxSearchResults);
+    check("efficient query cap is shorter than full", efficient.maxQueryChars < full.maxQueryChars);
+    check("efficient fetch cap is shorter than full", efficient.maxFetchChars < full.maxFetchChars);
+    check("caching search matches balanced", modes.tokenModePolicy("caching").maxSearchResults === balanced.maxSearchResults);
+    const efficientTools = await chatTools.buildChatTools(
+        { tokenMode: "efficient", webSearchEnabled: true, toolAccess: { webSearch: true } },
+        { provider: "openai", messages: [] },
+    );
+    check(
+        "efficient search tool advertises its cap",
+        String(efficientTools.web_search?.description ?? "").includes(`max ${efficient.maxSearchResults}`),
+    );
+    check(
+        "full search tool advertises a higher cap",
+        String(
+            (
+                await chatTools.buildChatTools(
+                    { tokenMode: "full", webSearchEnabled: true, toolAccess: { webSearch: true } },
+                    { provider: "openai", messages: [] },
+                )
+            ).web_search?.description ?? "",
+        ).includes(`max ${full.maxSearchResults}`),
+    );
+    const prompt = await vite.ssrLoadModule(path.join(root, "app/lib/server/prompt.ts"));
+    const efficientPrompt = prompt.buildChatSystemPrompt(undefined, undefined, undefined, "main", undefined, false, "efficient");
+    const fullPrompt = prompt.buildChatSystemPrompt(undefined, undefined, undefined, "main", undefined, false, "full");
+    check("efficient prompt states its hit cap", efficientPrompt.includes(`Never request more than ${efficient.maxSearchResults}`));
+    check("full prompt states a higher hit cap", fullPrompt.includes(`Never request more than ${full.maxSearchResults}`));
+
     check(
         "MCP execution failures stay inside the tool protocol",
         mcpOutputAdapter({ output: failedResult }) &&

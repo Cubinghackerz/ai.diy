@@ -88,6 +88,7 @@ export async function loadMcpTools(
         TokenModePolicy,
         | "defaultSearchResults"
         | "maxSearchResults"
+        | "maxQueryChars"
         | "maxMcpResultChars"
         | "maxSnippetChars"
     >,
@@ -144,6 +145,7 @@ export function wrapMcpToolForBudget(
         TokenModePolicy,
         | "defaultSearchResults"
         | "maxSearchResults"
+        | "maxQueryChars"
         | "maxMcpResultChars"
         | "maxSnippetChars"
     >,
@@ -166,7 +168,10 @@ export function wrapMcpToolForBudget(
             : Math.min(policy.maxMcpResultChars, Math.max(4_000, Math.floor(policy.maxMcpResultChars * 0.75)));
     const resultBudget =
         kind === "search"
-            ? Math.min(policy.maxMcpResultChars, Math.max(8_000, policy.maxSearchResults * 480))
+            ? Math.min(
+                  policy.maxMcpResultChars,
+                  policy.maxSearchResults * (snippetChars + 120),
+              )
             : policy.maxMcpResultChars;
 
     return {
@@ -268,7 +273,7 @@ function extractMcpSearchQuery(args: unknown): string {
 
 function clampMcpSearchArgs(
     args: unknown,
-    policy: Pick<TokenModePolicy, "defaultSearchResults" | "maxSearchResults">,
+    policy: Pick<TokenModePolicy, "defaultSearchResults" | "maxSearchResults" | "maxQueryChars">,
     mcpTool?: ToolSet[string],
 ): unknown {
     if (!args || typeof args !== "object" || Array.isArray(args)) return args;
@@ -278,14 +283,14 @@ function clampMcpSearchArgs(
         if (!(key in next)) continue;
         const value = next[key];
         if (typeof value === "string") {
-            const focused = focusSearchQuery(value);
+            const focused = focusSearchQuery(value, policy.maxQueryChars);
             if (focused) next[key] = focused;
         }
     }
     for (const key of ["search_queries", "searchQueries", "queries"] as const) {
         if (!(key in next) || !Array.isArray(next[key])) continue;
         next[key] = (next[key] as unknown[]).map((item) =>
-            typeof item === "string" ? focusSearchQuery(item) || item : item,
+            typeof item === "string" ? focusSearchQuery(item, policy.maxQueryChars) || item : item,
         );
     }
 

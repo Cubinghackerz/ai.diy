@@ -26,12 +26,12 @@ export const TOKEN_MODE_BLURBS: Record<TokenMode, string> = {
 
 export const TOKEN_MODE_DESCRIPTIONS: Record<TokenMode, string> = {
     efficient:
-        "Lean prompt and core tools (12 steps). Best for everyday Q&A and light coding without bloating context.",
+        "Lean prompt and core tools (12 steps). Search stays short: fewer hits, tighter snippets, one page fetch.",
     balanced:
         "Full everyday tools with a compact prompt (16 steps). Search stays high-signal: fewer hits, tighter snippets, fetch only for proof.",
     caching:
-        "Balanced capability with a stable cacheable prompt prefix (16 steps). Cuts repeat input cost on Anthropic/OpenAI-style caches without dropping core tools.",
-    full: "Maximum tool catalog, skill suite, and highest step budget (24 steps).",
+        "Balanced capability with a stable cacheable prompt prefix (16 steps). Search budget matches Balanced. Cuts repeat input cost on Anthropic/OpenAI-style caches.",
+    full: "Maximum tool catalog, skill suite, and highest step budget (24 steps). Longer search queries, more hits, and longer page fetches.",
 };
 
 export function normalizeTokenMode(value: unknown): TokenMode {
@@ -64,10 +64,16 @@ export interface TokenModePolicy {
     defaultSearchResults: number;
     /** Hard ceiling on search hits (built-in + MCP arg clamping). */
     maxSearchResults: number;
+    /** Max characters kept in a search query after focusing. */
+    maxQueryChars: number;
+    /** Max words the model should put in one search query. */
+    maxQueryWords: number;
     /** Max chars per search-result snippet / excerpt. */
     maxSnippetChars: number;
     /** Max chars returned from fetch_url / read_url. */
     maxFetchChars: number;
+    /** How many pages to fetch after a search before answering. */
+    maxFetches: number;
     /** Max chars for any single MCP tool result after compacting. */
     maxMcpResultChars: number;
     /** Number of newest UI messages kept verbatim before old tool outputs are projected. */
@@ -98,10 +104,13 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
                 linuxEnvironment: true,
                 compactToolDescriptions: true,
                 // Quality: enough ranked hits to pick a source, not a dump.
-                defaultSearchResults: 8,
-                maxSearchResults: 12,
-                maxSnippetChars: 140,
-                maxFetchChars: 3_500,
+                defaultSearchResults: 4,
+                maxSearchResults: 6,
+                maxQueryChars: 80,
+                maxQueryWords: 6,
+                maxSnippetChars: 100,
+                maxFetchChars: 2_000,
+                maxFetches: 1,
                 maxMcpResultChars: 8_000,
                 historyKeepRecent: 6,
                 compactHistoricalToolResults: true,
@@ -121,10 +130,13 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
                 connectorsMeta: true,
                 linuxEnvironment: true,
                 compactToolDescriptions: true,
-                defaultSearchResults: 8,
-                maxSearchResults: 12,
+                defaultSearchResults: 6,
+                maxSearchResults: 10,
+                maxQueryChars: 120,
+                maxQueryWords: 10,
                 maxSnippetChars: 160,
-                maxFetchChars: 4_500,
+                maxFetchChars: 4_000,
+                maxFetches: 2,
                 maxMcpResultChars: 10_000,
                 historyKeepRecent: 8,
                 compactHistoricalToolResults: true,
@@ -144,10 +156,13 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
                 connectorsMeta: true,
                 linuxEnvironment: true,
                 compactToolDescriptions: false,
-                defaultSearchResults: 16,
-                maxSearchResults: 24,
-                maxSnippetChars: 240,
-                maxFetchChars: 10_000,
+                defaultSearchResults: 12,
+                maxSearchResults: 20,
+                maxQueryChars: 200,
+                maxQueryWords: 16,
+                maxSnippetChars: 280,
+                maxFetchChars: 12_000,
+                maxFetches: 4,
                 maxMcpResultChars: 24_000,
                 historyKeepRecent: 10,
                 compactHistoricalToolResults: false,
@@ -169,16 +184,31 @@ export function tokenModePolicy(mode: TokenMode): TokenModePolicy {
                 linuxEnvironment: true,
                 compactToolDescriptions: true,
                 // High-signal default: model can raise maxResults when needed.
-                defaultSearchResults: 8,
-                maxSearchResults: 14,
+                defaultSearchResults: 6,
+                maxSearchResults: 10,
+                maxQueryChars: 120,
+                maxQueryWords: 10,
                 maxSnippetChars: 160,
-                maxFetchChars: 4_500,
+                maxFetchChars: 4_000,
+                maxFetches: 2,
                 maxMcpResultChars: 10_000,
                 historyKeepRecent: 8,
                 compactHistoricalToolResults: true,
                 promptCaching: false,
             };
     }
+}
+
+/** Mode-specific search limits the model must follow. Stable for a given mode. */
+export function searchBudgetInstruction(policy: TokenModePolicy): string {
+    return `
+
+Search budget (${policy.mode}):
+- One query is at most ${policy.maxQueryWords} words and ${policy.maxQueryChars} characters. Do not paste the user prompt into the query.
+- Ask for ${policy.defaultSearchResults} results by default. Never request more than ${policy.maxSearchResults}.
+- Snippets are capped near ${policy.maxSnippetChars} characters. They are leads, not proof.
+- Fetch at most ${policy.maxFetches} page${policy.maxFetches === 1 ? "" : "s"} after search. Each fetch is truncated near ${policy.maxFetchChars} characters.
+- Stop after one successful search unless the hits are empty or off-topic.`;
 }
 
 /** Providers where explicit Anthropic-style cache_control is useful. */

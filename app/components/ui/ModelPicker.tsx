@@ -22,6 +22,7 @@ import {
 } from "@phosphor-icons/react";
 import { hapticSelect } from "~/lib/haptics";
 import { useSettings } from "~/lib/providers/SettingsProvider";
+import { preferDiscoveredChatGPTModel } from "~/lib/chatgpt-models";
 import { DEFAULT_MODELS, type ModelInfo, type ProviderId } from "~/lib/types";
 import {
     enrichModelInfo,
@@ -440,6 +441,20 @@ export function ModelPicker({
     const menuRef = useRef<HTMLDivElement>(null);
     const { hovered, setHovered, merged } = useHoveredModel();
     const catalog = useModelCatalog();
+
+    const upgradedSelection = useRef("");
+    useEffect(() => {
+        if (provider !== "chatgpt" || models.length === 0) return;
+        const next = preferDiscoveredChatGPTModel(
+            value,
+            models.map((model) => model.id),
+        );
+        if (!next || next === value) return;
+        const key = `${value}->${next}`;
+        if (upgradedSelection.current === key) return;
+        upgradedSelection.current = key;
+        onChange(next);
+    }, [provider, models, value, onChange]);
 
     const selected = useMemo(() => {
         const hit = models.find((m) => m.id === value);

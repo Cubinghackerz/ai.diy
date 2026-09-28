@@ -35,7 +35,7 @@ export function inferModelSupportsVision(
     }
 
     if (
-        /gpt-4o|gpt-4\.1|gpt-5|chatgpt|o[1-4]|claude|gemini|gemma-4|llava|bakllava|moondream|minicpm-v|vision|pixtral|qwen[^/]*vl|llama-4|grok-2-vision|nova-(?:lite|pro)|command-a-vision/.test(
+        /gpt-4o|gpt-4\.1|gpt-(?:[5-9]|[1-9]\d)|chatgpt|o[1-4]|claude|gemini|gemma-4|llava|bakllava|moondream|minicpm-v|vision|pixtral|qwen[^/]*vl|llama-4|grok-2-vision|nova-(?:lite|pro)|command-a-vision/.test(
             id,
         )
     ) {
@@ -72,7 +72,7 @@ export function inferModelSupportsDocuments(
     // more portable when extracted to text locally before sending.
     if (provider === "grok") return false;
     const id = modelId.toLowerCase();
-    if (/claude|gpt-4o|gpt-4\.1|gpt-5|gemini|o[1-4]/.test(id)) return true;
+    if (/claude|gpt-4o|gpt-4\.1|gpt-(?:[5-9]|[1-9]\d)|gemini|o[1-4]/.test(id)) return true;
     return inferModelSupportsVision(modelId, provider);
 }
 

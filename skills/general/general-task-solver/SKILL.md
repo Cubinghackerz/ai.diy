@@ -84,6 +84,7 @@ If success criteria are ambiguous and blocking, ask once via `ask_user`, then pr
 | Why it failed, RCA, 5-Whys, postmortem cause | `root-cause-analysis` |
 | Live/recent security or reliability incident IR | `incident-investigator` |
 | Defensive vuln/control audit, threat model review | `security-audit` |
+| Money, markets, filings, rates, budgets, taxes, valuation | `finance-research` |
 | Competitors, market landscape, battlecards | `competitor-research` |
 | Meeting transcript → decisions & actions | `meeting-analysis` |
 | Reviews/tickets/surveys → themes & VOC | `customer-feedback-analysis` |

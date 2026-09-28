@@ -1,66 +1,86 @@
 /**
  * Helpers for ChatGPT subscription model discovery and preference ordering.
+ *
+ * Live account slugs are the source of truth. Ranking is version-aware so a
+ * newly returned GPT-6 (or later) series outranks older flagships without a
+ * catalog edit. Named variants only break ties inside the same version.
  */
 
 import { enrichModelInfo } from "~/lib/model-capabilities";
 import type { ModelInfo } from "~/lib/types";
 
-/** Prefer newer Codex / ChatGPT flagships when ranking discovered slugs. */
-const PREFERRED_ORDER = [
-    "gpt-5.6-luna",
-    "gpt-5.6",
-    "gpt-5.6-sol",
-    "gpt-5.6-terra",
-    "gpt-5.5",
-    "gpt-5.5-pro",
-    "gpt-5.4",
-    "gpt-5.4-mini",
-    "gpt-5.3-codex",
-    "gpt-5.3-codex-spark",
-    "gpt-5.2",
-    "gpt-5.1",
-    "gpt-5-codex",
-    "gpt-5",
-    "gpt-5-mini",
-    "gpt-4.1",
-    "gpt-4.1-mini",
-    "gpt-4o",
-    "gpt-4o-mini",
-    "o4-mini",
-    "o3",
-    "o3-mini",
-] as const;
+/** Previous auto-selected default. Upgrade only this id when a newer series appears. */
+export const CHATGPT_STALE_DEFAULTS = ["gpt-5.6-luna"] as const;
 
-function preferenceRank(slug: string): number {
-    const lower = slug.toLowerCase();
-    const idx = PREFERRED_ORDER.findIndex(
-        (id) => lower === id || lower.startsWith(`${id}-`) || lower.includes(id),
-    );
-    return idx === -1 ? 1_000 : idx;
+const VARIANT_RANK: Array<[RegExp, number]> = [
+    [/(?:^|-)(?:luna|sol|terra)$/, 0],
+    [/(?:^|-)pro$/, 1],
+    [/(?:^|-)(?:mini|nano)$/, 4],
+];
+
+type GptSeries = { major: number; minor: number };
+
+function gptSeries(slug: string): GptSeries | null {
+    const match = slug.toLowerCase().match(/(?:^|[/:\s])gpt-(\d+)(?:\.(\d+))?/);
+    if (!match) return null;
+    return { major: Number(match[1]), minor: Number(match[2] ?? 0) };
 }
 
-/** Sort account-discovered model slugs with latest preferred first. */
+function variantRank(slug: string): number {
+    const lower = slug.toLowerCase();
+    const series = gptSeries(lower);
+    if (!series) return 50;
+    const suffix = lower.replace(/^.*gpt-\d+(?:\.\d+)?/, "");
+    if (!suffix || suffix === "") return 2;
+    for (const [pattern, rank] of VARIANT_RANK) {
+        if (pattern.test(suffix)) return rank;
+    }
+    return 3;
+}
+
+/** Higher GPT major/minor first; codenames only break ties. Non-GPT ids sort after. */
+export function compareChatGPTSlugs(a: string, b: string): number {
+    const left = gptSeries(a);
+    const right = gptSeries(b);
+    if (left && !right) return -1;
+    if (!left && right) return 1;
+    if (left && right) {
+        if (left.major !== right.major) return right.major - left.major;
+        if (left.minor !== right.minor) return right.minor - left.minor;
+        const variant = variantRank(a) - variantRank(b);
+        if (variant !== 0) return variant;
+    }
+    return b.localeCompare(a, undefined, { numeric: true, sensitivity: "base" });
+}
+
+/** Sort account-discovered model slugs with the newest GPT series first. */
 export function sortChatGPTModelSlugs(slugs: string[]): string[] {
-    return [...new Set(slugs.map((s) => s.trim()).filter(Boolean))].sort(
-        (a, b) =>
-            preferenceRank(a) - preferenceRank(b) ||
-            b.localeCompare(a, undefined, { numeric: true, sensitivity: "base" }),
+    return [...new Set(slugs.map((slug) => slug.trim()).filter(Boolean))].sort(
+        compareChatGPTSlugs,
     );
+}
+
+export function formatChatGPTModelName(slug: string): string {
+    const id = slug.trim();
+    const match = id.match(/^gpt-(\d+(?:\.\d+)?)(?:-(.+))?$/i);
+    if (!match) return id;
+    const variant = match[2]
+        ? ` ${match[2].replace(/-/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())}`
+        : "";
+    return `GPT-${match[1]}${variant}`;
 }
 
 export function chatgptModelsFromSlugs(slugs: string[]): ModelInfo[] {
     return sortChatGPTModelSlugs(slugs).map((id) =>
         enrichModelInfo({
             id,
-            name: id,
+            name: formatChatGPTModelName(id),
             provider: "chatgpt",
             supportsTools: !/image|tts|whisper|embedding|dall/i.test(id),
             supportsVision: !/tts|whisper|embedding/i.test(id),
             supportsStreaming: true,
-            // Codex models always reason; keep account-specific slugs such as
-            // reserve and auto-review selectable in the same effort menu.
             supportsReasoning: !/image|tts|whisper|embedding|dall/i.test(id),
-            ...( /image/i.test(id) ? { supportsImageGeneration: true } : {}),
+            ...(/image/i.test(id) ? { supportsImageGeneration: true } : {}),
         }),
     );
 }
@@ -68,10 +88,37 @@ export function chatgptModelsFromSlugs(slugs: string[]): ModelInfo[] {
 /** Pick the newest usable chat model (skip dedicated image/tts ids when possible). */
 export function pickLatestChatGPTModel(slugs: string[]): string | undefined {
     const sorted = sortChatGPTModelSlugs(slugs);
-    const chat = sorted.find(
-        (id) => !/image|tts|whisper|embedding|dall/i.test(id),
-    );
+    const chat = sorted.find((id) => !/image|tts|whisper|embedding|dall/i.test(id));
     return chat ?? sorted[0];
+}
+
+/**
+ * Keep an explicit user pick. Replace a missing id, or the previous auto
+ * default, when the account catalog now includes a newer GPT series.
+ */
+export function preferDiscoveredChatGPTModel(
+    current: string | undefined,
+    slugs: string[],
+): string | undefined {
+    const latest = pickLatestChatGPTModel(slugs);
+    if (!latest) return current;
+    const selected = current?.trim() ?? "";
+    if (!selected) return latest;
+    if (!slugs.some((slug) => slug === selected)) return latest;
+    const stale = (CHATGPT_STALE_DEFAULTS as readonly string[]).includes(selected);
+    if (!stale) return selected;
+    const selectedSeries = gptSeries(selected);
+    const latestSeries = gptSeries(latest);
+    if (
+        selectedSeries &&
+        latestSeries &&
+        (latestSeries.major > selectedSeries.major ||
+            (latestSeries.major === selectedSeries.major &&
+                latestSeries.minor > selectedSeries.minor))
+    ) {
+        return latest;
+    }
+    return selected;
 }
 
 export function formatChatGPTReset(resetsInSeconds?: number | null): string | null {

@@ -15,10 +15,12 @@ import {
     serializeCookie,
     type ChatGPTHandler,
 } from "@opencoredev/loginwithchatgpt-server";
+import { pickLatestChatGPTModel } from "~/lib/chatgpt-models";
 import {
     resolveChatGPTSecret,
     resolveChatGPTSessionStore,
 } from "~/lib/server/local-persist";
+import { DEFAULT_MODELS } from "~/lib/types";
 
 /** Stable Codex CLI version known to expose current GPT-5.6 / 5.5 catalog. */
 const DEFAULT_LWC_CLIENT_VERSION = "0.147.0";
@@ -55,8 +57,10 @@ export function getChatGPTHandler(): ChatGPTHandler {
         cookieName: CHATGPT_COOKIE_NAME,
         basePath: "/api/chatgpt",
         clientVersion,
-        // Prefer latest Codex default; live discovery still picks the account's best.
-        defaultModel: "gpt-5.6-luna",
+        // Fallback only. Live /models still returns the account catalog, ranked newest-first.
+        defaultModel:
+            pickLatestChatGPTModel((DEFAULT_MODELS.chatgpt ?? []).map((model) => model.id)) ||
+            "gpt-5.6-luna",
         allowedOrigins: allowedOrigins.length ? allowedOrigins : undefined,
         responsesProxy: {
             // Unset allowedModels → any model the signed-in account can use.

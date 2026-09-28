@@ -172,7 +172,7 @@ export function inferModelSupportsVision(
         return false;
     }
     if (
-        /gpt-4o|gpt-4\.1|gpt-5|chatgpt|o[1-4]|claude|gemini|gemma-4|llava|bakllava|moondream|minicpm-v|vision|pixtral|qwen.*vl|llama-4|grok.*vision|command-a-vision/.test(
+        /gpt-4o|gpt-4\.1|gpt-(?:[5-9]|[1-9]\d)|chatgpt|o[1-4]|claude|gemini|gemma-4|llava|bakllava|moondream|minicpm-v|vision|pixtral|qwen.*vl|llama-4|grok.*vision|command-a-vision/.test(
             id,
         )
     ) {

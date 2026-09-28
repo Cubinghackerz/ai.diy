@@ -33,6 +33,11 @@ export const forcedSkillStore: { current: ForcedSkill[] } = {
 /** Built-in skills that can be force-selected without custom content. */
 export const BUILTIN_FORCED_SKILLS: ForcedSkill[] = [
     {
+        name: "Finance Research",
+        content:
+            "You MUST follow the finance-research contract for this request: call research_skill first, then search and fetch primary sources (filings, company IR, central-bank or statistics releases, fund fact sheets) before stating any price, rate, return, multiple, or tax figure. Compute with calculator or run_python only from retrieved inputs and show the formula. Label each figure with its as-of date. Never invent numbers or URLs. This is research, not a buy/sell/tax recommendation. Do not answer before calling research_skill.",
+    },
+    {
         name: "Research",
         content:
             "You MUST handle this request with the research_skill: call research_skill first with a question close to the user's words (do not invent years/vendors/scope). Then run only short keyword searches (3–10 words) and fetch primary pages. Do not rely on training data for time-sensitive facts. Cite retrieved URLs and report confidence. Do not answer before calling research_skill.",
@@ -97,6 +102,15 @@ export const BUILTIN_FORCED_SKILLS: ForcedSkill[] = [
 /** Search aliases for the slash skill menu (name + shortcuts). */
 const SKILL_MENU_ALIASES: Record<string, string[]> = {
     research: ["research", "web research", "search"],
+    "finance research": [
+        "finance research",
+        "finance",
+        "money",
+        "investing",
+        "markets",
+        "earnings",
+        "valuation",
+    ],
     compaction: ["compaction", "compact", "compress", "context", "shrink"],
     "html craft": [
         "html craft",
@@ -166,6 +180,8 @@ export function skillMatchesSlashQuery(skillName: string, query: string): boolea
 /** Map forced skill display names (and aliases) to callable tool ids. */
 const SKILL_TOOL_BY_NAME: Record<string, string> = {
     research: "research_skill",
+    "finance research": "research_skill",
+    finance: "research_skill",
     "research skill": "research_skill",
     "web research": "research_skill",
     "html craft": "html_craft",
@@ -609,6 +625,33 @@ export function ensureFrontendSkill(
     const skill = lookupForcedSkill(
         briefOnly ? "Frontend Design" : "Ultimate Frontend UI",
     );
+    if (skill) next.unshift(skill);
+    return next;
+}
+
+/** Money, markets, filings, and rates — not stock photos or generic "stock of". */
+export function detectFinanceIntent(text: string | undefined | null): boolean {
+    const raw = (text ?? "").trim();
+    if (!raw || raw.length < 8) return false;
+    const t = raw.toLowerCase();
+    if (/\bstock\s+photos?\b/.test(t)) return false;
+    return /\b(finance|financial|invest(?:ing|ment|or)?s?|portfolio|earnings|valuation|mortgage|inflation|interest rates?|dividend|10-[kq]|sec filing|etfs?|ticker|p\/e|cash flow|budget|tax(?:es|ation)?|net worth|yield|(?:stock|share)s?\s+(?:price|prices|quote))\b/.test(
+        t,
+    );
+}
+
+export function ensureFinanceSkill(
+    skills: ForcedSkill[] | undefined,
+    userText: string,
+    options: { webSearchEnabled?: boolean } = {},
+): ForcedSkill[] {
+    const next = [...(skills ?? [])];
+    const hasFinance = next.some(
+        (skill) => normalizeForcedSkillName(skill.name) === "finance research",
+    );
+    if (hasFinance || options.webSearchEnabled === false) return next;
+    if (!detectFinanceIntent(userText)) return next;
+    const skill = lookupForcedSkill("Finance Research");
     if (skill) next.unshift(skill);
     return next;
 }

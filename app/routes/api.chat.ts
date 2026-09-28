@@ -27,6 +27,7 @@ import {
 import { buildChatSystemPromptParts } from "~/lib/server/prompt";
 import {
     ensureCompactionSkill,
+    ensureFinanceSkill,
     ensureFrontendSkill,
     ensureLinuxSkill,
     ensureNpmProjectSkill,
@@ -724,7 +725,8 @@ export async function action({ request }: ActionFunctionArgs) {
         const detectedSkills: ForcedSkill[] =
             body.previewMode === true
                 ? []
-                : ensureNpmProjectSkill(
+                : ensureFinanceSkill(
+                      ensureNpmProjectSkill(
                       ensureLinuxSkill(
                           ensureCompactionSkill(
                               ensureUrlDoctorSkill(
@@ -760,7 +762,13 @@ export async function action({ request }: ActionFunctionArgs) {
                           npmProjectEnabled: toolAccess.npmProject,
                           alreadyInvoked: npmProjectInvokedThisChat,
                       },
-                  );
+                  ),
+                  userText,
+                  {
+                      webSearchEnabled:
+                          toolAccess.webSearch && body.toolSettings?.webSearchEnabled,
+                  },
+              );
         const activeSkills = detectedSkills.filter((skill) => {
             const skillTool = toolNameForForcedSkill(skill.name);
             const accessKey = skillTool ? toolAccessKeyForTool(skillTool) : null;
