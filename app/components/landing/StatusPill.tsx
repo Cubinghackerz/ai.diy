@@ -21,7 +21,7 @@ export function StatusPill({
     return (
         <span
             className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[10px] tracking-wide",
+                "inline-flex items-center gap-1.5 rounded-[2px] border px-2.5 py-1 font-mono text-[10px] tracking-wide",
                 live
                     ? "border-[rgba(61,255,176,0.35)] bg-[rgba(61,255,176,0.1)] text-[#d8ffe9]"
                     : warn
@@ -33,12 +33,12 @@ export function StatusPill({
                 {pulse ? (
                     <span
                         className={cn(
-                            "absolute inline-flex h-full w-full animate-ping rounded-full opacity-40 motion-reduce:hidden",
+                            "absolute inline-flex h-full w-full animate-ping rounded-none opacity-40 motion-reduce:hidden",
                             dot,
                         )}
                     />
                 ) : null}
-                <span className={cn("relative inline-flex size-1.5 rounded-full", dot)} />
+                <span className={cn("relative inline-flex size-1.5 rounded-none", dot)} />
             </span>
             {children}
         </span>

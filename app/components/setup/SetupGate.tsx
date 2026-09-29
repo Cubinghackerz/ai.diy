@@ -321,7 +321,7 @@ export function SetupGate() {
             />
             <div
                 aria-hidden
-                className="pointer-events-none absolute left-1/2 top-[18%] h-64 w-[36rem] -translate-x-1/2 rounded-full bg-white/[0.04] blur-3xl"
+                className="pointer-events-none absolute left-1/2 top-[18%] h-64 w-[36rem] -translate-x-1/2 rounded-[2px] bg-white/[0.04] blur-3xl"
             />
 
             <div className="relative z-10 flex w-full max-w-xl flex-col gap-7 py-2 animate-slide-up sm:gap-8">
@@ -329,12 +329,12 @@ export function SetupGate() {
                     <div className="relative">
                         <div
                             aria-hidden
-                            className="absolute -inset-3 rounded-[1.75rem] bg-white/[0.08] blur-xl"
+                            className="absolute -inset-3 rounded-[3px] bg-white/[0.08] blur-xl"
                         />
                         <img
                             src="/ai-diy.png"
                             alt="ai.diy"
-                            className="relative size-14 rounded-[1.15rem] object-cover shadow-[0_18px_50px_-20px_rgba(255,255,255,0.45)] ring-1 ring-white/15"
+                            className="relative size-14 rounded-[3px] object-cover shadow-[0_18px_50px_-20px_rgba(255,255,255,0.45)] ring-1 ring-white/15"
                         />
                     </div>
                     <div className="flex flex-col gap-2">
@@ -347,13 +347,13 @@ export function SetupGate() {
                             the request you send.
                         </p>
                     </div>
-                    <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 font-mono text-[10px] tracking-wide text-zinc-400">
+                    <div className="inline-flex items-center gap-2 rounded-[2px] border border-white/10 bg-white/[0.04] px-3 py-1.5 font-mono text-[10px] tracking-wide text-zinc-400">
                         <ShieldCheck weight="fill" className="size-3.5 text-emerald-400" />
                         Local-first · BYOK · browser storage
                     </div>
                 </header>
 
-                <section className="relative overflow-hidden rounded-[1.75rem] border border-white/[0.1] bg-[#0e0e11]/80 p-5 shadow-[0_30px_100px_-40px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl sm:p-6">
+                <section className="relative overflow-hidden rounded-[3px] border border-white/[0.1] bg-[#0e0e11]/80 p-5 shadow-[0_30px_100px_-40px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl sm:p-6">
                     <div
                         aria-hidden
                         className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),transparent)]"
@@ -372,7 +372,7 @@ export function SetupGate() {
                                 <div
                                     key={item.n}
                                     className={cn(
-                                        "rounded-xl border px-2.5 py-2 text-center transition-colors",
+                                        "rounded-[2px] border px-2.5 py-2 text-center transition-colors",
                                         done || active
                                             ? "border-white/15 bg-white/[0.06]"
                                             : "border-white/[0.06] bg-white/[0.02]",
@@ -407,7 +407,7 @@ export function SetupGate() {
                             <ProviderPicker
                                 value={provider}
                                 onChange={selectProvider}
-                                className="w-full [&>button]:h-11 [&>button]:w-full [&>button]:rounded-xl [&>button]:border-white/10 [&>button]:bg-white/[0.04] [&>button]:px-3 [&>button]:text-sm [&>button]:text-zinc-100 [&>button]:hover:border-white/25 [&>button]:hover:bg-white/[0.08]"
+                                className="w-full [&>button]:h-11 [&>button]:w-full [&>button]:rounded-[2px] [&>button]:border-white/10 [&>button]:bg-white/[0.04] [&>button]:px-3 [&>button]:text-sm [&>button]:text-zinc-100 [&>button]:hover:border-white/25 [&>button]:hover:bg-white/[0.08]"
                             />
                             <p className="text-[11px] leading-relaxed text-zinc-500">
                                 Search all supported cloud providers, local runtimes, and custom OpenAI-compatible endpoints.
@@ -449,12 +449,12 @@ export function SetupGate() {
                                         setVerified(false);
                                         setError(null);
                                     }}
-                                    className="h-11 rounded-xl border-white/10 bg-white/[0.04] font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus-visible:border-white/25"
+                                    className="h-11 rounded-[2px] border-white/10 bg-white/[0.04] font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus-visible:border-white/25"
                                 />
                                 {CREDENTIAL_HINTS[provider] ? (
                                     <p className="text-[11px] leading-relaxed text-zinc-500">
                                         Paste JSON credentials:{" "}
-                                        <code className="rounded-md border border-white/10 bg-black/40 px-1.5 py-0.5 font-mono text-[10px] text-zinc-300">
+                                        <code className="rounded-[2px] border border-white/10 bg-black/40 px-1.5 py-0.5 font-mono text-[10px] text-zinc-300">
                                             {CREDENTIAL_HINTS[provider]}
                                         </code>
                                     </p>
@@ -477,7 +477,7 @@ export function SetupGate() {
                                     setBaseUrl(e.target.value);
                                     setVerified(false);
                                 }}
-                                className="h-11 rounded-xl border-white/10 bg-white/[0.04] font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus-visible:border-white/25"
+                                className="h-11 rounded-[2px] border-white/10 bg-white/[0.04] font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus-visible:border-white/25"
                             />
                         </div> : null}
 
@@ -486,7 +486,7 @@ export function SetupGate() {
                             variant="outline"
                             disabled={!keyReady || testing}
                             onClick={runTest}
-                            className="h-11 rounded-xl border-white/12 bg-white/[0.04] text-zinc-100 hover:border-white/25 hover:bg-white/[0.08] hover:text-white"
+                            className="h-11 rounded-[2px] border-white/12 bg-white/[0.04] text-zinc-100 hover:border-white/25 hover:bg-white/[0.08] hover:text-white"
                         >
                             {testing ? (
                                 <>
@@ -502,7 +502,7 @@ export function SetupGate() {
                         </Button> : null}
 
                         {error ? (
-                            <p className="flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-xs leading-relaxed text-red-300">
+                            <p className="flex items-start gap-2 rounded-[2px] border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-xs leading-relaxed text-red-300">
                                 <XCircle size={14} className="mt-0.5 shrink-0" weight="fill" />
                                 <span className="whitespace-pre-wrap">{error}</span>
                             </p>
@@ -515,7 +515,7 @@ export function SetupGate() {
                                     className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500"
                                 >
                                     Model
-                                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-0.5 font-mono text-[10px] normal-case tracking-normal text-emerald-300">
+                                    <span className="inline-flex items-center gap-1 rounded-[2px] border border-emerald-400/25 bg-emerald-400/10 px-2 py-0.5 font-mono text-[10px] normal-case tracking-normal text-emerald-300">
                                         <CheckCircle size={11} weight="fill" />
                                         Verified
                                     </span>
@@ -530,7 +530,7 @@ export function SetupGate() {
                                 </p>
                             </div>
                         ) : (
-                            <p className="rounded-xl border border-dashed border-white/10 bg-white/[0.025] px-3.5 py-3 text-xs leading-relaxed text-zinc-400">
+                            <p className="rounded-[2px] border border-dashed border-white/10 bg-white/[0.025] px-3.5 py-3 text-xs leading-relaxed text-zinc-400">
                                 {provider === "chatgpt"
                                     ? "Sign in above to unlock the models in your ChatGPT plan."
                                     : local
@@ -540,7 +540,7 @@ export function SetupGate() {
                         )}
 
                         {verified ? (
-                            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3.5 sm:p-4">
+                            <div className="rounded-[2px] border border-white/[0.08] bg-white/[0.025] p-3.5 sm:p-4">
                                 <ToolAccessPicker
                                     value={settings.toolAccess}
                                     onChange={updateToolAccess}
@@ -555,7 +555,7 @@ export function SetupGate() {
                             disabled={!canContinue}
                             onClick={handleContinue}
                             className={cn(
-                                "h-12 w-full rounded-full text-sm font-semibold shadow-none transition-[transform,background-color,opacity] active:scale-[0.98]",
+                                "h-12 w-full rounded-[2px] text-sm font-semibold shadow-none transition-[transform,background-color,opacity] active:scale-[0.98]",
                                 canContinue
                                     ? "bg-white text-black hover:bg-zinc-100"
                                     : "bg-white/15 text-zinc-400",

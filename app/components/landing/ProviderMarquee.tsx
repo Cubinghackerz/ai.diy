@@ -1,3 +1,4 @@
+import { SectionLabel } from "./SectionLabel";
 import { PROVIDER_LOGOS } from "./constants";
 import { MaskedHeading } from "./MaskedHeading";
 import { Reveal } from "./DoubleBezel";
@@ -6,11 +7,12 @@ export function ProviderMarquee() {
     return (
         <section
             id="providers"
-            className="relative overflow-hidden border-y border-white/[0.08] py-20 sm:py-24"
+            className="relative overflow-hidden py-20 sm:py-24"
             data-anim-gate="marquee"
             aria-label="Supported providers"
         >
             <div className="mx-auto max-w-6xl px-5 sm:px-8">
+                <SectionLabel index="02">Providers</SectionLabel>
                 <MaskedHeading className="max-w-[13ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
                     Bring any model into the same thread.
                 </MaskedHeading>

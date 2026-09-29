@@ -807,7 +807,7 @@ export function ComposioSettings() {
             <div>
                 <h2 id="composio-heading" className="flex items-center gap-2 text-sm font-semibold">
                     Composio Apps
-                    <span className="rounded-full border border-primary/35 bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
+                    <span className="rounded-[2px] border border-primary/35 bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
                         New
                     </span>
                 </h2>
@@ -1112,7 +1112,7 @@ export function ComposioSettings() {
                                 </span>
                                 {toolkit.connected ? (
                                     <>
-                                        <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+                                        <span className="inline-flex items-center gap-1 rounded-[2px] border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
                                             <CheckCircle className="size-3" weight="fill" />
                                             Connected
                                         </span>

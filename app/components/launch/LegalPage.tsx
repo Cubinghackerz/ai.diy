@@ -26,10 +26,10 @@ export function LegalPage({
                 <Link
                     to="/workspace"
                     reloadDocument
-                    className="group inline-flex min-h-10 items-center gap-2 rounded-full bg-white py-1.5 pl-4 pr-1.5 text-[12px] font-medium text-black transition-[transform,background-color] duration-200 hover:bg-zinc-200 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                    className="group inline-flex min-h-10 items-center gap-2 rounded-[2px] bg-white py-1.5 pl-4 pr-1.5 text-[12px] font-medium text-black transition-[transform,background-color] duration-200 hover:bg-zinc-200 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                 >
                     Enter Workspace
-                    <span className="inline-flex size-7 items-center justify-center rounded-full bg-black/10 transition-transform duration-200 group-hover:-translate-y-px group-hover:translate-x-0.5">
+                    <span className="inline-flex size-7 items-center justify-center rounded-[2px] bg-black/10 transition-transform duration-200 group-hover:-translate-y-px group-hover:translate-x-0.5">
                         <ArrowUpRight weight="bold" className="size-3.5" />
                     </span>
                 </Link>

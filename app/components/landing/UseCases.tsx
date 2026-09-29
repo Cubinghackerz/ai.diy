@@ -1,3 +1,4 @@
+import { SectionLabel } from "./SectionLabel";
 import { Code, Files, SquareHalf } from "@phosphor-icons/react";
 import { Link } from "react-router";
 import { Reveal } from "./DoubleBezel";
@@ -30,6 +31,7 @@ export function UseCases() {
             className="mx-auto max-w-6xl scroll-mt-28 px-5 py-24 sm:px-8 sm:py-32"
             data-anim-gate="use-cases"
         >
+            <SectionLabel index="04">Use cases</SectionLabel>
             <MaskedHeading className="max-w-[16ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
                 Browser-owned by default. Capable by design.
             </MaskedHeading>
@@ -43,8 +45,8 @@ export function UseCases() {
                                 key={item.title}
                                 className={
                                     flagship
-                                        ? "rounded-2xl border border-white/[0.08] bg-[#0a0a0a] p-7 transition-[transform,border-color,background-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-white/[0.16] hover:bg-[#111] hover:shadow-[0_24px_60px_-24px_rgba(0,0,0,0.85)] md:col-span-2"
-                                        : "rounded-2xl border border-white/[0.08] bg-[#0a0a0a] p-6 transition-[transform,border-color,background-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-white/[0.16] hover:bg-[#111] hover:shadow-[0_24px_60px_-24px_rgba(0,0,0,0.85)]"
+                                        ? "rounded-[2px] border border-white/[0.08] bg-[#0a0a0a] p-7 transition-[transform,border-color,background-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-white/[0.16] hover:bg-[#111] hover:shadow-[0_24px_60px_-24px_rgba(0,0,0,0.85)] md:col-span-2"
+                                        : "rounded-[2px] border border-white/[0.08] bg-[#0a0a0a] p-6 transition-[transform,border-color,background-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-white/[0.16] hover:bg-[#111] hover:shadow-[0_24px_60px_-24px_rgba(0,0,0,0.85)]"
                                 }
                                 style={{ transitionTimingFunction: EASE_OUT }}
                             >

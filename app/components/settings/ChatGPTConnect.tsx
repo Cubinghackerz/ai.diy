@@ -38,7 +38,7 @@ function PillButton({ className, children, ...props }: React.ComponentProps<"but
         <button
             type="button"
             className={cn(
-                "inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-foreground px-4 text-sm font-medium text-background transition-[background-color,transform] duration-150 hover:bg-foreground/85 active:translate-y-px disabled:pointer-events-none disabled:opacity-60",
+                "inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-[2px] bg-foreground px-4 text-sm font-medium text-background transition-[background-color,transform] duration-150 hover:bg-foreground/85 active:translate-y-px disabled:pointer-events-none disabled:opacity-60",
                 FOCUS,
                 className,
             )}
@@ -53,7 +53,7 @@ function Spinner() {
     return (
         <span
             aria-hidden
-            className="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+            className="size-3.5 animate-spin rounded-[2px] border-2 border-current border-t-transparent"
         />
     );
 }
@@ -137,7 +137,7 @@ export function ChatGPTConnect({ className }: { className?: string }) {
                 <span className="relative grid size-9 shrink-0 place-items-center rounded-xl bg-[#10a37f] text-white">
                     <ChatGPTMark width={18} height={18} />
                     {connected ? (
-                        <span className="cgpt-pop absolute -right-1 -bottom-1 grid size-4 place-items-center rounded-full bg-success text-black ring-2 ring-background">
+                        <span className="cgpt-pop absolute -right-1 -bottom-1 grid size-4 place-items-center rounded-[2px] bg-success text-black ring-2 ring-background">
                             <Check size={9} weight="bold" />
                         </span>
                     ) : null}
@@ -235,7 +235,7 @@ function DeviceCodePanel() {
                     type="button"
                     size="sm"
                     variant="outline"
-                    className={cn("h-9 rounded-full px-3", FOCUS)}
+                    className={cn("h-9 rounded-[2px] px-3", FOCUS)}
                     onClick={() => void session.copyCode()}
                 >
                     {session.copied ? (
@@ -249,7 +249,7 @@ function DeviceCodePanel() {
                     type="button"
                     size="sm"
                     variant="ghost"
-                    className={cn("h-9 rounded-full px-3", FOCUS)}
+                    className={cn("h-9 rounded-[2px] px-3", FOCUS)}
                     onClick={session.cancel}
                 >
                     Cancel
@@ -262,8 +262,8 @@ function DeviceCodePanel() {
                 className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground"
             >
                 <span className="relative grid size-2 place-items-center text-success">
-                    <span className="cgpt-ping absolute inset-0 rounded-full" />
-                    <span className="relative size-2 rounded-full bg-current" />
+                    <span className="cgpt-ping absolute inset-0 rounded-[2px]" />
+                    <span className="relative size-2 rounded-[2px] bg-current" />
                 </span>
                 <span>Waiting for approval</span>
                 <span aria-hidden className="tabular-nums">
@@ -293,7 +293,7 @@ function ConnectedDetails() {
         <div className="cgpt-rise mt-3">
             <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-xs">
                 {plan ? (
-                    <span className="rounded-full border border-border px-2 py-0.5 font-medium">
+                    <span className="rounded-[2px] border border-border px-2 py-0.5 font-medium">
                         {plan} plan
                     </span>
                 ) : null}

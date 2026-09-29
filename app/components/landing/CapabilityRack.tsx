@@ -1,3 +1,4 @@
+import { SectionLabel } from "./SectionLabel";
 import { useState } from "react";
 import {
     HardDrives,
@@ -50,12 +51,13 @@ export function CapabilityRack() {
             className="mx-auto max-w-6xl scroll-mt-28 px-5 py-28 sm:px-8 sm:py-36"
             data-anim-gate="capabilities"
         >
+            <SectionLabel index="05">Capabilities</SectionLabel>
             <MaskedHeading className="max-w-[18ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
                     Create files, presentations, and code with your own models.
             </MaskedHeading>
 
             <Reveal delayMs={40} className="mt-12">
-                <div className="rounded-2xl border border-white/[0.1] bg-[#0a0a0a]">
+                <div className="rounded-[2px] border border-white/[0.1] bg-[#0a0a0a]">
                     <div className="flex min-h-[24rem] flex-col md:flex-row">
                         <div
                             role="tablist"
@@ -75,7 +77,7 @@ export function CapabilityRack() {
                                         aria-controls={`cap-panel-${t.id}`}
                                         onClick={() => setTab(t.id)}
                                         className={cn(
-                                            "inline-flex min-h-11 shrink-0 items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[14px] transition-[background-color,color,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.98]",
+                                            "inline-flex min-h-11 shrink-0 items-center gap-2.5 rounded-[2px] px-3 py-2.5 text-left text-[14px] transition-[background-color,color,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.98]",
                                             selected
                                                 ? "bg-white/[0.08] text-white shadow-[inset_0_1px_0_rgba(61,255,176,0.25)]"
                                                 : "text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100",
@@ -106,7 +108,7 @@ export function CapabilityRack() {
                             </div>
 
                             <div className="mt-6 flex items-start gap-4">
-                                <span className="mt-0.5 inline-flex size-10 shrink-0 items-center justify-center rounded-lg border border-white/[0.1] bg-white/[0.04]">
+                                <span className="mt-0.5 inline-flex size-10 shrink-0 items-center justify-center rounded-[2px] border border-white/[0.1] bg-white/[0.04]">
                                     <Icon weight="light" className="size-5 text-zinc-300" />
                                 </span>
                                 <div className="min-w-0">
@@ -128,7 +130,7 @@ export function CapabilityRack() {
                                     ].map((row) => (
                                         <div
                                             key={row.k}
-                                            className="rounded-lg border border-white/[0.08] bg-black px-3.5 py-3 transition-[border-color,background-color] duration-200 hover:border-white/[0.14] hover:bg-white/[0.02]"
+                                            className="rounded-[2px] border border-white/[0.08] bg-black px-3.5 py-3 transition-[border-color,background-color] duration-200 hover:border-white/[0.14] hover:bg-white/[0.02]"
                                         >
                                             <p className="font-mono text-[10px] tracking-wide text-zinc-500">
                                                 {row.k}
@@ -142,7 +144,7 @@ export function CapabilityRack() {
                             ) : null}
 
                             {active.id === "storage" ? (
-                                <pre className="mt-8 overflow-x-auto rounded-lg border border-white/[0.08] bg-black p-4 font-mono text-[11px] leading-relaxed text-zinc-400 sm:text-[12px]">
+                                <pre className="mt-8 overflow-x-auto rounded-[2px] border border-white/[0.08] bg-black p-4 font-mono text-[11px] leading-relaxed text-zinc-400 sm:text-[12px]">
                                     <code>
                                         {`browser/
   localStorage  → encrypted settings payload
@@ -157,7 +159,7 @@ server/
                             ) : null}
 
                             {active.id === "deploy" ? (
-                                <pre className="mt-8 overflow-x-auto rounded-lg border border-white/[0.08] bg-black p-4 font-mono text-[12px] leading-relaxed text-zinc-400">
+                                <pre className="mt-8 overflow-x-auto rounded-[2px] border border-white/[0.08] bg-black p-4 font-mono text-[12px] leading-relaxed text-zinc-400">
                                     <code>
                                         <span className="text-zinc-500">$ </span>
                                         npm run build && npm start

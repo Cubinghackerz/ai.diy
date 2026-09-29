@@ -58,7 +58,7 @@ export function IslandNav() {
             <div className="pointer-events-none fixed inset-x-0 top-0 z-40 flex justify-center px-4 pt-4 sm:px-6 sm:pt-5">
                 <nav
                     className={cn(
-                        "pointer-events-auto flex w-full max-w-5xl items-center gap-3 rounded-full border px-2 py-1.5 pl-4 shadow-[0_12px_48px_-24px_rgba(0,0,0,0.9)] backdrop-blur-2xl transition-[border-color,background-color,box-shadow] duration-200",
+                        "pointer-events-auto flex w-full max-w-5xl items-center gap-3 rounded-[2px] border px-2 py-1.5 pl-4 shadow-[0_12px_48px_-24px_rgba(0,0,0,0.9)] backdrop-blur-2xl transition-[border-color,background-color,box-shadow] duration-200",
                         scrolled
                             ? "border-white/[0.1] bg-black/80"
                             : "border-white/[0.08] bg-black/55",
@@ -78,7 +78,7 @@ export function IslandNav() {
                             <a
                                 key={link.label}
                                 href={link.href}
-                                className="inline-flex min-h-9 items-center rounded-full px-3 text-[13px] text-zinc-400 transition-[color,background-color] duration-200 hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                                className="inline-flex min-h-9 items-center rounded-[2px] px-3 text-[13px] text-zinc-400 transition-[color,background-color] duration-200 hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                                 style={{ transitionTimingFunction: EASE_OUT }}
                             >
                                 {link.label}
@@ -93,7 +93,7 @@ export function IslandNav() {
                                 href={link.href}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="hidden min-h-9 items-center rounded-full px-3 text-[13px] text-zinc-400 transition-[color,background-color] duration-200 hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 md:inline-flex"
+                                className="hidden min-h-9 items-center rounded-[2px] px-3 text-[13px] text-zinc-400 transition-[color,background-color] duration-200 hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 md:inline-flex"
                                 style={{ transitionTimingFunction: EASE_OUT }}
                             >
                                 {link.label}
@@ -104,7 +104,7 @@ export function IslandNav() {
                         </LandingCta>
                         <button
                             type="button"
-                            className="inline-flex size-10 items-center justify-center rounded-full text-zinc-300 transition-[color,background-color,transform] duration-200 hover:bg-white/[0.08] hover:text-white active:scale-[0.96] lg:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                            className="inline-flex size-10 items-center justify-center rounded-[2px] text-zinc-300 transition-[color,background-color,transform] duration-200 hover:bg-white/[0.08] hover:text-white active:scale-[0.96] lg:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                             aria-label={open ? "Close menu" : "Open menu"}
                             aria-expanded={open}
                             aria-controls={menuId}
@@ -145,7 +145,7 @@ export function IslandNav() {
                 <div className="flex h-full flex-col justify-center gap-1 px-8 pt-16">
                     {[...LINKS, ...EXTERNAL].map((link, i) => {
                         const className = cn(
-                            "block rounded-xl px-3 py-3 text-2xl font-medium text-zinc-100 transition-[opacity,transform] duration-200",
+                            "block rounded-[2px] px-3 py-3 text-2xl font-medium text-zinc-100 transition-[opacity,transform] duration-200",
                             open ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0",
                         );
                         const style = {

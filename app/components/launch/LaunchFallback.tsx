@@ -44,16 +44,16 @@ export function LaunchFallback({
                                 <Link
                                     to="/workspace"
                                     reloadDocument
-                                    className="group inline-flex min-h-11 items-center gap-2 rounded-full bg-white py-2 pl-5 pr-2 text-[13px] font-medium text-black transition-[transform,background-color] duration-200 hover:bg-zinc-200 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                                    className="group inline-flex min-h-11 items-center gap-2 rounded-[2px] bg-white py-2 pl-5 pr-2 text-[13px] font-medium text-black transition-[transform,background-color] duration-200 hover:bg-zinc-200 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                                 >
                                     Open Workspace
-                                    <span className="inline-flex size-8 items-center justify-center rounded-full bg-black/10 transition-transform duration-200 group-hover:-translate-y-px group-hover:translate-x-0.5">
+                                    <span className="inline-flex size-8 items-center justify-center rounded-[2px] bg-black/10 transition-transform duration-200 group-hover:-translate-y-px group-hover:translate-x-0.5">
                                         <ArrowUpRight weight="bold" className="size-3.5" />
                                     </span>
                                 </Link>
                                 <Link
                                     to="/"
-                                    className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/[0.12] px-5 py-2 text-[13px] font-medium text-zinc-300 transition-[border-color,color,transform] duration-200 hover:border-white/25 hover:text-white active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                                    className="inline-flex min-h-11 items-center gap-2 rounded-[2px] border border-white/[0.12] px-5 py-2 text-[13px] font-medium text-zinc-300 transition-[border-color,color,transform] duration-200 hover:border-white/25 hover:text-white active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                                 >
                                     <ArrowLeft weight="light" className="size-4" />
                                     Back home

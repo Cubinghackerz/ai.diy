@@ -2,7 +2,16 @@
 
 ## Direction
 
-The landing page is **Vercel/Resend blackfield**: a centered product-window first viewport. Ownership copy and actions sit above the real ai.diy workspace screenshot, not beside it. The page then proves the claim through the Local Data Plane, provider freedom, private workflows, capability controls, and a real deploy terminal. Structure comes from typography, spacing, and hairlines. No gradients.
+The landing page is **Vercel/Resend blackfield with an instrumented, squared frame**: a centered product-window first viewport. Ownership copy and actions sit above the real ai.diy workspace screenshot, not beside it. The page then proves the claim through the Local Data Plane, provider freedom, private workflows, capability controls, and a real deploy terminal. Structure comes from typography, spacing, hairlines, and a numbered section grid. No gradients.
+
+## Shape Language
+
+- Corners are square: `--radius-xs` 1px through `--radius-4xl` 6px, defined once in `app/styles/app.css`. Every non-chat surface reads those tokens, so a shape change is a token change.
+- The chat surface is the exception. `.legacy-round` (set on the workspace main column in `app/routes/home.tsx`) restores the original soft radii for the header, thread, canvas, and preview panels. The composer keeps its pill shell and circular buttons.
+- Status dots, pills, and controls are rectangles or near-rectangles; only the composer and genuinely circular affordances (avatars, switch thumbs, spinner) stay round.
+- Evidence sits inside a hairline rail: the landing `main` is one `max-w-6xl` column with side borders, and each section is separated by a shared top border. Sections carry a mono index kicker (`SectionLabel`, "01 / OWNERSHIP") and a mint 6px square.
+- Hero evidence is framed with `CornerFrame` selection handles, the squarish signature.
+- Wordmark: the closing band sets `ai.diy` as outlined type that fills in on hover.
 
 ## Mode
 
@@ -14,8 +23,8 @@ Persuade. Understand BYOK local-first ownership, then open `/workspace` or deplo
 - Surfaces: `#0a0a0a` / `#111111`, used where containment communicates product or terminal structure
 - Type: white headings, zinc-400 body, zinc-500/600 metadata
 - Borders: `white/[0.08–0.1]` hairlines
-- Primary CTA: solid white pill with nested icon circle (`LandingCta`)
-- Live signal: mint `#3DFFB0`, reserved for status dots, cipher glyphs, and the Local Data Plane packet
+- Primary CTA: solid white rectangle with a squared nested arrow cell (`LandingCta`)
+- Live signal: mint `#3DFFB0`, reserved for status squares, cipher glyphs, and the Local Data Plane packet
 - Provider shelf: static official marks with grayscale-to-color hover; no pill containers or marquee loop
 
 ## Typography
@@ -28,31 +37,36 @@ Persuade. Understand BYOK local-first ownership, then open `/workspace` or deplo
 ## Shape And Depth
 
 - The page canvas is open black; evidence uses hairline containment, not decorative frames
-- Product and terminal surfaces earn rounded-2xl shells and a single large offset shadow
+- Product and terminal surfaces earn square shells (2–3px) and a single large offset shadow
 - The product bezel may take a gentle pointer tilt (≤3°)
-- Hairlines divide information; decorative dot fields, SVG noise, stage rails, crosshairs, dashed frames, nested bezels, and gradients are not page scaffolding
-- Floating island navigation remains the primary chrome
+- Hairlines divide information; decorative dot fields, SVG noise, dashed frames, gradients, and nested bezels are not page scaffolding. The single rail around `main` and its section dividers are the only structural lines
+- Floating island navigation remains the primary chrome, squared and hairline-bordered
 
 ## Composition
 
 1. Floating island navigation
-2. Centered ownership hero with cipher headline, actions, and a full-width product window
-3. Local Data Plane trust boundary with one mint transit packet
-4. Static provider shelf
-5. Private-workflow evidence as hairline cards
-6. Interactive capability lanes
-7. Copyable self-host terminal
-8. FAQ
-9. Quiet, edge-to-edge closing statement and footer
+2. Centered ownership hero: status row, cipher headline, actions, and a corner-framed product window
+3. Key-facts band inside the rail
+4. Local Data Plane trust boundary with one mint transit packet
+5. Static provider shelf
+6. Composio app shelf
+7. Private-workflow evidence as hairline cards
+8. Interactive capability lanes
+9. Copyable self-host terminal
+10. FAQ
+11. Changelog
+12. Closing statement with outlined wordmark, then footer
 
 ## Motion
 
 - Custom ease `cubic-bezier(0.32, 0.72, 0, 1)` / GSAP power3
-- Focal moment: the hero ownership headline decrypts under the cursor (Canvas UI DecryptReveal, mint on `#000`). Hover-capable pointers only; touch and reduced-motion see crisp type
+- Press and hover feedback settles in 150ms; the primary CTA scales to 0.97 on press
+- Focal moment: the hero ownership headline decrypts under the cursor (Canvas UI DecryptReveal, mint on `#0a0a0a`). Hover-capable pointers only; touch and reduced-motion see crisp type
 - Remaining hero steps keep the blur-up stagger; the headline is excluded so the cipher owns the entrance
 - CTAs magnet toward the pointer; product window tilts
 - Section headings use a one-time masked word reveal (`MaskedHeading`); other section reveals stay subtle (`Reveal`)
 - Local Data Plane: one mint packet traverses the header band
+- Closing wordmark fills from outline to a 6% wash on hover
 - No perpetual decorative floaters beyond the single packet; honor `prefers-reduced-motion`
 
 ## Icons
@@ -69,4 +83,5 @@ Persuade. Understand BYOK local-first ownership, then open `/workspace` or deplo
 ## Form Contract
 
 - THESIS: The product is the proof — a black, flat, Vercel-grade workspace in the first viewport
-- FORM: Vercel/Resend blackfield × centered product window × hairline instrumentation
+- FORM: Vercel/Resend blackfield × squared instrumented rail × centered product window
+- SHAPE: 1–6px radii everywhere except the workspace chat surface, which keeps its soft radii

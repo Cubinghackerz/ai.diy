@@ -194,7 +194,10 @@ export default function LandingPage() {
     return (
         <LandingShell>
             <IslandNav />
-            <main id="main-content">
+            <main
+                id="main-content"
+                className="mx-auto max-w-6xl border-x border-white/[0.08] [&>*+*]:border-t [&>*+*]:border-white/[0.08]"
+            >
                 <Hero />
                 <FactsBand />
                 <OwnershipStage />

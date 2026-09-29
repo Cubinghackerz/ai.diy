@@ -1,3 +1,4 @@
+import { SectionLabel } from "./SectionLabel";
 import { HardDrives, Key, PlugsConnected } from "@phosphor-icons/react";
 import { MaskedHeading } from "./MaskedHeading";
 import { TrustBoundary } from "./TrustBoundary";
@@ -27,6 +28,7 @@ export function OwnershipStage() {
             className="relative mx-auto max-w-6xl scroll-mt-28 px-5 py-20 sm:px-8 sm:py-28"
             data-anim-gate="ownership-stage"
         >
+            <SectionLabel index="01">Ownership</SectionLabel>
             <div className="grid gap-6 md:grid-cols-[0.85fr_1.15fr] md:items-end md:gap-12">
                 <MaskedHeading className="max-w-[12ch] text-4xl font-medium tracking-[-0.04em] text-white sm:text-5xl">
                     Your keys stay under your control.
@@ -48,7 +50,7 @@ export function OwnershipStage() {
                     return (
                         <article
                             key={item.title}
-                            className="rounded-2xl border border-white/[0.08] bg-[#0a0a0a] p-6 transition-[transform,border-color,background-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-white/[0.16] hover:bg-[#111] hover:shadow-[0_20px_48px_-28px_rgba(0,0,0,0.9)]"
+                            className="rounded-[2px] border border-white/[0.08] bg-[#0a0a0a] p-6 transition-[transform,border-color,background-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-white/[0.16] hover:bg-[#111] hover:shadow-[0_20px_48px_-28px_rgba(0,0,0,0.9)]"
                         >
                             <Icon weight="light" className="size-5 text-zinc-300" />
                             <h3 className="mt-5 text-[16px] font-medium tracking-tight text-white">
@@ -60,7 +62,7 @@ export function OwnershipStage() {
                         </article>
                     );
                 })}
-                <article className="rounded-2xl border border-white/[0.08] bg-black p-6 transition-[border-color,background-color] duration-200 hover:border-white/[0.14] hover:bg-[#0a0a0a] md:col-span-2">
+                <article className="rounded-[2px] border border-white/[0.08] bg-black p-6 transition-[border-color,background-color] duration-200 hover:border-white/[0.14] hover:bg-[#0a0a0a] md:col-span-2">
                     <PlugsConnected weight="light" className="size-5 text-zinc-300" />
                     <h3 className="mt-5 text-[16px] font-medium tracking-tight text-white">
                         {CALLOUTS[2].title}

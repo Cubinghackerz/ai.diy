@@ -1,3 +1,4 @@
+import { SectionLabel } from "./SectionLabel";
 import { MaskedHeading } from "./MaskedHeading";
 import { Reveal } from "./DoubleBezel";
 
@@ -96,13 +97,11 @@ export function ComposioApps() {
     return (
         <section
             id="apps"
-            className="relative overflow-hidden border-y border-white/[0.08] py-20 sm:py-24"
+            className="relative overflow-hidden py-20 sm:py-24"
             aria-label="Connect apps with Composio"
         >
             <div className="mx-auto max-w-6xl px-5 sm:px-8">
-                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-zinc-500">
-                    Connect
-                </p>
+                <SectionLabel index="03">Apps</SectionLabel>
                 <MaskedHeading className="mt-3 max-w-[18ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
                     Connect the apps you already use.
                 </MaskedHeading>

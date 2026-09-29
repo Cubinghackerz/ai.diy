@@ -1,3 +1,4 @@
+import { SectionLabel } from "./SectionLabel";
 import { ArrowUpRight, GitCommit } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import { CHANGELOG_URL, GITHUB_URL } from "./constants";
@@ -56,6 +57,7 @@ export function ChangelogSection() {
         >
             <div className="grid gap-10 md:grid-cols-[0.8fr_1.2fr] md:items-start md:gap-16">
                 <div>
+                    <SectionLabel index="08">Changelog</SectionLabel>
                     <MaskedHeading
                         id="changelog-heading"
                         className="max-w-[10ch] text-4xl font-medium tracking-[-0.04em] text-white sm:text-5xl"

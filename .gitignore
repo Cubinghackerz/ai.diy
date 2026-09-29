@@ -14,3 +14,5 @@ node_modules
 .backup/
 .codex/
 .impeccable/
+.opencode/
+.playwright-mcp/

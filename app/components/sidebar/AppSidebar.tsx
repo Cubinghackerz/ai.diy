@@ -1263,7 +1263,7 @@ function SettingsPanel({
                                                         {item.label}
                                                     </span>
                                                     {featured ? (
-                                                        <span className="shrink-0 rounded-full border border-primary/30 bg-primary/15 px-1.5 py-px text-[9px] font-semibold uppercase tracking-[0.12em] text-primary">
+                                                        <span className="shrink-0 rounded-[2px] border border-primary/30 bg-primary/15 px-1.5 py-px text-[9px] font-semibold uppercase tracking-[0.12em] text-primary">
                                                             New
                                                         </span>
                                                     ) : null}
@@ -1315,7 +1315,7 @@ function SettingsPanel({
                                     Private by design. Changes stay in this browser.
                                 </p>
                             </div>
-                            <span className="shrink-0 rounded-full border border-success/25 bg-success/10 px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-success">
+                            <span className="shrink-0 rounded-[2px] border border-success/25 bg-success/10 px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-success">
                                 Local
                             </span>
                         </div>
@@ -1815,7 +1815,7 @@ function TokenModeSettingsSection() {
                         >
                             <span
                                 className={cn(
-                                    "mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-full border",
+                                    "mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-[2px] border",
                                     selected
                                         ? "border-foreground/80 bg-foreground text-background"
                                         : "border-border/80",
@@ -1832,7 +1832,7 @@ function TokenModeSettingsSection() {
                                         {TOKEN_MODE_LABELS[mode]}
                                     </span>
                                     {mode === "balanced" ? (
-                                        <span className="rounded-full bg-muted/80 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-wide text-muted-foreground">
+                                        <span className="rounded-[2px] bg-muted/80 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-wide text-muted-foreground">
                                             default
                                         </span>
                                     ) : null}
@@ -3443,9 +3443,9 @@ function CloudStorageSection({
                                 hapticSelect();
                                 patch({ autoBackup: v });
                             }}
-                            className="relative h-5 w-9 shrink-0 rounded-full bg-muted transition-colors outline-none data-[state=checked]:bg-primary"
+                            className="relative h-5 w-9 shrink-0 rounded-[2px] bg-muted transition-colors outline-none data-[state=checked]:bg-primary"
                         >
-                            <Switch.Thumb className="block size-4 translate-x-0.5 rounded-full bg-white transition-transform data-[state=checked]:translate-x-4" />
+                            <Switch.Thumb className="block size-4 translate-x-0.5 rounded-[2px] bg-white transition-transform data-[state=checked]:translate-x-4" />
                         </Switch.Root>
                     </div>
                 </>
@@ -3857,7 +3857,7 @@ function LinuxNetworkSection({ scopeId }: { scopeId: string | null }) {
                 <div className="flex min-w-0 items-start gap-2">
                     <span
                         className={cn(
-                            "mt-1 size-2 shrink-0 rounded-full",
+                            "mt-1 size-2 shrink-0 rounded-[2px]",
                             connected
                                 ? "bg-success shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-success)_15%,transparent)]"
                                 : network.status === "error"
@@ -4353,7 +4353,7 @@ function KeysSection() {
                                 setActive(id);
                             }}
                             className={cn(
-                                "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium outline-none transition-colors",
+                                "inline-flex items-center gap-1 rounded-[2px] border px-2.5 py-1 text-[11px] font-medium outline-none transition-colors",
                                 active === id
                                     ? "border-primary/40 bg-primary/10 text-foreground"
                                     : "border-border/70 text-muted-foreground hover:bg-accent",
@@ -4710,9 +4710,9 @@ function ToolToggle({
                     hapticSelect();
                     onChange(v);
                 }}
-                className="relative h-5 w-9 shrink-0 rounded-full bg-muted transition-colors outline-none data-[state=checked]:bg-primary"
+                className="relative h-5 w-9 shrink-0 rounded-[2px] bg-muted transition-colors outline-none data-[state=checked]:bg-primary"
             >
-                <Switch.Thumb className="block size-4 translate-x-0.5 rounded-full bg-white transition-transform data-[state=checked]:translate-x-4" />
+                <Switch.Thumb className="block size-4 translate-x-0.5 rounded-[2px] bg-white transition-transform data-[state=checked]:translate-x-4" />
             </Switch.Root>
         </div>
     );

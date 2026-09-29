@@ -141,7 +141,7 @@ export function KimiSubscriptionSettings({
                 <div className="min-w-0">
                     <div className="flex items-center gap-2">
                         <p className="text-xs font-medium">Kimi membership</p>
-                        <span className="rounded-full border border-amber-500/30 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.08em] text-amber-600 dark:text-amber-400">
+                        <span className="rounded-[2px] border border-amber-500/30 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.08em] text-amber-600 dark:text-amber-400">
                             Experimental
                         </span>
                     </div>

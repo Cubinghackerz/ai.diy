@@ -1,3 +1,4 @@
+import { SectionLabel } from "./SectionLabel";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, CopySimple } from "@phosphor-icons/react";
 import { DEPLOY_TABS, VERCEL_DEPLOY_URL, type DeployTabId } from "./constants";
@@ -52,11 +53,12 @@ export function DeployTerminal() {
     return (
         <section
             id="deploy"
-            className="mx-auto max-w-6xl scroll-mt-28 px-5 pb-28 sm:px-8 sm:pb-36"
+            className="mx-auto max-w-6xl scroll-mt-28 px-5 pb-28 pt-20 sm:px-8 sm:pb-36 sm:pt-28"
             data-anim-gate="deploy"
         >
             <Reveal>
                 <div>
+                    <SectionLabel index="06">Deploy</SectionLabel>
                     <MaskedHeading className="text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
                         Self-host in one command.
                     </MaskedHeading>
@@ -68,7 +70,7 @@ export function DeployTerminal() {
             </Reveal>
 
             <Reveal delayMs={40} className="mt-8">
-                <div className="overflow-hidden rounded-2xl border border-white/[0.1] bg-[#0a0a0a]">
+                <div className="overflow-hidden rounded-[2px] border border-white/[0.1] bg-[#0a0a0a]">
                     <div
                         ref={tabsRef}
                         role="tablist"
@@ -85,7 +87,7 @@ export function DeployTerminal() {
                                 aria-selected={tab === t.id}
                                 onClick={() => setTab(t.id)}
                                 className={cn(
-                                    "t-tab min-h-10 rounded-t-lg px-3 py-2 font-mono text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40",
+                                    "t-tab min-h-10 rounded-t-[2px] px-3 py-2 font-mono text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40",
                                 )}
                             >
                                 {t.label}
@@ -109,7 +111,7 @@ export function DeployTerminal() {
                                 <span aria-hidden className="ml-1 inline-block h-[1.05em] w-[0.55em] translate-y-[0.22em] animate-pulse bg-[var(--landing-mint,#3DFFB0)] motion-reduce:animate-none" />
                             </code>
                         </pre>
-                        <span className="absolute right-4 top-4 inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-white/[0.12] bg-black/50 px-2.5 font-mono text-[11px] text-zinc-300">
+                        <span className="absolute right-4 top-4 inline-flex min-h-9 items-center gap-1.5 rounded-[2px] border border-white/[0.12] bg-black/50 px-2.5 font-mono text-[11px] text-zinc-300">
                             <span
                                 className="t-icon-swap"
                                 data-state={copied ? "b" : "a"}
@@ -134,7 +136,7 @@ export function DeployTerminal() {
                             onClick={() => {
                                 setTab("docker");
                             }}
-                            className="inline-flex min-h-10 items-center rounded-full border border-white/25 bg-white/[0.08] px-4 text-[12px] font-medium text-zinc-100 transition-colors hover:border-white/45 hover:bg-white/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                            className="inline-flex min-h-10 items-center rounded-[2px] border border-white/25 bg-white/[0.08] px-4 text-[12px] font-medium text-zinc-100 transition-colors hover:border-white/45 hover:bg-white/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                         >
                             Docker Compose
                         </button>

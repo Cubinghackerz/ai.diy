@@ -70,11 +70,11 @@ export function ProductBezel({ className }: { className?: string }) {
     return (
         <div className={cn("w-full", className)} aria-label="Workspace product demo">
             <TiltedCard maxTilt={3}>
-                <div className="overflow-hidden rounded-2xl border border-white/[0.1] bg-[#0a0a0a] shadow-[0_48px_120px_-48px_rgba(0,0,0,0.95)]">
+                <div className="overflow-hidden rounded-[2px] border border-white/[0.1] bg-[#0a0a0a] shadow-[0_48px_120px_-48px_rgba(0,0,0,0.95)]">
                     <div className="flex items-center gap-2 border-b border-white/[0.08] px-4 py-2.5">
-                        <span className="size-2 rounded-full bg-zinc-700" />
-                        <span className="size-2 rounded-full bg-zinc-700" />
-                        <span className="size-2 rounded-full bg-zinc-700" />
+                        <span className="size-2 rounded-[2px] bg-zinc-700" />
+                        <span className="size-2 rounded-[2px] bg-zinc-700" />
+                        <span className="size-2 rounded-[2px] bg-zinc-700" />
                         <span className="ml-3 font-mono text-[10px] tracking-wide text-zinc-500">
                             ai.diy workspace
                         </span>
@@ -85,7 +85,7 @@ export function ProductBezel({ className }: { className?: string }) {
                             <button
                                 type="button"
                                 onClick={() => setOpen(true)}
-                                className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-white/[0.12] bg-white/[0.04] px-2.5 font-mono text-[10px] tracking-wide text-zinc-300 transition-[background-color,border-color,color] duration-200 hover:border-white/25 hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                                className="inline-flex min-h-8 items-center gap-1.5 rounded-[2px] border border-white/[0.12] bg-white/[0.04] px-2.5 font-mono text-[10px] tracking-wide text-zinc-300 transition-[background-color,border-color,color] duration-200 hover:border-white/25 hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                                 style={{ transitionTimingFunction: EASE_OUT }}
                             >
                                 <Play weight="fill" className="size-3" />
@@ -108,7 +108,7 @@ export function ProductBezel({ className }: { className?: string }) {
                             style={{ transitionTimingFunction: EASE_OUT }}
                         />
                         <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-[opacity,background-color] duration-200 group-hover:bg-black/28 group-hover:opacity-100 group-focus-visible:bg-black/28 group-focus-visible:opacity-100">
-                            <span className="inline-flex translate-y-1 scale-[0.98] items-center gap-2 rounded-full border border-white/20 bg-black/75 px-4 py-2.5 font-mono text-[11px] text-white shadow-[0_12px_40px_-16px_rgba(0,0,0,0.8)] transition-[transform,opacity] duration-200 group-hover:translate-y-0 group-hover:scale-100 group-focus-visible:translate-y-0 group-focus-visible:scale-100">
+                            <span className="inline-flex translate-y-1 scale-[0.98] items-center gap-2 rounded-[2px] border border-white/20 bg-black/75 px-4 py-2.5 font-mono text-[11px] text-white shadow-[0_12px_40px_-16px_rgba(0,0,0,0.8)] transition-[transform,opacity] duration-200 group-hover:translate-y-0 group-hover:scale-100 group-focus-visible:translate-y-0 group-focus-visible:scale-100">
                                 <Play weight="fill" className="size-3.5" />
                                 Play fullscreen demo
                             </span>
@@ -150,13 +150,13 @@ export function ProductBezel({ className }: { className?: string }) {
                                   autoPlay={!reduced}
                                   controls
                                   playsInline
-                                  className="h-full max-h-[100dvh] w-full max-w-[100vw] rounded-none object-contain sm:rounded-2xl"
+                                  className="h-full max-h-[100dvh] w-full max-w-[100vw] rounded-none object-contain sm:rounded-[2px]"
                               />
                               <button
                                   ref={closeRef}
                                   type="button"
                                   onClick={closeModal}
-                                  className="absolute right-3 top-3 inline-flex size-11 items-center justify-center rounded-full border border-white/20 bg-black/70 text-white transition-colors hover:bg-black/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 sm:right-5 sm:top-5"
+                                  className="absolute right-3 top-3 inline-flex size-11 items-center justify-center rounded-[2px] border border-white/20 bg-black/70 text-white transition-colors hover:bg-black/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 sm:right-5 sm:top-5"
                                   aria-label="Close fullscreen demo"
                               >
                                   <X weight="light" className="size-5" />

@@ -8,8 +8,8 @@ export function DoubleBezel({
     className,
     innerClassName,
     padding = "p-1.5",
-    outerRadius = "rounded-[1.75rem]",
-    innerRadius = "rounded-[calc(1.75rem-0.375rem)]",
+    outerRadius = "rounded-[3px]",
+    innerRadius = "rounded-[2px]",
 }: {
     children: ReactNode;
     className?: string;

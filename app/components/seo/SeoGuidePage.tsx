@@ -55,13 +55,13 @@ export function SeoGuidePage({
                     <nav className="flex items-center gap-1.5 text-xs text-zinc-400 sm:gap-3" aria-label="Guide navigation">
                         <Link
                             to="/"
-                            className="rounded-full px-3 py-2 hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                            className="rounded-[2px] px-3 py-2 hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                         >
                             Home
                         </Link>
                         <Link
                             to="/workspace"
-                            className="rounded-full border border-white/20 bg-white/[0.08] px-3 py-2 text-white hover:bg-white/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                            className="rounded-[2px] border border-white/20 bg-white/[0.08] px-3 py-2 text-white hover:bg-white/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                         >
                             Open workspace
                         </Link>
@@ -95,7 +95,7 @@ export function SeoGuidePage({
                         </div>
                     </div>
 
-                    <dl className="mt-12 grid gap-px overflow-hidden rounded-2xl border border-white/[0.1] bg-white/[0.1] sm:grid-cols-3">
+                    <dl className="mt-12 grid gap-px overflow-hidden rounded-[2px] border border-white/[0.1] bg-white/[0.1] sm:grid-cols-3">
                         {facts.map((fact) => (
                             <div key={fact.label} className="bg-[#0b0b0d] px-5 py-5">
                                 <dt className="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-500">
@@ -135,14 +135,14 @@ export function SeoGuidePage({
                                     <ol className="mt-6 space-y-6">
                                         {steps.map((step, index) => (
                                             <li key={step.title} className="flex gap-4">
-                                                <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-white/15 font-mono text-xs text-zinc-300">
+                                                <span className="flex size-8 shrink-0 items-center justify-center rounded-[2px] border border-white/15 font-mono text-xs text-zinc-300">
                                                     {index + 1}
                                                 </span>
                                                 <div className="min-w-0">
                                                     <h3 className="text-base font-medium text-white">{step.title}</h3>
                                                     <div className="mt-2 text-[15px] leading-7 text-zinc-400">{step.body}</div>
                                                     {step.code ? (
-                                                        <pre className="mt-3 overflow-x-auto rounded-xl border border-white/[0.1] bg-[#0b0b0d] p-4 font-mono text-xs leading-6 text-zinc-300">
+                                                        <pre className="mt-3 overflow-x-auto rounded-[2px] border border-white/[0.1] bg-[#0b0b0d] p-4 font-mono text-xs leading-6 text-zinc-300">
                                                             <code>{step.code}</code>
                                                         </pre>
                                                     ) : null}
@@ -185,7 +185,7 @@ export function SeoGuidePage({
                                         <li key={relatedPage.slug}>
                                             <Link
                                                 to={relatedPage.path}
-                                                className="group flex items-center justify-between gap-3 rounded-lg px-2 py-2.5 text-sm text-zinc-300 hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                                                className="group flex items-center justify-between gap-3 rounded-[2px] px-2 py-2.5 text-sm text-zinc-300 hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                                             >
                                                 <span>{relatedPage.label}</span>
                                                 <ArrowRight className="size-4 text-zinc-600 transition-transform group-hover:translate-x-0.5 group-hover:text-zinc-300" />
@@ -202,7 +202,7 @@ export function SeoGuidePage({
                                     href={SITE_REPOSITORY_URL}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-full border border-white/20 px-4 text-xs font-medium text-white hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                                    className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-[2px] border border-white/20 px-4 text-xs font-medium text-white hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                                 >
                                     <GithubLogo className="size-4" />
                                     View source on GitHub
@@ -214,13 +214,13 @@ export function SeoGuidePage({
                     <div className="mt-20 flex flex-wrap items-center gap-3 border-t border-white/[0.1] pt-8">
                         <Link
                             to="/workspace"
-                            className="inline-flex min-h-11 items-center rounded-full bg-white px-5 text-sm font-medium text-black hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                            className="inline-flex min-h-11 items-center rounded-[2px] bg-white px-5 text-sm font-medium text-black hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
                         >
                             Open the workspace
                         </Link>
                         <Link
                             to="/"
-                            className="inline-flex min-h-11 items-center rounded-full border border-white/20 px-5 text-sm text-zinc-300 hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                            className="inline-flex min-h-11 items-center rounded-[2px] border border-white/20 px-5 text-sm text-zinc-300 hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                         >
                             Back to product overview
                         </Link>

@@ -12,7 +12,7 @@ const FACTS = [
 export function FactsBand() {
     return (
         <Reveal delayMs={60}>
-            <div className="border-y border-white/[0.08]">
+            <div>
                 <dl className="mx-auto grid max-w-6xl grid-cols-2 lg:grid-cols-4">
                     {FACTS.map((fact, i) => (
                         <div

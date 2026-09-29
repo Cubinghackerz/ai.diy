@@ -1,4 +1,5 @@
 import { GITHUB_URL } from "./constants";
+import { CornerFrame } from "./CornerFrame";
 import { LandingCta } from "./LandingCta";
 import { MaskedHeading } from "./MaskedHeading";
 
@@ -6,7 +7,7 @@ export function ClosingBand() {
     return (
         <section
             data-anim-gate="closing"
-            className="relative border-t border-white/[0.08] px-5 py-32 sm:px-8 sm:py-44"
+            className="relative overflow-hidden px-5 py-32 sm:px-8 sm:py-44"
         >
             <div className="relative mx-auto max-w-3xl text-center">
                 <MaskedHeading className="text-[clamp(2.4rem,5.5vw,4.25rem)] font-medium leading-[1.04] tracking-[-0.04em] text-white">
@@ -32,6 +33,14 @@ export function ClosingBand() {
                     <span>MIT LICENSED</span>
                 </p>
             </div>
+            <CornerFrame className="group mx-auto mt-24 max-w-4xl select-none sm:mt-32">
+                <p
+                    aria-hidden
+                    className="py-4 text-center text-[clamp(4.5rem,20vw,13rem)] font-semibold leading-[0.9] tracking-[-0.06em] text-transparent transition-[color,-webkit-text-stroke-color] duration-300 [-webkit-text-stroke:1px_rgba(255,255,255,0.22)] group-hover:text-white/[0.06] group-hover:[-webkit-text-stroke-color:rgba(255,255,255,0.6)] motion-reduce:transition-none"
+                >
+                    ai.diy
+                </p>
+            </CornerFrame>
         </section>
     );
 }

@@ -22,7 +22,7 @@ export function LandingFooter() {
                     <BrandMark height={22} />
                     <p className="mt-3 flex items-center gap-2 font-mono text-[11px] text-zinc-400">
                         <span
-                            className="size-1.5 rounded-full bg-[var(--landing-mint,#3DFFB0)]"
+                            className="size-1.5 rounded-[2px] bg-[var(--landing-mint,#3DFFB0)]"
                             aria-hidden
                         />
                         All systems normal

@@ -1,3 +1,4 @@
+import { SectionLabel } from "./SectionLabel";
 import { CaretDown } from "@phosphor-icons/react";
 import { Reveal } from "./DoubleBezel";
 import { MaskedHeading } from "./MaskedHeading";
@@ -47,6 +48,7 @@ export function Faq() {
             data-anim-gate="faq"
         >
             <Reveal>
+                <SectionLabel index="07">FAQ</SectionLabel>
                 <MaskedHeading
                     id="faq-heading"
                     className="max-w-[18ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl"
