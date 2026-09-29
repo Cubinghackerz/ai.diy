@@ -95,3 +95,18 @@ export function formatPlan(plan: string | undefined): string | null {
     if (!value) return null;
     return value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, " ");
 }
+
+/**
+ * `/status` answers `unauthenticated` when the store can't see the session —
+ * a restart, an instance swap, or a cookie that didn't travel. That is often
+ * momentary (the durable store re-appears), so a pending login tolerates a few
+ * consecutive misses before it gives up instead of killing the flow instantly.
+ */
+export const MAX_LOST_SESSION_STRIKES = 3;
+
+export function shouldFailLostSession(strikes: number): boolean {
+    return strikes >= MAX_LOST_SESSION_STRIKES;
+}
+
+export const LOST_SESSION_MESSAGE =
+    "The server lost track of this sign-in — a restart can do that, and blocked cookies will too. Start again for a fresh code.";

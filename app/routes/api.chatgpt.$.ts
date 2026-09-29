@@ -4,8 +4,11 @@
  * Wrapper responsibilities on top of the SDK handler:
  * - `GET /session` validates the session (advances it via `/status`) so tokens
  *   are renewed and a revoked session reports `expired` instead of a stale
- *   "authenticated". Concurrent validations of one cookie are coalesced so
- *   refresh-token rotation is never raced by our own polling.
+ *   "authenticated".
+ * - `GET /session` and `GET /status` are coalesced per session cookie: both
+ *   call the SDK's `advance()`, and two concurrent advances on one pending
+ *   session double-poll the device code and can save a stale "pending" over an
+ *   "authenticated" result (lost login). One in-flight advance per cookie.
  * - SDK failures become stable JSON `{ status: "error", error, message }`
  *   responses instead of opaque 500s.
  */
@@ -19,6 +22,7 @@ import {
 import { readCookie } from "@opencoredev/loginwithchatgpt-server";
 import { chatGPTErrorCode, describeChatGPTError } from "~/lib/chatgpt-errors";
 
+/** In-flight `advance()` per signed session cookie (see validateSession). */
 const validations = new Map<string, Promise<{ status: number; body: string }>>();
 
 function errorResponse(error: unknown): Response {
@@ -31,6 +35,7 @@ function errorResponse(error: unknown): Response {
     );
 }
 
+/** Runs the SDK's advancing `/status` path for a `/session` or `/status` request. */
 async function runValidation(request: Request): Promise<{ status: number; body: string }> {
     const url = new URL(request.url);
     url.pathname = url.pathname.replace(/\/session$/, "/status");
@@ -56,10 +61,12 @@ async function validateSession(request: Request): Promise<Response> {
 
 async function handle(request: Request): Promise<Response> {
     const pathname = new URL(request.url).pathname;
-    const isSession = request.method === "GET" && pathname.endsWith("/session");
+    const isAdvancing =
+        request.method === "GET" &&
+        (pathname.endsWith("/session") || pathname.endsWith("/status"));
     let response: Response;
     try {
-        response = isSession
+        response = isAdvancing
             ? await validateSession(request)
             : await getChatGPTHandler().handler(request);
     } catch (error) {
@@ -68,7 +75,7 @@ async function handle(request: Request): Promise<Response> {
     const headers = new Headers(response.headers);
     headers.set("Cache-Control", "no-store");
     headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
-    if (response.ok && (isSession || pathname.endsWith("/status"))) {
+    if (response.ok && isAdvancing) {
         const cookie = await refreshChatGPTSessionCookie(request).catch(() => undefined);
         if (cookie) headers.append("Set-Cookie", cookie);
     }

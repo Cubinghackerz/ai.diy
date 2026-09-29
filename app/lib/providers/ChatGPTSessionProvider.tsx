@@ -17,7 +17,11 @@ import {
     useState,
     type ReactNode,
 } from "react";
-import { describeChatGPTError } from "~/lib/chatgpt-errors";
+import {
+    LOST_SESSION_MESSAGE,
+    describeChatGPTError,
+    shouldFailLostSession,
+} from "~/lib/chatgpt-errors";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 
 const BASE = "/api/chatgpt";
@@ -326,50 +330,64 @@ export function ChatGPTSessionProvider({ children }: { children: ReactNode }) {
         (expiresAt: number, intervalSeconds: number) => {
             stopPolling();
             let active = true;
+            let inflight = false;
             let timer: number | undefined;
             let failures = 0;
+            let lostStrikes = 0;
             const delay = Math.min(8000, Math.max(2000, intervalSeconds * 1000));
 
             const tick = async () => {
-                if (!active) return;
-                if (Date.now() >= expiresAt + 5000) {
-                    failLogin("That code expired before it was approved. Start again for a fresh one.");
-                    return;
-                }
+                // visibilitychange and focus both fire on return-from-popup; one
+                // poll in flight at a time keeps the device-code advance single.
+                if (!active || inflight) return;
+                inflight = true;
                 try {
-                    const res = await api<RemoteSession>("/status");
-                    if (!active) return;
-                    if (res.ok && res.data?.status === "authenticated") {
-                        finishConnected(res.data.user);
-                        return;
-                    }
-                    if (res.ok && (res.data?.status === "expired" || res.data?.status === "error")) {
+                    if (Date.now() >= expiresAt + 5000) {
                         failLogin("That code expired before it was approved. Start again for a fresh one.");
                         return;
                     }
-                    if (res.ok && res.data?.status === "unauthenticated") {
-                        failLogin("The sign-in session was lost (cookies may be blocked). Try again.");
-                        return;
-                    }
-                    if (!res.ok) {
-                        const info = describeChatGPTError(res.data?.error);
-                        if (!info.retryable) {
-                            failLogin(res.data?.message || info.message);
+                    try {
+                        const res = await api<RemoteSession>("/status");
+                        if (!active) return;
+                        if (res.ok && res.data?.status === "authenticated") {
+                            finishConnected(res.data.user);
                             return;
                         }
+                        if (res.ok && (res.data?.status === "expired" || res.data?.status === "error")) {
+                            failLogin("That code expired before it was approved. Start again for a fresh one.");
+                            return;
+                        }
+                        if (res.ok && res.data?.status === "unauthenticated") {
+                            lostStrikes += 1;
+                            if (shouldFailLostSession(lostStrikes)) {
+                                failLogin(LOST_SESSION_MESSAGE);
+                                return;
+                            }
+                        } else if (res.ok) {
+                            lostStrikes = 0;
+                        }
+                        if (!res.ok) {
+                            const info = describeChatGPTError(res.data?.error);
+                            if (!info.retryable) {
+                                failLogin(res.data?.message || info.message);
+                                return;
+                            }
+                            failures += 1;
+                        } else {
+                            failures = 0;
+                        }
+                    } catch {
+                        if (!active) return;
                         failures += 1;
-                    } else {
-                        failures = 0;
                     }
-                } catch {
-                    if (!active) return;
-                    failures += 1;
+                    if (failures >= MAX_POLL_FAILURES) {
+                        failLogin("Lost connection to the server while waiting for approval. Try again.");
+                        return;
+                    }
+                } finally {
+                    inflight = false;
+                    if (active) timer = window.setTimeout(tick, delay);
                 }
-                if (failures >= MAX_POLL_FAILURES) {
-                    failLogin("Lost connection to the server while waiting for approval. Try again.");
-                    return;
-                }
-                timer = window.setTimeout(tick, delay);
             };
 
             const onVisible = () => {

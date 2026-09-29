@@ -11,11 +11,14 @@ const vite = await createServer({
 });
 const errors = await vite.ssrLoadModule(path.join(root, "app/lib/chatgpt-errors.ts"));
 const {
+    LOST_SESSION_MESSAGE,
+    MAX_LOST_SESSION_STRIKES,
     chatGPTErrorCode,
     describeChatGPTError,
     formatCountdown,
     formatPlan,
     secondsUntil,
+    shouldFailLostSession,
     splitDeviceCode,
 } = errors;
 
@@ -78,6 +81,18 @@ check("secondsUntil handles missing", secondsUntil(undefined, 0) === 0);
 check("formatPlan capitalizes", formatPlan("plus") === "Plus", formatPlan("plus") ?? "");
 check("formatPlan empty -> null", formatPlan("") === null);
 check("formatPlan missing -> null", formatPlan(undefined) === null);
+
+check(
+    "lost session survives first strikes",
+    !shouldFailLostSession(1) && !shouldFailLostSession(MAX_LOST_SESSION_STRIKES - 1),
+);
+check("lost session fails at the limit", shouldFailLostSession(MAX_LOST_SESSION_STRIKES));
+check("lost session fails past the limit", shouldFailLostSession(MAX_LOST_SESSION_STRIKES + 2));
+check(
+    "lost session message names recovery",
+    /start again/i.test(LOST_SESSION_MESSAGE),
+    LOST_SESSION_MESSAGE,
+);
 
 await vite.close();
 if (failures > 0) {
