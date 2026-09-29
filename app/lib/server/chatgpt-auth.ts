@@ -16,7 +16,9 @@ import {
     type ChatGPTHandler,
 } from "@opencoredev/loginwithchatgpt-server";
 import { pickLatestChatGPTModel } from "~/lib/chatgpt-models";
+import { createChatGPTGuard, type ChatGPTGuard } from "~/lib/server/chatgpt-guard";
 import {
+    isServerlessRuntime,
     resolveChatGPTSecret,
     resolveChatGPTSessionStore,
 } from "~/lib/server/local-persist";
@@ -35,10 +37,40 @@ function resolveSessionTtlMs(): number {
     return days * 24 * 60 * 60 * 1000;
 }
 
-let handler: ChatGPTHandler | null = null;
+let rawHandler: ChatGPTHandler | null = null;
+let guardedHandler: ChatGPTHandler | null = null;
+let guard: ChatGPTGuard | null = null;
 
-export function getChatGPTHandler(): ChatGPTHandler {
-    if (handler) return handler;
+/**
+ * Whether a sign-in can outlive this process. Serverless hosts need both a
+ * shared store (Redis) and a fixed secret; without them every cold start or
+ * instance swap silently drops the session and the user must reconnect.
+ */
+export function chatGPTPersistence(): "durable" | "ephemeral" {
+    if (!isServerlessRuntime()) return "durable";
+    const redis =
+        (process.env.UPSTASH_REDIS_REST_URL?.trim() || process.env.KV_REST_API_URL?.trim()) &&
+        (process.env.UPSTASH_REDIS_REST_TOKEN?.trim() || process.env.KV_REST_API_TOKEN?.trim());
+    return redis && process.env.LWC_SECRET?.trim() ? "durable" : "ephemeral";
+}
+
+/** Logs why OpenAI refused a token request (status + OAuth error code only, never tokens). */
+const loggingFetch: typeof fetch = async (input, init) => {
+    const response = await fetch(input, init);
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (!response.ok && url.includes("/oauth/token")) {
+        const code = await response
+            .clone()
+            .json()
+            .then((body: { error?: unknown }) => (typeof body?.error === "string" ? body.error : undefined))
+            .catch(() => undefined);
+        console.warn(`[chatgpt] OpenAI token endpoint answered ${response.status}${code ? ` (${code})` : ""}`);
+    }
+    return response;
+};
+
+function getRawHandler(): ChatGPTHandler {
+    if (rawHandler) return rawHandler;
 
     const secret = resolveChatGPTSecret();
 
@@ -50,8 +82,9 @@ export function getChatGPTHandler(): ChatGPTHandler {
     const clientVersion =
         process.env.LWC_CLIENT_VERSION?.trim() || DEFAULT_LWC_CLIENT_VERSION;
 
-    handler = createChatGPTHandler({
+    rawHandler = createChatGPTHandler({
         secret,
+        fetch: loggingFetch,
         sessionStore: resolveChatGPTSessionStore("chatgpt-sessions.json"),
         sessionTtlMs: resolveSessionTtlMs(),
         cookieName: CHATGPT_COOKIE_NAME,
@@ -71,7 +104,28 @@ export function getChatGPTHandler(): ChatGPTHandler {
         },
     });
 
-    return handler;
+    return rawHandler;
+}
+
+/** The one guard shared by the `/api/chatgpt/*` route and in-process chat callers. */
+export function getChatGPTGuard(): ChatGPTGuard {
+    guard ??= createChatGPTGuard({
+        getHandler: getRawHandler,
+        cookieName: CHATGPT_COOKIE_NAME,
+        renewCookie: refreshChatGPTSessionCookie,
+        persistence: chatGPTPersistence,
+    });
+    return guard;
+}
+
+/**
+ * The SDK handler for server code (chat, titles, model lists). `proxyFetch` and
+ * `getModels` are coordinated with session validation so a token is never
+ * rotated by two callers at once — see chatgpt-guard.ts.
+ */
+export function getChatGPTHandler(): ChatGPTHandler {
+    guardedHandler ??= getChatGPTGuard().wrap(getRawHandler());
+    return guardedHandler;
 }
 
 /** Renews an authenticated browser cookie without changing its signed value. */

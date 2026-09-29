@@ -3,6 +3,7 @@ import {
     mkdirSync,
     readFileSync,
     renameSync,
+    statSync,
     writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -248,23 +249,41 @@ interface FileStoreEntry<T> {
 /**
  * Single-node JSON key/value store. Enough for local Docker/Node so ChatGPT
  * sessions survive process restarts. Multi-instance hosts still need Redis/KV.
+ *
+ * The file is the source of truth: every operation first re-reads it when it
+ * changed on disk. Without that, two processes sharing `.data/` (dev + prod
+ * server, or an old process overlapping a restart) each hold a stale copy and
+ * the next write from either one erases the other's sessions.
  */
 export class FileKeyValueStore<T> implements KeyValueStore<T> {
     private readonly path: string;
     private readonly now: () => number;
     private map = new Map<string, FileStoreEntry<T>>();
     private loaded = false;
+    private stamp = "";
 
     constructor(filename: string, options: { now?: () => number } = {}) {
         this.path = join(DATA_DIR, filename);
         this.now = options.now ?? Date.now;
     }
 
-    private load() {
-        if (this.loaded) return;
-        this.loaded = true;
+    private fileStamp(): string {
         try {
-            if (!existsSync(this.path)) return;
+            const stat = statSync(this.path);
+            return `${stat.ino}:${stat.size}:${stat.mtimeMs}`;
+        } catch {
+            return "";
+        }
+    }
+
+    private load() {
+        const stamp = this.fileStamp();
+        if (this.loaded && stamp === this.stamp) return;
+        this.loaded = true;
+        this.stamp = stamp;
+        this.map = new Map();
+        if (!stamp) return;
+        try {
             const parsed = JSON.parse(readFileSync(this.path, "utf8")) as Record<
                 string,
                 FileStoreEntry<T>
@@ -293,6 +312,7 @@ export class FileKeyValueStore<T> implements KeyValueStore<T> {
         } catch {
             writeFileSync(this.path, next, { mode: 0o600 });
         }
+        this.stamp = this.fileStamp();
     }
 
     get(key: string): T | undefined {

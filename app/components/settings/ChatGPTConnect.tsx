@@ -332,6 +332,13 @@ function ConnectedDetails() {
                     Offline. Showing your last known status.
                 </p>
             ) : null}
+            {session.ephemeral ? (
+                <p className="mt-2.5 text-xs leading-relaxed text-amber-600 dark:text-amber-400">
+                    This server can&apos;t keep sign-ins across restarts, so you&apos;ll have to
+                    reconnect after it recycles. The host fixes this by setting LWC_SECRET and a
+                    Redis store (see DEPLOYMENT.md).
+                </p>
+            ) : null}
             {isFree ? (
                 <p className="mt-2.5 text-xs leading-relaxed text-amber-600 dark:text-amber-400">
                     Free plans have a low Codex usage quota. If chats fail with a usage limit, wait

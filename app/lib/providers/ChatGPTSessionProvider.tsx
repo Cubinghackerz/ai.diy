@@ -65,11 +65,14 @@ type SessionState = {
     error?: string;
     /** Last background check couldn't reach the server; last known state is kept. */
     offline: boolean;
+    /** The host can't keep sign-ins across restarts (serverless without Redis + LWC_SECRET). */
+    ephemeral: boolean;
     verify: ChatGPTVerifyState;
 };
 
 type RemoteSession = {
     status?: string;
+    persistence?: "durable" | "ephemeral";
     user?: ChatGPTUser;
     message?: string;
     error?: string;
@@ -101,6 +104,7 @@ const INITIAL: SessionState = {
     copied: false,
     popupBlocked: false,
     offline: false,
+    ephemeral: false,
     verify: { state: "idle" },
 };
 
@@ -179,6 +183,10 @@ export function ChatGPTSessionProvider({ children }: { children: ReactNode }) {
     const settle = useCallback(
         (data: RemoteSession | null): ChatGPTSessionStatus => {
             lastCheckRef.current = Date.now();
+            if (data?.persistence) {
+                const ephemeral = data.persistence === "ephemeral";
+                if (ephemeral !== stateRef.current.ephemeral) setState((prev) => ({ ...prev, ephemeral }));
+            }
             const inFlow = stateRef.current.status;
             if (inFlow === "pending" || inFlow === "starting") return inFlow;
             if (data?.status === "authenticated") {
@@ -257,9 +265,8 @@ export function ChatGPTSessionProvider({ children }: { children: ReactNode }) {
                     const res = await api<RemoteSession>("/session");
                     if (res.ok && res.data) return settle(res.data);
                     if (res.status === 401) return settle({ status: "unauthenticated" });
-                    if (res.status < 500 && res.status !== 429) {
-                        return settle({ status: "unauthenticated" });
-                    }
+                    // Anything else (403 from a proxy, 404 mid-deploy, 429, 5xx) says
+                    // nothing about the session: retry and keep the last known state.
                 } catch {
                     /* network failure — retry with backoff */
                 }
@@ -437,6 +444,11 @@ export function ChatGPTSessionProvider({ children }: { children: ReactNode }) {
             try {
                 const res = await api<LoginResponse>("/login", { method: "POST" });
                 const data = res.data;
+                if (res.ok && data?.status === "authenticated") {
+                    // Another tab (or an earlier click) already signed in: keep that session.
+                    finishConnected(data.user);
+                    return;
+                }
                 if (!res.ok || !data?.userCode || !data.verificationUrl) {
                     throw new Error(
                         data?.message || describeChatGPTError(data?.error).message,
@@ -473,7 +485,7 @@ export function ChatGPTSessionProvider({ children }: { children: ReactNode }) {
                 );
             }
         })();
-    }, [failLogin, startPolling]);
+    }, [failLogin, finishConnected, startPolling]);
 
     const cancel = useCallback(() => {
         stopPolling();
