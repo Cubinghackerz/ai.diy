@@ -13,6 +13,7 @@ import {
 } from "react-router";
 import type { HeadersFunction, LinksFunction, MetaFunction } from "react-router";
 import { SettingsProvider } from "~/lib/providers/SettingsProvider";
+import { ChatGPTSessionProvider } from "~/lib/providers/ChatGPTSessionProvider";
 import { TooltipProvider } from "~/components/ui/tooltip";
 import { LaunchFallback } from "~/components/launch/LaunchFallback";
 import { BUILD_ID } from "~/lib/build";
@@ -80,7 +81,9 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                     }}
                 />
                 <SettingsProvider>
-                    <TooltipProvider delay={200}>{children}</TooltipProvider>
+                    <ChatGPTSessionProvider>
+                        <TooltipProvider delay={200}>{children}</TooltipProvider>
+                    </ChatGPTSessionProvider>
                 </SettingsProvider>
                 <ScrollRestoration />
                 <Scripts />

@@ -30,7 +30,7 @@ The claim a neighboring product could not copy truthfully: a self-hosted AI work
 - Voice dictation via browser Web Speech; Python execution via browser-side Pyodide (generated files land in Canvas and are saved with the chat).
 - Client soft spend/token/RPM guardrails per key fingerprint, plus optional server sliding-window rate limits.
 - Import/export: ChatGPT, Claude, ShareGPT, Markdown, ai.diy JSON.
-- Experimental BETA: Login with ChatGPT subscription (`Settings → Experimental`) via HttpOnly session cookie — spends the user's ChatGPT plan through `/api/chatgpt`, not an OpenAI API key.
+- Experimental BETA: Login with ChatGPT subscription (`Settings → API Keys`) via HttpOnly session cookie — spends the user's ChatGPT plan through `/api/chatgpt`, not an OpenAI API key. Consent → device code → auto-detected connect (no reload); sessions are validated and renewed in the background.
 
 ## Capabilities and Constraints
 

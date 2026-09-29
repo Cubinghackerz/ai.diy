@@ -3,12 +3,15 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LoginWithChatGPT, useLoginWithChatGPT } from "@opencoredev/loginwithchatgpt-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { SearchableModelSelect } from "~/components/ui/ModelPicker";
 import { ProviderPicker } from "~/components/ui/ProviderPicker";
-import { ChatGPTConnectionRefreshDialog } from "~/components/settings/ChatGPTConnectionRefreshDialog";
+import { ChatGPTConnect } from "~/components/settings/ChatGPTConnect";
+import {
+    useChatGPTSession,
+    useOnChatGPTConnected,
+} from "~/lib/providers/ChatGPTSessionProvider";
 import {
     GrokSubscriptionSettings,
     useGrokBuildSession,
@@ -36,6 +39,7 @@ import {
 } from "@phosphor-icons/react";
 import { LoaderIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
+import { setThemeOverride } from "~/lib/theme-override";
 import { pickLatestChatGPTModel } from "~/lib/chatgpt-models";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { ToolAccessPicker } from "~/components/settings/ToolAccessPicker";
@@ -51,7 +55,7 @@ const CREDENTIAL_HINTS: Partial<Record<ProviderId, string>> = {
 export function SetupGate() {
     const { settings, loaded, updateProvider, updateChat, updateSettings, updateToolAccess } =
         useSettings();
-    const { isAuthenticated, user } = useLoginWithChatGPT();
+    const { isAuthenticated } = useChatGPTSession();
     const { session: grokSession } = useGrokBuildSession();
     const { session: kimiSession } = useKimiSession();
 
@@ -71,14 +75,15 @@ export function SetupGate() {
     const [testing, setTesting] = useState(false);
     const [verified, setVerified] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [chatGptRefreshOpen, setChatGptRefreshOpen] = useState(false);
 
     useEffect(() => {
         const root = document.documentElement;
         const hadDark = root.classList.contains("dark");
         const hadOled = root.classList.contains("oled");
+        setThemeOverride(true);
         root.classList.add("dark", "oled");
         return () => {
+            setThemeOverride(null);
             root.classList.toggle("dark", hadDark);
             root.classList.toggle("oled", hadOled);
         };
@@ -92,7 +97,9 @@ export function SetupGate() {
             ? grokAuthenticated
             : provider === "kimi"
               ? kimiAuthenticated
-              : local || apiKey.trim().length > 0;
+              : provider === "chatgpt"
+                ? isAuthenticated
+                : local || apiKey.trim().length > 0;
 
     useEffect(() => {
         const cfg = settings.providers[provider];
@@ -266,8 +273,8 @@ export function SetupGate() {
         updateSettings({ chatgptLoginEnabled: true });
         updateProvider("chatgpt", { apiKey: "", enabled: true });
         updateChat({ provider: "chatgpt", model: chatGptModel });
-        setChatGptRefreshOpen(true);
     }, [updateChat, updateProvider, updateSettings]);
+    useOnChatGPTConnected(handleChatGPTAuthenticated);
 
     const handleGrokBuildConnected = useCallback(() => {
         setModels(DEFAULT_MODELS.grok ?? []);
@@ -281,10 +288,6 @@ export function SetupGate() {
         setModel(DEFAULT_MODELS.kimi?.[0]?.id || "kimi-k3");
         setVerified(true);
         setError(null);
-    }, []);
-
-    const refreshAfterChatGPTLogin = useCallback(() => {
-        window.setTimeout(() => window.location.reload(), 500);
     }, []);
 
     const providerLabel = useMemo(
@@ -423,37 +426,9 @@ export function SetupGate() {
                             />
                         ) : null}
 
-                        <div className="flex flex-col gap-3 rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.04] p-3.5">
-                            <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                    <p className="text-sm font-semibold text-zinc-100">
-                                        ChatGPT subscription
-                                    </p>
-                                    <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
-                                        Sign in with ChatGPT to use your subscription through a secure session. No API key required.
-                                    </p>
-                                </div>
-                                <ShieldCheck
-                                    size={18}
-                                    weight="fill"
-                                    className="shrink-0 text-emerald-400"
-                                />
-                            </div>
-                            <LoginWithChatGPT
-                                consent={{
-                                    appName: "ai.diy",
-                                    continueLabel: "I understand - continue",
-                                }}
-                                onAuthenticated={handleChatGPTAuthenticated}
-                            />
-                            {isAuthenticated && user?.email ? (
-                                <p className="font-mono text-[10px] text-emerald-300/80">
-                                    Already connected as {user.email}
-                                </p>
-                            ) : null}
-                        </div>
+                        <ChatGPTConnect />
 
-                        {!local && provider !== "grok" && provider !== "kimi" ? (
+                        {!local && provider !== "grok" && provider !== "kimi" && provider !== "chatgpt" ? (
                             <div className="flex flex-col gap-2">
                                 <label
                                     htmlFor="setup-api-key"
@@ -487,7 +462,7 @@ export function SetupGate() {
                             </div>
                         ) : null}
 
-                        {provider !== "grok" && provider !== "kimi" ? <div className="flex flex-col gap-2">
+                        {provider !== "grok" && provider !== "kimi" && provider !== "chatgpt" ? <div className="flex flex-col gap-2">
                             <label
                                 htmlFor="setup-base-url"
                                 className="text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500"
@@ -506,7 +481,7 @@ export function SetupGate() {
                             />
                         </div> : null}
 
-                        {provider !== "grok" && provider !== "kimi" ? <Button
+                        {provider !== "grok" && provider !== "kimi" && provider !== "chatgpt" ? <Button
                             type="button"
                             variant="outline"
                             disabled={!keyReady || testing}
@@ -556,9 +531,11 @@ export function SetupGate() {
                             </div>
                         ) : (
                             <p className="rounded-xl border border-dashed border-white/10 bg-white/[0.025] px-3.5 py-3 text-xs leading-relaxed text-zinc-400">
-                                {local
-                                    ? "Models unlock after a successful live call to this endpoint."
-                                    : "Models unlock after a successful live test call to this provider (same key + endpoint you entered)."}
+                                {provider === "chatgpt"
+                                    ? "Sign in above to unlock the models in your ChatGPT plan."
+                                    : local
+                                      ? "Models unlock after a successful live call to this endpoint."
+                                      : "Models unlock after a successful live test call to this provider (same key + endpoint you entered)."}
                             </p>
                         )}
 
@@ -594,11 +571,6 @@ export function SetupGate() {
                     No server-side LLM credentials · MIT open source
                 </p>
             </div>
-            <ChatGPTConnectionRefreshDialog
-                open={chatGptRefreshOpen}
-                onOpenChange={setChatGptRefreshOpen}
-                onRefresh={refreshAfterChatGPTLogin}
-            />
         </div>
     );
 }

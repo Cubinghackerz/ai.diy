@@ -958,3 +958,72 @@ textarea {
 .aidiy-environment-term .xterm-screen {
     height: 100% !important;
 }
+
+/* Login with ChatGPT */
+@keyframes cgpt-rise {
+    from {
+        opacity: 0;
+        transform: translateY(var(--distance-micro));
+        filter: blur(var(--blur-small));
+    }
+    to {
+        opacity: 1;
+        transform: none;
+        filter: none;
+    }
+}
+
+@keyframes cgpt-ping {
+    from {
+        transform: scale(1);
+        opacity: 0.55;
+    }
+    to {
+        transform: scale(2.4);
+        opacity: 0;
+    }
+}
+
+@keyframes cgpt-pop {
+    0% {
+        transform: scale(0.4);
+        opacity: 0;
+    }
+    60% {
+        transform: scale(1.12);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.cgpt-rise {
+    animation: cgpt-rise var(--duration-fast) var(--ease-smooth-out) both;
+    animation-delay: calc(var(--i, 0) * var(--duration-stagger));
+}
+
+.cgpt-pop {
+    animation: cgpt-pop var(--duration-slow) var(--ease-bounce) both;
+}
+
+.cgpt-ping::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: currentColor;
+    animation: cgpt-ping 1.6s var(--ease-out) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cgpt-rise,
+    .cgpt-pop {
+        animation: none;
+    }
+    .cgpt-ping::after {
+        animation: none;
+        opacity: 0;
+    }
+}

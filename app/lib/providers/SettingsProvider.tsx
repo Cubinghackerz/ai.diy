@@ -43,6 +43,7 @@ import {
     normalizeToolAccess,
     type ToolAccessKey,
 } from "~/lib/tool-access";
+import { getThemeOverride } from "~/lib/theme-override";
 
 interface SettingsContextValue {
     settings: AppSettings;
@@ -298,12 +299,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         const root = document.documentElement;
         const mq = window.matchMedia("(prefers-color-scheme: dark)");
         const applyTheme = () => {
+            const override = getThemeOverride();
             const dark =
-                settings.theme === "dark" ||
-                settings.theme === "oled" ||
-                (settings.theme === "system" && mq.matches);
+                override ??
+                (settings.theme === "dark" ||
+                    settings.theme === "oled" ||
+                    (settings.theme === "system" && mq.matches));
             root.classList.toggle("dark", dark);
-            root.classList.toggle("oled", settings.theme === "oled");
+            root.classList.toggle("oled", override ? dark : settings.theme === "oled");
         };
         applyTheme();
         if (settings.theme !== "system") return;

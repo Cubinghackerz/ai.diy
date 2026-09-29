@@ -18,10 +18,11 @@
         "smoke:attachments": "node scripts/attachment-smoke.mjs",
         "smoke:shell-text": "node scripts/shell-text-smoke.mjs",
         "smoke:chatgpt-models": "node scripts/chatgpt-models-smoke.mjs",
+        "smoke:chatgpt-session": "node scripts/chatgpt-session-smoke.mjs",
         "smoke:interop": "node scripts/interop-smoke.mjs",
         "smoke:usage": "node scripts/usage-smoke.mjs",
         "smoke:s3-sign": "node scripts/s3-sign-smoke.mjs",
-        "smoke": "npm run smoke:npm-project && npm run smoke:security && npm run smoke:composio-guard && npm run smoke:composio-connect && npm run smoke:session-store && npm run smoke:tool-access && npm run smoke:token-efficiency && npm run smoke:attachments && npm run smoke:shell-text && npm run smoke:chatgpt-models && npm run smoke:interop && npm run smoke:usage && npm run smoke:s3-sign"
+        "smoke": "npm run smoke:npm-project && npm run smoke:security && npm run smoke:composio-guard && npm run smoke:composio-connect && npm run smoke:session-store && npm run smoke:tool-access && npm run smoke:token-efficiency && npm run smoke:attachments && npm run smoke:shell-text && npm run smoke:chatgpt-models && npm run smoke:chatgpt-session && npm run smoke:interop && npm run smoke:usage && npm run smoke:s3-sign"
     },
     "dependencies": {
         "@ai-sdk/amazon-bedrock": "^5.0.40",

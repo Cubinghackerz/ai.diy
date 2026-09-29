@@ -25,7 +25,7 @@ import { DEFAULT_MODELS } from "~/lib/types";
 /** Stable Codex CLI version known to expose current GPT-5.6 / 5.5 catalog. */
 const DEFAULT_LWC_CLIENT_VERSION = "0.147.0";
 const DEFAULT_LWC_SESSION_DAYS = 180;
-const CHATGPT_COOKIE_NAME = "lwc_session";
+export const CHATGPT_COOKIE_NAME = "lwc_session";
 
 function resolveSessionTtlMs(): number {
     const configured = Number(process.env.LWC_SESSION_DAYS);
