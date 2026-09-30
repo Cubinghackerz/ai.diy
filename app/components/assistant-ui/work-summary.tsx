@@ -34,6 +34,11 @@ import {
     ReasoningRoot,
     ReasoningText,
 } from "~/components/assistant-ui/reasoning";
+import {
+    ElapsedBadge,
+    extractThinkingHeadline,
+    useElapsedSeconds,
+} from "~/components/assistant-ui/thinking-state";
 import { skillLabelForTool } from "~/lib/skill-command";
 import { cn } from "~/lib/utils";
 
@@ -49,6 +54,7 @@ export interface ToolPartLike {
 
 export interface ReasoningPartLike {
     type?: string;
+    text?: string;
     status?: { type?: string };
 }
 
@@ -525,6 +531,11 @@ export const ReasoningWorkSummary: FC<{ indices: readonly number[] }> = ({ indic
     const durationLabel =
         !messageRunning && duration != null ? formatWorkSeconds(duration) : null;
     const collapsedLabel = durationLabel ? `Worked for ${durationLabel}` : "Reasoning";
+    const liveText = reasoningParts
+        .map((part) => (part as ReasoningPartLike).text ?? "")
+        .join("\n");
+    const headline = useMemo(() => extractThinkingHeadline(liveText), [liveText]);
+    const elapsed = useElapsedSeconds(running && reasoningParts.length > 0);
 
     if (!reasoningParts.length) return null;
 
@@ -533,9 +544,16 @@ export const ReasoningWorkSummary: FC<{ indices: readonly number[] }> = ({ indic
             <SummaryTrigger
                 active={running}
                 label={
-                    <span className="text-xs font-medium">
-                        {running ? "Reasoning…" : collapsedLabel}
-                    </span>
+                    <>
+                        <span
+                            className="text-xs font-medium"
+                            aria-live="polite"
+                            aria-atomic="true"
+                        >
+                            {running ? (headline ?? "Thinking…") : collapsedLabel}
+                        </span>
+                        {running ? <ElapsedBadge seconds={elapsed} /> : null}
+                    </>
                 }
                 icon={
                     running ? (

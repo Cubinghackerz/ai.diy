@@ -16,6 +16,7 @@ import { ThreadFollowupSuggestions } from "~/components/assistant-ui/follow-up-s
 import { MarkdownText } from "~/components/assistant-ui/markdown-text";
 
 import { ToolFallback } from "~/components/assistant-ui/tool-fallback";
+import { ThinkingIndicator } from "~/components/assistant-ui/thinking-state";
 import { ToolGroup } from "~/components/assistant-ui/tool-group";
 import {
   ReasoningWorkSummary,
@@ -830,15 +831,7 @@ const AssistantMessage: FC = () => {
               case "data":
                 return part.dataRendererUI;
               case "indicator":
-                return (
-                  <span
-                    data-slot="aui_assistant-message-indicator"
-                    className="animate-pulse font-sans"
-                    aria-label="Assistant is working"
-                  >
-                    {"●"}
-                  </span>
-                );
+                return <ThinkingIndicator />;
               default:
                 return null;
             }
