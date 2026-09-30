@@ -619,6 +619,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
         currentTime: true,
         askUser: true,
         compaction: true,
+        generativeUi: false,
     },
     agentModeEnabled: false,
     chatgptLoginEnabled: false,

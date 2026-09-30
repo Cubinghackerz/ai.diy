@@ -21,6 +21,7 @@ export const TOOL_ACCESS_KEYS = [
     "currentTime",
     "askUser",
     "compaction",
+    "generativeUi",
 ] as const;
 
 export type ToolAccessKey = (typeof TOOL_ACCESS_KEYS)[number];
@@ -113,6 +114,12 @@ export const TOOL_ACCESS_OPTIONS: ToolAccessOption[] = [
         label: "Context compaction",
         description: "Compress older conversation into a carry-forward brief",
     },
+    {
+        key: "generativeUi",
+        label: "Generative UI",
+        description:
+            "Let the assistant render interactive cards, tables, and forms (experimental — adds a large tool spec to prompts)",
+    },
 ];
 
 export const DEFAULT_TOOL_ACCESS: ToolAccessSettings = {
@@ -132,6 +139,7 @@ export const DEFAULT_TOOL_ACCESS: ToolAccessSettings = {
     currentTime: true,
     askUser: true,
     compaction: true,
+    generativeUi: false,
 };
 
 export function normalizeToolAccess(
@@ -150,6 +158,7 @@ export function normalizeToolAccess(
 export function toolAccessKeyForTool(toolName: string): ToolAccessKey | null {
     const name = toolName.trim().toLowerCase();
     if (!name) return null;
+    if (name.endsWith("_openui")) return "generativeUi";
     if (name.startsWith("mcp_composio_")) return "composio";
     if (
         name.startsWith("mcp_")

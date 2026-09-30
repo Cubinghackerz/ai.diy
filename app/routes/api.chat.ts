@@ -9,7 +9,9 @@ import {
     generateImage,
     generateSpeech,
     experimental_generateVideo,
+    jsonSchema,
     stepCountIs,
+    tool,
     type UIMessage,
 } from "ai";
 import { createChatGPTProxyProvider } from "@opencoredev/loginwithchatgpt-ai";
@@ -118,6 +120,22 @@ interface ChatRequestBody {
     systemPrompt?: string;
     advancedSystemPrompt?: string;
     system?: string;
+    /**
+     * assistant-ui model-context instructions forwarded by the client
+     * (e.g. the OpenUI Lang spec). Appended to the system prompt — never
+     * replaces the base prompt like `system` does — and only honored when
+     * the request also forwards at least one usable frontend tool.
+     */
+    modelInstructions?: string;
+    /**
+     * Client-declared frontend tool schemas (assistant-ui model context).
+     * Forwarded tools execute in the browser; the server exposes them to the
+     * model as calls without server-side execution.
+     */
+    tools?: Record<
+        string,
+        { description?: string; parameters?: unknown; providerOptions?: unknown }
+    >;
     projectInstructions?: string;
     temperature?: number;
     maxTokens?: number | null;
@@ -169,6 +187,70 @@ interface ChatRequestBody {
             parallelTools?: boolean;
         };
     };
+}
+
+const FRONTEND_TOOL_NAME = /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/;
+const MAX_FRONTEND_TOOLS = 16;
+const MAX_FRONTEND_SCHEMA_CHARS = 32_768;
+const MAX_FRONTEND_DESCRIPTION_CHARS = 2_000;
+const MAX_MODEL_INSTRUCTIONS_CHARS = 64_000;
+
+/** OpenUI Lang frontend tools — gated by the Generative UI tool-access key. */
+const GENERATIVE_UI_TOOL_NAMES = new Set(["present_openui", "prompt_openui"]);
+
+/**
+ * Sanitize client-forwarded tool schemas into no-execute `tool()` defs.
+ * These only describe what the model may call — the client executes them —
+ * so a bad or hostile payload degrades to "tool dropped", never a server
+ * action. Names that collide with server tools are dropped so a client
+ * cannot shadow a real tool with a call that silently never runs.
+ */
+function frontendToolsFromBody(
+    raw: ChatRequestBody["tools"],
+    reservedNames: ReadonlySet<string>,
+    generativeUiEnabled: boolean,
+): Record<string, Tool> {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+    const out: Record<string, Tool> = {};
+    for (const [name, def] of Object.entries(raw).slice(
+        0,
+        MAX_FRONTEND_TOOLS * 4,
+    )) {
+        if (Object.keys(out).length >= MAX_FRONTEND_TOOLS) break;
+        if (!FRONTEND_TOOL_NAME.test(name) || reservedNames.has(name)) continue;
+        if (!generativeUiEnabled && GENERATIVE_UI_TOOL_NAMES.has(name)) continue;
+        if (!def || typeof def !== "object") continue;
+        const parameters = def.parameters;
+        if (!parameters || typeof parameters !== "object") continue;
+        let schemaJson: string;
+        try {
+            schemaJson = JSON.stringify(parameters);
+        } catch {
+            continue;
+        }
+        if (schemaJson.length > MAX_FRONTEND_SCHEMA_CHARS) continue;
+        const description =
+            typeof def.description === "string"
+                ? def.description.slice(0, MAX_FRONTEND_DESCRIPTION_CHARS)
+                : "";
+        try {
+            out[name] = tool({
+                description,
+                inputSchema: jsonSchema(JSON.parse(schemaJson)),
+            });
+        } catch {
+            continue;
+        }
+    }
+    return out;
+}
+
+function sanitizeModelInstructions(raw: unknown): string {
+    if (typeof raw !== "string") return "";
+    return raw
+        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+        .slice(0, MAX_MODEL_INSTRUCTIONS_CHARS)
+        .trim();
 }
 
 function imagePrompt(messages: UIMessage[]): string {
@@ -795,6 +877,28 @@ export async function action({ request }: ActionFunctionArgs) {
                 ? {}
                 : { ...builtIn, ...(body.previewMode === true ? {} : mcpTools) };
 
+        // Frontend (client-executed) tool schemas forwarded by assistant-ui.
+        // Skipped for subagents and previews: they can't render tool UIs.
+        const clientTools =
+            body.subagentMode === true ||
+            body.previewMode === true ||
+            body.openAICompatible?.capabilityOverrides?.tools === false
+                ? {}
+                : frontendToolsFromBody(
+                      body.tools,
+                      new Set(Object.keys(tools)),
+                      toolAccess.generativeUi,
+                  );
+        for (const [name, def] of Object.entries(clientTools)) {
+            tools[name] = def;
+        }
+        // Model-context instructions describe the forwarded tools; without an
+        // accepted tool they'd only spend tokens, so the two stay coupled.
+        const modelInstructions =
+            Object.keys(clientTools).length > 0
+                ? sanitizeModelInstructions(body.modelInstructions)
+                : "";
+
         const forceCompaction = requiredSkillTools.includes("compaction_skill");
         const contextWindow = resolveModelContextWindow(body.provider, body.model);
         const reserveTokens = Math.max(2_048, body.maxTokens ?? 4_096);
@@ -810,6 +914,13 @@ export async function action({ request }: ActionFunctionArgs) {
             toolAccess,
             body.systemPrompt,
         );
+        // Client-tool instructions are static per build — append to the stable
+        // block so provider prompt caching still applies.
+        if (modelInstructions) {
+            const block = `\n\n<CLIENT-TOOLKIT-INSTRUCTIONS>\n${modelInstructions}\n</CLIENT-TOOLKIT-INSTRUCTIONS>`;
+            promptParts.stable += block;
+            promptParts.full += block;
+        }
         // Auto-compact once estimated context usage reaches 85% of the window.
         // Forced /Compaction must call compaction_skill instead of silently
         // rewriting history into plain text.

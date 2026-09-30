@@ -1,3 +1,7 @@
+/* OpenUI Lang toolkit styles live in their own layer (lazy chunk) —
+   pin the order so `openui` sits above Tailwind's base reset. */
+@layer theme, base, openui, components, utilities;
+
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "tw-shimmer";

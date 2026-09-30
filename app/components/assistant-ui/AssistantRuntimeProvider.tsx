@@ -56,12 +56,22 @@ import {
     createWebSpeechDictationAdapter,
     isWebSpeechDictationSupported,
 } from "~/lib/dictation";
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, lazy, Suspense, type ReactNode } from "react";
+import { shouldContinueAfterOpenUIPrompt } from "@openuidev/assistant-ui/ai-sdk";
 import { assertClientUsageAllowed } from "~/lib/usage-ledger.client";
 import {
     normalizeToolAccess,
     toolAccessAllows,
 } from "~/lib/tool-access";
+
+const OpenUIRegistration = lazy(() => {
+    // @openuidev/react-lang auto-mounts its Inspect overlay in dev builds;
+    // the flag must be set before that module evaluates.
+    (globalThis as Record<symbol, unknown>)[
+        Symbol.for("openui.devtools.autoMount")
+    ] = true;
+    return import("~/components/assistant-ui/openui-registration");
+});
 
 function parseErrorText(text: string, status: number): string {
     try {
@@ -233,10 +243,22 @@ export function AssistantRuntimeProvider({
                         (skill) =>
                             toolNameForForcedSkill(skill.name) === "spawn_subagents",
                     );
+                    // assistant-ui forwards model-context `system` (registered
+                    // instructions, e.g. the OpenUI Lang spec). Send it as
+                    // `modelInstructions` so it is appended to the server-side
+                    // prompt instead of replacing it via the `system` field.
+                    const {
+                        system: modelInstructions,
+                        ...forwardedBody
+                    } = (options.body ?? {}) as {
+                        system?: string;
+                        [key: string]: unknown;
+                    };
                     return {
                         body: {
-                            // Keep assistant-ui forwarded context (tools/system/etc).
-                            ...options.body,
+                            // Keep assistant-ui forwarded context (tools/etc).
+                            ...forwardedBody,
+                            modelInstructions,
                             messages: options.messages,
                             id: options.id,
                             chatId: threadId ?? "draft",
@@ -587,6 +609,9 @@ export function AssistantRuntimeProvider({
             );
         },
         sendAutomaticallyWhen: ({ messages }) => {
+            // A completed prompt_openui form is a user answer, not the end of
+            // the turn — continue the run so the model can react to it.
+            if (shouldContinueAfterOpenUIPrompt({ messages })) return true;
             if (linuxGenerationAborted()) {
                 pendingClientCalls.current = 0;
                 return false;
@@ -647,11 +672,20 @@ export function AssistantRuntimeProvider({
         transport.setRuntime(runtime);
     }, [transport, runtime]);
 
+    const generativeUiEnabled =
+        settings.toolAccess.generativeUi === true && modalities.tools === true;
+
     return (
         <ChatSessionProvider value={chat}>
             <AuiRuntimeProvider runtime={runtime}>
                 <ChatThreadSync threadId={threadId} />
-                {children}
+                {generativeUiEnabled ? (
+                    <Suspense fallback={null}>
+                        <OpenUIRegistration>{children}</OpenUIRegistration>
+                    </Suspense>
+                ) : (
+                    children
+                )}
             </AuiRuntimeProvider>
         </ChatSessionProvider>
     );
