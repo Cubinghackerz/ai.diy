@@ -91,7 +91,6 @@
         "clsx": "^2.1.1",
         "cmdk": "^1.1.1",
         "fflate": "^0.8.3",
-        "geist": "^1.7.2",
         "gsap": "^3.15.0",
         "hnswlib-wasm": "^0.8.2",
         "idb": "^8.0.3",
@@ -120,6 +119,11 @@
         "tw-shimmer": "^0.4.12",
         "zod": "^4.4.3",
         "zustand": "^5.0.14"
+    },
+    "overrides": {
+        "@openuidev/assistant-ui": {
+            "zustand": "$zustand"
+        }
     },
     "devDependencies": {
         "@react-router/dev": "^8.3.0",
