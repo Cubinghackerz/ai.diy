@@ -8,10 +8,7 @@ import { Input } from "~/components/ui/input";
 import { SearchableModelSelect } from "~/components/ui/ModelPicker";
 import { ProviderPicker } from "~/components/ui/ProviderPicker";
 import { ChatGPTConnect } from "~/components/settings/ChatGPTConnect";
-import {
-    useChatGPTSession,
-    useOnChatGPTConnected,
-} from "~/lib/providers/ChatGPTSessionProvider";
+import { useChatGPTSession, useOnChatGPTConnected } from "~/lib/providers/ChatGPTSessionProvider";
 import {
     GrokSubscriptionSettings,
     useGrokBuildSession,
@@ -24,19 +21,8 @@ import { haptic, hapticConfirm, hapticSelect } from "~/lib/haptics";
 import { testProviderKey } from "~/lib/key-test";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import { isLocalProvider, isProviderReady } from "~/lib/setup";
-import {
-    DEFAULT_MODELS,
-    PROVIDER_DEFAULTS,
-    type ModelInfo,
-    type ProviderId,
-} from "~/lib/types";
-import {
-    ArrowRight,
-    CheckCircle,
-    Key,
-    ShieldCheck,
-    XCircle,
-} from "@phosphor-icons/react";
+import { DEFAULT_MODELS, PROVIDER_DEFAULTS, type ModelInfo, type ProviderId } from "~/lib/types";
+import { ArrowRight, CheckCircle, Key, ShieldCheck, XCircle } from "@phosphor-icons/react";
 import { LoaderIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { setThemeOverride } from "~/lib/theme-override";
@@ -45,11 +31,9 @@ import { localProviderKey } from "~/lib/provider-credentials";
 import { ToolAccessPicker } from "~/components/settings/ToolAccessPicker";
 
 const CREDENTIAL_HINTS: Partial<Record<ProviderId, string>> = {
-    bedrock:
-        '{"accessKeyId":"…","secretAccessKey":"…","region":"us-east-1"}',
+    bedrock: '{"accessKeyId":"…","secretAccessKey":"…","region":"us-east-1"}',
     azure: '{"resourceName":"my-resource","apiKey":"…"}',
-    vertex:
-        '{"project":"my-project","location":"us-central1","clientEmail":"…","privateKey":"…"}',
+    vertex: '{"project":"my-project","location":"us-central1","clientEmail":"…","privateKey":"…"}',
 };
 
 export function SetupGate() {
@@ -59,16 +43,10 @@ export function SetupGate() {
     const { session: grokSession } = useGrokBuildSession();
     const { session: kimiSession } = useKimiSession();
 
-    const [provider, setProvider] = useState<ProviderId>(
-        settings.chat.provider || "chatgpt",
-    );
-    const [apiKey, setApiKey] = useState(
-        settings.providers[provider]?.apiKey || "",
-    );
+    const [provider, setProvider] = useState<ProviderId>(settings.chat.provider || "chatgpt");
+    const [apiKey, setApiKey] = useState(settings.providers[provider]?.apiKey || "");
     const [baseUrl, setBaseUrl] = useState(
-        settings.providers[provider]?.baseUrl ||
-            PROVIDER_DEFAULTS[provider].baseUrl ||
-            "",
+        settings.providers[provider]?.baseUrl || PROVIDER_DEFAULTS[provider].baseUrl || "",
     );
     const [model, setModel] = useState("");
     const [models, setModels] = useState<ModelInfo[]>([]);
@@ -212,9 +190,7 @@ export function SetupGate() {
         hapticConfirm();
         setVerified(true);
         setModel((prev) =>
-            result.models.some((m) => m.id === prev)
-                ? prev
-                : result.models[0]?.id || "",
+            result.models.some((m) => m.id === prev) ? prev : result.models[0]?.id || "",
         );
     }, [keyReady, provider, apiKey, baseUrl]);
 
@@ -290,10 +266,7 @@ export function SetupGate() {
         setError(null);
     }, []);
 
-    const providerLabel = useMemo(
-        () => PROVIDER_DEFAULTS[provider].name,
-        [provider],
-    );
+    const providerLabel = useMemo(() => PROVIDER_DEFAULTS[provider].name, [provider]);
 
     const step = !keyReady ? 1 : !verified ? 2 : model ? 4 : 3;
 
@@ -310,7 +283,10 @@ export function SetupGate() {
     }
 
     return (
-        <div className="relative flex h-dvh min-h-0 w-full items-start justify-center overflow-x-hidden overflow-y-auto overscroll-contain bg-[#070708] px-4 py-6 text-zinc-100 sm:py-12">
+        <div
+            data-setup-gate
+            className="relative flex h-dvh min-h-0 w-screen max-w-[100vw] shrink-0 items-start justify-center overflow-x-hidden overflow-y-auto overscroll-contain bg-[#070708] px-4 py-6 text-zinc-100 sm:py-12"
+        >
             <div
                 aria-hidden
                 className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_55%_at_50%_-10%,rgba(255,255,255,0.12),transparent_58%)]"
@@ -342,9 +318,9 @@ export function SetupGate() {
                             ai.diy
                         </h1>
                         <p className="mx-auto max-w-md text-[14px] leading-relaxed text-zinc-400">
-                            Connect a provider, live-test the key, then unlock models.
-                            Credentials stay in browser storage and pass through the relay only for
-                            the request you send.
+                            Connect a provider, live-test the key, then unlock models. Credentials
+                            stay in browser storage and pass through the relay only for the request
+                            you send.
                         </p>
                     </div>
                     <div className="inline-flex items-center gap-2 rounded-[2px] border border-white/10 bg-white/[0.04] px-3 py-1.5 font-mono text-[10px] tracking-wide text-zinc-400">
@@ -392,11 +368,11 @@ export function SetupGate() {
                                             done || active ? "text-white" : "text-zinc-500",
                                         )}
                                     >
-                                {item.label}
+                                        {item.label}
                                     </p>
-                            </div>
-                        );
-                    })}
+                                </div>
+                            );
+                        })}
                     </div>
 
                     <div className="relative flex flex-col gap-5">
@@ -410,25 +386,25 @@ export function SetupGate() {
                                 className="w-full [&>button]:h-11 [&>button]:w-full [&>button]:rounded-[2px] [&>button]:border-white/10 [&>button]:bg-white/[0.04] [&>button]:px-3 [&>button]:text-sm [&>button]:text-zinc-100 [&>button]:hover:border-white/25 [&>button]:hover:bg-white/[0.08]"
                             />
                             <p className="text-[11px] leading-relaxed text-zinc-500">
-                                Search all supported cloud providers, local runtimes, and custom OpenAI-compatible endpoints.
+                                Search all supported cloud providers, local runtimes, and custom
+                                OpenAI-compatible endpoints.
                             </p>
                         </div>
 
                         {provider === "grok" ? (
-                            <GrokSubscriptionSettings
-                                onConnected={handleGrokBuildConnected}
-                            />
+                            <GrokSubscriptionSettings onConnected={handleGrokBuildConnected} />
                         ) : null}
 
                         {provider === "kimi" ? (
-                            <KimiSubscriptionSettings
-                                onConnected={handleKimiConnected}
-                            />
+                            <KimiSubscriptionSettings onConnected={handleKimiConnected} />
                         ) : null}
 
                         <ChatGPTConnect />
 
-                        {!local && provider !== "grok" && provider !== "kimi" && provider !== "chatgpt" ? (
+                        {!local &&
+                        provider !== "grok" &&
+                        provider !== "kimi" &&
+                        provider !== "chatgpt" ? (
                             <div className="flex flex-col gap-2">
                                 <label
                                     htmlFor="setup-api-key"
@@ -462,44 +438,48 @@ export function SetupGate() {
                             </div>
                         ) : null}
 
-                        {provider !== "grok" && provider !== "kimi" && provider !== "chatgpt" ? <div className="flex flex-col gap-2">
-                            <label
-                                htmlFor="setup-base-url"
-                                className="text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500"
-                            >
-                                Endpoint
-                            </label>
-                            <Input
-                                id="setup-base-url"
-                                type="url"
-                                value={baseUrl}
-                                onChange={(e) => {
-                                    setBaseUrl(e.target.value);
-                                    setVerified(false);
-                                }}
-                                className="h-11 rounded-[2px] border-white/10 bg-white/[0.04] font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus-visible:border-white/25"
-                            />
-                        </div> : null}
+                        {provider !== "grok" && provider !== "kimi" && provider !== "chatgpt" ? (
+                            <div className="flex flex-col gap-2">
+                                <label
+                                    htmlFor="setup-base-url"
+                                    className="text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500"
+                                >
+                                    Endpoint
+                                </label>
+                                <Input
+                                    id="setup-base-url"
+                                    type="url"
+                                    value={baseUrl}
+                                    onChange={(e) => {
+                                        setBaseUrl(e.target.value);
+                                        setVerified(false);
+                                    }}
+                                    className="h-11 rounded-[2px] border-white/10 bg-white/[0.04] font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus-visible:border-white/25"
+                                />
+                            </div>
+                        ) : null}
 
-                        {provider !== "grok" && provider !== "kimi" && provider !== "chatgpt" ? <Button
-                            type="button"
-                            variant="outline"
-                            disabled={!keyReady || testing}
-                            onClick={runTest}
-                            className="h-11 rounded-[2px] border-white/12 bg-white/[0.04] text-zinc-100 hover:border-white/25 hover:bg-white/[0.08] hover:text-white"
-                        >
-                            {testing ? (
-                                <>
-                                    <LoaderIcon
-                                        className="size-3.5 shrink-0 animate-spin [animation-duration:0.6s]"
-                                        data-icon="inline-start"
-                                    />
-                                    {local ? "Testing endpoint…" : "Testing key…"}
-                                </>
-                            ) : (
-                                "Test connection"
-                            )}
-                        </Button> : null}
+                        {provider !== "grok" && provider !== "kimi" && provider !== "chatgpt" ? (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                disabled={!keyReady || testing}
+                                onClick={runTest}
+                                className="h-11 rounded-[2px] border-white/12 bg-white/[0.04] text-zinc-100 hover:border-white/25 hover:bg-white/[0.08] hover:text-white"
+                            >
+                                {testing ? (
+                                    <>
+                                        <LoaderIcon
+                                            className="size-3.5 shrink-0 animate-spin [animation-duration:0.6s]"
+                                            data-icon="inline-start"
+                                        />
+                                        {local ? "Testing endpoint…" : "Testing key…"}
+                                    </>
+                                ) : (
+                                    "Test connection"
+                                )}
+                            </Button>
+                        ) : null}
 
                         {error ? (
                             <p className="flex items-start gap-2 rounded-[2px] border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-xs leading-relaxed text-red-300">
