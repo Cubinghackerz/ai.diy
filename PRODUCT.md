@@ -25,7 +25,7 @@ The claim a neighboring product could not copy truthfully: a self-hosted AI work
 - Runs on a standard Node.js server or Docker; no server-side LLM credentials required.
 - Browser-side persistence: chats, messages, Canvas artifacts, memory, on-device knowledge base, usage ledger, and preview sessions in IndexedDB; settings and keys in localStorage.
 - Provider API keys are stored in the browser and relayed per request to the chosen provider endpoint through the Node server.
-- Supports 20+ provider integrations across cloud, subscription, and local endpoints, plus custom OpenAI-compatible endpoints.
+- Supports 26 provider integrations across cloud, subscription, and local endpoints, plus custom OpenAI-compatible endpoints.
 - Free web search from the start via bundled keyless MCP servers (Firecrawl, Parallel).
 - Voice dictation via browser Web Speech; Python execution via browser-side Pyodide (generated files land in Canvas and are saved with the chat).
 - Client soft spend/token/RPM guardrails per key fingerprint, plus optional server sliding-window rate limits.
@@ -35,6 +35,7 @@ The claim a neighboring product could not copy truthfully: a self-hosted AI work
 ## Capabilities and Constraints
 
 Confirmed functionality (from README and code):
+
 - Streaming chat, provider reasoning, reasoning-effort controls, image and video generation models.
 - Files, Canvas artifacts (text, HTML previews, images, and Python binaries persisted with the thread), model hover cards with capability/price data from models.dev.
 - Tools: web search, URL fetch, calculator, browser Python, files, research skill, skills, local time, memory, on-device knowledge search, ask user, remote MCP, subagents. Setup and Settings let the user choose which of these capabilities the model may use.
@@ -48,7 +49,9 @@ Confirmed functionality (from README and code):
 - The workspace route is `/workspace`; the landing page is `/`.
 
 Known constraints:
-- `npm run dev` has a known composer input regression; production build (`npm run build && npm start`) is the supported local path.
+
+- Both `npm run dev` and the production build are supported. The former StrictMode/composer subscription regression is covered by unit and mock-backed dev E2E tests.
+- Storage failures surface in a banner/toast; unsaved chats offer retry and an emergency export. Persistent storage is best-effort, not a substitute for backups.
 - Settings are encrypted at rest with AES-GCM when Web Crypto and IndexedDB are available (envelope key in IndexedDB; see `app/lib/settings-crypto.ts`). Fallback environments may use plaintext storage.
 - Subagents require browser approval and wait for each nested session to finish before the main chat continues.
 - Very large binary artifacts may skip IndexedDB persistence when over the client size cap; download remains available in-session.
@@ -58,7 +61,7 @@ Known constraints:
 
 - Product name: ai.diy (logo asset `public/ai-diy.png`).
 - Voice: calm, direct, technical, no hype; "open tools for useful thinking."
-- Landing page copy and factual claims follow the Ethereal Glass × Resend blackspace redesign (ownership headline, BYOK subhead, real deploy commands, modular landing under `app/components/landing/`). Do not fabricate metrics, customers, or package names.
+- Landing page copy and factual claims follow the Vercel/Resend blackfield redesign (ownership headline, BYOK subhead, real deploy commands, modular landing under `app/components/landing/`). Provider count on the page is the `ProviderId` union (26). Do not fabricate metrics, customers, or package names.
 - Provider brand marks use bundled assets in `public/landing-logos/` and Simple Icons where applicable; Firecrawl and Parallel logos exist in `public/`.
 - Landing visual world: Vercel/Resend blackfield — canvas `#000`, surfaces `#0a0a0a`, hairline borders, Geist Sans/Mono, Phosphor Light, solid white CTAs, flat mint `#3DFFB0` live signal, no gradients. Centered product-window hero. Workspace identity tokens may differ.
 
@@ -66,7 +69,7 @@ Known constraints:
 
 - README.md documents all product facts, features, trust boundary, and environment variables (authority for claims).
 - `public/ai-diy.png` logo, `public/landing-logos/*`, `public/firecrawl-{dark,light}.png`, `public/parallel-{dark,light}.png`, `public/workspace-demo.gif`.
-- 20+ provider integrations, bundled MCP search, local memory/knowledge/artifacts/usage/backup features all implemented and runnable.
+- 26 provider integrations, bundled MCP search, local memory/knowledge/artifacts/usage/backup features all implemented and runnable.
 - No testimonials, customers, pricing, or benchmark data exist; must not be fabricated.
 
 ## Product Principles

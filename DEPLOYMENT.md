@@ -4,11 +4,11 @@ ai.diy is **BYOK (Bring Your Own Key)**. The hosted app does not need OpenAI/Ant
 
 ## Cost model
 
-| What | Who pays |
-|------|----------|
-| LLM API calls | **End user** (their key in browser settings) |
-| DuckDuckGo web search | Free (server-side scrape) |
-| Hosting (VPS / bare metal / Docker) | **You** |
+| What                                | Who pays                                     |
+| ----------------------------------- | -------------------------------------------- |
+| LLM API calls                       | **End user** (their key in browser settings) |
+| DuckDuckGo web search               | Free (server-side scrape)                    |
+| Hosting (VPS / bare metal / Docker) | **You**                                      |
 
 **No paid third-party APIs are required** to run this project.
 
@@ -16,18 +16,23 @@ ai.diy is **BYOK (Bring Your Own Key)**. The hosted app does not need OpenAI/Ant
 
 ### Requirements
 
-- Node.js 20+
+- Node.js 22.22.2+ on the Node 22 LTS line, or Node 24
 - Optional: Ollama running locally for offline models
 
 ### Quick start
 
 ```bash
-npm install
+OPENUI_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 npm ci
 npm run build
 npm start
 ```
 
-Open `http://localhost:3000` (or the port shown in the terminal). Prefer this production build over `npm run dev` (known composer regression in Vite).
+The OpenUI dependency's installer has pseudonymous telemetry enabled by default.
+The install command above, CI and Docker disable it explicitly without skipping
+lifecycle scripts or relaxing npm peer validation. These are installer controls,
+not a claim that all third-party runtime behavior has been independently audited.
+
+Open `http://localhost:3000` (or the port shown in the terminal). Development is also supported with `npm run dev -- --host localhost --port 5173`; the former StrictMode/composer subscription regression is covered by unit and dev E2E tests.
 
 ### Docker Compose (recommended)
 
@@ -55,7 +60,8 @@ CORS_ORIGINS=https://app.example.com,https://beta.example.com
 ALLOW_PRIVATE_PROVIDER_URLS=true   # trusted self-host only
 NODE_ENV=production
 RATE_LIMIT_RPM=60                  # per API key or IP, sliding 1-minute window
-# RATE_LIMIT_DISABLED=true         # skip in-memory rate limiting (dev only)
+# RATE_LIMIT_DISABLED=true         # skip rate limiting (dev only)
+TRUSTED_PROXY_HOPS=0               # ignore untrusted forwarding headers
 
 # Login with ChatGPT (Experimental BETA) — signs the session cookie and encrypts
 # subscription tokens at rest. Required for stable sessions across restarts.
@@ -65,6 +71,32 @@ RATE_LIMIT_RPM=60                  # per API key or IP, sliding 1-minute window
 # UPSTASH_REDIS_REST_URL=https://<database>.upstash.io
 # UPSTASH_REDIS_REST_TOKEN=...
 ```
+
+**Rate limiting**
+
+**Rate-limit deployment boundary:** With neither Upstash rate-limit variable set,
+the limiter uses a bounded, process-local sliding window. This does not coordinate
+multiple replicas or serverless instances. Set both `UPSTASH_REDIS_REST_URL` and
+`UPSTASH_REDIS_REST_TOKEN` to share the window through an atomic Redis Lua script;
+the same deployment variables already support session persistence. The limiter
+does not use the session store's `KV_REST_API_*` aliases. It sends only SHA-256
+identity fingerprints, request timestamps and random request IDs to Redis, never
+provider keys or conversation text. Buckets expire after a minute of inactivity.
+Shared-store errors, malformed replies or partial configuration reject requests
+with HTTP 429 and a short retry interval rather than silently falling back to memory.
+
+`TRUSTED_PROXY_HOPS` defaults to `0`. With no explicitly trusted proxy, non-keyed
+requests share one unknown-client bucket because the Fetch request has no socket
+peer address. `X-Real-IP` and `CF-Connecting-IP` are not trusted. Behind a controlled
+reverse proxy that appends or overwrites `X-Forwarded-For`, set the exact number of
+trusted hops (for example, `1` selects the rightmost address). Invalid or short
+chains use the unknown bucket. **Block direct access to the Node server** and use
+the same proxy path for every request; otherwise an attacker can spoof even the
+configured hop. Keep upstream request-size/connection limits for public instances.
+
+`npm run smoke:security` exercises the memory backend and the Upstash SDK against
+an isolated loopback REST stub. This is not a live Redis/Lua certification. Run a
+multi-replica concurrency check against your deployment's Redis before public exposure.
 
 **Login with ChatGPT notes**
 
@@ -86,13 +118,13 @@ RATE_LIMIT_RPM=60                  # per API key or IP, sliding 1-minute window
 
 ### Features on any host
 
-| Feature | Works |
-|---------|-------|
-| Cloud providers (OpenAI, Anthropic, …) | Works with user's BYOK key |
-| Ollama / localhost custom proxy | Only when the server can reach them (same network / Docker) |
-| Python `run_python` tool | Runs in each user's browser through Pyodide |
-| Web search, calculator, fetch URL, canvas | Works |
-| Chat history | Stored in **user's browser** (IndexedDB) |
+| Feature                                               | Works                                                                                   |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Cloud providers (OpenAI, Anthropic, …)                | Works with user's BYOK key                                                              |
+| Ollama / localhost custom proxy                       | Only when the server can reach them (same network / Docker)                             |
+| Python `run_python` tool                              | Runs in each user's browser through Pyodide                                             |
+| Web search, calculator, fetch URL, canvas             | Works                                                                                   |
+| Chat history                                          | Stored in **user's browser** (IndexedDB)                                                |
 | Client-side cloud backup (S3 / WebDAV / Google Drive) | Works in the browser; credentials never leave the client except to the storage endpoint |
 
 ### Cross-origin (separate frontend / API domains)

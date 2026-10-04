@@ -14,6 +14,8 @@ import { ChatGPTRequestRefreshPrompt } from "~/components/settings/ChatGPTReques
 import { SubagentProvider } from "~/components/assistant-ui/subagents";
 import { Thread } from "~/components/assistant-ui/Thread";
 import { CanvasPanel } from "~/components/canvas/CanvasPanel";
+import { SectionBoundary } from "~/components/ui/SectionBoundary";
+import { PersistenceBanner } from "~/components/ui/StorageNotices";
 import { ArtifactLauncher } from "~/components/canvas/ArtifactLauncher";
 import { AppSidebar } from "~/components/sidebar/AppSidebar";
 import { SetupGate, useNeedsSetup } from "~/components/setup/SetupGate";
@@ -25,6 +27,10 @@ import { useThreads } from "~/lib/hooks/useThreads";
 import { useProjects } from "~/lib/hooks/useProjects";
 import { Sidebar as SidebarIcon } from "@phosphor-icons/react";
 import { cn } from "~/lib/utils";
+import { reportStorageFailure } from "~/lib/storage-notices";
+
+const reportWorkspaceStorageError = (error: unknown) =>
+    reportStorageFailure("workspace-action", "Local storage", error);
 
 export const headers: HeadersFunction = () => WORKSPACE_DOCUMENT_HEADERS;
 
@@ -59,23 +65,16 @@ function HomeInner() {
         setThreadProject,
         refreshThreads,
     } = useThreads();
-    const {
-        projects,
-        createProject,
-        updateProject,
-        deleteProject,
-    } = useProjects();
+    const { projects, createProject, updateProject, deleteProject } = useProjects();
     const needsSetup = useNeedsSetup();
 
     // All local UI state must stay above any early returns (Rules of Hooks).
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-    const [sidebarPanel, setSidebarPanel] = useState<"chats" | "settings">(
-        "chats",
-    );
+    const [sidebarPanel, setSidebarPanel] = useState<"chats" | "settings">("chats");
     const handleTitleChange = useCallback(
         (threadId: string, title: string) => {
-            void updateThreadTitle(threadId, title);
+            void updateThreadTitle(threadId, title).catch(reportWorkspaceStorageError);
         },
         [updateThreadTitle],
     );
@@ -94,7 +93,7 @@ function HomeInner() {
         (projectId: string | null = null) => {
             haptic();
             leavePreview();
-            void createNewThread("New Chat", projectId);
+            void createNewThread("New Chat", projectId).catch(reportWorkspaceStorageError);
             setSidebarPanel("chats");
             setMobileSidebarOpen(false);
         },
@@ -115,7 +114,14 @@ function HomeInner() {
     }
 
     if (needsSetup) {
-        return <SetupGate />;
+        return (
+            <div className="flex h-full min-h-0 flex-col">
+                <PersistenceBanner />
+                <div className="min-h-0 flex-1 overflow-auto">
+                    <SetupGate />
+                </div>
+            </div>
+        );
     }
 
     const sidebar = (
@@ -134,26 +140,26 @@ function HomeInner() {
                 if (settings.preview.enabled && id === activeThreadId) {
                     leavePreview();
                 }
-                void deleteThread(id);
+                void deleteThread(id).catch(reportWorkspaceStorageError);
             }}
             onRenameThread={handleTitleChange}
             onMoveThread={(id, projectId) => {
-                void setThreadProject(id, projectId);
+                void setThreadProject(id, projectId).catch(reportWorkspaceStorageError);
             }}
             onCreateProject={(name, color, instructions) => {
-                void createProject(name, color, instructions);
+                void createProject(name, color, instructions).catch(reportWorkspaceStorageError);
             }}
             onUpdateProject={(id, patch) => {
-                void updateProject(id, patch);
+                void updateProject(id, patch).catch(reportWorkspaceStorageError);
             }}
             onDeleteProject={(id) => {
                 void (async () => {
                     await deleteProject(id);
                     await refreshThreads();
-                })();
+                })().catch(reportWorkspaceStorageError);
             }}
             onImportComplete={() => {
-                void refreshThreads();
+                void refreshThreads().catch(reportWorkspaceStorageError);
             }}
             panel={sidebarPanel}
             onPanelChange={setSidebarPanel}
@@ -162,106 +168,109 @@ function HomeInner() {
 
     const appShell = (
         <div className="flex h-full w-full overflow-hidden bg-background text-foreground">
-                <WorkspaceHotkeys
-                    onNewChat={handleNewChat}
-                    onOpenSettings={() => {
-                        setSidebarOpen(true);
-                        setSidebarPanel("settings");
-                        setMobileSidebarOpen(true);
-                    }}
-                />
-                <aside
-                    className={cn(
-                        "hidden flex-col border-r border-border/80 bg-sidebar transition-[width] duration-200 md:flex",
-                        sidebarOpen ? "w-72" : "w-0 overflow-hidden border-0",
-                    )}
-                >
-                    {sidebarOpen ? sidebar : null}
-                </aside>
+            <WorkspaceHotkeys
+                onNewChat={handleNewChat}
+                onOpenSettings={() => {
+                    setSidebarOpen(true);
+                    setSidebarPanel("settings");
+                    setMobileSidebarOpen(true);
+                }}
+            />
+            <aside
+                className={cn(
+                    "hidden flex-col border-r border-border/80 bg-sidebar transition-[width] duration-200 md:flex",
+                    sidebarOpen ? "w-72" : "w-0 overflow-hidden border-0",
+                )}
+            >
+                {sidebarOpen ? sidebar : null}
+            </aside>
 
-                {mobileSidebarOpen ? (
-                    <div className="fixed inset-0 z-50 flex md:hidden">
+            {mobileSidebarOpen ? (
+                <div className="fixed inset-0 z-50 flex md:hidden">
+                    <button
+                        type="button"
+                        className="absolute inset-0 bg-black/60"
+                        aria-label="Close sidebar"
+                        onClick={() => setMobileSidebarOpen(false)}
+                    />
+                    <aside className="relative z-10 flex h-full w-72 flex-col border-r border-border bg-sidebar shadow-2xl">
+                        {sidebar}
+                    </aside>
+                </div>
+            ) : null}
+
+            <div className="legacy-round relative flex min-w-0 flex-1 flex-col overflow-hidden">
+                <PersistenceBanner />
+                <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border/70 px-3">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
                         <button
                             type="button"
-                            className="absolute inset-0 bg-black/60"
-                            aria-label="Close sidebar"
-                            onClick={() => setMobileSidebarOpen(false)}
-                        />
-                        <aside className="relative z-10 flex h-full w-72 flex-col border-r border-border bg-sidebar shadow-2xl">
-                            {sidebar}
-                        </aside>
+                            onClick={() => {
+                                haptic();
+                                if (window.innerWidth < 768) {
+                                    setMobileSidebarOpen(true);
+                                } else {
+                                    setSidebarOpen((v) => !v);
+                                }
+                            }}
+                            className="flex size-8 items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground"
+                            title="Toggle sidebar"
+                        >
+                            <SidebarIcon size={18} />
+                        </button>
+                        <span className="truncate text-sm font-semibold">
+                            {settings.preview.enabled
+                                ? "Multi-model preview"
+                                : activeThread?.title || "New Chat"}
+                        </span>
                     </div>
-                ) : null}
+                    {settings.preview.enabled ? (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                hapticSelect();
+                                updateSettings({
+                                    preview: {
+                                        ...settings.preview,
+                                        enabled: false,
+                                    },
+                                });
+                            }}
+                            className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground"
+                        >
+                            Exit preview
+                        </button>
+                    ) : null}
+                </header>
 
-                <div className="legacy-round relative flex min-w-0 flex-1 flex-col overflow-hidden">
-                    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border/70 px-3">
-                        <div className="flex min-w-0 flex-1 items-center gap-2">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    haptic();
-                                    if (window.innerWidth < 768) {
-                                        setMobileSidebarOpen(true);
-                                    } else {
-                                        setSidebarOpen((v) => !v);
-                                    }
-                                }}
-                                className="flex size-8 items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground"
-                                title="Toggle sidebar"
-                            >
-                                <SidebarIcon size={18} />
-                            </button>
-                            <span className="truncate text-sm font-semibold">
-                                {settings.preview.enabled
-                                    ? "Multi-model preview"
-                                    : activeThread?.title || "New Chat"}
-                            </span>
-                        </div>
+                <div className="relative flex min-h-0 flex-1">
+                    <main className="relative min-w-0 flex-1 overflow-hidden">
                         {settings.preview.enabled ? (
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    hapticSelect();
-                                    updateSettings({
-                                        preview: {
-                                            ...settings.preview,
-                                            enabled: false,
-                                        },
-                                    });
-                                }}
-                                className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground"
-                            >
-                                Exit preview
-                            </button>
-                        ) : null}
-                    </header>
-
-                    <div className="relative flex min-h-0 flex-1">
-                        <main className="relative min-w-0 flex-1 overflow-hidden">
-                            {settings.preview.enabled ? (
-                                <PreviewWorkspace />
-                            ) : (
-                                <>
-                                    <ChatLifecycle
-                                        threadId={activeThreadId}
-                                        threadTitle={activeThread?.title}
-                                        onTitleChange={handleTitleChange}
-                                    />
-                                    <div className="flex h-full min-h-0 flex-col">
-                                        <ChatErrorBanner />
-                                        <div className="min-h-0 flex-1">
-                                            <Thread />
-                                        </div>
+                            <PreviewWorkspace />
+                        ) : (
+                            <>
+                                <ChatLifecycle
+                                    threadId={activeThreadId}
+                                    threadTitle={activeThread?.title}
+                                    onTitleChange={handleTitleChange}
+                                />
+                                <div className="flex h-full min-h-0 flex-col">
+                                    <ChatErrorBanner />
+                                    <div className="min-h-0 flex-1">
+                                        <Thread />
                                     </div>
-                                </>
-                            )}
-                        </main>
+                                </div>
+                            </>
+                        )}
+                    </main>
 
-                        {/* The canvas is a workspace sibling, so opening an
+                    {/* The canvas is a workspace sibling, so opening an
                             artifact gives the chat the remaining width. */}
+                    <SectionBoundary label="Canvas" resetKey={activeThreadId}>
                         <CanvasPanel />
-                    </div>
+                    </SectionBoundary>
                 </div>
+            </div>
         </div>
     );
 

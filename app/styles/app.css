@@ -106,7 +106,6 @@
 }
 
 @keyframes pulse-glow {
-
     0%,
     100% {
         box-shadow: 0 0 0 0 rgb(99 102 241 / 0);
@@ -248,7 +247,9 @@ body {
     outline: none;
 }
 
-:focus-visible:not(textarea):not(input):not(select):not(.aui-composer-input):not([data-slot="aui_composer-shell"]) {
+:focus-visible:not(textarea):not(input):not(select):not(.aui-composer-input):not(
+        [data-slot="aui_composer-shell"]
+    ) {
     outline: 1px solid color-mix(in oklab, var(--color-foreground) 28%, transparent);
     outline-offset: 2px;
 }
@@ -279,7 +280,9 @@ input:focus-visible,
 /* Composer: a restrained focus state keeps the input easy to find without becoming a second CTA. */
 [data-slot="aui_composer-shell"] {
     box-shadow: 0 14px 34px -28px rgb(0 0 0 / 0.45) !important;
-    transition: border-color 150ms ease, box-shadow 150ms ease;
+    transition:
+        border-color 150ms ease,
+        box-shadow 150ms ease;
 }
 
 [data-slot="aui_composer-shell"]:focus-within {
@@ -309,7 +312,7 @@ input:focus-visible,
     font-size: 0.85em;
 }
 
-.prose :not(pre)>code {
+.prose :not(pre) > code {
     background: var(--color-muted);
     border: 1px solid var(--color-border);
     border-radius: 4px;
@@ -412,7 +415,12 @@ a,
 select,
 input,
 textarea {
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+    transition:
+        background-color 0.15s ease,
+        border-color 0.15s ease,
+        color 0.15s ease,
+        box-shadow 0.15s ease,
+        opacity 0.15s ease;
 }
 
 /* assistant-ui overrides */
@@ -430,7 +438,10 @@ textarea {
 }
 
 .aui-thread [data-slot="aui_user-message-content"] {
-    transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+    transition:
+        border-color 150ms ease,
+        background-color 150ms ease,
+        box-shadow 150ms ease;
 }
 
 .aui-thread [data-slot="aui_user-message-content"]:hover {
@@ -487,7 +498,6 @@ textarea {
 }
 
 @keyframes typing-bounce {
-
     0%,
     60%,
     100% {
@@ -509,14 +519,19 @@ textarea {
 
 /* Landing tokens - OLED editorial blackspace. */
 .landing-pinnacle {
-    --landing-canvas: #050505;
-    --landing-surface: #0c0c0f;
-    --landing-surface-deep: #08080a;
+    --landing-canvas: #000000;
+    --landing-surface: #0a0a0a;
+    --landing-surface-deep: #050505;
     --landing-mint: #3dffb0;
     --landing-border: rgba(255, 255, 255, 0.14);
     --landing-border-strong: rgba(255, 255, 255, 0.18);
     --landing-fill: rgba(255, 255, 255, 0.06);
     background-color: var(--landing-canvas);
+}
+
+/* 10px zinc-500 fails AA on #000/#0a0a0a. Floor stays at least zinc-400. */
+.landing-pinnacle .text-zinc-500 {
+    color: #a1a1aa;
 }
 
 .landing-packet {
@@ -549,6 +564,15 @@ textarea {
     .landing-packet {
         animation: none;
         opacity: 0;
+    }
+}
+
+/* No-JS visitors never run the hero tween; don't leave steps at opacity 0. */
+@media (scripting: none) {
+    .landing-hero-step {
+        opacity: 1 !important;
+        transform: none !important;
+        filter: none !important;
     }
 }
 
@@ -711,7 +735,7 @@ textarea {
     z-index: 1;
     background: transparent;
     border: 0;
-    color: rgba(113, 113, 122, 0.9);
+    color: #a1a1aa;
     transition: color var(--tabs-dur) var(--tabs-ease);
 }
 
@@ -843,20 +867,20 @@ textarea {
 @custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));
 
 @theme inline {
-  @keyframes collapsible-down {
-  from {
-    height: 0;
+    @keyframes collapsible-down {
+        from {
+            height: 0;
         }
-  to {
-    height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
+        to {
+            height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
         }
     }
-  @keyframes collapsible-up {
-  from {
-    height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
+    @keyframes collapsible-up {
+        from {
+            height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
         }
-  to {
-    height: 0;
+        to {
+            height: 0;
         }
     }
 }

@@ -52,7 +52,7 @@ export function ChangelogSection() {
     return (
         <section
             id="changelog"
-            className="mx-auto max-w-6xl scroll-mt-28 border-t border-white/[0.08] px-5 py-24 sm:px-8 sm:py-32"
+            className="mx-auto max-w-6xl scroll-mt-28 border-t border-white/[0.08] px-5 py-20 sm:px-8 sm:py-28"
             aria-labelledby="changelog-heading"
         >
             <div className="grid gap-10 md:grid-cols-[0.8fr_1.2fr] md:items-start md:gap-16">
@@ -83,10 +83,7 @@ export function ChangelogSection() {
                     <div className="relative min-h-[22rem] border-y border-white/[0.08]">
                         {status === "loading" && !skeletonGone ? (
                             <div
-                                className={cn(
-                                    "t-skel-skeleton",
-                                    commits && "t-skel-out",
-                                )}
+                                className={cn("t-skel-skeleton", commits && "t-skel-out")}
                                 aria-hidden={Boolean(commits)}
                             >
                                 <CommitSkeleton />
@@ -114,15 +111,25 @@ export function ChangelogSection() {
                                                     />
                                                 </a>
                                                 <div className="mt-2 flex items-center gap-2 font-mono text-[10px] tracking-[0.08em] text-zinc-500">
-                                                    <GitCommit weight="light" className="size-3.5" />
+                                                    <GitCommit
+                                                        weight="light"
+                                                        className="size-3.5"
+                                                    />
                                                     <span>{commit.sha.slice(0, 7)}</span>
-                                                    <span aria-hidden className="size-px bg-white/25" />
-                                                    <time dateTime={commit.commit.author?.date ?? undefined}>
+                                                    <span
+                                                        aria-hidden
+                                                        className="size-px bg-white/25"
+                                                    />
+                                                    <time
+                                                        dateTime={
+                                                            commit.commit.author?.date ?? undefined
+                                                        }
+                                                    >
                                                         {commitDate(commit)}
                                                     </time>
                                                 </div>
                                             </div>
-                                            <span className="font-mono text-[10px] text-zinc-600 sm:self-start sm:pt-1">
+                                            <span className="font-mono text-[10px] text-zinc-500 sm:self-start sm:pt-1">
                                                 {String(index + 1).padStart(2, "0")}
                                             </span>
                                         </li>

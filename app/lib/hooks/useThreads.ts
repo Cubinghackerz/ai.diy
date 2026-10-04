@@ -4,12 +4,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { ThreadData } from "~/lib/types";
-import {
-    getAllThreads,
-    saveThread,
-    deleteThreadFromDB,
-    getThreadMessages,
-} from "~/lib/db";
+import { reportStorageFailure } from "~/lib/storage-notices";
+import { getAllThreads, saveThread, deleteThreadFromDB, getThreadMessages } from "~/lib/db";
 
 async function createBlankThread(title = "New Chat", projectId: string | null = null) {
     const newThread: ThreadData = {
@@ -37,7 +33,7 @@ export function useThreads() {
 
     useEffect(() => {
         let cancelled = false;
-        (async () => {
+        const initialize = async () => {
             const list = await refreshThreads();
             if (cancelled) return;
             if (list.length === 0) {
@@ -49,7 +45,12 @@ export function useThreads() {
             } else {
                 setActiveThreadId((prev) => prev ?? list[0].id);
             }
-        })();
+        };
+        void initialize().catch((error) => {
+            if (cancelled) return;
+            setLoading(false);
+            reportStorageFailure("threads-load", "Chat history", error, initialize);
+        });
         return () => {
             cancelled = true;
         };
@@ -128,9 +129,7 @@ export function useThreads() {
 
     const updateThreadTitle = useCallback(async (id: string, title: string) => {
         const updatedAt = Date.now();
-        setThreads((prev) =>
-            prev.map((t) => (t.id === id ? { ...t, title, updatedAt } : t)),
-        );
+        setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, title, updatedAt } : t)));
         const list = await getAllThreads();
         const existing = list.find((t) => t.id === id);
         if (existing) {
@@ -139,17 +138,14 @@ export function useThreads() {
     }, []);
 
     /** Moves a thread into (or out of) a project folder. */
-    const setThreadProject = useCallback(
-        async (id: string, projectId: string | null) => {
-            const list = await getAllThreads();
-            const existing = list.find((t) => t.id === id);
-            if (!existing) return;
-            const next: ThreadData = { ...existing, projectId };
-            await saveThread(next);
-            setThreads((prev) => prev.map((t) => (t.id === id ? next : t)));
-        },
-        [],
-    );
+    const setThreadProject = useCallback(async (id: string, projectId: string | null) => {
+        const list = await getAllThreads();
+        const existing = list.find((t) => t.id === id);
+        if (!existing) return;
+        const next: ThreadData = { ...existing, projectId };
+        await saveThread(next);
+        setThreads((prev) => prev.map((t) => (t.id === id ? next : t)));
+    }, []);
 
     return {
         threads,

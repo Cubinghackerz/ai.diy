@@ -63,7 +63,9 @@ export function MaskedHeading({
                                 visible ? "translate-y-0" : "translate-y-[110%]",
                             )}
                             style={{
-                                transition: reduced ? "none" : `transform 500ms ${EASE_OUT}`,
+                                transitionProperty: "transform",
+                                transitionDuration: reduced ? "0ms" : "500ms",
+                                transitionTimingFunction: EASE_OUT,
                                 transitionDelay:
                                     visible && !reduced ? `${Math.min(i * 40, 240)}ms` : "0ms",
                             }}

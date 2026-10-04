@@ -43,24 +43,38 @@ docker build -t ai-diy .
 docker run -p 3000:3000 ai-diy
 ```
 
-`npm run dev` is not recommended (composer regression in Vite). Use the production build above. Details: [DEPLOYMENT.md](./DEPLOYMENT.md) · QA checklist: [QA.md](./QA.md) · launch brief: [PRODUCT_HUNT.md](./PRODUCT_HUNT.md).
+Use Node 22.22.2+ on the Node 22 LTS line, or Node 24. For development, run `npm run dev -- --host localhost --port 5173`; the former composer input-reset regression is fixed and covered by StrictMode unit and dev E2E tests. Details: [DEPLOYMENT.md](./DEPLOYMENT.md) · QA checklist: [QA.md](./QA.md) · agent handoff: [HANDOFF.md](./HANDOFF.md).
+
+## Development verification
+
+```bash
+npm ci
+npm run typecheck && npm run smoke && npm test
+npm run lint:changed && npm run format:check
+npm run build
+npx playwright install chromium
+npm run test:e2e
+npm run test:e2e:dev
+```
+
+The unit suite uses Vitest, Testing Library, and fake IndexedDB. Playwright starts its own production/dev server plus a local mock OpenAI-compatible provider; it seeds isolated browser contexts and needs no real API keys. Keep ports 3000, 5173, and 18765 free. The test server alone opts into loopback provider URLs; public deployment guards are unchanged. CI runs these checks, including focused dev composer coverage. See `QA.md` for the distinction between mock coverage and live-provider testing.
 
 ## Status
 
 Features marked **available** are wired. **Planned** items are not claimed as working.
 
-- **Available:** landing, 20+ provider integrations, model discovery, local persistence, files, browser Python (Canvas capture + IndexedDB persistence for generated images/binaries), in-browser Linux environment (CheerpX/WebVM: bash, python3, gcc, node, apt; no outbound network by default), search + connectors, remote MCP, artifacts, memory, on-device knowledge RAG, usage ledger with soft spend/token/RPM caps, server rate-limit hooks, voice dictation (Web Speech), multi-model Preview, import/export, client-side S3/WebDAV/Google Drive backup, portable skills catalog + install, slash commands (`/Research`, `/Compaction`, `/Subagent`, …), Agent Mode, subagents (approve → wait → synthesize), encrypted browser settings where supported, Vercel Connect (Beta: token-backed MCP servers + `connect_request`), first-run and Settings tool-access allowlist (only enabled capabilities are registered for the model)
+- **Available:** landing, 26 provider integrations, model discovery, local persistence, files, browser Python (Canvas capture + IndexedDB persistence for generated images/binaries), in-browser Linux environment (CheerpX/WebVM: bash, python3, gcc, node, apt; no outbound network by default), search + connectors, remote MCP, artifacts, memory, on-device knowledge RAG, usage ledger with soft spend/token/RPM caps, server rate-limit hooks, voice dictation (Web Speech), multi-model Preview, import/export, client-side S3/WebDAV/Google Drive backup, portable skills catalog + install, slash commands (`/Research`, `/Compaction`, `/Subagent`, …), Agent Mode, subagents (approve → wait → synthesize), encrypted browser settings where supported, Vercel Connect (Beta: token-backed MCP servers + `connect_request`), first-run and Settings tool-access allowlist (only enabled capabilities are registered for the model)
 - **Browser-local npm projects:** the AI can scaffold a per-chat Node project in the active browser tab using WebContainers, write files, install public registry packages with lifecycle scripts disabled, run allowlisted build/test scripts, inspect files, and export a tarball. Projects run in the browser, not on the ai.diy server or CheerpX Linux VM.
 - **Coming soon:** direct GitHub/Supabase/PostgreSQL adapters, custom-provider capability probing
 
 ## What You Own
 
-| Component | Location |
-| --- | --- |
-| Chat UI, settings, history, Canvas artifacts, memory, knowledge base, usage events, Preview | Browser (localStorage + IndexedDB) |
-| Dictation, Python, and Linux VM | Browser (Web Speech + Pyodide + CheerpX) |
-| LLM relay, model discovery, search, MCP, optional RPM rate limit | Node server |
-| Provider API keys | Browser only; relayed per request |
+| Component                                                                                   | Location                                 |
+| ------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| Chat UI, settings, history, Canvas artifacts, memory, knowledge base, usage events, Preview | Browser (localStorage + IndexedDB)       |
+| Dictation, Python, and Linux VM                                                             | Browser (Web Speech + Pyodide + CheerpX) |
+| LLM relay, model discovery, search, MCP, optional RPM rate limit                            | Node server                              |
+| Provider API keys                                                                           | Browser only; relayed per request        |
 
 When Web Crypto and IndexedDB are available, settings are encrypted at rest with AES-GCM. The encrypted payload is kept in localStorage and its envelope key is kept separately in IndexedDB. Browser or platform fallbacks may use plaintext storage, and this protection does not defend against a compromised browser profile or malicious same-origin code. Provider keys still pass through the relay in transit; treat hosted instances as able to observe that traffic.
 
@@ -111,7 +125,7 @@ Enable Agent Mode under **Settings → Experimental**. The model plans, selects 
 
 ### Providers
 
-OpenAI, ChatGPT subscription, Anthropic, Gemini, Groq, Cerebras, Fireworks, Perplexity, Cohere, OpenRouter, xAI, DeepSeek, Bedrock, Azure, Vertex, Vercel Gateway, Together, Mistral, Hugging Face, Ollama, LM Studio, and custom OpenAI-compatible endpoints.
+26 integrations: OpenAI, ChatGPT subscription, Grok subscription, Kimi subscription, GLM, MiniMax, Anthropic, Gemini, Groq, Cerebras, Fireworks, Perplexity, Cohere, OpenRouter, xAI, DeepSeek, Bedrock, Azure, Vertex, Vercel Gateway, Together, Mistral, Hugging Face, Ollama, LM Studio, and custom OpenAI-compatible endpoints.
 
 ### Tools
 
@@ -132,6 +146,8 @@ Outside **Full suite**, optional capabilities are registered compactly and their
 ### Import / Export / Backup
 
 ChatGPT, Claude, ShareGPT, Markdown, ai.diy JSON. Client-side backup to S3-compatible storage, WebDAV, or Google Drive (service-account JSON). Credentials stay in the browser and talk only to your storage endpoint.
+
+Failed chat saves show a persistent banner and a temporary toast, retain the unsaved reply in memory, and offer retry plus a local unsaved-chat download. Artifact failures retain the Canvas copy; oversized artifacts prompt a download. Keep the tab open until data is saved or exported. **Settings → Import & Export → Browser storage** shows site-wide usage/quota estimates and persistence status. The app requests persistent storage best-effort on first use; browser approval is not guaranteed and does not replace backups.
 
 > Note: an older “Cloud storage coming soon” blurb referred to Google Drive **OAuth**. Client-side S3/WebDAV/Drive service-account backup is available now.
 

@@ -4,6 +4,7 @@
  */
 
 import { openDB, type DBSchema, type IDBPDatabase, type StoreNames } from "idb";
+import { clearStorageIssue, reportStorageFailure } from "~/lib/storage-notices";
 import type { ThreadData, MessageData, MemoryEntry, Project } from "~/lib/types";
 import type { Artifact } from "~/lib/canvas";
 import type { UsageEvent } from "~/lib/usage";
@@ -158,7 +159,30 @@ function getDB() {
                     db.createObjectStore(CRYPTO_KEYS_STORE, { keyPath: "id" });
                 }
             },
-        });
+        })
+            .then((db) => {
+                clearStorageIssue("database");
+                db.addEventListener("error", (event) => {
+                    const target = event.target as IDBRequest;
+                    const stores = Array.from(target.transaction?.objectStoreNames ?? []);
+                    const resource = stores.some(
+                        (name) => name === "messages" || name === "threads",
+                    )
+                        ? "Chat"
+                        : stores.includes("artifacts")
+                          ? "Artifact"
+                          : stores.includes(CRYPTO_KEYS_STORE)
+                            ? "Settings"
+                            : "Local storage";
+                    reportStorageFailure(`database-write:${resource}`, resource, target.error);
+                });
+                return db;
+            })
+            .catch((error) => {
+                dbPromise = null;
+                reportStorageFailure("database", "Local storage", error);
+                throw error;
+            });
     }
     return dbPromise;
 }
@@ -241,10 +265,7 @@ export async function getArtifactsForScope(scopeId: string): Promise<Artifact[]>
     return artifacts.sort((a, b) => a.createdAt - b.createdAt);
 }
 
-export async function saveArtifactToDB(
-    scopeId: string,
-    artifact: Artifact,
-): Promise<void> {
+export async function saveArtifactToDB(scopeId: string, artifact: Artifact): Promise<void> {
     const db = await getDB();
     if (!db) return;
     await db.put("artifacts", { ...artifact, scopeId });
@@ -270,10 +291,7 @@ export async function loadPreviewSession<T>(id: string): Promise<T | null> {
     return (record?.data as T | undefined) ?? null;
 }
 
-export async function savePreviewSession<T>(
-    id: string,
-    data: T,
-): Promise<void> {
+export async function savePreviewSession<T>(id: string, data: T): Promise<void> {
     const db = await getDB();
     if (!db) return;
     await db.put("previewSessions", { id, data, updatedAt: Date.now() });
@@ -404,6 +422,33 @@ export async function deleteMessageFromDB(messageId: string): Promise<void> {
     await db.delete("messages", messageId);
 }
 
+export async function putMessagesBatch(
+    threadId: string,
+    rows: MessageData[],
+    deleteIds: string[],
+    threadPatch?: Partial<Pick<ThreadData, "model" | "provider" | "updatedAt">>,
+): Promise<boolean> {
+    const db = await getDB();
+    if (!db) return false;
+    const tx = db.transaction(["messages", "threads"], "readwrite");
+    const messages = tx.objectStore("messages");
+    const threads = tx.objectStore("threads");
+    const writes: Promise<unknown>[] = [
+        ...deleteIds.map((id) => messages.delete(id)),
+        ...rows.map((row) => messages.put(row)),
+    ];
+    if (threadPatch) {
+        writes.push(
+            threads.get(threadId).then((thread) => {
+                if (!thread) return;
+                return threads.put({ ...thread, ...threadPatch, id: threadId });
+            }),
+        );
+    }
+    await Promise.all([...writes, tx.done]);
+    return true;
+}
+
 /** Cached models.dev catalog snapshot (keyed "catalog", single row). */
 export async function getModelCatalogCache(): Promise<{
     data: unknown;
@@ -444,18 +489,13 @@ export async function appendUsageEventToDB(event: UsageEvent): Promise<void> {
  * Keep the usage ledger bounded: drop events older than the retention window
  * and cap the total row count (oldest first). Runs after each append.
  */
-async function pruneUsageEvents(
-    db: IDBPDatabase<PrismiumDB>,
-    now = Date.now(),
-): Promise<void> {
+async function pruneUsageEvents(db: IDBPDatabase<PrismiumDB>, now = Date.now()): Promise<void> {
     const RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
     const MAX_EVENTS = 5000;
     const cutoff = now - RETENTION_MS;
     const all = await db.getAll("usageEvents");
     if (all.length === 0) return;
-    const staleIds = all
-        .filter((event) => event.createdAt < cutoff)
-        .map((event) => event.id);
+    const staleIds = all.filter((event) => event.createdAt < cutoff).map((event) => event.id);
     let overflowIds: string[] = [];
     const retainedCount = all.length - staleIds.length;
     if (retainedCount > MAX_EVENTS) {
@@ -479,11 +519,7 @@ export async function getUsageEventsSinceFromDB(
 ): Promise<UsageEvent[]> {
     const db = await getDB();
     if (!db) return [];
-    const events = await db.getAllFromIndex(
-        "usageEvents",
-        "by-fingerprint",
-        keyFingerprint,
-    );
+    const events = await db.getAllFromIndex("usageEvents", "by-fingerprint", keyFingerprint);
     return events
         .filter((event) => event.createdAt >= sinceMs)
         .sort((a, b) => a.createdAt - b.createdAt);

@@ -4,11 +4,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { Project } from "~/lib/types";
-import {
-    getAllProjects,
-    saveProject,
-    deleteProjectFromDB,
-} from "~/lib/db";
+import { reportStorageFailure } from "~/lib/storage-notices";
+import { getAllProjects, saveProject, deleteProjectFromDB } from "~/lib/db";
 
 export function useProjects() {
     const [projects, setProjects] = useState<Project[]>([]);
@@ -27,7 +24,11 @@ export function useProjects() {
             const list = await refreshProjects();
             if (cancelled) return;
             setProjects(list);
-        })();
+        })().catch((error) => {
+            if (cancelled) return;
+            setLoading(false);
+            reportStorageFailure("projects-load", "Local storage", error, refreshProjects);
+        });
         return () => {
             cancelled = true;
         };
@@ -50,27 +51,19 @@ export function useProjects() {
         [refreshProjects],
     );
 
-    const updateProject = useCallback(
-        async (id: string, patch: Partial<Project>) => {
-            const list = await getAllProjects();
-            const existing = list.find((p) => p.id === id);
-            if (!existing) return;
-            const next: Project = { ...existing, ...patch, updatedAt: Date.now() };
-            await saveProject(next);
-            setProjects((prev) =>
-                prev.map((p) => (p.id === id ? next : p)),
-            );
-        },
-        [],
-    );
+    const updateProject = useCallback(async (id: string, patch: Partial<Project>) => {
+        const list = await getAllProjects();
+        const existing = list.find((p) => p.id === id);
+        if (!existing) return;
+        const next: Project = { ...existing, ...patch, updatedAt: Date.now() };
+        await saveProject(next);
+        setProjects((prev) => prev.map((p) => (p.id === id ? next : p)));
+    }, []);
 
-    const deleteProject = useCallback(
-        async (id: string) => {
-            await deleteProjectFromDB(id);
-            setProjects((prev) => prev.filter((p) => p.id !== id));
-        },
-        [],
-    );
+    const deleteProject = useCallback(async (id: string) => {
+        await deleteProjectFromDB(id);
+        setProjects((prev) => prev.filter((p) => p.id !== id));
+    }, []);
 
     return {
         projects,

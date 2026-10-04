@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "~/lib/utils";
 import { usePrefersReducedMotion } from "./hooks";
+import { EASE_OUT } from "./motion";
 
 /** Nested hardware bezel: outer shell + concentric inner core. */
 export function DoubleBezel({
@@ -92,11 +93,16 @@ export function Reveal({
         <div
             ref={ref}
             className={cn(
-                "transition-[opacity,transform] duration-[400ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:translate-y-0 motion-reduce:opacity-100",
+                "motion-reduce:translate-y-0 motion-reduce:opacity-100",
                 visible ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0",
                 className,
             )}
-            style={delayMs && !reduced && !visible ? { transitionDelay: `${delayMs}ms` } : undefined}
+            style={{
+                transitionProperty: "opacity, transform",
+                transitionDuration: "400ms",
+                transitionTimingFunction: EASE_OUT,
+                transitionDelay: delayMs && !reduced && !visible ? `${delayMs}ms` : "0ms",
+            }}
         >
             {children}
         </div>

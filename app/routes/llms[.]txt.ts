@@ -1,4 +1,5 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { PROVIDER_INTEGRATION_COUNT } from "~/components/landing/constants";
 import { SEO_GUIDES } from "~/lib/seo-pages";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_REPOSITORY_URL, SITE_URL } from "~/lib/site";
 
@@ -10,9 +11,9 @@ const HEADERS = {
 export const headers: HeadersFunction = () => HEADERS;
 
 export function loader(_args: LoaderFunctionArgs) {
-    const guides = SEO_GUIDES.map((page) => `- [${page.label}](${SITE_URL}${page.path}): ${page.description}`).join(
-        "\n",
-    );
+    const guides = SEO_GUIDES.map(
+        (page) => `- [${page.label}](${SITE_URL}${page.path}): ${page.description}`,
+    ).join("\n");
     return new Response(
         [
             `# ${SITE_NAME}`,
@@ -20,7 +21,7 @@ export function loader(_args: LoaderFunctionArgs) {
             `> ${SITE_DESCRIPTION}`,
             "",
             `${SITE_NAME} is a browser-owned, open-source AI workspace at ${SITE_URL}.`,
-            "Chats, knowledge, and API keys stay in the browser. A self-hosted relay talks to 20+ providers.",
+            `Chats, knowledge, and API keys stay in the browser. A self-hosted relay talks to ${PROVIDER_INTEGRATION_COUNT} providers.`,
             "Users can connect Gmail, GitHub, Notion, Slack, and more through Composio (Settings → Apps).",
             "",
             "## Product",

@@ -1,4 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { reportSafeServerError } from "~/lib/server/safe-error-log";
 import type { Tool, ToolSet } from "ai";
 import {
     streamText,
@@ -45,10 +46,7 @@ import {
     toolNamesInvokedInThread,
     type ForcedSkill,
 } from "~/lib/skill-command";
-import {
-    normalizeToolAccess,
-    toolAccessKeyForTool,
-} from "~/lib/tool-access";
+import { normalizeToolAccess, toolAccessKeyForTool } from "~/lib/tool-access";
 import {
     compactUiMessages,
     estimateTokensFromText,
@@ -57,15 +55,8 @@ import {
 } from "~/lib/server/context-compaction";
 import { estimatePromptBudget } from "~/lib/server/prompt-budget";
 import { normalizeUsage } from "~/lib/usage";
-import {
-    buildReasoningProviderOptions,
-    type ReasoningEffort,
-} from "~/lib/reasoning";
-import type {
-    ConnectorConfig,
-    McpServerConfig,
-    ProviderId,
-} from "~/lib/types";
+import { buildReasoningProviderOptions, type ReasoningEffort } from "~/lib/reasoning";
+import type { ConnectorConfig, McpServerConfig, ProviderId } from "~/lib/types";
 import type { ToolAccessSettings } from "~/lib/tool-access";
 import {
     createChatModel,
@@ -107,10 +98,7 @@ import {
     rateLimitKeyFromRequest,
     rateLimitResponse,
 } from "~/lib/server/rate-limit";
-import {
-    getAttachmentPolicy,
-    validateIncomingAttachmentMessages,
-} from "~/lib/attachment-policy";
+import { getAttachmentPolicy, validateIncomingAttachmentMessages } from "~/lib/attachment-policy";
 
 interface ChatRequestBody {
     messages: UIMessage[];
@@ -236,8 +224,7 @@ async function generateImageResponse(
             }
             writer.write({ type: "finish", finishReason: "stop" });
         },
-        onError: (error) =>
-            error instanceof Error ? error.message : "Image generation failed",
+        onError: (error) => (error instanceof Error ? error.message : "Image generation failed"),
     });
 
     return createUIMessageStreamResponse({ stream });
@@ -307,9 +294,7 @@ async function generateChatGPTImageResponse(
                 const mediaType = file.mediaType || "image/png";
                 const base64 =
                     file.base64 ||
-                    (file.uint8Array
-                        ? Buffer.from(file.uint8Array).toString("base64")
-                        : "");
+                    (file.uint8Array ? Buffer.from(file.uint8Array).toString("base64") : "");
                 if (!base64) continue;
                 writer.write({
                     type: "file",
@@ -319,8 +304,7 @@ async function generateChatGPTImageResponse(
             }
             writer.write({ type: "finish", finishReason: "stop" });
         },
-        onError: (error) =>
-            error instanceof Error ? error.message : "Image generation failed",
+        onError: (error) => (error instanceof Error ? error.message : "Image generation failed"),
     });
 
     return createUIMessageStreamResponse({ stream });
@@ -348,8 +332,7 @@ async function generateVideoResponse(
             }
             writer.write({ type: "finish", finishReason: "stop" });
         },
-        onError: (error) =>
-            error instanceof Error ? error.message : "Video generation failed",
+        onError: (error) => (error instanceof Error ? error.message : "Video generation failed"),
     });
 
     return createUIMessageStreamResponse({ stream });
@@ -376,8 +359,7 @@ async function generateAudioResponse(
             });
             writer.write({ type: "finish", finishReason: "stop" });
         },
-        onError: (error) =>
-            error instanceof Error ? error.message : "Audio generation failed",
+        onError: (error) => (error instanceof Error ? error.message : "Audio generation failed"),
     });
 
     return createUIMessageStreamResponse({ stream });
@@ -404,10 +386,7 @@ function attachStreamCleanup(response: Response, cleanup: () => Promise<void>): 
 export function loader({ request }: LoaderFunctionArgs) {
     const preflight = corsPreflight(request);
     if (preflight) return preflight;
-    return withCors(
-        request,
-        new Response("Method Not Allowed", { status: 405 }),
-    );
+    return withCors(request, new Response("Method Not Allowed", { status: 405 }));
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -415,27 +394,21 @@ export async function action({ request }: ActionFunctionArgs) {
     if (preflight) return preflight;
 
     if (request.method !== "POST") {
-        return withCors(
-            request,
-            new Response("Method Not Allowed", { status: 405 }),
-        );
+        return withCors(request, new Response("Method Not Allowed", { status: 405 }));
     }
 
     let body: ChatRequestBody;
     try {
         body = await request.json();
     } catch {
-        return withCors(
-            request,
-            Response.json({ error: "Invalid JSON body" }, { status: 400 }),
-        );
+        return withCors(request, Response.json({ error: "Invalid JSON body" }, { status: 400 }));
     }
 
     const rateKey = rateLimitKeyFromRequest(
         request,
         subscriptionRateLimitKey(body.provider) ?? body.apiKey,
     );
-    const rateCheck = checkRateLimit(rateKey);
+    const rateCheck = await checkRateLimit(rateKey);
     if (!rateCheck.ok) {
         return withCors(request, rateLimitResponse(rateCheck.retryAfterMs));
     }
@@ -495,10 +468,7 @@ export async function action({ request }: ActionFunctionArgs) {
                 context: "chat",
             }),
         };
-        return withCors(
-            request,
-            Response.json(payload, { status: 400 }),
-        );
+        return withCors(request, Response.json(payload, { status: 400 }));
     }
 
     if (!body.model) {
@@ -575,10 +545,7 @@ export async function action({ request }: ActionFunctionArgs) {
         );
     }
 
-    if (
-        body.subagentMode !== true &&
-        inferModelSupportsAudioOutput(body.model, body.provider)
-    ) {
+    if (body.subagentMode !== true && inferModelSupportsAudioOutput(body.model, body.provider)) {
         try {
             return withCors(request, await generateAudioResponse(body, request.signal));
         } catch (err) {
@@ -587,7 +554,7 @@ export async function action({ request }: ActionFunctionArgs) {
                 provider: body.provider,
                 context: "chat",
             }).kind;
-            console.error("[api/chat:audio]", message.split("\n")[0]);
+            reportSafeServerError("chat-audio", err);
             return withCors(
                 request,
                 Response.json({ error: message }, { status: httpStatusForProviderError(kind) }),
@@ -595,10 +562,7 @@ export async function action({ request }: ActionFunctionArgs) {
         }
     }
 
-    if (
-        body.subagentMode !== true &&
-        inferModelSupportsVideo(body.model, body.provider)
-    ) {
+    if (body.subagentMode !== true && inferModelSupportsVideo(body.model, body.provider)) {
         try {
             return withCors(request, await generateVideoResponse(body, request.signal));
         } catch (err) {
@@ -607,7 +571,7 @@ export async function action({ request }: ActionFunctionArgs) {
                 provider: body.provider,
                 context: "chat",
             }).kind;
-            console.error("[api/chat:video]", message.split("\n")[0]);
+            reportSafeServerError("chat-video", err);
             return withCors(
                 request,
                 Response.json({ error: message }, { status: httpStatusForProviderError(kind) }),
@@ -627,7 +591,7 @@ export async function action({ request }: ActionFunctionArgs) {
                 provider: body.provider,
                 context: "chat",
             }).kind;
-            console.error("[api/chat:image]", message.split("\n")[0]);
+            reportSafeServerError("chat-image", err);
             return withCors(
                 request,
                 Response.json({ error: message }, { status: httpStatusForProviderError(kind) }),
@@ -672,9 +636,7 @@ export async function action({ request }: ActionFunctionArgs) {
         }
         const searchIntent =
             detectResearchIntent(userText) ||
-            /\b(search|browse|look\s*up|find\s+(?:sources?|pages?|results?))\b/i.test(
-                userText,
-            );
+            /\b(search|browse|look\s*up|find\s+(?:sources?|pages?|results?))\b/i.test(userText);
 
         if (body.previewMode !== true) {
             const allowedMcpServers = (body.mcpServers ?? []).filter((server) =>
@@ -683,18 +645,13 @@ export async function action({ request }: ActionFunctionArgs) {
                     : toolAccess.mcp,
             );
             const selectedMcpServers = selectMcpServersForRequest(allowedMcpServers, {
-                      searchIntent,
-                      activeSearchConnector: Boolean(activeSearchConnector),
-                      webSearchEnabled:
-                          toolAccess.webSearch &&
-                          body.toolSettings?.webSearchEnabled !== false,
-                      mcpToolAlreadyUsed,
-                  });
-            const loadedMcp = await loadMcpTools(
-                selectedMcpServers,
-                policy,
-                request.signal,
-            );
+                searchIntent,
+                activeSearchConnector: Boolean(activeSearchConnector),
+                webSearchEnabled:
+                    toolAccess.webSearch && body.toolSettings?.webSearchEnabled !== false,
+                mcpToolAlreadyUsed,
+            });
+            const loadedMcp = await loadMcpTools(selectedMcpServers, policy, request.signal);
             mcpTools = loadedMcp.tools;
             mcpClients = loadedMcp.clients;
         }
@@ -705,10 +662,7 @@ export async function action({ request }: ActionFunctionArgs) {
                     delete mcpTools[name];
                 }
             }
-        } else if (
-            !toolAccess.askUser &&
-            body.toolSettings?.composioAutoApproveWrites !== true
-        ) {
+        } else if (!toolAccess.askUser && body.toolSettings?.composioAutoApproveWrites !== true) {
             for (const name of Object.keys(mcpTools)) {
                 if (isMutatingComposioTool(name)) delete mcpTools[name];
             }
@@ -731,7 +685,9 @@ export async function action({ request }: ActionFunctionArgs) {
             }
         }
         const mcpSearchAvailable = Object.keys(mcpTools).some((name) =>
-            /^mcp_(?:parallel_search_mcp_(?:web_search|web_fetch)|firecrawl_keyless_firecrawl_(?:search|scrape|parse))$/i.test(name),
+            /^mcp_(?:parallel_search_mcp_(?:web_search|web_fetch)|firecrawl_keyless_firecrawl_(?:search|scrape|parse))$/i.test(
+                name,
+            ),
         );
 
         // Slash-selected skills + auto Research / Frontend / URL Doctor when intent is clear.
@@ -745,48 +701,48 @@ export async function action({ request }: ActionFunctionArgs) {
                 ? []
                 : ensureFinanceSkill(
                       ensureNpmProjectSkill(
-                      ensureLinuxSkill(
-                          ensureCompactionSkill(
-                              ensureUrlDoctorSkill(
-                                  ensureFrontendSkill(
-                                      ensureResearchSkill(body.customSkills, userText, {
+                          ensureLinuxSkill(
+                              ensureCompactionSkill(
+                                  ensureUrlDoctorSkill(
+                                      ensureFrontendSkill(
+                                          ensureResearchSkill(body.customSkills, userText, {
+                                              webSearchEnabled:
+                                                  toolAccess.webSearch &&
+                                                  body.toolSettings?.webSearchEnabled,
+                                              alreadyInvoked: researchInvokedThisChat,
+                                          }),
+                                          userText,
+                                      ),
+                                      userText,
+                                      {
                                           webSearchEnabled:
                                               toolAccess.webSearch &&
                                               body.toolSettings?.webSearchEnabled,
-                                          alreadyInvoked: researchInvokedThisChat,
-                                      }),
-                                      userText,
+                                      },
                                   ),
                                   userText,
-                                  {
-                                      webSearchEnabled:
-                                          toolAccess.webSearch &&
-                                          body.toolSettings?.webSearchEnabled,
-                                  },
                               ),
                               userText,
+                              {
+                                  linuxEnvironment:
+                                      toolAccess.linux && body.toolSettings?.linuxEnvironment,
+                                  alreadyInvoked: linuxInvokedThisChat,
+                              },
                           ),
                           userText,
                           {
                               linuxEnvironment:
                                   toolAccess.linux && body.toolSettings?.linuxEnvironment,
-                              alreadyInvoked: linuxInvokedThisChat,
+                              npmProjectEnabled: toolAccess.npmProject,
+                              alreadyInvoked: npmProjectInvokedThisChat,
                           },
                       ),
                       userText,
                       {
-                          linuxEnvironment:
-                              toolAccess.linux && body.toolSettings?.linuxEnvironment,
-                          npmProjectEnabled: toolAccess.npmProject,
-                          alreadyInvoked: npmProjectInvokedThisChat,
+                          webSearchEnabled:
+                              toolAccess.webSearch && body.toolSettings?.webSearchEnabled,
                       },
-                  ),
-                  userText,
-                  {
-                      webSearchEnabled:
-                          toolAccess.webSearch && body.toolSettings?.webSearchEnabled,
-                  },
-              );
+                  );
         const activeSkills = detectedSkills.filter((skill) => {
             const skillTool = toolNameForForcedSkill(skill.name);
             const accessKey = skillTool ? toolAccessKeyForTool(skillTool) : null;
@@ -882,11 +838,7 @@ export async function action({ request }: ActionFunctionArgs) {
             mcpTools,
         });
         const effort = body.reasoningEffort ?? "medium";
-        const providerOptions = buildReasoningProviderOptions(
-            body.provider,
-            body.model,
-            effort,
-        );
+        const providerOptions = buildReasoningProviderOptions(body.provider, body.model, effort);
         const toolsEnabled = Object.keys(tools).length > 0;
         const safeProviderOptions =
             toolsEnabled &&
@@ -917,9 +869,11 @@ export async function action({ request }: ActionFunctionArgs) {
         let maxOutputTokens = body.maxTokens ?? undefined;
         if (anthropicThinkingOn) {
             const budget =
-                (providerOptions?.anthropic?.thinking as {
-                    budgetTokens?: number;
-                })?.budgetTokens ?? 8000;
+                (
+                    providerOptions?.anthropic?.thinking as {
+                        budgetTokens?: number;
+                    }
+                )?.budgetTokens ?? 8000;
             const floor = budget + 4096;
             if (maxOutputTokens == null || maxOutputTokens <= budget) {
                 maxOutputTokens = floor;
@@ -930,8 +884,7 @@ export async function action({ request }: ActionFunctionArgs) {
         // Anthropic-family providers). OpenAI-style automatic prefix caches
         // also benefit because the large static block leads the prompt.
         const useExplicitCache =
-            policy.promptCaching &&
-            providerSupportsExplicitCache(body.provider);
+            policy.promptCaching && providerSupportsExplicitCache(body.provider);
         const cachedMessages = policy.promptCaching
             ? [
                   {
@@ -973,8 +926,7 @@ export async function action({ request }: ActionFunctionArgs) {
                     [last]: {
                         ...lastTool,
                         providerOptions: {
-                            ...(lastTool as { providerOptions?: object })
-                                .providerOptions,
+                            ...(lastTool as { providerOptions?: object }).providerOptions,
                             anthropic: {
                                 cacheControl: { type: "ephemeral" as const },
                             },
@@ -995,21 +947,19 @@ export async function action({ request }: ActionFunctionArgs) {
             Object.keys(cachedTools).some((name) =>
                 /search|scrape|fetch|firecrawl|parallel/i.test(name),
             );
-        const maxSteps = Math.min(
-            32,
-            policy.maxSteps + (researchHeavy ? 4 : 0),
-        );
+        const maxSteps = Math.min(32, policy.maxSteps + (researchHeavy ? 4 : 0));
 
         const streamStartedAt = Date.now();
         let firstTokenAt: number | null = null;
 
         const result = streamText({
             model: modelInstance,
+            // Override the SDK's default console.error(error): SDK errors
+            // include requestBodyValues and raw provider response payloads.
+            onError: ({ error }) => reportSafeServerError("chat-stream", error),
             abortSignal: request.signal,
             messages: cachedMessages,
-            ...(policy.promptCaching
-                ? {}
-                : { system: promptParts.full }),
+            ...(policy.promptCaching ? {} : { system: promptParts.full }),
             ...(anthropicThinkingOn
                 ? { temperature: 1 }
                 : {
@@ -1020,9 +970,7 @@ export async function action({ request }: ActionFunctionArgs) {
             // ChatGPT subscription 429 usage limits are not transient — don't burn
             // three attempts before surfacing the plan/quota error.
             maxRetries:
-                body.provider === "chatgpt"
-                    ? 0
-                    : (body.openAICompatible?.maxRetries ?? undefined),
+                body.provider === "chatgpt" ? 0 : (body.openAICompatible?.maxRetries ?? undefined),
             tools: Object.keys(cachedTools).length > 0 ? cachedTools : undefined,
             stopWhen: stepCountIs(maxSteps),
             ...(safeProviderOptions ? { providerOptions: safeProviderOptions } : {}),
@@ -1078,8 +1026,7 @@ export async function action({ request }: ActionFunctionArgs) {
                             firstTokenAt != null
                                 ? Math.max(0, firstTokenAt - streamStartedAt)
                                 : Math.max(0, finishedAt - streamStartedAt);
-                        const rawUsage =
-                            part.totalUsage ?? (part as { usage?: unknown }).usage;
+                        const rawUsage = part.totalUsage ?? (part as { usage?: unknown }).usage;
                         const usage = normalizeUsage(rawUsage) ?? rawUsage;
                         return {
                             usage,
@@ -1109,13 +1056,10 @@ export async function action({ request }: ActionFunctionArgs) {
             provider: body.provider,
             context: "chat",
         }).kind;
-        console.error("[api/chat]", errorMsg.split("\n")[0]);
+        reportSafeServerError("chat", err);
         return withCors(
             request,
-            Response.json(
-                { error: errorMsg },
-                { status: httpStatusForProviderError(kind) },
-            ),
+            Response.json({ error: errorMsg }, { status: httpStatusForProviderError(kind) }),
         );
     }
 }

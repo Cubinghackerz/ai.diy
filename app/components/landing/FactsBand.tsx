@@ -1,9 +1,10 @@
 import { cn } from "~/lib/utils";
+import { PROVIDER_INTEGRATION_COUNT } from "./constants";
 import { Reveal } from "./DoubleBezel";
 
 const FACTS = [
     { label: "LOCAL-FIRST", detail: "Browser-owned storage" },
-    { label: "20+ PROVIDERS", detail: "Cloud and local models" },
+    { label: `${PROVIDER_INTEGRATION_COUNT} PROVIDERS`, detail: "Cloud and local models" },
     { label: "NO PERSISTENT LLM KEYS", detail: "Relayed per request" },
     { label: "MIT LICENSED", detail: "Self-host anytime" },
 ] as const;

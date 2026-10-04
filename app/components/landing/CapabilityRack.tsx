@@ -1,10 +1,6 @@
 import { SectionLabel } from "./SectionLabel";
 import { useState } from "react";
-import {
-    HardDrives,
-    PlugsConnected,
-    TerminalWindow,
-} from "@phosphor-icons/react";
+import { Code, FilePy, HardDrives, PlugsConnected } from "@phosphor-icons/react";
 import { Reveal } from "./DoubleBezel";
 import { MaskedHeading } from "./MaskedHeading";
 import { EASE_OUT } from "./motion";
@@ -21,20 +17,28 @@ const TABS = [
         chips: ["Keyless search", "Website presets", "Agent Mode"],
     },
     {
+        id: "canvas" as const,
+        label: "Canvas",
+        icon: Code,
+        title: "Files beside the thread.",
+        body: "Canvas holds text, HTML previews, images, and Python binaries with the chat. Very large binaries may skip IndexedDB and stay downloadable in-session.",
+        chips: ["HTML preview", "Images", "Saved with the thread"],
+    },
+    {
+        id: "python" as const,
+        label: "Python",
+        icon: FilePy,
+        title: "Pyodide in the tab.",
+        body: "Browser Python runs in the tab. Generated charts and files land in Canvas and persist in IndexedDB with the chat.",
+        chips: ["Pyodide", "Canvas capture", "No server runtime"],
+    },
+    {
         id: "storage" as const,
         label: "Storage",
         icon: HardDrives,
-        title: "Your browser is the database.",
-        body: "Chats, Canvas artifacts, memory, knowledge chunks, usage events, and preview sessions live in IndexedDB. Settings use AES-GCM encrypted localStorage when Web Crypto and IndexedDB are available, with the envelope key stored separately. Optional client-side backup goes to S3, WebDAV, or Google Drive.",
-        chips: ["IndexedDB", "No vendor vector DB", "Export anytime"],
-    },
-    {
-        id: "deploy" as const,
-        label: "Deploy",
-        icon: TerminalWindow,
-        title: "Node or Docker. No persistent LLM secrets.",
-        body: "Self-host on a standard Node server or Docker Compose. The relay does not need persistent provider credentials. Optional RATE_LIMIT_RPM for public exposure. MIT licensed.",
-        chips: ["npm start", "docker compose", "MIT"],
+        title: "Optional backup, still client-side.",
+        body: "The Local Data Plane above is the storage map. Optional backup to S3, WebDAV, or Google Drive stays client-side and off until you enable it.",
+        chips: ["S3", "WebDAV", "Google Drive"],
     },
 ] as const;
 
@@ -48,12 +52,12 @@ export function CapabilityRack() {
     return (
         <section
             id="capabilities"
-            className="mx-auto max-w-6xl scroll-mt-28 px-5 py-28 sm:px-8 sm:py-36"
+            className="mx-auto max-w-6xl scroll-mt-28 px-5 py-20 sm:px-8 sm:py-28"
             data-anim-gate="capabilities"
         >
             <SectionLabel index="05">Capabilities</SectionLabel>
             <MaskedHeading className="max-w-[18ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl">
-                    Create files, presentations, and code with your own models.
+                Create files, presentations, and code with your own models.
             </MaskedHeading>
 
             <Reveal delayMs={40} className="mt-12">
@@ -115,7 +119,7 @@ export function CapabilityRack() {
                                     <h3 className="text-xl font-medium tracking-[-0.03em] text-white sm:text-2xl">
                                         {active.title}
                                     </h3>
-                                     <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-zinc-400">
+                                    <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-zinc-400">
                                         {active.body}
                                     </p>
                                 </div>
@@ -143,31 +147,26 @@ export function CapabilityRack() {
                                 </div>
                             ) : null}
 
-                            {active.id === "storage" ? (
-                                <pre className="mt-8 overflow-x-auto rounded-[2px] border border-white/[0.08] bg-black p-4 font-mono text-[11px] leading-relaxed text-zinc-400 sm:text-[12px]">
-                                    <code>
-                                        {`browser/
-  localStorage  → encrypted settings payload
-  IndexedDB     → settings envelope key,
-                  threads, canvas, memory,
-                  knowledge, usage ledger
-server/
-  /api/*        → relay + enabled services
-                 - no persistent LLM secrets`}
-                                    </code>
-                                </pre>
-                            ) : null}
-
-                            {active.id === "deploy" ? (
-                                <pre className="mt-8 overflow-x-auto rounded-[2px] border border-white/[0.08] bg-black p-4 font-mono text-[12px] leading-relaxed text-zinc-400">
-                                    <code>
-                                        <span className="text-zinc-500">$ </span>
-                                        npm run build && npm start
-                                        {"\n"}
-                                        <span className="text-zinc-500">$ </span>
-                                        docker compose up --build
-                                    </code>
-                                </pre>
+                            {active.id === "canvas" ? (
+                                <div className="mt-8 grid gap-2 sm:grid-cols-3">
+                                    {[
+                                        { k: "Text", v: "Notes and documents" },
+                                        { k: "HTML", v: "Preview beside the thread" },
+                                        { k: "Binaries", v: "Images and Python output" },
+                                    ].map((row) => (
+                                        <div
+                                            key={row.k}
+                                            className="rounded-[2px] border border-white/[0.08] bg-black px-3.5 py-3"
+                                        >
+                                            <p className="font-mono text-[10px] tracking-wide text-zinc-500">
+                                                {row.k}
+                                            </p>
+                                            <p className="mt-1.5 text-[12px] leading-snug text-zinc-300">
+                                                {row.v}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
                             ) : null}
                         </div>
                     </div>

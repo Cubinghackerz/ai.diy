@@ -1,6 +1,6 @@
 /**
  * SettingsProvider — Client-side BYOK settings context
- * 
+ *
  * Manages provider API keys, chat settings, theme, tool config, and MCP servers.
  * Settings are encrypted at rest with AES-GCM (see settings-crypto): the payload
  * lives in localStorage as ciphertext, the envelope key in IndexedDB, with a
@@ -18,6 +18,13 @@ import {
     useRef,
     type ReactNode,
 } from "react";
+import { PersistenceToast } from "~/components/ui/StorageNotices";
+import {
+    clearStorageIssue,
+    observeStorage,
+    reportStorageFailure,
+    requestPersistentStorage,
+} from "~/lib/storage-notices";
 import {
     DEFAULT_SETTINGS,
     DEFAULT_MODELS,
@@ -38,11 +45,7 @@ import {
     decryptSettingsPayload,
     clearSettingsEnvelopeKey,
 } from "~/lib/settings-crypto";
-import {
-    DEFAULT_TOOL_ACCESS,
-    normalizeToolAccess,
-    type ToolAccessKey,
-} from "~/lib/tool-access";
+import { DEFAULT_TOOL_ACCESS, normalizeToolAccess, type ToolAccessKey } from "~/lib/tool-access";
 import { getThemeOverride } from "~/lib/theme-override";
 
 interface SettingsContextValue {
@@ -68,8 +71,7 @@ function mergeLoadedSettings(parsed: Partial<AppSettings>): AppSettings {
             (preset) =>
                 !storedMcpServers.some(
                     (server) =>
-                        server.url?.trim().toLowerCase() ===
-                        preset.url?.trim().toLowerCase(),
+                        server.url?.trim().toLowerCase() === preset.url?.trim().toLowerCase(),
                 ),
         ),
         ...storedMcpServers,
@@ -129,9 +131,9 @@ function mergeLoadedSettings(parsed: Partial<AppSettings>): AppSettings {
             ...DEFAULT_SETTINGS.composio,
             ...(parsed.composio ?? {}),
             mcpHeaders:
-                (parsed.composio?.mcpHeaders && typeof parsed.composio.mcpHeaders === "object"
+                parsed.composio?.mcpHeaders && typeof parsed.composio.mcpHeaders === "object"
                     ? parsed.composio.mcpHeaders
-                    : DEFAULT_SETTINGS.composio.mcpHeaders),
+                    : DEFAULT_SETTINGS.composio.mcpHeaders,
             autoApproveWrites: parsed.composio?.autoApproveWrites === true,
             tipDismissed: parsed.composio?.tipDismissed === true,
         },
@@ -188,9 +190,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                     const decrypted = await decryptSettingsPayload(encrypted);
                     if (decrypted !== null) {
                         if (!cancelled) {
-                            setSettings(
-                                mergeLoadedSettings(decrypted as Partial<AppSettings>),
-                            );
+                            setSettings(mergeLoadedSettings(decrypted as Partial<AppSettings>));
                             setLoaded(true);
                         }
                         return;
@@ -201,9 +201,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                         if (backupDecrypted !== null) {
                             if (!cancelled) {
                                 setSettings(
-                                    mergeLoadedSettings(
-                                        backupDecrypted as Partial<AppSettings>,
-                                    ),
+                                    mergeLoadedSettings(backupDecrypted as Partial<AppSettings>),
                                 );
                                 setLoaded(true);
                             }
@@ -235,7 +233,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             }
         }
 
-        void loadSettings();
+        void loadSettings().catch((error) => {
+            recoveryRef.current = true;
+            reportStorageFailure("settings-load", "Settings", error);
+            if (!cancelled) setLoaded(true);
+        });
+        void requestPersistentStorage();
         return () => {
             cancelled = true;
         };
@@ -247,7 +250,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         if (!loaded) return;
         latestRef.current = settings;
         persistChainRef.current = persistChainRef.current
-            .then(() => persistSettings(latestRef.current))
+            .then(() =>
+                observeStorage("settings-save", "Settings", () =>
+                    persistSettings(latestRef.current),
+                ),
+            )
             .catch(() => {
                 // Persistence failure must never crash the UI.
             });
@@ -257,39 +264,51 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         try {
             // Theme stays plaintext for the pre-hydration theme script.
             localStorage.setItem(SETTINGS_THEME_KEY, value.theme);
-        } catch {
+            clearStorageIssue("settings-theme");
+        } catch (error) {
             // Storage unavailable — keep going in memory only.
+            reportStorageFailure("settings-theme", "Settings", error);
         }
-        if (recoveryRef.current) return;
+        if (recoveryRef.current) {
+            reportStorageFailure("settings-recovery", "Settings", {
+                name: "SettingsRecoveryError",
+            });
+            return;
+        }
         if (!settingsCryptoAvailable()) {
             // No Web Crypto / IndexedDB — fall back to plaintext.
             try {
                 localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(value));
-            } catch {
+            } catch (error) {
                 // Persist failure — settings stay in memory.
+                throw error;
             }
             return;
         }
         try {
             const encrypted = await encryptSettingsPayload(value);
-            if (encrypted === null) return;
+            if (encrypted === null)
+                throw new DOMException("Settings encryption unavailable", "InvalidStateError");
             const previous = localStorage.getItem(SETTINGS_ENC_KEY);
             if (previous) {
                 try {
                     localStorage.setItem(SETTINGS_ENC_BACKUP_KEY, previous);
-                } catch {
+                    clearStorageIssue("settings-backup");
+                } catch (error) {
                     // Backup full — proceed with the new payload anyway.
+                    reportStorageFailure("settings-backup", "Settings backup", error);
                 }
             }
             try {
                 localStorage.setItem(SETTINGS_ENC_KEY, encrypted);
-            } catch {
-                return;
+            } catch (error) {
+                throw error;
             }
             // Legacy plaintext is gone only after encryption succeeded.
             localStorage.removeItem(SETTINGS_STORAGE_KEY);
-        } catch {
+        } catch (error) {
             // Persist failure — settings stay in memory.
+            throw error;
         }
     }
 
@@ -430,6 +449,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 resetSettings,
             }}
         >
+            <PersistenceToast />
             {children}
         </SettingsContext.Provider>
     );

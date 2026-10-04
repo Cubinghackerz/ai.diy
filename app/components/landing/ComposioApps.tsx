@@ -15,41 +15,6 @@ const APPS: Array<{ slug: string; label: string }> = [
     { slug: "googledocs", label: "Docs" },
     { slug: "discord", label: "Discord" },
     { slug: "trello", label: "Trello" },
-    { slug: "airtable", label: "Airtable" },
-    { slug: "facebook", label: "Facebook" },
-    { slug: "instagram", label: "Instagram" },
-    { slug: "youtube", label: "YouTube" },
-    { slug: "todoist", label: "Todoist" },
-    { slug: "twitter", label: "X" },
-    { slug: "hackernews", label: "Hacker News" },
-    { slug: "outlook", label: "Outlook" },
-    { slug: "asana", label: "Asana" },
-    { slug: "clickup", label: "ClickUp" },
-    { slug: "figma", label: "Figma" },
-    { slug: "hubspot", label: "HubSpot" },
-    { slug: "salesforce", label: "Salesforce" },
-    { slug: "stripe", label: "Stripe" },
-    { slug: "shopify", label: "Shopify" },
-    { slug: "zendesk", label: "Zendesk" },
-    { slug: "intercom", label: "Intercom" },
-    { slug: "zoom", label: "Zoom" },
-    { slug: "linkedin", label: "LinkedIn" },
-    { slug: "gitlab", label: "GitLab" },
-    { slug: "bitbucket", label: "Bitbucket" },
-    { slug: "confluence", label: "Confluence" },
-    { slug: "dropbox", label: "Dropbox" },
-    { slug: "box", label: "Box" },
-    { slug: "sentry", label: "Sentry" },
-    { slug: "vercel", label: "Vercel" },
-    { slug: "supabase", label: "Supabase" },
-    { slug: "reddit", label: "Reddit" },
-    { slug: "spotify", label: "Spotify" },
-    { slug: "telegram", label: "Telegram" },
-    { slug: "calendly", label: "Calendly" },
-    { slug: "pagerduty", label: "PagerDuty" },
-    { slug: "twilio", label: "Twilio" },
-    { slug: "mailchimp", label: "Mailchimp" },
-    { slug: "typeform", label: "Typeform" },
 ];
 
 const SEARCH_PARTNERS = [
@@ -97,7 +62,7 @@ export function ComposioApps() {
     return (
         <section
             id="apps"
-            className="relative overflow-hidden py-20 sm:py-24"
+            className="relative overflow-hidden py-20 sm:py-28"
             aria-label="Connect apps with Composio"
         >
             <div className="mx-auto max-w-6xl px-5 sm:px-8">
@@ -106,9 +71,9 @@ export function ComposioApps() {
                     Connect the apps you already use.
                 </MaskedHeading>
                 <p className="mt-5 max-w-2xl text-[15px] leading-relaxed text-zinc-400">
-                    Paste a free Composio key in Settings → Apps. Authorize Gmail,
-                    GitHub, Notion, Slack, and a thousand more — the assistant acts
-                    only in the tools you connect.
+                    Paste a free Composio key in Settings → Apps. Authorize Gmail, GitHub, Notion,
+                    Slack, and a thousand more through Composio. The assistant acts only in the
+                    tools you connect.
                 </p>
             </div>
 
@@ -141,19 +106,20 @@ export function ComposioApps() {
                     rel="noreferrer"
                     className="inline-flex w-fit items-center gap-2.5 text-[13px] text-zinc-400 transition-colors hover:text-white"
                 >
-                    <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-zinc-500">
+                    <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-zinc-400">
                         Powered by
                     </span>
                     <img
                         src="/landing-logos/composio-white.svg"
                         alt="Composio"
+                        width={16}
                         height={16}
                         className="h-4 w-auto opacity-80"
                     />
                 </a>
 
                 <div>
-                    <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-zinc-500">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-zinc-400">
                         Free web search powered by
                     </p>
                     <ul className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-3">

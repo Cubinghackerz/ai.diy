@@ -32,9 +32,7 @@ type ComposioFailure = {
 };
 
 function errorRecord(value: unknown): Record<string, unknown> | undefined {
-    return value && typeof value === "object"
-        ? (value as Record<string, unknown>)
-        : undefined;
+    return value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
 }
 
 function errorText(value: unknown): string | undefined {
@@ -92,7 +90,7 @@ export function classifyComposioFailure(
     if (forbidden) {
         const permission =
             action === "session"
-                ? 'create sessions'
+                ? "create sessions"
                 : action === "authorize"
                   ? "manage auth configs and connected accounts"
                   : action === "disconnect"
@@ -177,7 +175,10 @@ export async function action({ request }: ActionFunctionArgs) {
         if (JSON.stringify(parsed).length > 16_384) {
             return withCors(
                 request,
-                Response.json({ ok: false, error: "Composio request is too large." }, { status: 413 }),
+                Response.json(
+                    { ok: false, error: "Composio request is too large." },
+                    { status: 413 },
+                ),
             );
         }
         const body = parsed as ComposioActionBody;
@@ -190,8 +191,7 @@ export async function action({ request }: ActionFunctionArgs) {
             (body.userId != null && typeof body.userId !== "string") ||
             (body.sessionId != null && typeof body.sessionId !== "string") ||
             (body.toolkit != null && typeof body.toolkit !== "string") ||
-            (body.connectedAccountId != null &&
-                typeof body.connectedAccountId !== "string") ||
+            (body.connectedAccountId != null && typeof body.connectedAccountId !== "string") ||
             body.apiKey.length > 512 ||
             (body.userId?.length ?? 0) > 160 ||
             (body.sessionId?.length ?? 0) > 256 ||
@@ -211,11 +211,11 @@ export async function action({ request }: ActionFunctionArgs) {
             );
         }
 
-        const ipRateCheck = checkRateLimit(rateLimitKeyFromRequest(request));
+        const ipRateCheck = await checkRateLimit(rateLimitKeyFromRequest(request));
         if (!ipRateCheck.ok) {
             return withCors(request, rateLimitResponse(ipRateCheck.retryAfterMs));
         }
-        const keyRateCheck = checkRateLimit(rateLimitKeyFromRequest(request, apiKey));
+        const keyRateCheck = await checkRateLimit(rateLimitKeyFromRequest(request, apiKey));
         if (!keyRateCheck.ok) {
             return withCors(request, rateLimitResponse(keyRateCheck.retryAfterMs));
         }
@@ -259,10 +259,7 @@ export async function action({ request }: ActionFunctionArgs) {
                 if (!toolkit) {
                     return withCors(
                         request,
-                        Response.json(
-                            { ok: false, error: "Toolkit required." },
-                            { status: 400 },
-                        ),
+                        Response.json({ ok: false, error: "Toolkit required." }, { status: 400 }),
                     );
                 }
                 await disconnectComposioToolkit({
@@ -281,7 +278,10 @@ export async function action({ request }: ActionFunctionArgs) {
                         return withCors(
                             request,
                             Response.json(
-                                { ok: false, error: "Composio user ID required to remove a session." },
+                                {
+                                    ok: false,
+                                    error: "Composio user ID required to remove a session.",
+                                },
                                 { status: 400 },
                             ),
                         );

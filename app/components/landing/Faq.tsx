@@ -1,3 +1,4 @@
+import { PROVIDER_INTEGRATION_SUMMARY } from "./constants";
 import { SectionLabel } from "./SectionLabel";
 import { CaretDown } from "@phosphor-icons/react";
 import { Reveal } from "./DoubleBezel";
@@ -9,33 +10,27 @@ const ACC_CLOSE_MS = 250;
 export const FAQ_ITEMS = [
     {
         question: "What is ai.diy?",
-        answer:
-            "ai.diy is an open-source, self-hosted AI workspace for chat, research, tools, Canvas artifacts, memory, and local knowledge. It uses bring-your-own-key (BYOK) access so you choose the provider and model instead of being locked into one hosted AI service.",
+        answer: "ai.diy is an open-source, self-hosted AI workspace for chat, research, tools, Canvas artifacts, memory, and local knowledge. It uses bring-your-own-key (BYOK) access so you choose the provider and model instead of being locked into one hosted AI service.",
     },
     {
         question: "Are my AI provider keys stored on the ai.diy server?",
-        answer:
-            "No server-side LLM credentials are required. Provider keys are kept in your browser and relayed per request to the provider you select. A hosted instance operator can observe traffic in transit, so self-host ai.diy when you need control over the infrastructure and network boundary.",
+        answer: "No. Provider keys stay in the browser and are relayed per request. The server does not keep them as persistent secrets. Self-host when you need control of the network boundary.",
     },
     {
         question: "Where does ai.diy store chats and documents?",
-        answer:
-            "Chats, files, Canvas artifacts, memory, on-device knowledge-base chunks, usage events, and preview sessions persist in your browser through IndexedDB and localStorage. Optional S3, WebDAV, or Google Drive backups are client-side features that you enable yourself.",
+        answer: "In the browser. Threads, files, Canvas artifacts, memory, knowledge chunks, usage events, and preview sessions use IndexedDB. Settings use localStorage, encrypted with AES-GCM when Web Crypto and IndexedDB are available. Optional S3, WebDAV, and Google Drive backups are client-side and off until you enable them.",
     },
     {
         question: "Which AI providers work with ai.diy?",
-        answer:
-            "ai.diy supports 20+ integrations including OpenAI, ChatGPT subscription, Anthropic, Google Gemini, Groq, Cerebras, Fireworks, Perplexity, Cohere, OpenRouter, DeepSeek, xAI, Ollama, Mistral, Hugging Face, Amazon Bedrock, Azure, Vertex, Vercel Gateway, Together, LM Studio, and custom OpenAI-compatible endpoints.",
+        answer: `ai.diy supports ${PROVIDER_INTEGRATION_SUMMARY}`,
     },
     {
         question: "Can I self-host ai.diy?",
-        answer:
-            "Yes. Run the production build on a standard Node.js server or use Docker Compose. The server acts as a request relay and does not need provider API keys in environment variables. You can open the hosted demo first or deploy the MIT-licensed source code on infrastructure you control.",
+        answer: "Yes. Run the production build on a standard Node.js server or use Docker Compose. The server acts as a request relay and does not need provider API keys in environment variables. You can open the hosted demo first or deploy the MIT-licensed source code on infrastructure you control.",
     },
     {
         question: "Does ai.diy replace my AI provider or pay for model usage?",
-        answer:
-            "No. ai.diy is the workspace layer. You bring authorized provider keys or connect local models such as Ollama and LM Studio. Provider pricing, quotas, availability, and data policies remain controlled by each provider, and any usage charges are yours.",
+        answer: "No. ai.diy is the workspace layer. You bring authorized provider keys or connect local models such as Ollama and LM Studio. Provider pricing, quotas, availability, and data policies remain controlled by each provider, and any usage charges are yours.",
     },
 ] as const;
 
@@ -44,7 +39,7 @@ export function Faq() {
         <section
             id="faq"
             aria-labelledby="faq-heading"
-            className="mx-auto max-w-4xl scroll-mt-28 px-5 py-16 sm:px-8 sm:py-20"
+            className="mx-auto max-w-4xl scroll-mt-28 px-5 py-20 sm:px-8 sm:py-28"
             data-anim-gate="faq"
         >
             <Reveal>
@@ -64,10 +59,7 @@ export function Faq() {
             <Reveal delayMs={40} className="mt-8">
                 <div className="divide-y divide-white/[0.08] border-t border-white/[0.08]">
                     {FAQ_ITEMS.map((item) => (
-                        <details
-                            key={item.question}
-                            className="t-acc py-5 first:pt-1 last:pb-1"
-                        >
+                        <details key={item.question} className="t-acc py-5 first:pt-1 last:pb-1">
                             <summary
                                 onClick={(event) => {
                                     const details = event.currentTarget.closest("details");
@@ -83,10 +75,7 @@ export function Faq() {
                             >
                                 {item.question}
                                 <span className="t-acc-chevron shrink-0" aria-hidden>
-                                    <CaretDown
-                                        weight="light"
-                                        className="size-5 text-zinc-400"
-                                    />
+                                    <CaretDown weight="light" className="size-5 text-zinc-400" />
                                 </span>
                             </summary>
                             <div className="t-acc-panel">

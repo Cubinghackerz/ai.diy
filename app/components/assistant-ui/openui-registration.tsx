@@ -16,34 +16,40 @@
  */
 
 import "@openuidev/react-ui/layered/styles/index.css";
-import {
-    AuiProvider,
-    Tools,
-    useAssistantInstructions,
-    useAui,
-} from "@assistant-ui/react";
+import { AuiProvider, Tools, useAssistantInstructions, useAui } from "@assistant-ui/react";
 import { createOpenUIIntegration } from "@openuidev/assistant-ui";
 import type { ReactNode } from "react";
+import { SectionBoundary } from "~/components/ui/SectionBoundary";
+import type { Toolkit } from "@assistant-ui/react";
 
 const integration = createOpenUIIntegration({
-    theme: { mode: "dark" },
+  theme: { mode: "dark" },
 });
 
+const toolkit: Toolkit = Object.fromEntries(
+  Object.entries(integration.toolkit).map(([name, definition]) => {
+    const Render = definition.render;
+    if (!Render) return [name, definition];
+    const render: typeof Render = (props) => (
+      <SectionBoundary label="Generative UI" resetKey={props.toolCallId}>
+        <Render {...props} />
+      </SectionBoundary>
+    );
+    return [name, { ...definition, render }];
+  }),
+);
+
 function OpenUIInstructions() {
-    useAssistantInstructions(integration.instructions);
-    return null;
+  useAssistantInstructions(integration.instructions);
+  return null;
 }
 
-export default function OpenUIRegistration({
-    children,
-}: {
-    children: ReactNode;
-}) {
-    const aui = useAui({ tools: Tools({ toolkit: integration.toolkit }) });
-    return (
-        <AuiProvider value={aui}>
-            <OpenUIInstructions />
-            {children}
-        </AuiProvider>
-    );
+export default function OpenUIRegistration({ children }: { children: ReactNode }) {
+  const aui = useAui({ tools: Tools({ toolkit }) });
+  return (
+    <AuiProvider value={aui}>
+      <OpenUIInstructions />
+      {children}
+    </AuiProvider>
+  );
 }

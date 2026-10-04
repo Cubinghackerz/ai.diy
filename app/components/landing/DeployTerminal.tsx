@@ -53,7 +53,7 @@ export function DeployTerminal() {
     return (
         <section
             id="deploy"
-            className="mx-auto max-w-6xl scroll-mt-28 px-5 pb-28 pt-20 sm:px-8 sm:pb-36 sm:pt-28"
+            className="mx-auto max-w-6xl scroll-mt-28 px-5 py-20 sm:px-8 sm:py-28"
             data-anim-gate="deploy"
         >
             <Reveal>
@@ -63,8 +63,8 @@ export function DeployTerminal() {
                         Self-host in one command.
                     </MaskedHeading>
                     <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-zinc-400">
-                        Node production build, Docker Compose, or a Vercel preview. Click
-                        the terminal to copy.
+                        Node production build, Docker Compose, or a Vercel preview. Click the
+                        terminal to copy.
                     </p>
                 </div>
             </Reveal>
@@ -98,8 +98,8 @@ export function DeployTerminal() {
                         type="button"
                         onClick={() => void copy()}
                         className="group relative block w-full overflow-x-auto bg-black p-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/40"
-                        aria-label={copied ? "Command copied" : "Copy command"}
                     >
+                        <span className="sr-only">{copied ? "Copied. " : "Copy command. "}</span>
                         <pre className="font-mono text-[12px] leading-relaxed text-zinc-300 sm:text-[13px]">
                             <code>
                                 {active.command.split("\n").map((line, index) => (
@@ -108,7 +108,10 @@ export function DeployTerminal() {
                                         {line}
                                     </span>
                                 ))}
-                                <span aria-hidden className="ml-1 inline-block h-[1.05em] w-[0.55em] translate-y-[0.22em] animate-pulse bg-[var(--landing-mint,#3DFFB0)] motion-reduce:animate-none" />
+                                <span
+                                    aria-hidden
+                                    className="ml-1 inline-block h-[1.05em] w-[0.55em] translate-y-[0.22em] animate-pulse bg-[var(--landing-mint,#3DFFB0)] motion-reduce:animate-none"
+                                />
                             </code>
                         </pre>
                         <span className="absolute right-4 top-4 inline-flex min-h-9 items-center gap-1.5 rounded-[2px] border border-white/[0.12] bg-black/50 px-2.5 font-mono text-[11px] text-zinc-300">

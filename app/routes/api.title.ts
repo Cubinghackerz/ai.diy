@@ -51,10 +51,7 @@ function cleanTitle(raw: string, message: string): string {
 export function loader({ request }: LoaderFunctionArgs) {
     const preflight = corsPreflight(request);
     if (preflight) return preflight;
-    return withCors(
-        request,
-        new Response("Method Not Allowed", { status: 405 }),
-    );
+    return withCors(request, new Response("Method Not Allowed", { status: 405 }));
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -62,44 +59,32 @@ export async function action({ request }: ActionFunctionArgs) {
     if (preflight) return preflight;
 
     if (request.method !== "POST") {
-        return withCors(
-            request,
-            new Response("Method Not Allowed", { status: 405 }),
-        );
+        return withCors(request, new Response("Method Not Allowed", { status: 405 }));
     }
 
     let body: TitleRequestBody;
     try {
         body = await request.json();
     } catch {
-        return withCors(
-            request,
-            Response.json({ error: "Invalid JSON body" }, { status: 400 }),
-        );
+        return withCors(request, Response.json({ error: "Invalid JSON body" }, { status: 400 }));
     }
 
     const rateKey = rateLimitKeyFromRequest(
         request,
         subscriptionRateLimitKey(body.provider) ?? body.apiKey,
     );
-    const rateCheck = checkRateLimit(rateKey);
+    const rateCheck = await checkRateLimit(rateKey);
     if (!rateCheck.ok) {
         return withCors(request, rateLimitResponse(rateCheck.retryAfterMs));
     }
 
     const message = body.message?.trim() ?? "";
     if (!message) {
-        return withCors(
-            request,
-            Response.json({ error: "Message required" }, { status: 400 }),
-        );
+        return withCors(request, Response.json({ error: "Message required" }, { status: 400 }));
     }
 
     if (!body.model) {
-        return withCors(
-            request,
-            Response.json({ error: "Model required" }, { status: 400 }),
-        );
+        return withCors(request, Response.json({ error: "Model required" }, { status: 400 }));
     }
 
     if (body.provider === "chatgpt") {
@@ -129,18 +114,12 @@ export async function action({ request }: ActionFunctionArgs) {
     } else if (providerNeedsKey(body.provider) && !body.apiKey) {
         return withCors(
             request,
-            Response.json(
-                { title: fallbackTitle(message), fallback: true },
-                { status: 200 },
-            ),
+            Response.json({ title: fallbackTitle(message), fallback: true }, { status: 200 }),
         );
     }
 
     if (inferModelSupportsImageGeneration(body.model, body.provider)) {
-        return withCors(
-            request,
-            Response.json({ title: fallbackTitle(message), fallback: true }),
-        );
+        return withCors(request, Response.json({ title: fallbackTitle(message), fallback: true }));
     }
 
     try {
@@ -149,8 +128,7 @@ export async function action({ request }: ActionFunctionArgs) {
             model,
             ...(body.provider === "chatgpt" ? {} : { temperature: 0.3 }),
             maxOutputTokens: body.provider === "chatgpt" ? 64 : 24,
-            system:
-                "Generate a short chat title (3–6 words) for the user's first message. Return only the title text — no quotes, no punctuation at the end, no explanation.",
+            system: "Generate a short chat title (3–6 words) for the user's first message. Return only the title text — no quotes, no punctuation at the end, no explanation.",
             prompt:
                 body.provider === "chatgpt"
                     ? `Title this chat in 3-6 words.\n\nMessage: ${message.slice(0, 500)}\nTitle:`

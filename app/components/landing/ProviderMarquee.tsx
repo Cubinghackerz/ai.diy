@@ -1,5 +1,5 @@
 import { SectionLabel } from "./SectionLabel";
-import { PROVIDER_LOGOS } from "./constants";
+import { PROVIDER_INTEGRATION_COUNT, PROVIDER_LOGOS } from "./constants";
 import { MaskedHeading } from "./MaskedHeading";
 import { Reveal } from "./DoubleBezel";
 
@@ -7,7 +7,7 @@ export function ProviderMarquee() {
     return (
         <section
             id="providers"
-            className="relative overflow-hidden py-20 sm:py-24"
+            className="relative overflow-hidden py-20 sm:py-28"
             data-anim-gate="marquee"
             aria-label="Supported providers"
         >
@@ -17,8 +17,8 @@ export function ProviderMarquee() {
                     Bring any model into the same thread.
                 </MaskedHeading>
                 <p className="mt-5 max-w-2xl text-[15px] leading-relaxed text-zinc-400">
-                    Connect 20+ cloud and local providers, then switch models without moving
-                    your workspace or copying context between apps.
+                    Connect {PROVIDER_INTEGRATION_COUNT} cloud and local providers, then switch
+                    models without moving your workspace or copying context between apps.
                 </p>
             </div>
 
@@ -37,7 +37,9 @@ export function ProviderMarquee() {
                                 className="size-5 shrink-0 object-contain opacity-55 grayscale transition-[filter,opacity] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:opacity-100 group-hover:grayscale-0"
                                 loading="lazy"
                             />
-                            <span className="text-sm text-zinc-300 transition-colors duration-200 group-hover:text-white">{logo.label}</span>
+                            <span className="text-sm text-zinc-300 transition-colors duration-200 group-hover:text-white">
+                                {logo.label}
+                            </span>
                         </li>
                     ))}
                 </ul>

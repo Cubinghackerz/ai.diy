@@ -20,7 +20,8 @@ import { LandingShell } from "~/components/landing/LandingShell";
 import { OwnershipStage } from "~/components/landing/OwnershipStage";
 import { ComposioApps } from "~/components/landing/ComposioApps";
 import { ProviderMarquee } from "~/components/landing/ProviderMarquee";
-import { UseCases } from "~/components/landing/UseCases";
+import { InUse } from "~/components/landing/InUse";
+import { PROVIDER_INTEGRATION_COUNT } from "~/components/landing/constants";
 import { versionedAsset } from "~/lib/build";
 import { PUBLIC_DOCUMENT_HEADERS } from "~/lib/http-headers";
 import { pageMeta } from "~/lib/seo";
@@ -106,7 +107,7 @@ const STRUCTURED_DATA = {
                 "Connect Gmail, GitHub, Notion, and Slack via Composio",
                 "Web search and MCP tools",
                 "Canvas artifacts and browser Python",
-                "20+ cloud and local AI provider integrations",
+                `${PROVIDER_INTEGRATION_COUNT} cloud and local AI provider integrations`,
                 "Node.js and Docker self-hosting",
             ],
             keywords: SITE_KEYWORDS,
@@ -177,8 +178,9 @@ export const links: LinksFunction = () => [
     {
         rel: "preload",
         as: "image",
-        href: "/workspace-demo.png",
-        type: "image/png",
+        href: "/landing/workspace-demo.avif",
+        type: "image/avif",
+        fetchPriority: "high",
     },
     {
         rel: "stylesheet",
@@ -203,7 +205,7 @@ export default function LandingPage() {
                 <OwnershipStage />
                 <ProviderMarquee />
                 <ComposioApps />
-                <UseCases />
+                <InUse />
                 <CapabilityRack />
                 <DeployTerminal />
                 <Faq />

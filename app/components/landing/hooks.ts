@@ -63,8 +63,10 @@ function cacheStars(value: number) {
 }
 
 export function useGithubStars() {
-    const [stars, setStars] = useState<number | null>(readCachedStars);
+    const [stars, setStars] = useState<number | null>(null);
     useEffect(() => {
+        const cached = readCachedStars();
+        if (cached !== null) setStars(cached);
         let cancelled = false;
         const controller = new AbortController();
         const timeout = window.setTimeout(() => controller.abort(), 5000);
@@ -129,18 +131,29 @@ function cacheCommits(value: GithubCommit[]) {
     }
 }
 
+/** Hides maintenance noise (fixes, CI, tests, deps) from the public changelog. */
+const MAINTENANCE_COMMIT =
+    /^(fix|chore|test|ci|build|docs|revert|merge|bump)\b|\b(deps?|dependenc|lockfile|override)/i;
+
+function isVisitorFacing(commit: GithubCommit) {
+    return !MAINTENANCE_COMMIT.test(commit.commit.message.split("\n", 1)[0] ?? "");
+}
+
 export function useGithubCommits() {
-    const [commits, setCommits] = useState<GithubCommit[] | null>(readCachedCommits);
-    const [status, setStatus] = useState<"loading" | "ready" | "error">(
-        () => (readCachedCommits() ? "ready" : "loading"),
-    );
+    const [commits, setCommits] = useState<GithubCommit[] | null>(null);
+    const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
 
     useEffect(() => {
+        const cached = readCachedCommits();
+        if (cached) {
+            setCommits(cached);
+            setStatus("ready");
+        }
         let cancelled = false;
         const controller = new AbortController();
         const timeout = window.setTimeout(() => controller.abort(), 5000);
 
-        void fetch(`https://api.github.com/repos/${GITHUB_REPO}/commits?per_page=5`, {
+        void fetch(`https://api.github.com/repos/${GITHUB_REPO}/commits?per_page=30`, {
             headers: { Accept: "application/vnd.github+json" },
             signal: controller.signal,
         })
@@ -150,13 +163,15 @@ export function useGithubCommits() {
             })
             .then((data) => {
                 if (cancelled || !Array.isArray(data)) return;
-                const next = data.filter(isGithubCommit).slice(0, 5);
+                const all = data.filter(isGithubCommit);
+                const visitorFacing = all.filter(isVisitorFacing);
+                const next = (visitorFacing.length >= 3 ? visitorFacing : all).slice(0, 5);
                 setCommits(next.length ? next : null);
                 setStatus("ready");
                 if (next.length) cacheCommits(next);
             })
             .catch(() => {
-                if (!cancelled && !commits) setStatus("error");
+                if (!cancelled && !cached) setStatus("error");
             })
             .finally(() => window.clearTimeout(timeout));
 

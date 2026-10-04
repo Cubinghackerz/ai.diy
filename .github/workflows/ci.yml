@@ -1,28 +1,58 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
 
 permissions:
-  contents: read
+    contents: read
+
+# Keep third-party installation telemetry out of CI; scripts still run normally.
+env:
+    OPENUI_TELEMETRY_DISABLED: "1"
+    DO_NOT_TRACK: "1"
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Typecheck
-        run: npm run typecheck
-      - name: Build
-        run: npm run build
+    build:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Check out repository
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+            - name: Set up Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+            - name: Install dependencies
+              run: npm ci
+            - name: Typecheck
+              run: npm run typecheck
+            - name: Smoke tests
+              run: npm run smoke
+            - name: Unit tests
+              run: npm test
+            - name: Changed-file lint and formatting
+              env:
+                  CHECK_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+              run: npm run lint:changed && npm run format:check
+            - name: Build
+              run: npm run build
+            - name: Install Chromium
+              run: npx playwright install --with-deps chromium
+            - name: Production E2E
+              run: npm run test:e2e
+            - name: Dev composer regression
+              run: npm run test:e2e:dev -- --grep 'composer retains|shift-enter'
+            - name: Upload failure traces
+              if: failure()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: playwright-traces
+                  path: |
+                      test-results/
+                      playwright-report/
+                  retention-days: 7

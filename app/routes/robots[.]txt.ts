@@ -43,7 +43,6 @@ export function loader(_args: LoaderFunctionArgs) {
             "Disallow: /api/",
             "",
             `Sitemap: ${SITE_URL}/sitemap.xml`,
-            `LLMs: ${SITE_URL}/llms.txt`,
             "",
         ].join("\n"),
         { headers: ROBOTS_HEADERS },

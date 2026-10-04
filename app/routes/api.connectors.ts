@@ -28,20 +28,25 @@ export async function action({ request }: ActionFunctionArgs) {
         };
 
         const rateKey = rateLimitKeyFromRequest(request, body.connector?.apiKey);
-        const rateCheck = checkRateLimit(rateKey);
+        const rateCheck = await checkRateLimit(rateKey);
         if (!rateCheck.ok) {
             return withCors(request, rateLimitResponse(rateCheck.retryAfterMs));
         }
 
         const connector = body.connector;
         if (body.action !== "test" || !connector) {
-            return withCors(request, Response.json({ error: "Connector test required." }, { status: 400 }));
+            return withCors(
+                request,
+                Response.json({ error: "Connector test required." }, { status: 400 }),
+            );
         }
         if (!["tavily", "brave", "exa", "parallel"].includes(connector.kind)) {
             return withCors(
                 request,
                 Response.json(
-                    { error: "Use a Remote MCP server for this connector until its permission-scoped adapter is enabled." },
+                    {
+                        error: "Use a Remote MCP server for this connector until its permission-scoped adapter is enabled.",
+                    },
                     { status: 501 },
                 ),
             );
@@ -52,7 +57,10 @@ export async function action({ request }: ActionFunctionArgs) {
         return withCors(
             request,
             Response.json(
-                { ok: false, error: error instanceof Error ? error.message : "Connector test failed." },
+                {
+                    ok: false,
+                    error: error instanceof Error ? error.message : "Connector test failed.",
+                },
                 { status: 502 },
             ),
         );

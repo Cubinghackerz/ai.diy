@@ -7,6 +7,7 @@ import { isbot } from "isbot";
 import type { RenderToPipeableStreamOptions } from "react-dom/server";
 import { renderToPipeableStream } from "react-dom/server";
 import { loadLocalEnvFiles } from "~/lib/server/local-env";
+import { reportSafeServerError } from "~/lib/server/safe-error-log";
 
 // Local `.env` / `.env.local` support for `npm start` (production runtime):
 // Vercel Connect tokens, connector registry, and other server env vars.
@@ -14,102 +15,107 @@ loadLocalEnvFiles();
 
 export const streamTimeout = 5_000;
 
+// React Router otherwise logs thrown loader/action/shell errors verbatim.
+export function handleError(error: unknown): void {
+    reportSafeServerError("document-render", error);
+}
+
 // Baseline document hardening. Route headers (e.g. workspace COOP/COEP in
 // home.tsx) win when already present. Applied up front so HEAD responses get
 // the same hardening as GET renders.
 function applyDocumentHardening(responseHeaders: Headers): void {
-  if (!responseHeaders.has("X-Content-Type-Options")) {
-    responseHeaders.set("X-Content-Type-Options", "nosniff");
-  }
-  if (!responseHeaders.has("Referrer-Policy")) {
-    responseHeaders.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  }
-  if (!responseHeaders.has("X-Frame-Options")) {
-    responseHeaders.set("X-Frame-Options", "SAMEORIGIN");
-  }
-  if (!responseHeaders.has("Permissions-Policy")) {
-    // Microphone stays available for voice dictation; everything else
-    // sensitive defaults to off at the document level.
-    responseHeaders.set(
-      "Permissions-Policy",
-      "camera=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=()",
-    );
-  }
+    if (!responseHeaders.has("X-Content-Type-Options")) {
+        responseHeaders.set("X-Content-Type-Options", "nosniff");
+    }
+    if (!responseHeaders.has("Referrer-Policy")) {
+        responseHeaders.set("Referrer-Policy", "strict-origin-when-cross-origin");
+    }
+    if (!responseHeaders.has("X-Frame-Options")) {
+        responseHeaders.set("X-Frame-Options", "SAMEORIGIN");
+    }
+    if (!responseHeaders.has("Permissions-Policy")) {
+        // Microphone stays available for voice dictation; everything else
+        // sensitive defaults to off at the document level.
+        responseHeaders.set(
+            "Permissions-Policy",
+            "camera=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=()",
+        );
+    }
 }
 
 export default function handleRequest(
-  request: Request,
-  responseStatusCode: number,
-  responseHeaders: Headers,
-  routerContext: EntryContext,
-  loadContext: RouterContextProvider,
+    request: Request,
+    responseStatusCode: number,
+    responseHeaders: Headers,
+    routerContext: EntryContext,
+    loadContext: RouterContextProvider,
 ) {
-  applyDocumentHardening(responseHeaders);
-  // https://httpwg.org/specs/rfc9110.html#HEAD
-  if (request.method.toUpperCase() === "HEAD") {
-    return new Response(null, {
-      status: responseStatusCode,
-      headers: responseHeaders,
-    });
-  }
+    applyDocumentHardening(responseHeaders);
+    // https://httpwg.org/specs/rfc9110.html#HEAD
+    if (request.method.toUpperCase() === "HEAD") {
+        return new Response(null, {
+            status: responseStatusCode,
+            headers: responseHeaders,
+        });
+    }
 
-  return new Promise((resolve, reject) => {
-    let shellRendered = false;
-    let userAgent = request.headers.get("user-agent");
+    return new Promise((resolve, reject) => {
+        let shellRendered = false;
+        let userAgent = request.headers.get("user-agent");
 
-    // Ensure requests from bots and SPA Mode renders wait for all content to load before responding
-    // https://react.dev/reference/react-dom/server/renderToPipeableStream#waiting-for-all-content-to-load-for-crawlers-and-static-generation
-    let readyOption: keyof RenderToPipeableStreamOptions =
-      (userAgent && isbot(userAgent)) || routerContext.isSpaMode
-        ? "onAllReady"
-        : "onShellReady";
+        // Ensure requests from bots and SPA Mode renders wait for all content to load before responding
+        // https://react.dev/reference/react-dom/server/renderToPipeableStream#waiting-for-all-content-to-load-for-crawlers-and-static-generation
+        let readyOption: keyof RenderToPipeableStreamOptions =
+            (userAgent && isbot(userAgent)) || routerContext.isSpaMode
+                ? "onAllReady"
+                : "onShellReady";
 
-    // Abort the rendering stream after the `streamTimeout` so it has time to
-    // flush down the rejected boundaries
-    let timeoutId: ReturnType<typeof setTimeout> | undefined = setTimeout(
-      () => abort(),
-      streamTimeout + 1000,
-    );
+        // Abort the rendering stream after the `streamTimeout` so it has time to
+        // flush down the rejected boundaries
+        let timeoutId: ReturnType<typeof setTimeout> | undefined = setTimeout(
+            () => abort(),
+            streamTimeout + 1000,
+        );
 
-    const { pipe, abort } = renderToPipeableStream(
-      <ServerRouter context={routerContext} url={request.url} />,
-      {
-        [readyOption]() {
-          shellRendered = true;
-          const body = new PassThrough({
-            final(callback) {
-              // Clear the timeout to prevent retaining the closure and memory leak
-              clearTimeout(timeoutId);
-              timeoutId = undefined;
-              callback();
+        const { pipe, abort } = renderToPipeableStream(
+            <ServerRouter context={routerContext} url={request.url} />,
+            {
+                [readyOption]() {
+                    shellRendered = true;
+                    const body = new PassThrough({
+                        final(callback) {
+                            // Clear the timeout to prevent retaining the closure and memory leak
+                            clearTimeout(timeoutId);
+                            timeoutId = undefined;
+                            callback();
+                        },
+                    });
+                    const stream = createReadableStreamFromReadable(body);
+
+                    responseHeaders.set("Content-Type", "text/html");
+
+                    pipe(body);
+
+                    resolve(
+                        new Response(stream, {
+                            headers: responseHeaders,
+                            status: responseStatusCode,
+                        }),
+                    );
+                },
+                onShellError(error: unknown) {
+                    reject(error);
+                },
+                onError(error: unknown) {
+                    responseStatusCode = 500;
+                    // Log streaming rendering errors from inside the shell.  Don't log
+                    // errors encountered during initial shell rendering since they'll
+                    // reject and get logged in handleDocumentRequest.
+                    if (shellRendered) {
+                        reportSafeServerError("document-render", error);
+                    }
+                },
             },
-          });
-          const stream = createReadableStreamFromReadable(body);
-
-          responseHeaders.set("Content-Type", "text/html");
-
-          pipe(body);
-
-          resolve(
-            new Response(stream, {
-              headers: responseHeaders,
-              status: responseStatusCode,
-            }),
-          );
-        },
-        onShellError(error: unknown) {
-          reject(error);
-        },
-        onError(error: unknown) {
-          responseStatusCode = 500;
-          // Log streaming rendering errors from inside the shell.  Don't log
-          // errors encountered during initial shell rendering since they'll
-          // reject and get logged in handleDocumentRequest.
-          if (shellRendered) {
-            console.error(error);
-          }
-        },
-      },
-    );
-  });
+        );
+    });
 }

@@ -1,4 +1,4 @@
-import { GITHUB_URL } from "./constants";
+import { GITHUB_URL, PROVIDER_INTEGRATION_COUNT } from "./constants";
 import { CornerFrame } from "./CornerFrame";
 import { LandingCta } from "./LandingCta";
 import { MaskedHeading } from "./MaskedHeading";
@@ -7,7 +7,7 @@ export function ClosingBand() {
     return (
         <section
             data-anim-gate="closing"
-            className="relative overflow-hidden px-5 py-32 sm:px-8 sm:py-44"
+            className="relative overflow-hidden px-5 py-20 sm:px-8 sm:py-28"
         >
             <div className="relative mx-auto max-w-3xl text-center">
                 <MaskedHeading className="text-[clamp(2.4rem,5.5vw,4.25rem)] font-medium leading-[1.04] tracking-[-0.04em] text-white">
@@ -23,8 +23,8 @@ export function ClosingBand() {
                         View on GitHub
                     </LandingCta>
                 </div>
-                <p className="mt-14 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 font-mono text-[10px] tracking-[0.14em] text-zinc-600">
-                    <span>20+ PROVIDERS</span>
+                <p className="mt-14 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 font-mono text-[10px] tracking-[0.14em] text-zinc-500">
+                    <span>{PROVIDER_INTEGRATION_COUNT} PROVIDERS</span>
                     <span aria-hidden className="size-px self-center bg-white/25" />
                     <span>NO PERSISTENT LLM KEYS</span>
                     <span aria-hidden className="size-px self-center bg-white/25" />

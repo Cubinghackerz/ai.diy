@@ -5,15 +5,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
+import { SectionBoundary } from "~/components/ui/SectionBoundary";
+import { StorageHealthPanel } from "~/components/ui/StorageNotices";
 import { Input } from "~/components/ui/input";
 import { ModelPicker } from "~/components/ui/ModelPicker";
 import { ProviderPicker } from "~/components/ui/ProviderPicker";
 import { ModelLogo } from "~/components/ui/ModelLogo";
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from "~/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import {
     Dialog,
     DialogClose,
@@ -58,10 +56,7 @@ import {
 import { resolveModel } from "~/lib/model-capabilities";
 import { getModelModalities } from "~/lib/model-modalities";
 import { getReasoningEffortOptions } from "~/lib/reasoning";
-import {
-    UNIVERSAL_MEMORY_EXPORT_PROMPT,
-    importMemoryEntries,
-} from "~/lib/memory";
+import { UNIVERSAL_MEMORY_EXPORT_PROMPT, importMemoryEntries } from "~/lib/memory";
 import {
     clearMemoryEntries,
     exportLocalBackup,
@@ -78,10 +73,7 @@ import {
     type MessageUsageRecord,
     type UsageAggregate,
 } from "~/lib/usage";
-import {
-    lookupInCatalog,
-    useModelCatalog,
-} from "~/lib/model-catalog-cache";
+import { lookupInCatalog, useModelCatalog } from "~/lib/model-catalog-cache";
 import { cn } from "~/lib/utils";
 import { versionedAsset } from "~/lib/build";
 import { localProviderKey } from "~/lib/provider-credentials";
@@ -135,11 +127,7 @@ import {
     uninstallBundledSkill,
 } from "~/lib/skills/catalog";
 import type { PortableSkill } from "~/lib/skills/format";
-import {
-    TOKEN_MODE_DESCRIPTIONS,
-    TOKEN_MODE_LABELS,
-    type TokenMode,
-} from "~/lib/token-mode";
+import { TOKEN_MODE_DESCRIPTIONS, TOKEN_MODE_LABELS, type TokenMode } from "~/lib/token-mode";
 import { buildChatSystemPromptParts } from "~/lib/server/prompt";
 import * as Switch from "@radix-ui/react-switch";
 import {
@@ -161,10 +149,7 @@ import type {
     S3StorageConfig,
     WebDAVStorageConfig,
 } from "~/lib/cloud-storage/types";
-import {
-    backupKeyForNow,
-    cloudConfigComplete,
-} from "~/lib/cloud-storage/types";
+import { backupKeyForNow, cloudConfigComplete } from "~/lib/cloud-storage/types";
 import {
     cloudStorageError,
     downloadBackup,
@@ -378,49 +363,49 @@ export function AppSidebar({
             onOpenChange={(open) => onPanelChange(open ? "settings" : "chats")}
         >
             <div className="flex h-full flex-col">
-            <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-3">
-                <div className="flex items-center gap-2 min-w-0">
-                    <SidebarBrand />
-                    <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-primary">
-                        Beta
-                    </span>
+                <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <SidebarBrand />
+                        <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-primary">
+                            Beta
+                        </span>
+                    </div>
                 </div>
-            </div>
 
-            <div className="mx-3 mb-3 grid grid-cols-2 gap-1 rounded-2xl border border-border/60 bg-background/35 p-1 shadow-sm">
-                <button
-                    type="button"
-                    onClick={() => {
-                        hapticSelect();
-                        onPanelChange("chats");
-                    }}
-                    className={cn(
-                        "flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-medium transition-[background-color,color,box-shadow] outline-none focus-visible:bg-background/80",
-                        panel === "chats"
-                            ? "bg-foreground text-background shadow-sm"
-                            : "text-muted-foreground hover:text-foreground",
-                    )}
-                >
-                    <ChatCircleDots size={14} />
-                    Chats
-                </button>
-                <button
-                    type="button"
-                    onClick={() => {
-                        hapticSelect();
-                        onPanelChange("settings");
-                    }}
-                    className={cn(
-                        "flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-medium transition-[background-color,color,box-shadow] outline-none focus-visible:bg-background/80",
-                        panel === "settings"
-                            ? "bg-foreground text-background shadow-sm"
-                            : "text-muted-foreground hover:text-foreground",
-                    )}
-                >
-                    <GearSix size={14} />
-                    Settings
-                </button>
-            </div>
+                <div className="mx-3 mb-3 grid grid-cols-2 gap-1 rounded-2xl border border-border/60 bg-background/35 p-1 shadow-sm">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            hapticSelect();
+                            onPanelChange("chats");
+                        }}
+                        className={cn(
+                            "flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-medium transition-[background-color,color,box-shadow] outline-none focus-visible:bg-background/80",
+                            panel === "chats"
+                                ? "bg-foreground text-background shadow-sm"
+                                : "text-muted-foreground hover:text-foreground",
+                        )}
+                    >
+                        <ChatCircleDots size={14} />
+                        Chats
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            hapticSelect();
+                            onPanelChange("settings");
+                        }}
+                        className={cn(
+                            "flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-medium transition-[background-color,color,box-shadow] outline-none focus-visible:bg-background/80",
+                            panel === "settings"
+                                ? "bg-foreground text-background shadow-sm"
+                                : "text-muted-foreground hover:text-foreground",
+                        )}
+                    >
+                        <GearSix size={14} />
+                        Settings
+                    </button>
+                </div>
 
                 <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-3">
                     <ChatsPanel
@@ -447,10 +432,12 @@ export function AppSidebar({
                     Configure providers, tools, workspace behavior, and appearance.
                 </DialogDescription>
                 <div className="min-h-0 flex-1 overflow-hidden">
-                    <SettingsPanel
-                        scopeId={activeThreadId}
-                        onImportComplete={onImportComplete}
-                    />
+                    <SectionBoundary label="Settings" resetKey={activeThreadId}>
+                        <SettingsPanel
+                            scopeId={activeThreadId}
+                            onImportComplete={onImportComplete}
+                        />
+                    </SectionBoundary>
                 </div>
             </DialogContent>
         </Dialog>
@@ -595,11 +582,7 @@ function ChatsPanel({
                 }
             }}
             aria-disabled={generating && !isActive}
-            title={
-                generating && !isActive
-                    ? "Wait until the current reply finishes"
-                    : undefined
-            }
+            title={generating && !isActive ? "Wait until the current reply finishes" : undefined}
             className={cn(
                 "group flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium outline-none transition-colors",
                 isActive
@@ -732,11 +715,7 @@ function ChatsPanel({
                     type="button"
                     variant="outline"
                     disabled={generating}
-                    title={
-                        generating
-                            ? "Wait until the current reply finishes"
-                            : "New thread"
-                    }
+                    title={generating ? "Wait until the current reply finishes" : "New thread"}
                     onClick={() => {
                         if (generating) return;
                         haptic();
@@ -868,9 +847,7 @@ function ChatsPanel({
                 {projects.map((project) => {
                     const isOpen = !collapsed[project.id];
                     const isActiveProject = projectEditingId === project.id;
-                    const projectThreads = threads.filter(
-                        (t) => t.projectId === project.id,
-                    );
+                    const projectThreads = threads.filter((t) => t.projectId === project.id);
                     return (
                         <div key={project.id} className="flex flex-col gap-0.5">
                             <div className="group flex items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-xs font-semibold text-foreground hover:bg-accent/40">
@@ -1052,26 +1029,18 @@ function ChatsPanel({
                         </p>
                     )
                 ) : (
-                    unassignedThreads.map((t) =>
-                        renderThreadRow(t, t.id === activeThreadId),
-                    )
+                    unassignedThreads.map((t) => renderThreadRow(t, t.id === activeThreadId))
                 )}
             </div>
 
             {exportMenu ? (
                 <>
-                    <div
-                        className="fixed inset-0 z-40"
-                        onClick={() => setExportMenu(null)}
-                    />
+                    <div className="fixed inset-0 z-40" onClick={() => setExportMenu(null)} />
                     <div
                         className="fixed z-50 flex min-w-44 flex-col gap-0.5 rounded-xl border border-border bg-popover p-1 shadow-lg"
                         style={{
                             left: Math.max(8, exportMenu.x - 184),
-                            top: Math.min(
-                                exportMenu.y,
-                                window.innerHeight - 88,
-                            ),
+                            top: Math.min(exportMenu.y, window.innerHeight - 88),
                         }}
                     >
                         <button
@@ -1148,9 +1117,7 @@ function SettingsPanel({
             kind: mcpKind,
             url: mcpUrl.trim(),
             headers,
-            vercelAuth: mcpConnectorId.trim()
-                ? { connectorId: mcpConnectorId.trim() }
-                : undefined,
+            vercelAuth: mcpConnectorId.trim() ? { connectorId: mcpConnectorId.trim() } : undefined,
             enabled: true,
         };
         addMcpServer(newServer);
@@ -1169,9 +1136,7 @@ function SettingsPanel({
     const visibleGroups = SETTINGS_GROUPS.map((group) => ({
         ...group,
         items: group.items.filter((item) =>
-            `${item.label} ${item.description} ${group.label}`
-                .toLowerCase()
-                .includes(searchQuery),
+            `${item.label} ${item.description} ${group.label}`.toLowerCase().includes(searchQuery),
         ),
     })).filter((group) => group.items.length > 0);
 
@@ -1183,9 +1148,7 @@ function SettingsPanel({
                         <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
                             Workspace
                         </p>
-                        <h2 className="mt-1 text-lg font-semibold tracking-[-0.025em]">
-                            Settings
-                        </h2>
+                        <h2 className="mt-1 text-lg font-semibold tracking-[-0.025em]">Settings</h2>
                     </div>
                     <DialogClose
                         type="button"
@@ -1239,8 +1202,12 @@ function SettingsPanel({
                                                     selected
                                                         ? "bg-accent text-foreground shadow-sm"
                                                         : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
-                                                    featured && !selected && "bg-primary/8 text-foreground",
-                                                    featured && selected && "ring-1 ring-primary/35",
+                                                    featured &&
+                                                        !selected &&
+                                                        "bg-primary/8 text-foreground",
+                                                    featured &&
+                                                        selected &&
+                                                        "ring-1 ring-primary/35",
                                                 )}
                                             >
                                                 <button
@@ -1305,7 +1272,9 @@ function SettingsPanel({
                         <div className="flex items-start justify-between gap-4">
                             <div className="min-w-0">
                                 <div className="flex items-center gap-2 text-muted-foreground">
-                                    {ActiveIcon ? <ActiveIcon size={18} className="text-primary" /> : null}
+                                    {ActiveIcon ? (
+                                        <ActiveIcon size={18} className="text-primary" />
+                                    ) : null}
                                     <span className="text-sm font-medium">Settings</span>
                                 </div>
                                 <h3 className="mt-3 text-2xl font-semibold tracking-[-0.035em]">
@@ -1325,7 +1294,8 @@ function SettingsPanel({
                                     Route
                                 </span>
                                 <span className="ml-2 text-sm font-medium">
-                                    {PROVIDER_DEFAULTS[settings.chat.provider]?.name || settings.chat.provider}
+                                    {PROVIDER_DEFAULTS[settings.chat.provider]?.name ||
+                                        settings.chat.provider}
                                 </span>
                             </div>
                             <div className="rounded-lg border border-border/70 bg-muted/35 px-3 py-2">
@@ -1346,285 +1316,388 @@ function SettingsPanel({
                     </div>
 
                     <div className="aidiy-settings-content mt-7">
+                        {section === "keys" && <KeysSection />}
 
-            {section === "keys" && <KeysSection />}
+                        {section === "instructions" && <CustomInstructionsSection />}
 
-            {section === "instructions" && <CustomInstructionsSection />}
+                        {section === "tokens" && <TokenModeSettingsSection />}
 
-            {section === "tokens" && <TokenModeSettingsSection />}
-
-            {section === "tools" && (
-                <div className="flex flex-col gap-2">
-                    <ToolAccessPicker
-                        value={settings.toolAccess}
-                        onChange={updateToolAccess}
-                    />
-                    {(() => {
-                        const activeSearchConnector = settings.connectors.find(
-                            (connector) =>
-                                connector.enabled &&
-                                Boolean(connector.apiKey?.trim()) &&
-                                ["tavily", "brave", "exa", "parallel"].includes(connector.kind),
-                        );
-                        const searchConnectorKinds = ["tavily", "brave", "exa", "parallel"];
-                        return (
-                            <>
-                    {settings.toolAccess.webSearch && settings.webSearchEnabled ? (
-                        <div className="flex flex-col gap-1.5 rounded-xl border border-border/70 p-2.5">
-                            <label className="text-[11px] font-medium text-muted-foreground">
-                                Search engine
-                            </label>
-                            <select
-                                value={activeSearchConnector?.kind || settings.webSearchEngine}
-                                onChange={(e) => {
-                                    const value = e.target.value;
-                                    if (searchConnectorKinds.includes(value)) {
-                                        updateSettings({
-                                            webSearchEnabled: true,
-                                            connectors: settings.connectors.map((connector) =>
-                                                searchConnectorKinds.includes(connector.kind)
-                                                    ? { ...connector, enabled: connector.kind === value }
-                                                    : connector,
-                                            ),
-                                        });
-                                    } else {
-                                        updateSettings({
-                                            webSearchEngine: value as "duckduckgo" | "searxng",
-                                            connectors: settings.connectors.map((connector) =>
-                                                searchConnectorKinds.includes(connector.kind)
-                                                    ? { ...connector, enabled: false }
-                                                    : connector,
-                                            ),
-                                        });
-                                    }
-                                }}
-                                className="h-8 w-full rounded-lg border border-border bg-background px-2 text-xs outline-none"
-                            >
-                                <option value="duckduckgo">DuckDuckGo</option>
-                                <option value="searxng">SearXNG</option>
-                                {settings.connectors
-                                    .filter(
-                                        (connector) =>
-                                            searchConnectorKinds.includes(connector.kind) &&
-                                            Boolean(connector.apiKey?.trim()),
-                                    )
-                                    .map((connector) => (
-                                        <option key={connector.kind} value={connector.kind}>
-                                            {connector.name}
-                                        </option>
-                                    ))}
-                            </select>
-                            {settings.webSearchEngine === "searxng" ? (
-                                <Input
-                                    value={settings.searxngUrl}
-                                    onChange={(e) =>
-                                        updateSettings({
-                                            searxngUrl: e.target.value,
-                                        })
-                                    }
-                                    placeholder="https://searx.example.com"
-                                    className="h-8 rounded-lg text-xs"
+                        {section === "tools" && (
+                            <div className="flex flex-col gap-2">
+                                <ToolAccessPicker
+                                    value={settings.toolAccess}
+                                    onChange={updateToolAccess}
                                 />
-                            ) : null}
-                            <p className="text-[10px] leading-relaxed text-muted-foreground">
-                                DuckDuckGo Instant Answers are included by default as a fast research overview. This free service is intended for non-commercial use; review DuckDuckGo&apos;s current terms before commercial deployment. Verify important claims with fetched sources.
-                            </p>
-                        </div>
-                    ) : null}
-                            </>
-                        );
-                    })()}
-                    <CustomSkillsSection />
-                </div>
-            )}
+                                {(() => {
+                                    const activeSearchConnector = settings.connectors.find(
+                                        (connector) =>
+                                            connector.enabled &&
+                                            Boolean(connector.apiKey?.trim()) &&
+                                            ["tavily", "brave", "exa", "parallel"].includes(
+                                                connector.kind,
+                                            ),
+                                    );
+                                    const searchConnectorKinds = [
+                                        "tavily",
+                                        "brave",
+                                        "exa",
+                                        "parallel",
+                                    ];
+                                    return (
+                                        <>
+                                            {settings.toolAccess.webSearch &&
+                                            settings.webSearchEnabled ? (
+                                                <div className="flex flex-col gap-1.5 rounded-xl border border-border/70 p-2.5">
+                                                    <label className="text-[11px] font-medium text-muted-foreground">
+                                                        Search engine
+                                                    </label>
+                                                    <select
+                                                        value={
+                                                            activeSearchConnector?.kind ||
+                                                            settings.webSearchEngine
+                                                        }
+                                                        onChange={(e) => {
+                                                            const value = e.target.value;
+                                                            if (
+                                                                searchConnectorKinds.includes(value)
+                                                            ) {
+                                                                updateSettings({
+                                                                    webSearchEnabled: true,
+                                                                    connectors:
+                                                                        settings.connectors.map(
+                                                                            (connector) =>
+                                                                                searchConnectorKinds.includes(
+                                                                                    connector.kind,
+                                                                                )
+                                                                                    ? {
+                                                                                          ...connector,
+                                                                                          enabled:
+                                                                                              connector.kind ===
+                                                                                              value,
+                                                                                      }
+                                                                                    : connector,
+                                                                        ),
+                                                                });
+                                                            } else {
+                                                                updateSettings({
+                                                                    webSearchEngine: value as
+                                                                        "duckduckgo" | "searxng",
+                                                                    connectors:
+                                                                        settings.connectors.map(
+                                                                            (connector) =>
+                                                                                searchConnectorKinds.includes(
+                                                                                    connector.kind,
+                                                                                )
+                                                                                    ? {
+                                                                                          ...connector,
+                                                                                          enabled: false,
+                                                                                      }
+                                                                                    : connector,
+                                                                        ),
+                                                                });
+                                                            }
+                                                        }}
+                                                        className="h-8 w-full rounded-lg border border-border bg-background px-2 text-xs outline-none"
+                                                    >
+                                                        <option value="duckduckgo">
+                                                            DuckDuckGo
+                                                        </option>
+                                                        <option value="searxng">SearXNG</option>
+                                                        {settings.connectors
+                                                            .filter(
+                                                                (connector) =>
+                                                                    searchConnectorKinds.includes(
+                                                                        connector.kind,
+                                                                    ) &&
+                                                                    Boolean(
+                                                                        connector.apiKey?.trim(),
+                                                                    ),
+                                                            )
+                                                            .map((connector) => (
+                                                                <option
+                                                                    key={connector.kind}
+                                                                    value={connector.kind}
+                                                                >
+                                                                    {connector.name}
+                                                                </option>
+                                                            ))}
+                                                    </select>
+                                                    {settings.webSearchEngine === "searxng" ? (
+                                                        <Input
+                                                            value={settings.searxngUrl}
+                                                            onChange={(e) =>
+                                                                updateSettings({
+                                                                    searxngUrl: e.target.value,
+                                                                })
+                                                            }
+                                                            placeholder="https://searx.example.com"
+                                                            className="h-8 rounded-lg text-xs"
+                                                        />
+                                                    ) : null}
+                                                    <p className="text-[10px] leading-relaxed text-muted-foreground">
+                                                        DuckDuckGo Instant Answers are included by
+                                                        default as a fast research overview. This
+                                                        free service is intended for non-commercial
+                                                        use; review DuckDuckGo&apos;s current terms
+                                                        before commercial deployment. Verify
+                                                        important claims with fetched sources.
+                                                    </p>
+                                                </div>
+                                            ) : null}
+                                        </>
+                                    );
+                                })()}
+                                <CustomSkillsSection />
+                            </div>
+                        )}
 
-            {section === "mcp" && (
-                <div className="flex flex-col gap-3">
-                    <p className="text-[11px] leading-relaxed text-muted-foreground">
-                        Remote HTTP/SSE MCP tools are loaded for each chat request.
-                        Add any required request headers below; local/private targets
-                        require the self-hosted opt-in environment setting.
-                    </p>
-                    <FreeSearchMcpSection />
-                    <div className="flex flex-col gap-1.5">
-                        <Input
-                            value={mcpName}
-                            onChange={(e) => setMcpName(e.target.value)}
-                            placeholder="Server name"
-                            className="h-9 rounded-xl text-xs"
-                        />
-                        <select
-                            value={mcpKind}
-                            onChange={(event) =>
-                                setMcpKind(event.target.value as "http" | "sse")
-                            }
-                            className="h-9 rounded-xl border border-border bg-background px-2 text-xs outline-none"
-                            aria-label="MCP transport"
-                        >
-                            <option value="http">Streamable HTTP</option>
-                            <option value="sse">Server-sent events</option>
-                        </select>
-                        <Input
-                            value={mcpHeaders}
-                            onChange={(event) => setMcpHeaders(event.target.value)}
-                            placeholder='Optional headers JSON, e.g. {"Authorization":"Bearer …"}'
-                            className="h-9 rounded-xl text-xs"
-                        />
-                        <Input
-                            value={mcpConnectorId}
-                            onChange={(event) => setMcpConnectorId(event.target.value)}
-                            placeholder="Vercel Connect connector (optional, e.g. scl_…)"
-                            className="h-9 rounded-xl text-xs"
-                        />
-                        <Input
-                            value={mcpUrl}
-                            onChange={(e) => setMcpUrl(e.target.value)}
-                            placeholder="https://…/sse or /mcp"
-                            className="h-9 rounded-xl text-xs"
-                        />
-                        <Button
-                            type="button"
-                            size="sm"
-                            onClick={handleAddMcp}
-                            className="rounded-xl"
-                        >
-                            Add MCP server
-                        </Button>
-                        {mcpError ? <p className="text-[11px] text-destructive">{mcpError}</p> : null}
-                    </div>
-                    {settings.mcpServers.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">
-                            No MCP servers yet.
-                        </p>
-                    ) : (
-                        settings.mcpServers.map((s) => (
-                            <div
-                                key={s.id}
-                                className="flex items-center justify-between gap-2 rounded-xl border border-border px-3 py-2"
-                            >
-                                <div className="min-w-0">
-                                    <div className="truncate text-xs font-semibold">
-                                        {s.name}
-                                    </div>
-                                    <div className="truncate text-[10px] text-muted-foreground">
-                                        {s.kind.toUpperCase()} · {s.url}{s.headers && Object.keys(s.headers).length > 0 ? " · headers" : ""}
-                                    </div>
-                                    {s.vercelAuth ? (
-                                        <ConnectAuthControl
-                                            connectorId={s.vercelAuth.connectorId}
-                                        />
+                        {section === "mcp" && (
+                            <div className="flex flex-col gap-3">
+                                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                                    Remote HTTP/SSE MCP tools are loaded for each chat request. Add
+                                    any required request headers below; local/private targets
+                                    require the self-hosted opt-in environment setting.
+                                </p>
+                                <FreeSearchMcpSection />
+                                <div className="flex flex-col gap-1.5">
+                                    <Input
+                                        value={mcpName}
+                                        onChange={(e) => setMcpName(e.target.value)}
+                                        placeholder="Server name"
+                                        className="h-9 rounded-xl text-xs"
+                                    />
+                                    <select
+                                        value={mcpKind}
+                                        onChange={(event) =>
+                                            setMcpKind(event.target.value as "http" | "sse")
+                                        }
+                                        className="h-9 rounded-xl border border-border bg-background px-2 text-xs outline-none"
+                                        aria-label="MCP transport"
+                                    >
+                                        <option value="http">Streamable HTTP</option>
+                                        <option value="sse">Server-sent events</option>
+                                    </select>
+                                    <Input
+                                        value={mcpHeaders}
+                                        onChange={(event) => setMcpHeaders(event.target.value)}
+                                        placeholder='Optional headers JSON, e.g. {"Authorization":"Bearer …"}'
+                                        className="h-9 rounded-xl text-xs"
+                                    />
+                                    <Input
+                                        value={mcpConnectorId}
+                                        onChange={(event) => setMcpConnectorId(event.target.value)}
+                                        placeholder="Vercel Connect connector (optional, e.g. scl_…)"
+                                        className="h-9 rounded-xl text-xs"
+                                    />
+                                    <Input
+                                        value={mcpUrl}
+                                        onChange={(e) => setMcpUrl(e.target.value)}
+                                        placeholder="https://…/sse or /mcp"
+                                        className="h-9 rounded-xl text-xs"
+                                    />
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        onClick={handleAddMcp}
+                                        className="rounded-xl"
+                                    >
+                                        Add MCP server
+                                    </Button>
+                                    {mcpError ? (
+                                        <p className="text-[11px] text-destructive">{mcpError}</p>
                                     ) : null}
                                 </div>
-                                <div className="flex items-center gap-1">
-                                    <button
-                                        type="button"
-                                        onClick={() =>
-                                            updateMcpServer(s.id, {
-                                                enabled: !s.enabled,
-                                            })
-                                        }
-                                        className={cn(
-                                            "rounded-md px-1.5 py-0.5 text-[10px] font-medium outline-none",
-                                            s.enabled
-                                                ? "bg-primary/15 text-primary"
-                                                : "bg-muted text-muted-foreground",
-                                        )}
-                                    >
-                                        {s.enabled ? "On" : "Off"}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => removeMcpServer(s.id)}
-                                        className="rounded-md p-1 text-muted-foreground outline-none hover:text-destructive"
-                                        aria-label={`Remove ${s.name}`}
-                                    >
-                                        <Trash size={14} />
-                                    </button>
+                                {settings.mcpServers.length === 0 ? (
+                                    <p className="text-xs text-muted-foreground">
+                                        No MCP servers yet.
+                                    </p>
+                                ) : (
+                                    settings.mcpServers.map((s) => (
+                                        <div
+                                            key={s.id}
+                                            className="flex items-center justify-between gap-2 rounded-xl border border-border px-3 py-2"
+                                        >
+                                            <div className="min-w-0">
+                                                <div className="truncate text-xs font-semibold">
+                                                    {s.name}
+                                                </div>
+                                                <div className="truncate text-[10px] text-muted-foreground">
+                                                    {s.kind.toUpperCase()} · {s.url}
+                                                    {s.headers && Object.keys(s.headers).length > 0
+                                                        ? " · headers"
+                                                        : ""}
+                                                </div>
+                                                {s.vercelAuth ? (
+                                                    <ConnectAuthControl
+                                                        connectorId={s.vercelAuth.connectorId}
+                                                    />
+                                                ) : null}
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        updateMcpServer(s.id, {
+                                                            enabled: !s.enabled,
+                                                        })
+                                                    }
+                                                    className={cn(
+                                                        "rounded-md px-1.5 py-0.5 text-[10px] font-medium outline-none",
+                                                        s.enabled
+                                                            ? "bg-primary/15 text-primary"
+                                                            : "bg-muted text-muted-foreground",
+                                                    )}
+                                                >
+                                                    {s.enabled ? "On" : "Off"}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeMcpServer(s.id)}
+                                                    className="rounded-md p-1 text-muted-foreground outline-none hover:text-destructive"
+                                                    aria-label={`Remove ${s.name}`}
+                                                >
+                                                    <Trash size={14} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        )}
+
+                        {section === "connect" && <ConnectedAppsSection />}
+
+                        {section === "experimental" && (
+                            <div className="flex flex-col gap-3">
+                                <SubagentsSettingsSection scopeId={scopeId} />
+                                <PreviewSettingsSection />
+                            </div>
+                        )}
+
+                        {section === "memory" && <MemorySettingsSection />}
+
+                        {section === "knowledge" && <KnowledgeSettingsSection />}
+
+                        {section === "connectors" && <ConnectorsSection />}
+                        {section === "apps" && <ComposioSettings />}
+
+                        {section === "cloud" && (
+                            <CloudStorageSection onImportComplete={onImportComplete} />
+                        )}
+
+                        {section === "data" && (
+                            <DataInteropSection onImportComplete={onImportComplete} />
+                        )}
+
+                        {section === "usage" && <UsageSection />}
+
+                        {section === "appearance" && (
+                            <div className="flex flex-col gap-3">
+                                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                                    Choose the workspace surface. Onboarding always uses its own
+                                    dark presentation.
+                                </p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {(
+                                        [
+                                            {
+                                                id: "dark",
+                                                label: "Dark",
+                                                description: "Soft black surfaces",
+                                                icon: Moon,
+                                                swatch: "bg-[#0a0a0a]",
+                                            },
+                                            {
+                                                id: "light",
+                                                label: "Light",
+                                                description: "Bright paper canvas",
+                                                icon: Sun,
+                                                swatch: "bg-[#f7f7f7]",
+                                            },
+                                            {
+                                                id: "system",
+                                                label: "System",
+                                                description: "Follow device theme",
+                                                icon: Desktop,
+                                                swatch: "bg-[linear-gradient(135deg,#f7f7f7_50%,#0a0a0a_50%)]",
+                                            },
+                                            {
+                                                id: "oled",
+                                                label: "OLED / Pure Black",
+                                                description: "True #000 canvas",
+                                                icon: Lightning,
+                                                swatch: "bg-black",
+                                            },
+                                        ] as const
+                                    ).map((theme) => {
+                                        const Icon = theme.icon;
+                                        const selected = settings.theme === theme.id;
+                                        return (
+                                            <button
+                                                key={theme.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    hapticSelect();
+                                                    updateSettings({ theme: theme.id });
+                                                }}
+                                                className={cn(
+                                                    "group flex min-w-0 flex-col items-start gap-2 rounded-2xl border p-2.5 text-left outline-none transition-colors",
+                                                    selected
+                                                        ? "border-primary/40 bg-primary/10 text-foreground"
+                                                        : "border-border/70 text-muted-foreground hover:bg-accent hover:text-foreground",
+                                                )}
+                                            >
+                                                <span
+                                                    className={cn(
+                                                        "relative flex h-10 w-full items-end justify-between overflow-hidden rounded-xl border border-black/10 p-1.5",
+                                                        theme.swatch,
+                                                    )}
+                                                >
+                                                    <Icon
+                                                        size={14}
+                                                        className={
+                                                            theme.id === "light"
+                                                                ? "text-zinc-600"
+                                                                : "text-zinc-300"
+                                                        }
+                                                    />
+                                                    {selected ? (
+                                                        <CheckCircle
+                                                            size={14}
+                                                            weight="fill"
+                                                            className={
+                                                                theme.id === "light"
+                                                                    ? "text-zinc-700"
+                                                                    : "text-white"
+                                                            }
+                                                        />
+                                                    ) : null}
+                                                </span>
+                                                <span className="min-w-0">
+                                                    <span className="block truncate text-[11px] font-semibold">
+                                                        {theme.label}
+                                                    </span>
+                                                    <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+                                                        {theme.description}
+                                                    </span>
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             </div>
-                        ))
-                    )}
-                </div>
-            )}
+                        )}
 
-            {section === "connect" && <ConnectedAppsSection />}
-
-            {section === "experimental" && (
-                <div className="flex flex-col gap-3">
-                    <SubagentsSettingsSection scopeId={scopeId} />
-                    <PreviewSettingsSection />
-                </div>
-            )}
-
-            {section === "memory" && <MemorySettingsSection />}
-
-            {section === "knowledge" && <KnowledgeSettingsSection />}
-
-            {section === "connectors" && <ConnectorsSection />}
-            {section === "apps" && <ComposioSettings />}
-
-            {section === "cloud" && (
-                <CloudStorageSection onImportComplete={onImportComplete} />
-            )}
-
-            {section === "data" && <DataInteropSection onImportComplete={onImportComplete} />}
-
-            {section === "usage" && <UsageSection />}
-
-            {section === "appearance" && (
-                <div className="flex flex-col gap-3">
-                    <p className="text-[11px] leading-relaxed text-muted-foreground">
-                        Choose the workspace surface. Onboarding always uses its own dark presentation.
-                    </p>
-                    <div className="grid grid-cols-2 gap-2">
-                        {([
-                            { id: "dark", label: "Dark", description: "Soft black surfaces", icon: Moon, swatch: "bg-[#0a0a0a]" },
-                            { id: "light", label: "Light", description: "Bright paper canvas", icon: Sun, swatch: "bg-[#f7f7f7]" },
-                            { id: "system", label: "System", description: "Follow device theme", icon: Desktop, swatch: "bg-[linear-gradient(135deg,#f7f7f7_50%,#0a0a0a_50%)]" },
-                            { id: "oled", label: "OLED / Pure Black", description: "True #000 canvas", icon: Lightning, swatch: "bg-black" },
-                        ] as const).map((theme) => {
-                            const Icon = theme.icon;
-                            const selected = settings.theme === theme.id;
-                            return (
-                                <button
-                                    key={theme.id}
-                                    type="button"
-                                    onClick={() => {
-                                        hapticSelect();
-                                        updateSettings({ theme: theme.id });
-                                    }}
-                                    className={cn(
-                                        "group flex min-w-0 flex-col items-start gap-2 rounded-2xl border p-2.5 text-left outline-none transition-colors",
-                                        selected
-                                            ? "border-primary/40 bg-primary/10 text-foreground"
-                                            : "border-border/70 text-muted-foreground hover:bg-accent hover:text-foreground",
-                                    )}
-                                >
-                                    <span className={cn("relative flex h-10 w-full items-end justify-between overflow-hidden rounded-xl border border-black/10 p-1.5", theme.swatch)}>
-                                        <Icon size={14} className={theme.id === "light" ? "text-zinc-600" : "text-zinc-300"} />
-                                        {selected ? <CheckCircle size={14} weight="fill" className={theme.id === "light" ? "text-zinc-700" : "text-white"} /> : null}
-                                    </span>
-                                    <span className="min-w-0">
-                                        <span className="block truncate text-[11px] font-semibold">{theme.label}</span>
-                                        <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{theme.description}</span>
-                                    </span>
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
-
-            <button
-                type="button"
-                onClick={() => {
-                    haptic();
-                    resetSettings();
-                }}
-                className="mt-10 border-t border-border/70 pt-5 text-left text-sm text-destructive outline-none hover:underline"
-            >
-                Reset all settings
-            </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                haptic();
+                                resetSettings();
+                            }}
+                            className="mt-10 border-t border-border/70 pt-5 text-left text-sm text-destructive outline-none hover:underline"
+                        >
+                            Reset all settings
+                        </button>
                     </div>
                 </div>
             </main>
@@ -1674,9 +1747,8 @@ function CustomInstructionsSection() {
             <div>
                 <h3 className="text-xs font-semibold">Custom instructions</h3>
                 <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                    These supplement ai.diy&apos;s default system prompt. They do
-                    not replace tool, safety, or active skill instructions.
-                    Applied to every chat.
+                    These supplement ai.diy&apos;s default system prompt. They do not replace tool,
+                    safety, or active skill instructions. Applied to every chat.
                 </p>
             </div>
             <textarea
@@ -1720,7 +1792,8 @@ function CustomInstructionsSection() {
                             Danger zone: full system prompt
                         </span>
                         <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">
-                            View the effective prompt or replace its built-in instructions. Changes can make the AI ignore important safety, tool, and workflow rules.
+                            View the effective prompt or replace its built-in instructions. Changes
+                            can make the AI ignore important safety, tool, and workflow rules.
                         </span>
                     </span>
                     <span className="shrink-0 text-[10px] text-destructive">
@@ -1742,7 +1815,10 @@ function CustomInstructionsSection() {
                             value={advancedValue}
                             onChange={(event) =>
                                 updateChat({
-                                    advancedSystemPrompt: event.target.value.slice(0, maxAdvancedChars),
+                                    advancedSystemPrompt: event.target.value.slice(
+                                        0,
+                                        maxAdvancedChars,
+                                    ),
                                 })
                             }
                             placeholder="Leave empty to use ai.diy's built-in system prompt."
@@ -1753,7 +1829,8 @@ function CustomInstructionsSection() {
                         />
                         <div className="flex items-center justify-between gap-2">
                             <p className="text-[10px] tabular-nums text-muted-foreground">
-                                {advancedValue.length.toLocaleString()} / {maxAdvancedChars.toLocaleString()}
+                                {advancedValue.length.toLocaleString()} /{" "}
+                                {maxAdvancedChars.toLocaleString()}
                             </p>
                             <Button
                                 type="button"
@@ -1783,10 +1860,9 @@ function TokenModeSettingsSection() {
             <div>
                 <h3 className="text-xs font-semibold">Token mode</h3>
                 <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                    Controls system-prompt size, tool suite, step budget, and
-                    optional prompt caching. Default is Balanced. You can also
-                    change this from the t/s / tok chip on any assistant
-                    message.
+                    Controls system-prompt size, tool suite, step budget, and optional prompt
+                    caching. Default is Balanced. You can also change this from the t/s / tok chip
+                    on any assistant message.
                 </p>
             </div>
             <div
@@ -1808,9 +1884,7 @@ function TokenModeSettingsSection() {
                             }}
                             className={cn(
                                 "flex items-start gap-2.5 rounded-xl px-3 py-2.5 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-                                selected
-                                    ? "bg-foreground/[0.07]"
-                                    : "hover:bg-muted/50",
+                                selected ? "bg-foreground/[0.07]" : "hover:bg-muted/50",
                             )}
                         >
                             <span
@@ -1822,9 +1896,7 @@ function TokenModeSettingsSection() {
                                 )}
                                 aria-hidden
                             >
-                                {selected ? (
-                                    <CheckCircle size={10} weight="fill" />
-                                ) : null}
+                                {selected ? <CheckCircle size={10} weight="fill" /> : null}
                             </span>
                             <span className="min-w-0 flex-1">
                                 <span className="flex items-center gap-1.5">
@@ -1852,9 +1924,7 @@ function TokenModeSettingsSection() {
 function KnowledgeSettingsSection() {
     const { settings, updateSettings, updateToolAccess } = useSettings();
     const knowledgeEnabled = settings.knowledgeEnabled !== false;
-    const [docs, setDocs] = useState<
-        Array<{ id: string; name: string; chunkCount: number }>
-    >([]);
+    const [docs, setDocs] = useState<Array<{ id: string; name: string; chunkCount: number }>>([]);
     const [status, setStatus] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
     const modalities = getModelModalities(settings.chat.model, settings.chat.provider);
@@ -1912,15 +1982,15 @@ function KnowledgeSettingsSection() {
                 onChange={(value) => updateToolAccess("knowledge", value)}
             />
             <p className="text-[11px] leading-relaxed text-muted-foreground">
-                    Upload text, Markdown, JSON, CSV, PDF, or DOCX. Text is extracted and
-                    embedded locally; images inside PDFs/DOCX are not indexed. The selected
-                    model receives retrieved text, not the original knowledge file.
-                    Vectors are stored in IndexedDB; the MiniLM model caches in the browser.
-                </p>
+                Upload text, Markdown, JSON, CSV, PDF, or DOCX. Text is extracted and embedded
+                locally; images inside PDFs/DOCX are not indexed. The selected model receives
+                retrieved text, not the original knowledge file. Vectors are stored in IndexedDB;
+                the MiniLM model caches in the browser.
+            </p>
             {!modalities.vision ? (
                 <p className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">
-                    The current model does not support image input. It can still receive
-                    extracted PDF/Word text, but it will not see embedded images.
+                    The current model does not support image input. It can still receive extracted
+                    PDF/Word text, but it will not see embedded images.
                 </p>
             ) : null}
             <label className="inline-flex h-8 w-fit cursor-pointer items-center rounded-xl border border-border px-3 text-xs font-medium hover:bg-accent">
@@ -1946,9 +2016,7 @@ function KnowledgeSettingsSection() {
                         >
                             <span className="truncate text-foreground">
                                 {doc.name}{" "}
-                                <span className="text-muted-foreground">
-                                    ({doc.chunkCount})
-                                </span>
+                                <span className="text-muted-foreground">({doc.chunkCount})</span>
                             </span>
                             <button
                                 type="button"
@@ -1985,9 +2053,7 @@ function KnowledgeSettingsSection() {
                     Clear knowledge base
                 </button>
             ) : null}
-            {status ? (
-                <p className="text-[11px] text-muted-foreground">{status}</p>
-            ) : null}
+            {status ? <p className="text-[11px] text-muted-foreground">{status}</p> : null}
         </div>
     );
 }
@@ -2072,18 +2138,24 @@ function MemorySettingsSection() {
             <div>
                 <h3 className="text-xs font-semibold">Local memory</h3>
                 <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                    Saved memories stay in this browser. The memory tool can retrieve a
-                    narrow relevant subset on demand. Automatic attachment is separate,
-                    optional, and off by default.
+                    Saved memories stay in this browser. The memory tool can retrieve a narrow
+                    relevant subset on demand. Automatic attachment is separate, optional, and off
+                    by default.
                 </p>
             </div>
             <div className="rounded-xl border border-border/70 bg-muted/20 p-3 text-[11px] leading-relaxed text-muted-foreground">
-                <strong className="text-foreground">Import from another AI:</strong>{" "}
-                copy the export prompt below into ChatGPT, Gemini, Claude, or Grok,
-                save its JSON response, then import that file here.
+                <strong className="text-foreground">Import from another AI:</strong> copy the export
+                prompt below into ChatGPT, Gemini, Claude, or Grok, save its JSON response, then
+                import that file here.
             </div>
             <div className="flex flex-wrap gap-2">
-                <Button type="button" size="sm" variant="outline" onClick={copyPrompt} className="rounded-xl">
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={copyPrompt}
+                    className="rounded-xl"
+                >
                     Copy export prompt
                 </Button>
                 <label className="inline-flex h-8 cursor-pointer items-center rounded-xl border border-border px-3 text-xs font-medium hover:bg-accent">
@@ -2103,7 +2175,7 @@ function MemorySettingsSection() {
             <textarea
                 value={pastedMemory}
                 onChange={(event) => setPastedMemory(event.target.value)}
-                placeholder='Paste exported JSON or a concise memory list here…'
+                placeholder="Paste exported JSON or a concise memory list here…"
                 rows={4}
                 className="w-full resize-y rounded-xl border border-border bg-background px-3 py-2 text-xs outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                 aria-label="Paste memory export"
@@ -2121,7 +2193,11 @@ function MemorySettingsSection() {
             <div className="flex items-center justify-between rounded-xl border border-border/70 px-3 py-2 text-xs">
                 <span>{count} stored memories</span>
                 <div className="flex items-center gap-1">
-                    <button type="button" onClick={() => void downloadMemory()} className="rounded-md px-2 py-1 text-muted-foreground hover:bg-accent hover:text-foreground">
+                    <button
+                        type="button"
+                        onClick={() => void downloadMemory()}
+                        className="rounded-md px-2 py-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                    >
                         Export
                     </button>
                     <button
@@ -2142,12 +2218,10 @@ function MemorySettingsSection() {
     );
 }
 
-const FREE_SEARCH_MCP_DETAILS: Record<
-    string,
-    { description: string; tools: string }
-> = {
+const FREE_SEARCH_MCP_DETAILS: Record<string, { description: string; tools: string }> = {
     mcp_parallel_search: {
-        description: "Free web search and page fetch, no API key required. A saved Parallel connector key is attached automatically for higher rate limits.",
+        description:
+            "Free web search and page fetch, no API key required. A saved Parallel connector key is attached automatically for higher rate limits.",
         tools: "web_search · web_fetch",
     },
     mcp_firecrawl_keyless: {
@@ -2157,9 +2231,7 @@ const FREE_SEARCH_MCP_DETAILS: Record<
 };
 
 function ConnectAuthControl({ connectorId }: { connectorId: string }) {
-    const [state, setState] = useState<
-        "idle" | "checking" | "ok" | "needs-auth" | "error"
-    >("idle");
+    const [state, setState] = useState<"idle" | "checking" | "ok" | "needs-auth" | "error">("idle");
     const [detail, setDetail] = useState("");
     const [busy, setBusy] = useState(false);
 
@@ -2371,9 +2443,11 @@ function ConnectedAppsSection() {
                     <span className="font-semibold text-foreground">
                         Vercel Connect is not configured here
                     </span>
-                    No Vercel OIDC token or <code className="rounded bg-muted px-1 text-[10px]">VERCEL_TOKEN</code>{" "}
-                    was found, so token-backed MCP servers and the{" "}
-                    <code className="rounded bg-muted px-1 text-[10px]">connect_request</code> tool are disabled.
+                    No Vercel OIDC token or{" "}
+                    <code className="rounded bg-muted px-1 text-[10px]">VERCEL_TOKEN</code> was
+                    found, so token-backed MCP servers and the{" "}
+                    <code className="rounded bg-muted px-1 text-[10px]">connect_request</code> tool
+                    are disabled.
                     {messages._global ? (
                         <span className="text-destructive">{messages._global}</span>
                     ) : null}
@@ -2399,9 +2473,9 @@ function ConnectedAppsSection() {
     return (
         <div className="flex flex-col gap-2">
             <p className="text-[11px] leading-relaxed text-muted-foreground">
-                App-scoped connectors declared in the environment. Authorize each
-                connector once, then the model can act on the service and protected
-                MCP servers can request tokens automatically.
+                App-scoped connectors declared in the environment. Authorize each connector once,
+                then the model can act on the service and protected MCP servers can request tokens
+                automatically.
             </p>
             <ConnectEnableGuide />
             {connectors.map((entry) => (
@@ -2411,9 +2485,7 @@ function ConnectedAppsSection() {
                 >
                     <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
-                            <div className="truncate text-xs font-semibold">
-                                {entry.key}
-                            </div>
+                            <div className="truncate text-xs font-semibold">{entry.key}</div>
                             <div className="truncate text-[10px] text-muted-foreground">
                                 {entry.connectorId}
                                 {entry.baseUrl ? ` · ${entry.baseUrl}` : ""}
@@ -2455,9 +2527,7 @@ function FreeSearchMcpSection() {
 
     const addPreset = (preset: (typeof FREE_SEARCH_MCP_PRESETS)[number]) => {
         const parallelKey = settings.connectors.find(
-            (connector) =>
-                connector.kind === "parallel" &&
-                Boolean(connector.apiKey?.trim()),
+            (connector) => connector.kind === "parallel" && Boolean(connector.apiKey?.trim()),
         )?.apiKey;
         const headers =
             preset.id === "mcp_parallel_search" && parallelKey
@@ -2471,13 +2541,11 @@ function FreeSearchMcpSection() {
         <div className="flex flex-col gap-2 rounded-xl border border-primary/20 bg-primary/5 p-2.5">
             <span className="text-[11px] font-semibold">Free search MCPs</span>
             <p className="text-[10px] leading-relaxed text-muted-foreground">
-                Free hosted web search for the model, no API key. When enabled,
-                these are preferred over the built-in DuckDuckGo search.
+                Free hosted web search for the model, no API key. When enabled, these are preferred
+                over the built-in DuckDuckGo search.
             </p>
             {FREE_SEARCH_MCP_PRESETS.map((preset) => {
-                const added = settings.mcpServers.some(
-                    (server) => server.url === preset.url,
-                );
+                const added = settings.mcpServers.some((server) => server.url === preset.url);
                 const details = FREE_SEARCH_MCP_DETAILS[preset.id];
                 return (
                     <div
@@ -2515,9 +2583,7 @@ function FreeSearchMcpSection() {
                         <p className="text-[10px] text-muted-foreground/80">
                             Tools: {details.tools}
                         </p>
-                        <p className="truncate text-[9px] text-muted-foreground/60">
-                            {preset.url}
-                        </p>
+                        <p className="truncate text-[9px] text-muted-foreground/60">{preset.url}</p>
                     </div>
                 );
             })}
@@ -2591,21 +2657,30 @@ function ConnectorsSection() {
     return (
         <div className="flex flex-col gap-3">
             <div>
-                <h3 className="text-xs font-semibold">Connectors <span className="text-[9px] uppercase tracking-wider text-primary">Beta</span></h3>
+                <h3 className="text-xs font-semibold">
+                    Connectors{" "}
+                    <span className="text-[9px] uppercase tracking-wider text-primary">Beta</span>
+                </h3>
                 <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                    Search connectors are BYOK and sent only for the current request. An enabled connector is used instead of Firecrawl or Parallel MCP search.
+                    Search connectors are BYOK and sent only for the current request. An enabled
+                    connector is used instead of Firecrawl or Parallel MCP search.
                 </p>
             </div>
             {SEARCH_CONNECTOR_OPTIONS.map((option) => {
                 const connector = getConnector(option.kind);
                 return (
-                    <div key={option.kind} className="flex flex-col gap-2 rounded-xl border border-border/70 p-2.5">
+                    <div
+                        key={option.kind}
+                        className="flex flex-col gap-2 rounded-xl border border-border/70 p-2.5"
+                    >
                         <div className="flex items-center justify-between gap-2">
                             <span className="text-xs font-semibold">{option.label}</span>
                             <div className="flex items-center gap-1">
                                 <button
                                     type="button"
-                                    onClick={() => setHelpKind(helpKind === option.kind ? null : option.kind)}
+                                    onClick={() =>
+                                        setHelpKind(helpKind === option.kind ? null : option.kind)
+                                    }
                                     className="flex size-6 items-center justify-center rounded-md border border-border text-[11px] font-semibold text-muted-foreground hover:bg-accent hover:text-foreground"
                                     aria-label={`How to get a ${option.label} key`}
                                 >
@@ -2613,10 +2688,17 @@ function ConnectorsSection() {
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => saveConnector({ ...connector, enabled: !connector.enabled }, true)}
+                                    onClick={() =>
+                                        saveConnector(
+                                            { ...connector, enabled: !connector.enabled },
+                                            true,
+                                        )
+                                    }
                                     className={cn(
                                         "rounded-md px-2 py-1 text-[10px] font-medium",
-                                        connector.enabled ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
+                                        connector.enabled
+                                            ? "bg-primary/15 text-primary"
+                                            : "bg-muted text-muted-foreground",
                                     )}
                                 >
                                     {connector.enabled ? "On" : "Off"}
@@ -2627,15 +2709,27 @@ function ConnectorsSection() {
                             <Input
                                 type="password"
                                 value={connector.apiKey ?? ""}
-                                onChange={(event) => saveConnector({ ...connector, apiKey: event.target.value })}
+                                onChange={(event) =>
+                                    saveConnector({ ...connector, apiKey: event.target.value })
+                                }
                                 placeholder={option.placeholder}
                                 className="h-8 min-w-0 flex-1 rounded-lg text-xs"
                             />
-                            <Button type="button" size="sm" variant="outline" onClick={() => void testConnector(connector)} className="h-8 rounded-lg px-2 text-[11px]">
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void testConnector(connector)}
+                                className="h-8 rounded-lg px-2 text-[11px]"
+                            >
                                 Test
                             </Button>
                         </div>
-                        {status[option.kind] ? <p className="text-[10px] text-muted-foreground">{status[option.kind]}</p> : null}
+                        {status[option.kind] ? (
+                            <p className="text-[10px] text-muted-foreground">
+                                {status[option.kind]}
+                            </p>
+                        ) : null}
                         {option.kind === "exa" || option.kind === "parallel" ? (
                             <ConnectorSearchOptionsFields
                                 connector={connector}
@@ -2647,14 +2741,14 @@ function ConnectorsSection() {
                                 }
                             />
                         ) : null}
-                        {helpKind === option.kind ? (
-                            <ConnectorHelp kind={option.kind} />
-                        ) : null}
+                        {helpKind === option.kind ? <ConnectorHelp kind={option.kind} /> : null}
                     </div>
                 );
             })}
             <div className="rounded-xl border border-dashed border-border/70 p-3 text-[11px] leading-relaxed text-muted-foreground">
-                <strong className="text-foreground">GitHub, Supabase, PostgreSQL, S3:</strong> connect these through a permission-scoped Remote MCP server in MCP Beta. Direct database/service-role proxying is intentionally blocked.
+                <strong className="text-foreground">GitHub, Supabase, PostgreSQL, S3:</strong>{" "}
+                connect these through a permission-scoped Remote MCP server in MCP Beta. Direct
+                database/service-role proxying is intentionally blocked.
             </div>
         </div>
     );
@@ -2757,9 +2851,7 @@ function ConnectorSearchOptionsFields({
                 Include domains
                 <Input
                     value={options.includeDomains ?? ""}
-                    onChange={(event) =>
-                        onChange({ includeDomains: event.target.value })
-                    }
+                    onChange={(event) => onChange({ includeDomains: event.target.value })}
                     placeholder="arxiv.org, openai.com"
                     className="h-8 rounded-lg text-xs"
                 />
@@ -2768,9 +2860,7 @@ function ConnectorSearchOptionsFields({
                 Exclude domains
                 <Input
                     value={options.excludeDomains ?? ""}
-                    onChange={(event) =>
-                        onChange({ excludeDomains: event.target.value })
-                    }
+                    onChange={(event) => onChange({ excludeDomains: event.target.value })}
                     placeholder="reddit.com, x.com"
                     className="h-8 rounded-lg text-xs"
                 />
@@ -2903,11 +2993,12 @@ function DataInteropSection({ onImportComplete }: { onImportComplete?: () => voi
             <div>
                 <h3 className="text-xs font-semibold">Import &amp; export</h3>
                 <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                    Bring chats in from ChatGPT, Claude, ShareGPT, or Markdown, and
-                    export your chats as Markdown or ai.diy JSON. Everything runs
-                    locally in this browser; nothing is uploaded.
+                    Bring chats in from ChatGPT, Claude, ShareGPT, or Markdown, and export your
+                    chats as Markdown or ai.diy JSON. Everything runs locally in this browser;
+                    nothing is uploaded.
                 </p>
             </div>
+            <StorageHealthPanel />
 
             <div
                 role="button"
@@ -2938,9 +3029,7 @@ function DataInteropSection({ onImportComplete }: { onImportComplete?: () => voi
                 )}
             >
                 <UploadSimple size={18} />
-                <span>
-                    {busy ? "Analyzing file…" : "Drop a file here or click to choose"}
-                </span>
+                <span>{busy ? "Analyzing file…" : "Drop a file here or click to choose"}</span>
                 <span className="text-[10px] text-muted-foreground/80">
                     ChatGPT/Claude ZIP, ai.diy JSON, ShareGPT JSONL, or Markdown
                 </span>
@@ -2994,9 +3083,7 @@ function DataInteropSection({ onImportComplete }: { onImportComplete?: () => voi
                 </div>
             ) : null}
 
-            {status ? (
-                <p className="text-[11px] text-primary">{status}</p>
-            ) : null}
+            {status ? <p className="text-[11px] text-primary">{status}</p> : null}
             {error ? (
                 <p className="flex items-start gap-1 text-[11px] leading-relaxed text-destructive">
                     <WarningCircle size={13} className="mt-0.5 shrink-0" />
@@ -3005,10 +3092,10 @@ function DataInteropSection({ onImportComplete }: { onImportComplete?: () => voi
             ) : null}
 
             <div className="rounded-xl border border-border/70 bg-muted/20 p-3 text-[10px] leading-relaxed text-muted-foreground">
-                <strong className="text-foreground">Exporting:</strong> hover a chat
-                in the list and use the download icon to export it as Markdown or
-                ai.diy JSON. The ai.diy JSON backup from Cloud Storage can also be
-                imported here to restore chats on another device or browser.
+                <strong className="text-foreground">Exporting:</strong> hover a chat in the list and
+                use the download icon to export it as Markdown or ai.diy JSON. The ai.diy JSON
+                backup from Cloud Storage can also be imported here to restore chats on another
+                device or browser.
             </div>
             <Button
                 type="button"
@@ -3031,11 +3118,7 @@ function useCloudAutoBackup() {
     useEffect(() => {
         const runBackup = async () => {
             const cfg = settings.cloudStorage;
-            if (
-                !cfg.autoBackup ||
-                !cloudConfigComplete(cfg) ||
-                busyRef.current
-            ) {
+            if (!cfg.autoBackup || !cloudConfigComplete(cfg) || busyRef.current) {
                 return;
             }
             busyRef.current = true;
@@ -3067,11 +3150,7 @@ function useCloudAutoBackup() {
     }, [settings.cloudStorage, updateSettings]);
 }
 
-function CloudStorageSection({
-    onImportComplete,
-}: {
-    onImportComplete?: () => void;
-}) {
+function CloudStorageSection({ onImportComplete }: { onImportComplete?: () => void }) {
     const { settings, updateSettings } = useSettings();
     const cfg = settings.cloudStorage;
     const [status, setStatus] = useState<string | null>(null);
@@ -3165,15 +3244,12 @@ function CloudStorageSection({
             <div>
                 <h3 className="text-xs font-semibold">
                     Cloud storage{" "}
-                    <span className="text-[9px] uppercase tracking-wider text-primary">
-                        Beta
-                    </span>
+                    <span className="text-[9px] uppercase tracking-wider text-primary">Beta</span>
                 </h3>
                 <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                    Back up and restore all chats from the storage provider of
-                    your choice. Credentials are stored only in this browser,
-                    never on a server — requests go directly from your device
-                    to your storage endpoint.
+                    Back up and restore all chats from the storage provider of your choice.
+                    Credentials are stored only in this browser, never on a server — requests go
+                    directly from your device to your storage endpoint.
                 </p>
             </div>
 
@@ -3209,9 +3285,7 @@ function CloudStorageSection({
             {cfg.kind === "s3" ? (
                 <div className="flex flex-col gap-2">
                     <label className="flex flex-col gap-1">
-                        <span className="text-[10px] text-muted-foreground">
-                            Endpoint
-                        </span>
+                        <span className="text-[10px] text-muted-foreground">Endpoint</span>
                         <Input
                             value={cfg.s3?.endpoint ?? ""}
                             onChange={(e) => patchS3({ endpoint: e.target.value })}
@@ -3221,9 +3295,7 @@ function CloudStorageSection({
                     </label>
                     <div className="flex gap-2">
                         <label className="flex min-w-0 flex-1 flex-col gap-1">
-                            <span className="text-[10px] text-muted-foreground">
-                                Region
-                            </span>
+                            <span className="text-[10px] text-muted-foreground">Region</span>
                             <Input
                                 value={cfg.s3?.region ?? ""}
                                 onChange={(e) => patchS3({ region: e.target.value })}
@@ -3232,9 +3304,7 @@ function CloudStorageSection({
                             />
                         </label>
                         <label className="flex min-w-0 flex-1 flex-col gap-1">
-                            <span className="text-[10px] text-muted-foreground">
-                                Bucket
-                            </span>
+                            <span className="text-[10px] text-muted-foreground">Bucket</span>
                             <Input
                                 value={cfg.s3?.bucket ?? ""}
                                 onChange={(e) => patchS3({ bucket: e.target.value })}
@@ -3245,9 +3315,7 @@ function CloudStorageSection({
                     </div>
                     <div className="flex gap-2">
                         <label className="flex min-w-0 flex-1 flex-col gap-1">
-                            <span className="text-[10px] text-muted-foreground">
-                                Access key ID
-                            </span>
+                            <span className="text-[10px] text-muted-foreground">Access key ID</span>
                             <Input
                                 value={cfg.s3?.accessKeyId ?? ""}
                                 onChange={(e) => patchS3({ accessKeyId: e.target.value })}
@@ -3257,9 +3325,7 @@ function CloudStorageSection({
                             />
                         </label>
                         <label className="flex min-w-0 flex-1 flex-col gap-1">
-                            <span className="text-[10px] text-muted-foreground">
-                                Secret key
-                            </span>
+                            <span className="text-[10px] text-muted-foreground">Secret key</span>
                             <Input
                                 type="password"
                                 value={cfg.s3?.secretAccessKey ?? ""}
@@ -3282,10 +3348,10 @@ function CloudStorageSection({
                         />
                     </label>
                     <p className="text-[10px] leading-relaxed text-muted-foreground">
-                        Works with AWS S3, Cloudflare R2, MinIO, Backblaze B2,
-                        and Wasabi. R2 example:{" "}
+                        Works with AWS S3, Cloudflare R2, MinIO, Backblaze B2, and Wasabi. R2
+                        example:{" "}
                         <code className="text-[9px]">
-                          https://&lt;accountid&gt;.r2.cloudflarestorage.com
+                            https://&lt;accountid&gt;.r2.cloudflarestorage.com
                         </code>
                     </p>
                 </div>
@@ -3294,9 +3360,7 @@ function CloudStorageSection({
             {cfg.kind === "webdav" ? (
                 <div className="flex flex-col gap-2">
                     <label className="flex flex-col gap-1">
-                        <span className="text-[10px] text-muted-foreground">
-                            Server URL
-                        </span>
+                        <span className="text-[10px] text-muted-foreground">Server URL</span>
                         <Input
                             value={cfg.webdav?.url ?? ""}
                             onChange={(e) => patchWebDAV({ url: e.target.value })}
@@ -3306,9 +3370,7 @@ function CloudStorageSection({
                     </label>
                     <div className="flex gap-2">
                         <label className="flex min-w-0 flex-1 flex-col gap-1">
-                            <span className="text-[10px] text-muted-foreground">
-                                Username
-                            </span>
+                            <span className="text-[10px] text-muted-foreground">Username</span>
                             <Input
                                 value={cfg.webdav?.username ?? ""}
                                 onChange={(e) => patchWebDAV({ username: e.target.value })}
@@ -3317,9 +3379,7 @@ function CloudStorageSection({
                             />
                         </label>
                         <label className="flex min-w-0 flex-1 flex-col gap-1">
-                            <span className="text-[10px] text-muted-foreground">
-                                Password
-                            </span>
+                            <span className="text-[10px] text-muted-foreground">Password</span>
                             <Input
                                 type="password"
                                 value={cfg.webdav?.password ?? ""}
@@ -3341,8 +3401,8 @@ function CloudStorageSection({
                         />
                     </label>
                     <p className="text-[10px] leading-relaxed text-muted-foreground">
-                        Works with Nextcloud, ownCloud, Box, and any WebDAV
-                        server. Use an app password where available.
+                        Works with Nextcloud, ownCloud, Box, and any WebDAV server. Use an app
+                        password where available.
                     </p>
                 </div>
             ) : null}
@@ -3355,9 +3415,7 @@ function CloudStorageSection({
                         </span>
                         <textarea
                             value={cfg.gdrive?.keyJson ?? ""}
-                            onChange={(e) =>
-                                patchGDrive({ keyJson: e.target.value })
-                            }
+                            onChange={(e) => patchGDrive({ keyJson: e.target.value })}
                             placeholder='{"type":"service_account","client_email":"…","private_key":"-----BEGIN PRIVATE KEY-----…"}'
                             spellCheck={false}
                             autoComplete="off"
@@ -3372,21 +3430,17 @@ function CloudStorageSection({
                         </span>
                         <Input
                             value={cfg.gdrive?.prefix ?? ""}
-                            onChange={(e) =>
-                                patchGDrive({ prefix: e.target.value })
-                            }
+                            onChange={(e) => patchGDrive({ prefix: e.target.value })}
                             placeholder="ai-diy-backups"
                             className="h-8 text-xs"
                         />
                     </label>
                     <p className="text-[10px] leading-relaxed text-muted-foreground">
-                        Get a key in the Google Cloud console: IAM &amp; Admin →{" "}
-                        Service accounts → Keys → Add key (JSON). Enable the
-                        Google Drive API for the project. To sync with a
-                        personal account, create the folder there and share it
-                        with the service account&apos;s email. The key signs a
-                        short-lived token in your browser and is never sent to
-                        any server but Google&apos;s token endpoint.
+                        Get a key in the Google Cloud console: IAM &amp; Admin → Service accounts →
+                        Keys → Add key (JSON). Enable the Google Drive API for the project. To sync
+                        with a personal account, create the folder there and share it with the
+                        service account&apos;s email. The key signs a short-lived token in your
+                        browser and is never sent to any server but Google&apos;s token endpoint.
                     </p>
                 </div>
             ) : null}
@@ -3402,9 +3456,7 @@ function CloudStorageSection({
                             onClick={() => void testConnection()}
                             className="rounded-xl"
                         >
-                            {busy ? (
-                                <SpinnerGap size={12} className="animate-spin" />
-                            ) : null}
+                            {busy ? <SpinnerGap size={12} className="animate-spin" /> : null}
                             Test connection
                         </Button>
                         <Button
@@ -3430,9 +3482,7 @@ function CloudStorageSection({
 
                     <div className="flex items-center justify-between gap-2 rounded-xl border border-border/70 p-2.5">
                         <div>
-                            <div className="text-[11px] font-medium">
-                                Auto-backup
-                            </div>
+                            <div className="text-[11px] font-medium">Auto-backup</div>
                             <div className="text-[10px] text-muted-foreground">
                                 Upload 30s after chat changes
                             </div>
@@ -3487,9 +3537,7 @@ function CloudStorageSection({
                 </div>
             ) : null}
 
-            {status ? (
-                <p className="text-[11px] text-primary">{status}</p>
-            ) : null}
+            {status ? <p className="text-[11px] text-primary">{status}</p> : null}
             {error ? (
                 <p className="flex items-start gap-1 text-[11px] leading-relaxed text-destructive">
                     <WarningCircle size={13} className="mt-0.5 shrink-0" />
@@ -3498,10 +3546,9 @@ function CloudStorageSection({
             ) : null}
 
             <div className="rounded-xl border border-dashed border-border/70 p-3 text-[10px] leading-relaxed text-muted-foreground">
-                A backup contains all chats, messages, artifacts, memories, and
-                projects. It is uploaded as plain JSON — store it securely and
-                only use services you trust. Restores always import as new
-                chats.
+                A backup contains all chats, messages, artifacts, memories, and projects. It is
+                uploaded as plain JSON — store it securely and only use services you trust. Restores
+                always import as new chats.
             </div>
             <Button
                 type="button"
@@ -3618,10 +3665,7 @@ function CustomSkillsSection() {
                             <SkillCatalogRow
                                 key={skill.name}
                                 skill={skill}
-                                installed={isSkillInstalled(
-                                    skill.name,
-                                    settings.customSkills,
-                                )}
+                                installed={isSkillInstalled(skill.name, settings.customSkills)}
                                 onToggle={() => toggleInstall(skill)}
                             />
                         ))}
@@ -3631,19 +3675,14 @@ function CustomSkillsSection() {
                     {(query.trim()
                         ? availableCatalog
                         : availableCatalog.filter((sk) => !sk.popular)
-                    ).map(
-                        (skill) => (
-                            <SkillCatalogRow
-                                key={skill.name}
-                                skill={skill}
-                                installed={isSkillInstalled(
-                                    skill.name,
-                                    settings.customSkills,
-                                )}
-                                onToggle={() => toggleInstall(skill)}
-                            />
-                        ),
-                    )}
+                    ).map((skill) => (
+                        <SkillCatalogRow
+                            key={skill.name}
+                            skill={skill}
+                            installed={isSkillInstalled(skill.name, settings.customSkills)}
+                            onToggle={() => toggleInstall(skill)}
+                        />
+                    ))}
                     {availableCatalog.length === 0 ? (
                         <p className="px-1 py-2 text-[11px] text-muted-foreground">
                             {query.trim()
@@ -3783,9 +3822,7 @@ function SubagentsSettingsSection({ scopeId }: { scopeId: string | null }) {
                 checked={settings.linuxEnvironment !== false}
                 onChange={(enabled) => updateToolAccess("linux", enabled)}
             />
-            {settings.linuxEnvironment !== false ? (
-                <LinuxNetworkSection scopeId={scopeId} />
-            ) : null}
+            {settings.linuxEnvironment !== false ? <LinuxNetworkSection scopeId={scopeId} /> : null}
             <ToolToggle
                 title="Agent Mode"
                 description="Plan with skills and tools, then verify before the final answer. Uses General Task Solver routing when installed."
@@ -3795,11 +3832,10 @@ function SubagentsSettingsSection({ scopeId }: { scopeId: string | null }) {
             />
             {settings.agentModeEnabled ? (
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
-                    The model will plan, select installed skills, execute tools,
-                    verify results, and synthesize. Install{" "}
-                    <span className="font-medium">General Task Solver</span> from
-                    Skills for best multi-domain routing. Subagents remain optional
-                    below for nested approved runs.
+                    The model will plan, select installed skills, execute tools, verify results, and
+                    synthesize. Install <span className="font-medium">General Task Solver</span>{" "}
+                    from Skills for best multi-domain routing. Subagents remain optional below for
+                    nested approved runs.
                 </p>
             ) : null}
             <ToolToggle
@@ -3811,13 +3847,10 @@ function SubagentsSettingsSection({ scopeId }: { scopeId: string | null }) {
             {settings.subagentsEnabled ? (
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
                     The model can call{" "}
-                    <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
-                        spawn_subagent
-                    </code>{" "}
-                    for deep research or long multi-step work. You approve each
-                    subagent before it runs, you cannot prompt it mid-run, and
-                    the main model waits for its result before synthesizing the
-                    answer.
+                    <code className="rounded bg-muted px-1 py-0.5 text-[10px]">spawn_subagent</code>{" "}
+                    for deep research or long multi-step work. You approve each subagent before it
+                    runs, you cannot prompt it mid-run, and the main model waits for its result
+                    before synthesizing the answer.
                 </p>
             ) : null}
         </div>
@@ -3825,9 +3858,7 @@ function SubagentsSettingsSection({ scopeId }: { scopeId: string | null }) {
 }
 
 function LinuxNetworkSection({ scopeId }: { scopeId: string | null }) {
-    const [network, setNetwork] = useState<LinuxNetworkSnapshot>(() =>
-        getLinuxNetworkSnapshot(),
-    );
+    const [network, setNetwork] = useState<LinuxNetworkSnapshot>(() => getLinuxNetworkSnapshot());
     const [connecting, setConnecting] = useState(false);
 
     useEffect(() => subscribeLinuxNetwork(setNetwork), []);
@@ -3910,9 +3941,7 @@ function LinuxNetworkSection({ scopeId }: { scopeId: string | null }) {
                 Public internet requires an exit node in your Tailscale network.
             </p>
             {network.error ? (
-                <p className="mt-2 text-[10px] leading-relaxed text-destructive">
-                    {network.error}
-                </p>
+                <p className="mt-2 text-[10px] leading-relaxed text-destructive">{network.error}</p>
             ) : null}
         </div>
     );
@@ -3962,10 +3991,9 @@ function PreviewSettingsSection() {
             {preview.enabled ? (
                 <>
                     <p className="text-[11px] leading-relaxed text-muted-foreground">
-                        Preview runs are isolated from regular chat history.
-                        Edit models in the preview columns, or here. Each
-                        column keeps its own tool calls, reasoning, images, and
-                        artifacts while it runs.
+                        Preview runs are isolated from regular chat history. Edit models in the
+                        preview columns, or here. Each column keeps its own tool calls, reasoning,
+                        images, and artifacts while it runs.
                     </p>
 
                     <div className="flex flex-col gap-2">
@@ -3994,10 +4022,7 @@ function PreviewSettingsSection() {
                             variant="outline"
                             onClick={() =>
                                 updatePreview({
-                                    primaryModels: [
-                                        ...preview.primaryModels,
-                                        seedConfig(),
-                                    ],
+                                    primaryModels: [...preview.primaryModels, seedConfig()],
                                 })
                             }
                             className="rounded-xl"
@@ -4046,10 +4071,7 @@ function PreviewModelRow({
 }) {
     const { settings } = useSettings();
     const ready = isProviderReady(settings, config.provider);
-    const reasoningOptions = getReasoningEffortOptions(
-        config.provider,
-        config.model,
-    );
+    const reasoningOptions = getReasoningEffortOptions(config.provider, config.model);
 
     return (
         <div className="flex flex-col gap-2 rounded-xl border border-border/80 bg-background/50 p-2.5">
@@ -4097,9 +4119,7 @@ function PreviewModelRow({
             {reasoningOptions.length > 0 ? (
                 <select
                     value={
-                        reasoningOptions.some(
-                            (option) => option.id === config.reasoningEffort,
-                        )
+                        reasoningOptions.some((option) => option.id === config.reasoningEffort)
                             ? config.reasoningEffort
                             : reasoningOptions[0].id
                     }
@@ -4123,25 +4143,20 @@ function PreviewModelRow({
 }
 
 function KeysSection() {
-    const { settings, updateProvider, updateSettings } =
-        useSettings();
+    const { settings, updateProvider, updateSettings } = useSettings();
     const [active, setActive] = useState<ProviderId>(
         settings.chat.provider === "chatgpt" ||
-        settings.chat.provider === "grok" ||
-        settings.chat.provider === "kimi"
+            settings.chat.provider === "grok" ||
+            settings.chat.provider === "kimi"
             ? "openai"
             : settings.chat.provider,
     );
     const [draftName, setDraftName] = useState(
         settings.providers[active]?.name || PROVIDER_DEFAULTS[active].name,
     );
-    const [draftKey, setDraftKey] = useState(
-        settings.providers[active]?.apiKey || "",
-    );
+    const [draftKey, setDraftKey] = useState(settings.providers[active]?.apiKey || "");
     const [draftUrl, setDraftUrl] = useState(
-        settings.providers[active]?.baseUrl ||
-            PROVIDER_DEFAULTS[active].baseUrl ||
-            "",
+        settings.providers[active]?.baseUrl || PROVIDER_DEFAULTS[active].baseUrl || "",
     );
     const [draftCompatible, setDraftCompatible] = useState(
         settings.providers[active]?.openAICompatible ?? {
@@ -4183,9 +4198,7 @@ function KeysSection() {
             },
         );
         setDraftHeaders(
-            cfg?.openAICompatible?.headers
-                ? JSON.stringify(cfg.openAICompatible.headers)
-                : "",
+            cfg?.openAICompatible?.headers ? JSON.stringify(cfg.openAICompatible.headers) : "",
         );
         setManualModelId("");
         setDiscoveredModels([]);
@@ -4242,10 +4255,10 @@ function KeysSection() {
                         ? ""
                         : draftKey,
                 baseUrl: draftUrl,
-                    headers: parseHeaders(),
-                    timeoutMs: draftCompatible.timeoutMs,
-                    maxRetries: draftCompatible.maxRetries,
-                    authMode: draftCompatible.authMode,
+                headers: parseHeaders(),
+                timeoutMs: draftCompatible.timeoutMs,
+                maxRetries: draftCompatible.maxRetries,
+                authMode: draftCompatible.authMode,
             });
         } catch (error) {
             setTesting(false);
@@ -4281,9 +4294,7 @@ function KeysSection() {
         }
 
         hapticConfirm();
-        const storedKey = local
-            ? draftKey.trim() || localProviderKey(active)
-            : draftKey.trim();
+        const storedKey = local ? draftKey.trim() || localProviderKey(active) : draftKey.trim();
         updateProvider(active, {
             apiKey: storedKey,
             baseUrl: draftUrl || PROVIDER_DEFAULTS[active].baseUrl,
@@ -4295,22 +4306,13 @@ function KeysSection() {
             kind: "ok",
             message: `Connected — ${result.models.length} model${result.models.length === 1 ? "" : "s"} available.`,
         });
-    }, [
-        active,
-        draftKey,
-        draftUrl,
-        custom,
-        local,
-        updateProvider,
-        updateSettings,
-    ]);
+    }, [active, draftKey, draftUrl, custom, local, updateProvider, updateSettings]);
 
     const saveCustomConnection = () => {
         try {
             if (!draftUrl.trim()) throw new Error("Enter the custom provider API root first.");
             const headers = parseHeaders();
-            const model =
-                manualModelId.trim() || discoveredModels[0]?.id || "default-model";
+            const model = manualModelId.trim() || discoveredModels[0]?.id || "default-model";
             updateProvider(active, {
                 name: draftName.trim() || "OpenAI Compatible",
                 apiKey: draftKey.trim() || localProviderKey(active),
@@ -4335,44 +4337,38 @@ function KeysSection() {
             <KimiSubscriptionSettings />
             <p className="text-[11px] leading-relaxed text-muted-foreground">
                 Keys stay in this browser. Test makes a live{" "}
-                <span className="font-medium text-foreground">/models</span>{" "}
-                call with the key you entered — nothing is read from env vars.
+                <span className="font-medium text-foreground">/models</span> call with the key you
+                entered — nothing is read from env vars.
             </p>
 
             <div className="flex flex-wrap gap-1">
                 {(Object.keys(PROVIDER_DEFAULTS) as ProviderId[])
                     .filter((id) => id !== "chatgpt" && id !== "grok" && id !== "kimi")
                     .map((id) => {
-                    const ready = isProviderReady(settings, id);
-                    return (
-                        <button
-                            key={id}
-                            type="button"
-                            onClick={() => {
-                                hapticSelect();
-                                setActive(id);
-                            }}
-                            className={cn(
-                                "inline-flex items-center gap-1 rounded-[2px] border px-2.5 py-1 text-[11px] font-medium outline-none transition-colors",
-                                active === id
-                                    ? "border-primary/40 bg-primary/10 text-foreground"
-                                    : "border-border/70 text-muted-foreground hover:bg-accent",
-                            )}
-                        >
-                            {isLocalProvider(id) ? (
-                                <HardDrives size={11} />
-                            ) : null}
-                            {PROVIDER_DEFAULTS[id].name}
-                            {ready ? (
-                                <CheckCircle
-                                    size={11}
-                                    className="text-success"
-                                    weight="fill"
-                                />
-                            ) : null}
-                        </button>
-                    );
-                })}
+                        const ready = isProviderReady(settings, id);
+                        return (
+                            <button
+                                key={id}
+                                type="button"
+                                onClick={() => {
+                                    hapticSelect();
+                                    setActive(id);
+                                }}
+                                className={cn(
+                                    "inline-flex items-center gap-1 rounded-[2px] border px-2.5 py-1 text-[11px] font-medium outline-none transition-colors",
+                                    active === id
+                                        ? "border-primary/40 bg-primary/10 text-foreground"
+                                        : "border-border/70 text-muted-foreground hover:bg-accent",
+                                )}
+                            >
+                                {isLocalProvider(id) ? <HardDrives size={11} /> : null}
+                                {PROVIDER_DEFAULTS[id].name}
+                                {ready ? (
+                                    <CheckCircle size={11} className="text-success" weight="fill" />
+                                ) : null}
+                            </button>
+                        );
+                    })}
             </div>
 
             {custom ? (
@@ -4391,9 +4387,7 @@ function KeysSection() {
 
             {!local || custom ? (
                 <div className="flex flex-col gap-1.5">
-                    <label className="text-[11px] font-medium text-muted-foreground">
-                        API key
-                    </label>
+                    <label className="text-[11px] font-medium text-muted-foreground">API key</label>
                     <Input
                         type="password"
                         autoComplete="off"
@@ -4403,16 +4397,18 @@ function KeysSection() {
                             setDraftKey(e.target.value);
                             setStatus({ kind: "idle" });
                         }}
-                        placeholder={custom ? "Optional API key for hosted endpoints" : `${PROVIDER_DEFAULTS[active].name} key`}
+                        placeholder={
+                            custom
+                                ? "Optional API key for hosted endpoints"
+                                : `${PROVIDER_DEFAULTS[active].name} key`
+                        }
                         className="h-9 rounded-xl font-mono text-xs"
                     />
                 </div>
             ) : null}
 
             <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-medium text-muted-foreground">
-                    Endpoint
-                </label>
+                <label className="text-[11px] font-medium text-muted-foreground">Endpoint</label>
                 <Input
                     type="url"
                     value={draftUrl}
@@ -4426,7 +4422,9 @@ function KeysSection() {
                     <div className="flex items-center justify-between gap-2">
                         <div>
                             <p className="text-[11px] font-medium">OpenAI-compatible API</p>
-                            <p className="text-[10px] text-muted-foreground">Chat Completions is the safest default.</p>
+                            <p className="text-[10px] text-muted-foreground">
+                                Chat Completions is the safest default.
+                            </p>
                         </div>
                         <button
                             type="button"
@@ -4445,7 +4443,8 @@ function KeysSection() {
                                     onChange={(event) =>
                                         setDraftCompatible((current) => ({
                                             ...current,
-                                            apiMode: event.target.value as "auto" | "chat" | "responses",
+                                            apiMode: event.target.value as
+                                                "auto" | "chat" | "responses",
                                         }))
                                     }
                                     className="mt-1 h-8 w-full rounded-lg border border-border bg-background px-2 text-xs outline-none"
@@ -4462,7 +4461,9 @@ function KeysSection() {
                                     onChange={(event) =>
                                         setDraftCompatible((current) => ({
                                             ...current,
-                                            authMode: event.target.value as NonNullable<typeof current.authMode>,
+                                            authMode: event.target.value as NonNullable<
+                                                typeof current.authMode
+                                            >,
                                         }))
                                     }
                                     className="mt-1 h-8 w-full rounded-lg border border-border bg-background px-2 text-xs outline-none"
@@ -4502,7 +4503,8 @@ function KeysSection() {
                                     onChange={(event) =>
                                         setDraftCompatible((current) => ({
                                             ...current,
-                                            reasoningWithTools: event.target.value as "auto" | "none" | "allow",
+                                            reasoningWithTools: event.target.value as
+                                                "auto" | "none" | "allow",
                                         }))
                                     }
                                     className="mt-1 h-8 w-full rounded-lg border border-border bg-background px-2 text-xs outline-none"
@@ -4519,11 +4521,15 @@ function KeysSection() {
                                         type="number"
                                         min={5}
                                         max={300}
-                                        value={Math.round((draftCompatible.timeoutMs ?? 60_000) / 1000)}
+                                        value={Math.round(
+                                            (draftCompatible.timeoutMs ?? 60_000) / 1000,
+                                        )}
                                         onChange={(event) =>
                                             setDraftCompatible((current) => ({
                                                 ...current,
-                                                timeoutMs: Math.max(5, Number(event.target.value) || 60) * 1000,
+                                                timeoutMs:
+                                                    Math.max(5, Number(event.target.value) || 60) *
+                                                    1000,
                                             }))
                                         }
                                         className="mt-1 h-8 rounded-lg text-xs"
@@ -4539,7 +4545,10 @@ function KeysSection() {
                                         onChange={(event) =>
                                             setDraftCompatible((current) => ({
                                                 ...current,
-                                                maxRetries: Math.min(5, Math.max(0, Number(event.target.value) || 0)),
+                                                maxRetries: Math.min(
+                                                    5,
+                                                    Math.max(0, Number(event.target.value) || 0),
+                                                ),
                                             }))
                                         }
                                         className="mt-1 h-8 rounded-lg text-xs"
@@ -4547,28 +4556,47 @@ function KeysSection() {
                                 </label>
                             </div>
                             <div className="flex flex-col gap-1.5">
-                                <p className="text-[10px] text-muted-foreground">Capability overrides</p>
+                                <p className="text-[10px] text-muted-foreground">
+                                    Capability overrides
+                                </p>
                                 <div className="grid grid-cols-2 gap-1.5">
-                                    {([
-                                        ["tools", "Tool calling"],
-                                        ["vision", "Vision"],
-                                        ["structuredOutput", "Structured output"],
-                                        ["reasoning", "Reasoning controls"],
-                                        ["embeddings", "Embeddings"],
-                                        ["parallelTools", "Parallel tools"],
-                                    ] as const).map(([key, label]) => {
+                                    {(
+                                        [
+                                            ["tools", "Tool calling"],
+                                            ["vision", "Vision"],
+                                            ["structuredOutput", "Structured output"],
+                                            ["reasoning", "Reasoning controls"],
+                                            ["embeddings", "Embeddings"],
+                                            ["parallelTools", "Parallel tools"],
+                                        ] as const
+                                    ).map(([key, label]) => {
                                         const value = draftCompatible.capabilityOverrides?.[key];
                                         return (
-                                            <label key={key} className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                                                <span className="min-w-0 flex-1 truncate">{label}</span>
+                                            <label
+                                                key={key}
+                                                className="flex items-center gap-1 text-[10px] text-muted-foreground"
+                                            >
+                                                <span className="min-w-0 flex-1 truncate">
+                                                    {label}
+                                                </span>
                                                 <select
-                                                    value={value === undefined ? "auto" : value ? "on" : "off"}
+                                                    value={
+                                                        value === undefined
+                                                            ? "auto"
+                                                            : value
+                                                              ? "on"
+                                                              : "off"
+                                                    }
                                                     onChange={(event) =>
                                                         setDraftCompatible((current) => ({
                                                             ...current,
                                                             capabilityOverrides: {
                                                                 ...current.capabilityOverrides,
-                                                                [key]: event.target.value === "auto" ? undefined : event.target.value === "on",
+                                                                [key]:
+                                                                    event.target.value === "auto"
+                                                                        ? undefined
+                                                                        : event.target.value ===
+                                                                          "on",
                                                             },
                                                         }))
                                                     }
@@ -4624,14 +4652,13 @@ function KeysSection() {
                 >
                     {testing ? (
                         <>
-                            <SpinnerGap
-                                className="animate-spin"
-                                data-icon="inline-start"
-                            />
+                            <SpinnerGap className="animate-spin" data-icon="inline-start" />
                             Testing…
                         </>
+                    ) : custom ? (
+                        "Test connection"
                     ) : (
-                        custom ? "Test connection" : "Test & save"
+                        "Test & save"
                     )}
                 </Button>
                 {custom ? (
@@ -4639,7 +4666,7 @@ function KeysSection() {
                         type="button"
                         size="sm"
                         variant="outline"
-                        disabled={testing || !manualModelId.trim() && !discoveredModels.length}
+                        disabled={testing || (!manualModelId.trim() && !discoveredModels.length)}
                         onClick={saveCustomConnection}
                         className="h-9 rounded-xl"
                     >
@@ -4651,9 +4678,18 @@ function KeysSection() {
             {custom && testResult ? (
                 <div className="rounded-xl border border-success/25 bg-success/5 p-2.5 text-[10px] leading-relaxed text-muted-foreground">
                     <p className="font-medium text-success">Connection successful</p>
-                    <p>{testResult.models.length} models found · {testResult.live ? "Live discovery" : "Fallback catalog"} · {testResult.latencyMs} ms</p>
-                    <p className="truncate">Resolved endpoint: {testResult.resolvedBaseUrl || draftUrl || "default"}</p>
-                    <p>Streaming and tool support are selected by compatibility settings; they are not independently probed yet.</p>
+                    <p>
+                        {testResult.models.length} models found ·{" "}
+                        {testResult.live ? "Live discovery" : "Fallback catalog"} ·{" "}
+                        {testResult.latencyMs} ms
+                    </p>
+                    <p className="truncate">
+                        Resolved endpoint: {testResult.resolvedBaseUrl || draftUrl || "default"}
+                    </p>
+                    <p>
+                        Streaming and tool support are selected by compatibility settings; they are
+                        not independently probed yet.
+                    </p>
                 </div>
             ) : null}
 
@@ -4694,15 +4730,15 @@ function ToolToggle({
     className?: string;
 }) {
     return (
-        <div className={cn(
-            "flex items-center justify-between gap-3 rounded-xl border border-border/80 bg-background/50 px-3 py-2.5",
-            className,
-        )}>
+        <div
+            className={cn(
+                "flex items-center justify-between gap-3 rounded-xl border border-border/80 bg-background/50 px-3 py-2.5",
+                className,
+            )}
+        >
             <div className="min-w-0">
                 <div className="text-xs font-semibold">{title}</div>
-                <div className="text-[11px] text-muted-foreground">
-                    {description}
-                </div>
+                <div className="text-[11px] text-muted-foreground">{description}</div>
             </div>
             <Switch.Root
                 checked={checked}
@@ -4770,9 +4806,7 @@ function UsageSection() {
 
     const coverage =
         aggregate && aggregate.assistantMessages > 0
-            ? Math.round(
-                  (aggregate.messagesWithUsage / aggregate.assistantMessages) * 100,
-              )
+            ? Math.round((aggregate.messagesWithUsage / aggregate.assistantMessages) * 100)
             : 0;
 
     return (
@@ -4792,16 +4826,16 @@ function UsageSection() {
                 </button>
             </div>
             <p className="text-[11px] leading-relaxed text-muted-foreground">
-                Real token usage reported by each provider is captured on every
-                assistant message and stored locally. Cost is estimated from
-                models.dev pricing — exact billing depends on your provider.
+                Real token usage reported by each provider is captured on every assistant message
+                and stored locally. Cost is estimated from models.dev pricing — exact billing
+                depends on your provider.
             </p>
 
             <div className="rounded-xl border border-border/70 bg-muted/10 p-3">
                 <h4 className="text-[11px] font-semibold">Usage limits</h4>
                 <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-                    Local guardrails per API key fingerprint. Server rate limits
-                    apply separately via RATE_LIMIT_RPM.
+                    Local guardrails per API key fingerprint. Server rate limits apply separately
+                    via RATE_LIMIT_RPM.
                 </p>
                 <div className="mt-2 flex flex-col gap-2">
                     <ToolToggle
@@ -4830,9 +4864,7 @@ function UsageSection() {
                                         updateSettings({
                                             usageLimits: {
                                                 ...limits,
-                                                dailyTokenCap: raw
-                                                    ? Number(raw)
-                                                    : null,
+                                                dailyTokenCap: raw ? Number(raw) : null,
                                             },
                                         });
                                     }}
@@ -4854,9 +4886,7 @@ function UsageSection() {
                                         updateSettings({
                                             usageLimits: {
                                                 ...limits,
-                                                dailySpendCapUsd: raw
-                                                    ? Number(raw)
-                                                    : null,
+                                                dailySpendCapUsd: raw ? Number(raw) : null,
                                             },
                                         });
                                     }}
@@ -4877,8 +4907,7 @@ function UsageSection() {
                                             usageLimits: {
                                                 ...limits,
                                                 requestsPerMinute:
-                                                    Number.isFinite(value) &&
-                                                    value > 0
+                                                    Number.isFinite(value) && value > 0
                                                         ? value
                                                         : 30,
                                             },
@@ -4902,8 +4931,7 @@ function UsageSection() {
                                             usageLimits: {
                                                 ...limits,
                                                 warnAtPercent:
-                                                    Number.isFinite(value) &&
-                                                    value > 0
+                                                    Number.isFinite(value) && value > 0
                                                         ? Math.min(value, 100)
                                                         : 80,
                                             },
@@ -4937,41 +4965,32 @@ function UsageSection() {
                 </div>
             ) : !aggregate || aggregate.messagesWithUsage === 0 ? (
                 <div className="rounded-xl border border-border/70 bg-muted/20 p-4 text-center text-[11px] text-muted-foreground">
-                    No usage data yet. Send a message and it will appear here —
-                    usage is recorded from now on; older chats have no usage
-                    data.
+                    No usage data yet. Send a message and it will appear here — usage is recorded
+                    from now on; older chats have no usage data.
                 </div>
             ) : (
                 <>
                     <div className="grid grid-cols-2 gap-2">
                         <div className="rounded-xl border border-border/70 p-2.5">
-                            <div className="text-[10px] text-muted-foreground">
-                                Total tokens
-                            </div>
+                            <div className="text-[10px] text-muted-foreground">Total tokens</div>
                             <div className="mt-0.5 text-sm font-semibold">
                                 {formatTokens(aggregate.totals.totalTokens)}
                             </div>
                         </div>
                         <div className="rounded-xl border border-border/70 p-2.5">
-                            <div className="text-[10px] text-muted-foreground">
-                                Estimated cost
-                            </div>
+                            <div className="text-[10px] text-muted-foreground">Estimated cost</div>
                             <div className="mt-0.5 text-sm font-semibold">
                                 {formatCost(aggregate.totalCost)}
                             </div>
                         </div>
                         <div className="rounded-xl border border-border/70 p-2.5">
-                            <div className="text-[10px] text-muted-foreground">
-                                Input tokens
-                            </div>
+                            <div className="text-[10px] text-muted-foreground">Input tokens</div>
                             <div className="mt-0.5 text-sm font-semibold">
                                 {formatTokens(aggregate.totals.inputTokens)}
                             </div>
                         </div>
                         <div className="rounded-xl border border-border/70 p-2.5">
-                            <div className="text-[10px] text-muted-foreground">
-                                Output tokens
-                            </div>
+                            <div className="text-[10px] text-muted-foreground">Output tokens</div>
                             <div className="mt-0.5 text-sm font-semibold">
                                 {formatTokens(aggregate.totals.outputTokens)}
                             </div>
@@ -4980,8 +4999,7 @@ function UsageSection() {
 
                     {aggregate.totals.reasoningTokens > 0 ? (
                         <div className="text-[10px] text-muted-foreground">
-                            Including{" "}
-                            {formatTokens(aggregate.totals.reasoningTokens)} reasoning
+                            Including {formatTokens(aggregate.totals.reasoningTokens)} reasoning
                             tokens · {coverage}% of assistant messages have usage data
                         </div>
                     ) : (
@@ -5007,14 +5025,11 @@ function UsageSection() {
                                                 modelId={row.model}
                                                 size={12}
                                             />
-                                            <span className="truncate">
-                                                {row.model}
-                                            </span>
+                                            <span className="truncate">{row.model}</span>
                                         </div>
                                         <div className="truncate text-[10px] text-muted-foreground">
-                                            {row.provider} ·{" "}
-                                            {formatTokens(row.usage.inputTokens)} in /{" "}
-                                            {formatTokens(row.usage.outputTokens)} out
+                                            {row.provider} · {formatTokens(row.usage.inputTokens)}{" "}
+                                            in / {formatTokens(row.usage.outputTokens)} out
                                         </div>
                                     </div>
                                     <span className="shrink-0 text-[11px] font-medium">
@@ -5036,9 +5051,7 @@ function UsageSection() {
                                     className="flex items-center justify-between gap-2 rounded-lg border border-border/60 px-2.5 py-1.5 text-[11px]"
                                 >
                                     <div className="min-w-0">
-                                        <div className="truncate font-medium">
-                                            {row.title}
-                                        </div>
+                                        <div className="truncate font-medium">{row.title}</div>
                                         <div className="truncate text-[10px] text-muted-foreground">
                                             {row.model ?? "—"} ·{" "}
                                             {formatTokens(row.usage.totalTokens)} tokens

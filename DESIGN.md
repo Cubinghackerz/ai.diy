@@ -29,7 +29,9 @@ Persuade. Understand BYOK local-first ownership, then open `/workspace` or deplo
 
 ## Typography
 
-- Geist Sans for display and body; Geist Mono only for data, terminal output, status, and sequence labels
+- Landing: Geist Sans for display and body, scoped in `LandingShell`; Geist font stylesheets are linked by the landing route.
+- Workspace: Hanken Grotesk for body/UI and Fragment Mono for code/data, from `app/styles/app.css`. The root also loads Bricolage Grotesque; this is not a universal Geist-only system.
+- Font stylesheets currently use external CDNs/Google Fonts. Self-hosting is a separate privacy/code-health task, not part of this reliability milestone.
 - Medium display weight, compact leading, tracking no tighter than `-0.04em`
 - Display scale tops out below 6rem; body measure remains near 65 characters
 - No gradient text
@@ -45,13 +47,13 @@ Persuade. Understand BYOK local-first ownership, then open `/workspace` or deplo
 ## Composition
 
 1. Floating island navigation
-2. Centered ownership hero: status row, cipher headline, actions, and a corner-framed product window
+2. Centered ownership hero: status row, cipher headline, one-line sub copy, actions, a copyable `git clone` chip, and a corner-framed product window
 3. Key-facts band inside the rail
-4. Local Data Plane trust boundary with one mint transit packet
+4. Interactive Local Data Plane: three focusable nodes and one mint packet stepped through a request
 5. Static provider shelf
-6. Composio app shelf
-7. Private-workflow evidence as hairline cards
-8. Interactive capability lanes
+6. Composio app shelf (12 marks; the rest is a text claim)
+7. In-use evidence (Canvas, browser Python, Knowledge Base) plus product-guide links
+8. Interactive capability lanes (Tools, Canvas, Python, Storage; deploy lives in the terminal section)
 9. Copyable self-host terminal
 10. FAQ
 11. Changelog
@@ -65,9 +67,10 @@ Persuade. Understand BYOK local-first ownership, then open `/workspace` or deplo
 - Remaining hero steps keep the blur-up stagger; the headline is excluded so the cipher owns the entrance
 - CTAs magnet toward the pointer; product window tilts
 - Section headings use a one-time masked word reveal (`MaskedHeading`); other section reveals stay subtle (`Reveal`)
-- Local Data Plane: one mint packet traverses the header band
+- Local Data Plane: one mint packet, moved only while a visitor steps "Follow one request". No looping packet. Reduced motion and no-JS render the four stages as a numbered list
 - Closing wordmark fills from outline to a 6% wash on hover
-- No perpetual decorative floaters beyond the single packet; honor `prefers-reduced-motion`
+- Motion budget: one packet, one headline decrypt, no scroll-pinned scene
+- Honor `prefers-reduced-motion`; reduced-motion visitors get visible static final states
 
 ## Icons
 

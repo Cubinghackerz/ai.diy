@@ -1,21 +1,24 @@
-import { GithubLogo } from "@phosphor-icons/react";
+import { Check, CopySimple, GithubLogo } from "@phosphor-icons/react";
 import { CipherHeadline } from "./CipherHeadline";
 import { CornerFrame } from "./CornerFrame";
-import { GITHUB_URL } from "./constants";
-import { usePrefersReducedMotion } from "./hooks";
+import { GITHUB_REPO, GITHUB_URL, PROVIDER_INTEGRATION_COUNT } from "./constants";
+import { useCopy, usePrefersReducedMotion } from "./hooks";
 import { LandingCta } from "./LandingCta";
 import { ProductBezel } from "./ProductBezel";
 import { StatusPill } from "./StatusPill";
 import { cn } from "~/lib/utils";
 
+const CLONE_COMMAND = `git clone ${GITHUB_URL}`;
+
 export function Hero() {
     const reduced = usePrefersReducedMotion();
+    const { copied, copy } = useCopy(CLONE_COMMAND);
 
     return (
         <section
             aria-labelledby="hero-heading"
             data-anim-gate="hero"
-            className="relative mx-auto max-w-6xl px-5 pb-16 pt-20 sm:px-8 sm:pt-24 lg:pb-20"
+            className="relative mx-auto max-w-6xl px-5 py-20 sm:px-8 sm:py-28"
         >
             <div className="mx-auto max-w-3xl text-center">
                 <div
@@ -30,6 +33,7 @@ export function Hero() {
                     </StatusPill>
                     <StatusPill>Bring your own key</StatusPill>
                     <StatusPill>Local-first</StatusPill>
+                    <StatusPill>{PROVIDER_INTEGRATION_COUNT} providers</StatusPill>
                 </div>
                 <CipherHeadline id="hero-heading">
                     Your AI workspace lives in your browser.
@@ -42,9 +46,8 @@ export function Hero() {
                     )}
                     data-hero-step="2"
                 >
-                    Use AI, npm packages, Canvas, Python, and browser tools to create presentations,
-                    documents, code, and useful files. Your chats, files, knowledge, and settings
-                    stay in your browser, with no persistent provider keys required on the server.
+                    Bring your own key. Chats, files, and knowledge stay in your browser; the server
+                    stores no provider keys.
                 </p>
 
                 <div
@@ -61,8 +64,39 @@ export function Hero() {
                         variant="ghost"
                         leadingIcon={<GithubLogo weight="light" className="size-4" />}
                     >
-                            View on GitHub
+                        View on GitHub
                     </LandingCta>
+                </div>
+                <div
+                    className={cn(
+                        "mt-5 flex min-w-0 justify-center",
+                        !reduced && "landing-hero-step opacity-0",
+                    )}
+                    data-hero-step="4"
+                >
+                    <button
+                        type="button"
+                        onClick={copy}
+                        aria-label={
+                            copied
+                                ? `Copied git clone github.com/${GITHUB_REPO}`
+                                : `Copy git clone github.com/${GITHUB_REPO}`
+                        }
+                        className="group inline-flex min-h-10 min-w-0 max-w-full items-center gap-3 rounded-[2px] border border-white/[0.1] bg-[#0a0a0a] px-3.5 font-mono text-[12px] text-zinc-400 transition-[border-color,color] duration-150 hover:border-white/25 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                    >
+                        <span className="text-zinc-500" aria-hidden>
+                            $
+                        </span>
+                        <span className="truncate">git clone github.com/{GITHUB_REPO}</span>
+                        {copied ? (
+                            <Check
+                                weight="light"
+                                className="size-3.5 text-[var(--landing-mint,#3DFFB0)]"
+                            />
+                        ) : (
+                            <CopySimple weight="light" className="size-3.5" />
+                        )}
+                    </button>
                 </div>
             </div>
 

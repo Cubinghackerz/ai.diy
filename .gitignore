@@ -16,3 +16,6 @@ node_modules
 .impeccable/
 .opencode/
 .playwright-mcp/
+/test-results/
+/playwright-report/
+/coverage/

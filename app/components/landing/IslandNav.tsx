@@ -4,6 +4,8 @@ import { List, X } from "@phosphor-icons/react";
 import { cn } from "~/lib/utils";
 import { DOCS_URL, GITHUB_URL } from "./constants";
 import { BrandMark } from "./BrandMark";
+import { formatStars, useGithubStars } from "./hooks";
+import { JumpPalette } from "./JumpPalette";
 import { LandingCta } from "./LandingCta";
 import { EASE_IN, EASE_OUT } from "./motion";
 
@@ -23,13 +25,14 @@ const EXTERNAL = [
 
 export function IslandNav() {
     const [open, setOpen] = useState(false);
+    const [palette, setPalette] = useState(false);
     const [scrolled, setScrolled] = useState(false);
+    const stars = useGithubStars();
     const menuId = useId();
 
     useEffect(() => {
         const scroller =
-            document.querySelector<HTMLElement>(".overflow-y-auto") ??
-            document.scrollingElement;
+            document.querySelector<HTMLElement>(".overflow-y-auto") ?? document.scrollingElement;
         const onScroll = () =>
             setScrolled(
                 (scroller instanceof HTMLElement ? scroller.scrollTop : window.scrollY) > 12,
@@ -93,12 +96,26 @@ export function IslandNav() {
                                 href={link.href}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="hidden min-h-9 items-center rounded-[2px] px-3 text-[13px] text-zinc-400 transition-[color,background-color] duration-200 hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 md:inline-flex"
+                                className="hidden min-h-10 items-center gap-1.5 rounded-[2px] px-3 text-[13px] text-zinc-400 transition-[color,background-color] duration-200 hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 md:inline-flex"
                                 style={{ transitionTimingFunction: EASE_OUT }}
                             >
                                 {link.label}
+                                {link.label === "GitHub" && stars !== null ? (
+                                    <span className="font-mono text-[11px] text-zinc-500">
+                                        {formatStars(stars)}
+                                    </span>
+                                ) : null}
                             </a>
                         ))}
+                        <button
+                            type="button"
+                            onClick={() => setPalette(true)}
+                            aria-label="Jump to a section"
+                            aria-keyshortcuts="Meta+K Control+K"
+                            className="hidden min-h-10 items-center rounded-[2px] px-2.5 font-mono text-[11px] text-zinc-400 hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 sm:inline-flex"
+                        >
+                            ⌘K
+                        </button>
                         <LandingCta to="/workspace" size="compact">
                             Open workspace
                         </LandingCta>
@@ -135,20 +152,33 @@ export function IslandNav() {
 
             <div
                 id={menuId}
+                inert={!open}
                 className={cn(
-                    "fixed inset-0 z-30 bg-black/82 backdrop-blur-3xl transition-[opacity,visibility] lg:hidden",
-                    open ? "visible opacity-100 duration-200" : "invisible opacity-0 duration-150",
+                    "fixed inset-0 z-30 overflow-x-clip bg-black/82 backdrop-blur-3xl transition-[opacity,visibility] lg:hidden",
+                    open ? "visible opacity-100 duration-200" : "hidden",
                 )}
                 style={{ transitionTimingFunction: open ? EASE_OUT : EASE_IN }}
                 aria-hidden={!open}
             >
-                <div className="flex h-full flex-col justify-center gap-1 px-8 pt-16">
+                <div className="flex h-full max-w-full flex-col justify-center gap-1 overflow-x-clip px-6 pt-16">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setOpen(false);
+                            setPalette(true);
+                        }}
+                        className="block min-h-11 rounded-[2px] px-3 py-3 text-left text-2xl font-medium text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                    >
+                        Jump
+                    </button>
                     {[...LINKS, ...EXTERNAL].map((link, i) => {
                         const className = cn(
-                            "block rounded-[2px] px-3 py-3 text-2xl font-medium text-zinc-100 transition-[opacity,transform] duration-200",
+                            "block min-h-11 rounded-[2px] px-3 py-3 text-2xl font-medium text-zinc-100",
                             open ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0",
                         );
                         const style = {
+                            transitionProperty: "opacity, transform",
+                            transitionDuration: "200ms",
                             transitionTimingFunction: EASE_OUT,
                             transitionDelay: open ? `${80 + i * 40}ms` : "0ms",
                         };
@@ -164,11 +194,15 @@ export function IslandNav() {
                                 onClick={() => setOpen(false)}
                             >
                                 {link.label}
+                                {link.label === "GitHub" && stars !== null
+                                    ? ` ${formatStars(stars)}`
+                                    : null}
                             </a>
                         );
                     })}
                 </div>
             </div>
+            <JumpPalette open={palette} onOpenChange={setPalette} />
         </>
     );
 }

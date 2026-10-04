@@ -10,10 +10,15 @@ export default defineConfig({
     define: {
         __BUILD_ID__: JSON.stringify(buildId),
     },
-    plugins: [
-        reactRouter(),
-        tailwindcss(),
-    ],
+    plugins: [reactRouter(), tailwindcss()],
+    optimizeDeps: {
+        entries: [
+            "app/root.tsx",
+            "app/routes/**/*.tsx",
+            "app/components/assistant-ui/openui-registration.tsx",
+        ],
+        include: ["@openuidev/assistant-ui/ai-sdk"],
+    },
     resolve: {
         tsconfigPaths: true,
     },

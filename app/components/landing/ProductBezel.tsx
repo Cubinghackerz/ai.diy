@@ -75,7 +75,7 @@ export function ProductBezel({ className }: { className?: string }) {
                         <span className="size-2 rounded-[2px] bg-zinc-700" />
                         <span className="size-2 rounded-[2px] bg-zinc-700" />
                         <span className="size-2 rounded-[2px] bg-zinc-700" />
-                        <span className="ml-3 font-mono text-[10px] tracking-wide text-zinc-500">
+                        <span className="ml-3 font-mono text-[10px] tracking-wide text-zinc-400">
                             ai.diy workspace
                         </span>
                         <div className="ml-auto flex items-center gap-2">
@@ -99,14 +99,20 @@ export function ProductBezel({ className }: { className?: string }) {
                         className="group relative block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/50"
                         aria-label="Play the ai.diy workspace demo fullscreen"
                     >
-                        <img
-                            src="/workspace-demo.png"
-                            alt="ai.diy workspace: local-first chat with model switching and tools"
-                            width={1280}
-                            height={800}
-                            className="block h-auto w-full origin-center transition-transform duration-200 group-hover:scale-[1.015]"
-                            style={{ transitionTimingFunction: EASE_OUT }}
-                        />
+                        <picture>
+                            <source srcSet="/landing/workspace-demo.avif" type="image/avif" />
+                            <source srcSet="/landing/workspace-demo.webp" type="image/webp" />
+                            <img
+                                src="/workspace-demo.png"
+                                alt="ai.diy workspace: local-first chat with model switching and tools"
+                                width={1786}
+                                height={1080}
+                                fetchPriority="high"
+                                decoding="async"
+                                className="block h-auto w-full origin-center transition-transform duration-200 group-hover:scale-[1.015]"
+                                style={{ transitionTimingFunction: EASE_OUT }}
+                            />
+                        </picture>
                         <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-[opacity,background-color] duration-200 group-hover:bg-black/28 group-hover:opacity-100 group-focus-visible:bg-black/28 group-focus-visible:opacity-100">
                             <span className="inline-flex translate-y-1 scale-[0.98] items-center gap-2 rounded-[2px] border border-white/20 bg-black/75 px-4 py-2.5 font-mono text-[11px] text-white shadow-[0_12px_40px_-16px_rgba(0,0,0,0.8)] transition-[transform,opacity] duration-200 group-hover:translate-y-0 group-hover:scale-100 group-focus-visible:translate-y-0 group-focus-visible:scale-100">
                                 <Play weight="fill" className="size-3.5" />
@@ -116,7 +122,7 @@ export function ProductBezel({ className }: { className?: string }) {
                     </button>
                 </div>
             </TiltedCard>
-            <p className="mt-4 text-center font-mono text-[10px] tracking-[0.16em] text-zinc-600">
+            <p className="mt-4 text-center font-mono text-[10px] tracking-[0.16em] text-zinc-500">
                 Real workspace. Click to expand
             </p>
 

@@ -15,10 +15,7 @@ import {
 export function loader({ request }: LoaderFunctionArgs) {
     const preflight = corsPreflight(request);
     if (preflight) return preflight;
-    return withCors(
-        request,
-        new Response("Method Not Allowed", { status: 405 }),
-    );
+    return withCors(request, new Response("Method Not Allowed", { status: 405 }));
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -26,14 +23,11 @@ export async function action({ request }: ActionFunctionArgs) {
     if (preflight) return preflight;
 
     if (request.method !== "POST") {
-        return withCors(
-            request,
-            new Response("Method Not Allowed", { status: 405 }),
-        );
+        return withCors(request, new Response("Method Not Allowed", { status: 405 }));
     }
 
     const rateKey = rateLimitKeyFromRequest(request);
-    const rateCheck = checkRateLimit(rateKey);
+    const rateCheck = await checkRateLimit(rateKey);
     if (!rateCheck.ok) {
         return withCors(request, rateLimitResponse(rateCheck.retryAfterMs));
     }
@@ -47,18 +41,12 @@ export async function action({ request }: ActionFunctionArgs) {
     try {
         body = (await request.json()) as typeof body;
     } catch {
-        return withCors(
-            request,
-            Response.json({ error: "Invalid JSON body" }, { status: 400 }),
-        );
+        return withCors(request, Response.json({ error: "Invalid JSON body" }, { status: 400 }));
     }
     const query = body.query?.trim();
 
     if (!query) {
-        return withCors(
-            request,
-            Response.json({ error: "Query required" }, { status: 400 }),
-        );
+        return withCors(request, Response.json({ error: "Query required" }, { status: 400 }));
     }
 
     if (body.engine === "searxng" && body.searxngUrl?.trim()) {
@@ -68,7 +56,10 @@ export async function action({ request }: ActionFunctionArgs) {
             return withCors(
                 request,
                 Response.json(
-                    { error: err instanceof Error ? err.message : "Invalid SearXNG URL", results: [] },
+                    {
+                        error: err instanceof Error ? err.message : "Invalid SearXNG URL",
+                        results: [],
+                    },
                     { status: 400 },
                 ),
             );
@@ -84,9 +75,6 @@ export async function action({ request }: ActionFunctionArgs) {
         return withCors(request, Response.json({ results }));
     } catch (err) {
         const message = err instanceof Error ? err.message : "Search failed";
-        return withCors(
-            request,
-            Response.json({ error: message, results: [] }, { status: 500 }),
-        );
+        return withCors(request, Response.json({ error: message, results: [] }, { status: 500 }));
     }
 }
