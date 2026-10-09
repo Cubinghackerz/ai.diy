@@ -22,6 +22,7 @@ export const TOOL_ACCESS_KEYS = [
     "askUser",
     "compaction",
     "generativeUi",
+    "externalMedia",
 ] as const;
 
 export type ToolAccessKey = (typeof TOOL_ACCESS_KEYS)[number];
@@ -118,7 +119,13 @@ export const TOOL_ACCESS_OPTIONS: ToolAccessOption[] = [
         key: "generativeUi",
         label: "Generative UI",
         description:
-            "Let the assistant render interactive cards, tables, and forms (experimental — adds a large tool spec to prompts)",
+            "Let the assistant render cards, tables, forms, timelines, maps, and photo galleries (adds a large tool spec to prompts)",
+    },
+    {
+        key: "externalMedia",
+        label: "External photos and maps",
+        description:
+            "Load photos from Wikipedia and map tiles from OpenFreeMap in generative UI. Sends place names and your IP address to those services",
     },
 ];
 
@@ -139,14 +146,15 @@ export const DEFAULT_TOOL_ACCESS: ToolAccessSettings = {
     currentTime: true,
     askUser: true,
     compaction: true,
-    generativeUi: false,
+    generativeUi: true,
+    externalMedia: true,
 };
 
 export function normalizeToolAccess(
     value: unknown,
     fallback: Partial<ToolAccessSettings> = {},
 ): ToolAccessSettings {
-    const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
+    const input = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
     const result = { ...DEFAULT_TOOL_ACCESS, ...fallback };
     for (const key of TOOL_ACCESS_KEYS) {
         if (typeof input[key] === "boolean") result[key] = input[key] as boolean;
@@ -160,13 +168,10 @@ export function toolAccessKeyForTool(toolName: string): ToolAccessKey | null {
     if (!name) return null;
     if (name.endsWith("_openui")) return "generativeUi";
     if (name.startsWith("mcp_composio_")) return "composio";
-    if (
-        name.startsWith("mcp_")
-    ) return "mcp";
+    if (name.startsWith("mcp_")) return "mcp";
     if (name.startsWith("knowledge_")) return "knowledge";
-    if (
-        /search|fetch_url|read_url|youtube|url_doctor|research_skill|duckduckgo/.test(name)
-    ) return "webSearch";
+    if (/search|fetch_url|read_url|youtube|url_doctor|research_skill|duckduckgo/.test(name))
+        return "webSearch";
     if (name === "calculator" || name === "calculate") return "calculator";
     if (name === "run_python" || name === "run_code" || name === "python_file_creation_skill") {
         return "python";
@@ -176,7 +181,8 @@ export function toolAccessKeyForTool(toolName: string): ToolAccessKey | null {
         name.startsWith("linux_") ||
         name === "run_command" ||
         name === "read_file"
-    ) return "linux";
+    )
+        return "linux";
     if (name === "npm_project" || name === "npm_project_skill") return "npmProject";
     if (name === "create_file" || name === "generate_file") return "fileCreation";
     if (name === "memory") return "memory";
@@ -198,7 +204,8 @@ export function toolAccessKeyForTool(toolName: string): ToolAccessKey | null {
         name === "ultimate_frontend_ui" ||
         name === "word_doc_skill" ||
         name === "file_creation_skill"
-    ) return "skills";
+    )
+        return "skills";
     return null;
 }
 

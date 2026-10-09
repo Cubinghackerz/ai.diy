@@ -7,7 +7,7 @@
 - Use Node 22.22.2+ on the Node 22 LTS line, or Node 24. Avoid unsupported odd Node releases.
 - `~/*` aliases `app/*`. Browser-only helpers conventionally use `.client.ts`; server integrations belong in `app/lib/server/`. Browser APIs must be guarded during SSR.
 - Provider credentials remain browser-owned and are relayed per request. Never log request bodies, keys, conversation data, or raw error payloads.
-- Tool access must be enforced on both the client and server. Forwarded frontend tools must not have server executors or shadow server tools. OpenUI remains opt-in and lazy.
+- Tool access must be enforced on both the client and server. Forwarded frontend tools must not have server executors or shadow server tools. OpenUI is lazy-loaded, on by default, and can be disabled in tool access.
 - Preserve the squared visual system and `.legacy-round` workspace exception. Do not redesign the original composer as part of reliability work.
 
 ## Debugging

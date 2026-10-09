@@ -1,6 +1,26 @@
 import { createServer } from "node:http";
 
 const model = "gpt-4o-mini";
+
+// Canned OpenUI Lang programs streamed as a present_openui tool call.
+const RICH_PROGRAM = [
+    'root = Card([head, gallery, timeline, map, more, FollowUpBlock(["Make it cheaper"])])',
+    'head = RichHeading("Mock plan", "Rendered from a tool call")',
+    'a = RichItem("a", "Colosseum", "09:00", "Book ahead.", "🏛️", "Landmark", 41.8902, 12.4922, "Colosseum")',
+    'b = RichItem("b", "Roman Forum", "11:30", "Next door.", "🏺", "Landmark", 41.8925, 12.4853, "Roman Forum")',
+    'gallery = RichGallery([a, b], "Photos")',
+    'timeline = RichTimeline([a, b], "The day")',
+    'map = RichMap([a, b], "Route", true)',
+    'c = RichItem("c", "Borghese Gallery", null, "Reserve a slot.", "🖼️")',
+    'more = RichSuggestions([c], "More ideas")',
+].join("\n");
+
+// One unsafe and one safe link button, to prove only http(s) targets open.
+const RICH_LINKS_PROGRAM = [
+    "root = Card([Buttons([unsafe, safe])])",
+    'unsafe = Button("Open unsafe", Action([@OpenUrl("javascript:window.__pwned=1")]), "secondary")',
+    'safe = Button("Open safe", Action([@OpenUrl("https://example.com/ok")]), "primary")',
+].join("\n");
 const server = createServer(async (request, response) => {
     if (request.url === "/health") {
         response.end("ok");
@@ -74,6 +94,38 @@ const server = createServer(async (request, response) => {
     };
     send({ role: "assistant", content: "" });
     const promptText = JSON.stringify(prompt);
+    const richProgram = promptText.includes("mock-rich-links")
+        ? RICH_LINKS_PROGRAM
+        : promptText.includes("mock-rich")
+          ? RICH_PROGRAM
+          : null;
+    const offeredTools = new Set((body.tools ?? []).map((tool) => tool.function?.name));
+    // A tool result already follows the call: end the turn with text, never loop.
+    const continuation = body.messages?.at(-1)?.role === "tool";
+    if (richProgram && offeredTools.has("present_openui") && !continuation) {
+        send({
+            tool_calls: [
+                {
+                    index: 0,
+                    id: "call_mock_rich",
+                    type: "function",
+                    function: { name: "present_openui", arguments: "" },
+                },
+            ],
+        });
+        const args = JSON.stringify({ ui: richProgram });
+        for (const part of args.match(/[\s\S]{1,48}/g)) {
+            if (response.destroyed) return;
+            send({ tool_calls: [{ index: 0, function: { arguments: part } }] });
+            await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        send({}, "tool_calls");
+        response.write(
+            `data: ${JSON.stringify({ id, object: "chat.completion.chunk", created: 0, model, choices: [], usage: { prompt_tokens: 12, completion_tokens: 10, total_tokens: 22 } })}\n\n`,
+        );
+        response.end("data: [DONE]\n\n");
+        return;
+    }
     if (promptText.includes("mock-drop")) {
         send({ content: "Mo" });
         send({ content: "ck" });

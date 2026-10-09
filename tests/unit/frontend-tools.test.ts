@@ -5,9 +5,16 @@ import { normalizeToolAccess, toolAccessAllows } from "~/lib/tool-access";
 const definition = { description: "Render a card", parameters: { type: "object", properties: {} } };
 
 describe("frontend tool boundaries", () => {
-    it("keeps generative UI opt-in after migration", () => {
-        expect(normalizeToolAccess(undefined).generativeUi).toBe(false);
-        expect(toolAccessAllows(normalizeToolAccess(undefined), "present_openui")).toBe(false);
+    it("enables generative UI by default but honors a stored opt-out", () => {
+        expect(normalizeToolAccess(undefined).generativeUi).toBe(true);
+        expect(toolAccessAllows(normalizeToolAccess(undefined), "present_openui")).toBe(true);
+        const optedOut = normalizeToolAccess({ generativeUi: false });
+        expect(optedOut.generativeUi).toBe(false);
+        expect(toolAccessAllows(optedOut, "present_openui")).toBe(false);
+    });
+    it("keeps external media on by default and persists an opt-out", () => {
+        expect(normalizeToolAccess(undefined).externalMedia).toBe(true);
+        expect(normalizeToolAccess({ externalMedia: false }).externalMedia).toBe(false);
     });
     it("only forwards enabled OpenUI tools without executors", () => {
         expect(frontendToolsFromBody({ present_openui: definition }, new Set(), false)).toEqual({});

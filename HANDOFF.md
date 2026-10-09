@@ -43,7 +43,7 @@ CI runs typecheck, all 17 smoke scripts, unit tests, changed-file lint/format ch
 - `app/components/assistant-ui/ChatThreadSync.tsx` and `app/lib/chat-store.ts`: history hydration, idle persistence, artifact extraction.
 - `app/lib/db.ts`: database `prismium-lite-db`, version 14. Keep the name and `prismium-lite:*` settings keys unless an explicit migration is approved.
 - `app/lib/tool-access.ts`: capability defaults and normalization. Enforce tool gates on both client and server.
-- OpenUI is opt-in and lazy. Forwarded tools have bounded schemas and no server executors; they cannot shadow server tools. Supplemental instructions append to the base prompt.
+- OpenUI is lazy-loaded, on by default, and can be disabled in tool access. Forwarded tools have bounded schemas and no server executors; they cannot shadow server tools. Supplemental instructions append to the base prompt.
 - The scoped OpenUI/Zustand override is intentional. Plain `npm ci` must keep working; do not replace strict peer validation with `--legacy-peer-deps`.
 - `SectionBoundary` isolates message, Canvas, Settings, and OpenUI rendering failures. Copied diagnostics intentionally omit raw error messages to protect conversation data and keys.
 - `storage-notices.ts` exposes persistence failures through a banner and toast. Failed chat saves retain an exportable in-memory snapshot and offer retry. Artifact failures keep the Canvas copy; oversized artifacts explicitly prompt download.
@@ -58,7 +58,7 @@ CI runs typecheck, all 17 smoke scripts, unit tests, changed-file lint/format ch
 1. Branches are not durable: `replaceThreadMessages` still removes messages outside the active path. Tier 1 must coordinate transactional incremental persistence, stable timestamps/parents, active-leaf state, assistant-ui history restoration, and export. No schema migration is included in Tier 0.
 2. A pre-existing version-17 database cannot be opened by version-14 code. Errors now surface instead of leaving an unexplained loading screen. Never clear user data as a fix; use a compatible build or explicit backup/recovery.
 3. The send path is still behind setup. Explore-before-setup remains a later milestone.
-4. Real-provider behavior, Safari, full mobile accessibility, Python/VM execution, and real OpenUI card/form interaction are not covered by the mock chat tests.
+4. Real-provider behavior, Safari, full mobile accessibility, Python/VM execution, and real-model OpenUI output are not covered; the mock only streams canned `present_openui` programs.
 5. Search/palette, shortcut changes, richer code blocks, and sidebar organization remain Tier 1; no additional providers/tools should precede them.
 6. Existing large modules and legacy accessibility findings remain. Do not mix their broad refactors into a focused bug fix.
 

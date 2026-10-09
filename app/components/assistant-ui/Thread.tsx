@@ -21,6 +21,7 @@ import { TooltipIconButton } from "~/components/assistant-ui/tooltip-icon-button
 import { Button } from "~/components/ui/button";
 import { SectionBoundary } from "~/components/ui/SectionBoundary";
 import { cn } from "~/lib/utils";
+import { toolAccessKeyForTool } from "~/lib/tool-access";
 import {
   ActionBarMorePrimitive,
   ActionBarPrimitive,
@@ -710,6 +711,9 @@ const ToolCallAtIndex: FC<{
   );
 };
 
+const isGenerativeUiTool = (toolName: string | undefined) =>
+  toolName !== undefined && toolAccessKeyForTool(toolName) === "generativeUi";
+
 const AssistantMessage: FC = () => {
   const { ToolFallback: ToolFallbackComponent = ToolFallback, ReasoningGroup } =
     useContext(ThreadComponentsContext);
@@ -730,10 +734,13 @@ const AssistantMessage: FC = () => {
     }
     return indices;
   }, [messageParts]);
+  // Generative-UI cards render inline in the message, so they stay out of the
+  // collapsed "Tool calls" disclosure.
   const toolIndices = useMemo(() => {
     const indices: number[] = [];
     for (let index = 0; index < messageParts.length; index++) {
-      if (messageParts[index]?.type === "tool-call") indices.push(index);
+      const part = messageParts[index];
+      if (part?.type === "tool-call" && !isGenerativeUiTool(part.toolName)) indices.push(index);
     }
     return indices;
   }, [messageParts]);
@@ -783,7 +790,7 @@ const AssistantMessage: FC = () => {
                 // not render the raw reasoning part as normal answer text.
                 return null;
               case "tool-call":
-                return null;
+                return isGenerativeUiTool(part.toolName) ? (part.toolUI ?? null) : null;
               case "file":
                 return part.mimeType.startsWith("image/") ? (
                   <figure className="my-3 max-w-2xl overflow-hidden rounded-2xl border border-border/70 bg-muted/30 shadow-sm">

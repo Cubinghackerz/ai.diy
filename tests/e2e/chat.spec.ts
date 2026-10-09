@@ -17,9 +17,9 @@ test.afterEach(({ page }) => {
     ).toEqual([]);
 });
 
-async function seed(page: Page, generativeUi = false) {
+async function seed(page: Page, generativeUi = false, externalMedia?: boolean) {
     await page.addInitScript(
-        ({ generativeUi }) => {
+        ({ generativeUi, externalMedia }) => {
             if (localStorage.getItem("test:seeded")) return;
             localStorage.setItem("test:seeded", "true");
             localStorage.setItem(
@@ -50,6 +50,7 @@ async function seed(page: Page, generativeUi = false) {
                         knowledge: false,
                         linux: false,
                         generativeUi,
+                        ...(externalMedia === undefined ? {} : { externalMedia }),
                     },
                     memoryEnabled: false,
                     memoryAutoAttach: false,
@@ -59,7 +60,7 @@ async function seed(page: Page, generativeUi = false) {
                 }),
             );
         },
-        { generativeUi },
+        { generativeUi, externalMedia },
     );
     await page.route(/https:\/\//, (route) => route.abort());
     await page.goto("/workspace");
@@ -259,4 +260,121 @@ test("hostile model HTML is sanitized and cannot exfiltrate", async ({ page }) =
     ).toEqual({ pwned: null, hostileImgs: 0 });
     await expect(page.locator(".katex").first()).toBeVisible();
     await expect(page.getByRole("button", { name: /load image from 127\.0\.0\.1/i })).toBeVisible();
+});
+
+/** The only third-party hosts generative UI may contact. */
+const MEDIA_HOSTS = new Set([
+    "en.wikipedia.org",
+    "thumb.wikimedia.org",
+    "upload.wikimedia.org",
+    "tiles.openfreemap.org",
+]);
+
+const PIXEL = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+    "base64",
+);
+
+/** Fixtures for the only third-party hosts generative UI may call. */
+async function fixtureExternalMedia(page: Page) {
+    await page.route(/https:\/\/en\.wikipedia\.org\/api\/rest_v1\/page\/summary\//, (route) => {
+        const title = decodeURIComponent(new URL(route.request().url()).pathname.split("/").pop()!);
+        return route.fulfill({
+            json: {
+                title,
+                extract: `${title} fixture`,
+                thumbnail: { source: "https://thumb.wikimedia.org/fixture.png" },
+                coordinates: { lat: 41.89, lon: 12.49 },
+            },
+        });
+    });
+    await page.route("https://thumb.wikimedia.org/**", (route) =>
+        route.fulfill({ contentType: "image/png", body: PIXEL }),
+    );
+    await page.route("https://tiles.openfreemap.org/**", (route) =>
+        route.fulfill({ json: { version: 8, sources: {}, layers: [] } }),
+    );
+}
+
+async function send(page: Page, text: string) {
+    const input = page.getByRole("textbox", { name: "Message input", exact: true });
+    await input.fill(text);
+    await input.press("Enter");
+}
+
+test("renders rich generative UI from a tool call with photos, timeline, map and suggestions", async ({
+    page,
+}) => {
+    const mediaHosts: string[] = [];
+    page.on("request", (request) => {
+        const { hostname } = new URL(request.url());
+        if (MEDIA_HOSTS.has(hostname)) mediaHosts.push(hostname);
+    });
+    await seed(page, true);
+    await fixtureExternalMedia(page);
+    await send(page, "mock-rich plan my day");
+
+    await expect(page.getByRole("heading", { name: "Mock plan" })).toBeVisible();
+    const timeline = page.locator(".rich-timeline");
+    await expect(timeline.getByText("Colosseum")).toBeVisible();
+    await expect(timeline.getByText("Roman Forum")).toBeVisible();
+    await expect(page.locator(".rich-gallery img")).toHaveCount(2);
+    await expect(page.locator(".rich-gallery img").first()).toHaveAttribute(
+        "src",
+        "https://thumb.wikimedia.org/fixture.png",
+    );
+    // A real WebGL map, not the text fallback: the canvas and both markers must appear.
+    await expect(page.locator(".rich-map .maplibregl-canvas")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator(".rich-map .rich-marker")).toHaveCount(2);
+    await expect(page.locator(".rich-map-list")).toHaveCount(0);
+    await page.locator(".rich-timeline-row").first().click();
+    await expect(page.locator(".rich-marker[data-selected='true']")).toHaveText("1");
+    await expect(page.getByText("Related Queries")).toBeVisible();
+
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await expect(page.getByText("Add Borghese Gallery", { exact: true })).toBeVisible();
+    await expect(
+        page.getByText("Mock reply: your message arrived and streamed successfully.", {
+            exact: true,
+        }),
+    ).toBeVisible();
+    expect(new Set(mediaHosts)).toEqual(
+        new Set(["en.wikipedia.org", "thumb.wikimedia.org", "tiles.openfreemap.org"]),
+    );
+});
+
+test("makes no third-party requests when external photos and maps is off", async ({ page }) => {
+    const mediaRequests: string[] = [];
+    page.on("request", (request) => {
+        if (MEDIA_HOSTS.has(new URL(request.url()).hostname)) mediaRequests.push(request.url());
+    });
+    await seed(page, true, false);
+    await send(page, "mock-rich plan my day");
+
+    await expect(page.getByRole("heading", { name: "Mock plan" })).toBeVisible();
+    await expect(page.getByText(/External photos and maps is turned off/)).toBeVisible();
+    await expect(page.locator(".rich-gallery img")).toHaveCount(0);
+    await expect(page.locator(".rich-map .maplibregl-canvas")).toHaveCount(0);
+    expect(mediaRequests).toEqual([]);
+});
+
+test("OpenUI link buttons open https targets but never javascript: URLs", async ({ page }) => {
+    const opened: string[] = [];
+    page.context().on("page", (popup) => opened.push(popup.url()));
+    const requested: string[] = [];
+    page.context().on("request", (request) => requested.push(request.url()));
+    await page.context().route(/https:\/\//, (route) => route.abort());
+    await seed(page, true);
+    await send(page, "mock-rich-links");
+
+    await page.getByRole("button", { name: "Open unsafe" }).click();
+    await page.waitForTimeout(750);
+    expect(opened).toEqual([]);
+
+    await page.getByRole("button", { name: "Open safe" }).click();
+    await expect.poll(() => opened.length).toBe(1);
+    await expect
+        .poll(() => requested.filter((url) => url.startsWith("https://example.com/ok")).length)
+        .toBeGreaterThan(0);
+    expect(await page.evaluate(() => "__pwned" in window)).toBe(false);
 });
