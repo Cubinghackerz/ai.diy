@@ -12,8 +12,8 @@ const MAX_FRONTEND_SCHEMA_CHARS = 32_768;
 const MAX_FRONTEND_DESCRIPTION_CHARS = 2_000;
 const MAX_MODEL_INSTRUCTIONS_CHARS = 64_000;
 
-/** OpenUI Lang frontend tools — gated by the Generative UI tool-access key. */
-const GENERATIVE_UI_TOOL_NAMES = new Set(["present_openui", "prompt_openui"]);
+/** OpenUI Lang and json-render frontend tools — gated by the Generative UI tool-access key. */
+const GENERATIVE_UI_TOOL_NAMES = new Set(["present_openui", "prompt_openui", "present_jsonrender"]);
 
 /**
  * Sanitize client-forwarded tool schemas into no-execute `tool()` defs.
@@ -29,10 +29,7 @@ export function frontendToolsFromBody(
 ): Record<string, Tool> {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
     const out: Record<string, Tool> = {};
-    for (const [name, def] of Object.entries(raw).slice(
-        0,
-        MAX_FRONTEND_TOOLS * 4,
-    )) {
+    for (const [name, def] of Object.entries(raw).slice(0, MAX_FRONTEND_TOOLS * 4)) {
         if (Object.keys(out).length >= MAX_FRONTEND_TOOLS) break;
         if (!FRONTEND_TOOL_NAME.test(name) || reservedNames.has(name)) continue;
         if (!generativeUiEnabled && GENERATIVE_UI_TOOL_NAMES.has(name)) continue;

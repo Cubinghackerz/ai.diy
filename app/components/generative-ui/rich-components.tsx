@@ -7,10 +7,22 @@
  * lookups, and only when the External photos and maps setting is on.
  */
 
+import {
+    ArrowSquareOut,
+    ArrowsIn,
+    ArrowsOut,
+    ChartLineUp,
+    MapTrifold,
+    Path,
+    Plus,
+} from "@phosphor-icons/react";
 import { defineComponent, useIsStreaming, useTriggerAction } from "@openuidev/react-lang";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import { z } from "zod/v4";
+import { useThreadBusy } from "./busy";
+import { usePythonImage } from "./python-image";
 import { useExternalMedia } from "./media";
+import { RICH_ICON_NAMES, RichIcon, isRichIconName, type RichIconName } from "./rich-icons";
 import { useRichSelection } from "./rich-selection";
 import { isSafeActionUrl } from "./safe-openui";
 import { fetchWikiSummary, type WikiSummary } from "./wikipedia";
@@ -26,7 +38,7 @@ type Item = {
     title: string;
     label?: string;
     description?: string;
-    emoji?: string;
+    icon?: RichIconName;
     category?: string;
     lat?: number;
     lng?: number;
@@ -41,7 +53,7 @@ export const RichItem = defineComponent({
         title: z.string(),
         label: z.string().optional().describe("Time, date, or duration shown beside the title"),
         description: z.string().optional(),
-        emoji: z.string().optional(),
+        icon: z.enum(RICH_ICON_NAMES).optional().describe("Pick the closest icon; never an emoji"),
         category: z.string().optional().describe("Short group name used for map filter chips"),
         lat: z.number().optional(),
         lng: z.number().optional(),
@@ -77,7 +89,7 @@ function readItems(value: unknown): Item[] {
             title: props.title,
             label: text("label"),
             description: text("description"),
-            emoji: text("emoji"),
+            icon: isRichIconName(props.icon) ? props.icon : undefined,
             category: text("category"),
             lat: num("lat"),
             lng: num("lng"),
@@ -89,6 +101,7 @@ function readItems(value: unknown): Item[] {
 }
 
 const scopeOf = (items: Item[]) => items.map((item) => item.id ?? item.title).join("|");
+const keyOf = (item: Item, index: number) => `${item.id ?? item.title}-${index}`;
 
 /** Looks up Wikipedia summaries once streaming has finished and media is allowed. */
 function useWikiSummaries(queries: (string | undefined)[]): Map<string, WikiSummary | null> {
@@ -113,11 +126,21 @@ function useWikiSummaries(queries: (string | undefined)[]): Map<string, WikiSumm
     return results;
 }
 
+function SectionTitle({ icon, children }: { icon?: ReactNode; children: ReactNode }) {
+    return (
+        <h3 className="rich-section-title">
+            {icon}
+            <span>{children}</span>
+        </h3>
+    );
+}
+
 function ItemLink({ link }: { link?: string }) {
     if (!isSafeActionUrl(link)) return null;
     return (
         <a className="rich-link" href={link} target="_blank" rel="noopener noreferrer">
             Learn more
+            <ArrowSquareOut size={12} weight="bold" aria-hidden />
         </a>
     );
 }
@@ -133,7 +156,11 @@ function GalleryView({ props }: { props: { items?: unknown; caption?: string } }
                 {items.map((item, index) => {
                     const image = item.query ? wiki.get(item.query)?.imageUrl : null;
                     return (
-                        <div className="rich-tile" key={`${item.id ?? item.title}-${index}`}>
+                        <div
+                            className="rich-tile"
+                            key={keyOf(item, index)}
+                            data-featured={index === 0}
+                        >
                             {allowed && image ? (
                                 <img
                                     src={image}
@@ -143,8 +170,8 @@ function GalleryView({ props }: { props: { items?: unknown; caption?: string } }
                                     referrerPolicy="no-referrer"
                                 />
                             ) : (
-                                <span className="rich-tile-empty" aria-hidden>
-                                    {item.emoji ?? item.title.slice(0, 1)}
+                                <span className="rich-tile-empty">
+                                    <RichIcon name={item.icon} size={36} />
                                 </span>
                             )}
                             <span className="rich-tile-title">{item.title}</span>
@@ -163,40 +190,47 @@ function TimelineView({ props }: { props: { items?: unknown; title?: string } })
     if (items.length === 0) return null;
     return (
         <section className="rich-timeline">
-            {props.title ? <h3>{props.title}</h3> : null}
-            <ol>
+            {props.title ? <SectionTitle>{props.title}</SectionTitle> : null}
+            <ol className="rich-rail">
                 {items.map((item, index) => (
-                    <li
-                        key={`${item.id ?? item.title}-${index}`}
-                        data-selected={selected === index}
-                    >
-                        <button
-                            type="button"
-                            className="rich-timeline-row"
-                            aria-current={selected === index ? "true" : undefined}
-                            onClick={() => select(selected === index ? null : index)}
-                        >
-                            <span className="rich-step" aria-hidden>
-                                {index + 1}
-                            </span>
-                            <span className="rich-timeline-body">
+                    <li key={keyOf(item, index)} data-selected={selected === index}>
+                        <span className="rich-node" aria-hidden>
+                            {item.icon ? (
+                                <RichIcon name={item.icon} size={16} weight="bold" />
+                            ) : (
+                                index + 1
+                            )}
+                        </span>
+                        <div className="rich-rail-card">
+                            <button
+                                type="button"
+                                className="rich-timeline-row"
+                                aria-current={selected === index ? "true" : undefined}
+                                onClick={() => select(selected === index ? null : index)}
+                            >
                                 <span className="rich-timeline-head">
-                                    <strong>
-                                        {item.emoji ? `${item.emoji} ` : ""}
-                                        {item.title}
-                                    </strong>
-                                    {item.label ? <em>{item.label}</em> : null}
+                                    <strong>{item.title}</strong>
+                                    {item.label ? (
+                                        <em className="rich-pill">{item.label}</em>
+                                    ) : null}
                                 </span>
-                                {item.description ? <span>{item.description}</span> : null}
-                            </span>
-                        </button>
-                        <ItemLink link={item.link} />
+                                {item.description ? (
+                                    <span className="rich-desc">{item.description}</span>
+                                ) : null}
+                                {item.category ? (
+                                    <span className="rich-category">{item.category}</span>
+                                ) : null}
+                            </button>
+                            <ItemLink link={item.link} />
+                        </div>
                     </li>
                 ))}
             </ol>
         </section>
     );
 }
+
+type Resolved = { item: Item; index: number; lat: number; lng: number };
 
 function MapSection({ props }: { props: { items?: unknown; title?: string; route?: boolean } }) {
     const items = useMemo(() => readItems(props.items), [props.items]);
@@ -260,9 +294,20 @@ function MapSection({ props }: { props: { items?: unknown; title?: string; route
     return (
         <section className="rich-map" data-expanded={expanded}>
             <div className="rich-map-head">
-                {props.title ? <h3>{props.title}</h3> : <span />}
+                <SectionTitle icon={<MapTrifold size={16} weight="duotone" aria-hidden />}>
+                    {props.title ?? "Map"}
+                </SectionTitle>
                 {interactive && resolved.length > 0 ? (
-                    <button type="button" onClick={() => setExpanded((value) => !value)}>
+                    <button
+                        type="button"
+                        className="rich-button"
+                        onClick={() => setExpanded((value) => !value)}
+                    >
+                        {expanded ? (
+                            <ArrowsIn size={14} aria-hidden />
+                        ) : (
+                            <ArrowsOut size={14} aria-hidden />
+                        )}
                         {expanded ? "Collapse" : "Expand"}
                     </button>
                 ) : null}
@@ -295,11 +340,13 @@ function MapSection({ props }: { props: { items?: unknown; title?: string; route
             ) : (
                 <ol className="rich-map-list">
                     {items.map((item, index) => (
-                        <li key={`${item.id ?? item.title}-${index}`}>
+                        <li key={keyOf(item, index)}>
+                            <span className="rich-node rich-node-small" aria-hidden>
+                                {index + 1}
+                            </span>
                             <strong>{item.title}</strong>
                             {item.lat !== undefined && item.lng !== undefined ? (
-                                <span>
-                                    {" "}
+                                <span className="rich-coords">
                                     {item.lat.toFixed(4)}, {item.lng.toFixed(4)}
                                 </span>
                             ) : null}
@@ -309,7 +356,8 @@ function MapSection({ props }: { props: { items?: unknown; title?: string; route
             )}
             {interactive && props.route === true && points.length > 1 ? (
                 <p className="rich-note">
-                    Dashed line connects stops in order — approximate, not a street route.
+                    <Path size={13} aria-hidden /> Dashed line connects stops in order —
+                    approximate, not a street route.
                 </p>
             ) : null}
             {!allowed ? (
@@ -331,32 +379,62 @@ function SuggestionsView({
     const items = useMemo(() => readItems(props.items), [props.items]);
     const triggerAction = useTriggerAction();
     const streaming = useIsStreaming();
+    const busy = useThreadBusy();
     const actionLabel = props.actionLabel?.trim() || "Add";
     if (items.length === 0) return null;
     return (
-        <section className="rich-suggestions">
-            <h3>{props.title ?? "You might also like"}</h3>
+        <section className="rich-suggestions" data-busy={busy}>
+            <SectionTitle>{props.title ?? "You might also like"}</SectionTitle>
             <ul>
                 {items.map((item, index) => (
-                    <li key={`${item.id ?? item.title}-${index}`}>
-                        <span className="rich-timeline-body">
-                            <strong>
-                                {item.emoji ? `${item.emoji} ` : ""}
-                                {item.title}
-                            </strong>
+                    <li key={keyOf(item, index)}>
+                        <span className="rich-suggestion-icon" aria-hidden>
+                            <RichIcon name={item.icon ?? "idea"} size={20} />
+                        </span>
+                        <span className="rich-suggestion-body">
+                            <strong>{item.title}</strong>
                             {item.description ? <span>{item.description}</span> : null}
                         </span>
                         <button
                             type="button"
-                            disabled={streaming}
+                            className="rich-button rich-button-primary"
+                            disabled={streaming || busy}
                             onClick={() => triggerAction(`${actionLabel} ${item.title}`)}
                         >
+                            <Plus size={13} weight="bold" aria-hidden />
                             {actionLabel}
                         </button>
                     </li>
                 ))}
             </ul>
         </section>
+    );
+}
+
+function FigureView({ props }: { props: { filename?: string; caption?: string; alt?: string } }) {
+    const url = usePythonImage(props.filename);
+    const streaming = useIsStreaming();
+    if (!props.filename) return null;
+    return (
+        <figure className="rich-figure">
+            {url ? (
+                <img
+                    src={url}
+                    alt={props.alt ?? props.caption ?? props.filename}
+                    decoding="async"
+                />
+            ) : (
+                <div className="rich-figure-empty" role="status">
+                    <ChartLineUp size={28} weight="duotone" aria-hidden />
+                    <span>
+                        {streaming
+                            ? "Preparing figure…"
+                            : `${props.filename} is not available in this chat's files`}
+                    </span>
+                </div>
+            )}
+            {props.caption ? <figcaption>{props.caption}</figcaption> : null}
+        </figure>
     );
 }
 
@@ -376,7 +454,7 @@ export const RichGallery = defineComponent({
     name: "RichGallery",
     props: z.object({ items: z.array(RichItem.ref), caption: z.string().optional() }),
     description:
-        "A grid of up to 6 photos. Each RichItem needs a query (Wikipedia article title) to show a photo; items without one show an emoji tile.",
+        "A grid of up to 6 photos; the first is featured. Each RichItem needs a query (Wikipedia article title) to show a photo; items without one show an icon tile.",
     component: ({ props }) => <GalleryView props={props} />,
 });
 
@@ -387,8 +465,6 @@ export const RichTimeline = defineComponent({
         "An ordered list of steps, stops, phases or events with a time label, title and description. Selecting an entry highlights it on a RichMap that uses the same items.",
     component: ({ props }) => <TimelineView props={props} />,
 });
-
-type Resolved = { item: Item; index: number; lat: number; lng: number };
 
 export const RichMap = defineComponent({
     name: "RichMap",
@@ -413,8 +489,20 @@ export const RichSuggestions = defineComponent({
         actionLabel: z.string().optional().describe("Button text, default 'Add'"),
     }),
     description:
-        "2-4 extra ideas the user may want to add. Each has a button that sends 'Add <title>' as the next user message, so write titles that stand alone.",
+        "2-4 extra ideas the user may want to add. Each has a button that sends '<actionLabel> <title>' as the next user message, so write titles that stand alone.",
     component: ({ props }) => <SuggestionsView props={props} />,
+});
+
+export const RichFigure = defineComponent({
+    name: "RichFigure",
+    props: z.object({
+        filename: z.string().describe("Image file already saved by run_python, e.g. 'sales.png'"),
+        caption: z.string().optional(),
+        alt: z.string().optional(),
+    }),
+    description:
+        "Shows a chart or image that run_python already saved (matplotlib savefig PNG/SVG). Run Python first, then reference the exact filename here. Never put image data or URLs in props.",
+    component: ({ props }) => <FigureView props={props} />,
 });
 
 export const RICH_COMPONENTS = [
@@ -424,4 +512,5 @@ export const RICH_COMPONENTS = [
     RichTimeline,
     RichMap,
     RichSuggestions,
+    RichFigure,
 ];

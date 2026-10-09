@@ -11,7 +11,7 @@
  * `ContinueConversation`, so its stock renderer is kept.
  */
 
-import { defineToolkit, useAui, type Toolkit } from "@assistant-ui/react";
+import { defineToolkit, useAui, useAuiState, type Toolkit } from "@assistant-ui/react";
 import {
     OPENUI_PRESENT_TOOL_NAME,
     OPENUI_PROMPT_TOOL_NAME,
@@ -19,7 +19,9 @@ import {
     createOpenUIToolkit,
 } from "@openuidev/assistant-ui";
 import { BuiltinActionType, type ActionEvent, type Library } from "@openuidev/react-lang";
-import { useCallback, type ComponentProps } from "react";
+import { useCallback, useRef, type ComponentProps } from "react";
+import { useChatGenerating } from "~/components/assistant-ui/ChatSessionContext";
+import { ThreadBusyContext } from "./busy";
 
 /** True only for absolute http(s) URLs. Relative, scheme-less, and executable schemes fail. */
 export function isSafeActionUrl(value: unknown): value is string {
@@ -38,8 +40,17 @@ export type ActionSinks = {
     append: (text: string) => void;
 };
 
-export function handleOpenUIAction(event: ActionEvent, sinks: ActionSinks) {
+/**
+ * `busy` mirrors the composer's send lock: while a reply is running, follow-up
+ * chips and buttons must not queue extra user messages.
+ */
+export function handleOpenUIAction(
+    event: ActionEvent,
+    sinks: ActionSinks,
+    options: { busy?: boolean } = {},
+) {
     if (event.type === BuiltinActionType.ContinueConversation) {
+        if (options.busy) return;
         sinks.append(event.humanFriendlyMessage);
     } else if (event.type === BuiltinActionType.OpenUrl) {
         const url = event.params?.["url"];
@@ -67,28 +78,41 @@ export function createSafeOpenUIToolkit(options: {
 
     function SafePresent({ args, status }: PresentProps) {
         const aui = useAui();
+        const running = useAuiState((state) => state.thread.isRunning);
+        const generating = useChatGenerating();
+        const busy = running || generating;
+        const busyRef = useRef(busy);
+        busyRef.current = busy;
         const onAction = useCallback(
             (event: ActionEvent) =>
-                handleOpenUIAction(event, {
-                    open: (url, target, features) => {
-                        if (typeof window !== "undefined") window.open(url, target, features);
+                handleOpenUIAction(
+                    event,
+                    {
+                        open: (url, target, features) => {
+                            if (typeof window !== "undefined") window.open(url, target, features);
+                        },
+                        append: (text) =>
+                            aui.thread.append({ role: "user", content: [{ type: "text", text }] }),
                     },
-                    append: (text) =>
-                        aui.thread.append({ role: "user", content: [{ type: "text", text }] }),
-                }),
+                    { busy: busyRef.current },
+                ),
             [aui],
         );
         return (
-            <OpenUIContent
-                library={options.library}
-                theme={theme}
-                response={args.ui ?? ""}
-                isStreaming={status.type === "running"}
-                onAction={onAction}
-                {...(options.ErrorFallback !== undefined && {
-                    ErrorFallback: options.ErrorFallback,
-                })}
-            />
+            <ThreadBusyContext.Provider value={busy}>
+                <div className="rich-root" data-busy={busy}>
+                    <OpenUIContent
+                        library={options.library}
+                        theme={theme}
+                        response={args.ui ?? ""}
+                        isStreaming={status.type === "running"}
+                        onAction={onAction}
+                        {...(options.ErrorFallback !== undefined && {
+                            ErrorFallback: options.ErrorFallback,
+                        })}
+                    />
+                </div>
+            </ThreadBusyContext.Provider>
         );
     }
 

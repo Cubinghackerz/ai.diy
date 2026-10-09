@@ -22,6 +22,15 @@ describe("frontend tool boundaries", () => {
         expect(tools.present_openui).toBeDefined();
         expect(tools.present_openui.execute).toBeUndefined();
     });
+    it("gates the json-render tool with the same Generative UI switch", () => {
+        const tools = { present_jsonrender: definition };
+        expect(frontendToolsFromBody(tools, new Set(), false)).toEqual({});
+        expect(frontendToolsFromBody(tools, new Set(), true).present_jsonrender).toBeDefined();
+        expect(
+            toolAccessAllows(normalizeToolAccess({ generativeUi: false }), "present_jsonrender"),
+        ).toBe(false);
+        expect(toolAccessAllows(normalizeToolAccess(undefined), "present_jsonrender")).toBe(true);
+    });
     it("never shadows server tools", () => {
         expect(
             frontendToolsFromBody({ web_search: definition }, new Set(["web_search"]), true),

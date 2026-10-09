@@ -378,3 +378,58 @@ test("OpenUI link buttons open https targets but never javascript: URLs", async 
         .toBeGreaterThan(0);
     expect(await page.evaluate(() => "__pwned" in window)).toBe(false);
 });
+
+test("renders a json-render dashboard and locks its buttons while a reply is running", async ({
+    page,
+}) => {
+    const mediaRequests: string[] = [];
+    page.on("request", (request) => {
+        if (MEDIA_HOSTS.has(new URL(request.url()).hostname)) mediaRequests.push(request.url());
+    });
+    await seed(page, true);
+    await send(page, "mock-json show me a dashboard");
+
+    await expect(page.getByRole("heading", { name: "Mock dashboard" })).toBeVisible();
+    await expect(page.getByText("$48k")).toBeVisible();
+    await expect(page.getByRole("table")).toContainText("Pro");
+    await expect(page.getByRole("img", { name: "Bar chart" })).toBeVisible();
+    // Specs are data: no network is needed to draw them.
+    expect(mediaRequests).toEqual([]);
+
+    const button = page.getByRole("button", { name: "Show by region" });
+    await expect(button).toBeEnabled();
+    await button.click();
+    await expect(page.getByText("mock-slow Show by region", { exact: true })).toBeVisible();
+    // While the slow reply streams, the card cannot queue another message.
+    await expect(button).toBeDisabled();
+    await button.click({ force: true });
+    await expect(page.getByText("mock-slow Show by region", { exact: true })).toHaveCount(1);
+    await expect(button).toBeEnabled({ timeout: 20_000 });
+});
+
+test("OpenUI suggestion buttons are locked while a reply is running", async ({ page }) => {
+    await seed(page, true);
+    await fixtureExternalMedia(page);
+    await send(page, "mock-rich plan my day");
+    const add = page.getByRole("button", { name: "Add", exact: true });
+    await expect(add).toBeEnabled();
+    await send(page, "mock-slow keep running");
+    await expect(page.getByRole("button", { name: "Stop generating", exact: true })).toBeVisible();
+    await expect(add).toBeDisabled();
+    await expect(add).toBeEnabled({ timeout: 20_000 });
+});
+
+test("OpenUI and json-render calls can follow each other in one conversation", async ({ page }) => {
+    await seed(page, true);
+    await fixtureExternalMedia(page);
+    const stop = page.getByRole("button", { name: "Stop generating", exact: true });
+    await send(page, "mock-rich plan my day");
+    await expect(page.getByRole("heading", { name: "Mock plan" })).toBeVisible();
+    await expect(stop).toHaveCount(0, { timeout: 15_000 });
+    await send(page, "mock-json show me a dashboard");
+    await expect(page.getByRole("heading", { name: "Mock dashboard" })).toBeVisible();
+    await expect(stop).toHaveCount(0, { timeout: 15_000 });
+    // Both cards stay on screen and usable once the thread is idle.
+    await expect(page.getByRole("heading", { name: "Mock plan" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Show by region" })).toBeEnabled();
+});

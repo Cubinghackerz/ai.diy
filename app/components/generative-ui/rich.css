@@ -2,204 +2,351 @@
    own unlayered styles can still override them, and use the squared radius
    tokens plus the OpenUI theme variables the surrounding cards already use. */
 @layer openui {
-    .rich-heading h2 {
-        margin: 0;
-        font: var(--openui-text-heading-md, 600 1.15rem/1.3 inherit);
-        color: var(--openui-text-neutral-primary);
-    }
-    .rich-heading p {
-        margin: 2px 0 0;
-        font-size: 0.85rem;
-        color: var(--openui-text-neutral-secondary);
-    }
-
+    .rich-heading,
+    .rich-figure,
     .rich-gallery,
     .rich-timeline,
     .rich-map,
-    .rich-suggestions {
-        margin: 0;
-        color: var(--openui-text-neutral-primary);
-    }
-    .rich-timeline h3,
-    .rich-map h3,
-    .rich-suggestions h3 {
-        margin: 0 0 6px;
-        font-size: 0.95rem;
-        font-weight: 600;
-    }
-    .rich-gallery figcaption,
-    .rich-note {
-        margin: 6px 0 0;
-        font-size: 0.75rem;
-        color: var(--openui-text-neutral-secondary);
+    .rich-suggestions,
+    .rich-root {
+        --rich-accent: var(--openui-interactive-accent-default, #6366f1);
+        --rich-accent-soft: color-mix(in srgb, var(--rich-accent) 16%, transparent);
+        --rich-border: var(--openui-border-default, rgb(255 255 255 / 0.12));
+        --rich-muted: var(--openui-text-neutral-secondary, #9ca3af);
+        --rich-text: var(--openui-text-neutral-primary, #f3f4f6);
+        --rich-surface: var(--openui-sunk, rgb(255 255 255 / 0.04));
+        color: var(--rich-text);
     }
 
+    /* While a reply is running, stock follow-up chips must not queue messages. */
+    .rich-root[data-busy="true"] .openui-follow-up-item {
+        pointer-events: none;
+        opacity: 0.45;
+    }
+
+    /* ── Heading ─────────────────────────────────────────────── */
+    .rich-heading {
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--rich-border);
+    }
+    .rich-heading h2 {
+        margin: 0;
+        font-size: 1.35rem;
+        font-weight: 650;
+        letter-spacing: -0.01em;
+        line-height: 1.25;
+    }
+    .rich-heading p {
+        margin: 4px 0 0;
+        font-size: 0.9rem;
+        color: var(--rich-muted);
+    }
+
+    .rich-section-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 0 10px;
+        font-size: 0.78rem;
+        font-weight: 650;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--rich-muted);
+    }
+    .rich-section-title svg {
+        color: var(--rich-accent);
+    }
+
+    /* ── Gallery ─────────────────────────────────────────────── */
+    .rich-gallery {
+        margin: 0;
+    }
     .rich-gallery-grid {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-auto-rows: 110px;
         gap: 6px;
     }
     .rich-gallery-grid[data-count="1"] {
         grid-template-columns: 1fr;
+        grid-auto-rows: 220px;
     }
-    .rich-gallery-grid[data-count="2"],
-    .rich-gallery-grid[data-count="4"] {
+    .rich-gallery-grid[data-count="2"] {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-auto-rows: 160px;
+    }
+    .rich-gallery-grid:not([data-count="1"]):not([data-count="2"])
+        .rich-tile[data-featured="true"] {
+        grid-column: span 2;
+        grid-row: span 2;
     }
     .rich-tile {
         position: relative;
-        aspect-ratio: 4 / 3;
         overflow: hidden;
-        border-radius: var(--radius-md);
-        background: var(--openui-sunk);
-        border: 1px solid var(--openui-border-default);
+        border-radius: var(--radius-lg);
+        background: var(--rich-surface);
+        border: 1px solid var(--rich-border);
     }
     .rich-tile img {
+        display: block;
         width: 100%;
         height: 100%;
         object-fit: cover;
-        display: block;
+        transition: transform 0.35s ease;
+    }
+    .rich-tile:hover img {
+        transform: scale(1.04);
     }
     .rich-tile-empty {
         display: grid;
         place-items: center;
         height: 100%;
-        font-size: 1.75rem;
+        color: var(--rich-accent);
+        background: linear-gradient(135deg, var(--rich-accent-soft), transparent 70%);
     }
     .rich-tile-title {
         position: absolute;
         inset: auto 0 0 0;
-        padding: 14px 8px 6px;
-        font-size: 0.75rem;
+        padding: 22px 10px 8px;
+        font-size: 0.8rem;
         font-weight: 600;
         color: #fff;
-        background: linear-gradient(to top, rgb(0 0 0 / 0.7), transparent);
+        background: linear-gradient(to top, rgb(0 0 0 / 0.78), transparent);
+    }
+    .rich-gallery figcaption,
+    .rich-note {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 8px 0 0;
+        font-size: 0.75rem;
+        color: var(--rich-muted);
     }
 
-    .rich-timeline ol,
-    .rich-suggestions ul,
-    .rich-map-list {
+    /* ── Figure (Python-generated image) ─────────────────────── */
+    .rich-figure {
+        margin: 0;
+    }
+    .rich-figure img {
+        display: block;
+        width: 100%;
+        height: auto;
+        max-height: 520px;
+        object-fit: contain;
+        background: #fff;
+        border: 1px solid var(--rich-border);
+        border-radius: var(--radius-lg);
+    }
+    .rich-figure figcaption {
+        margin: 6px 0 0;
+        font-size: 0.78rem;
+        color: var(--rich-muted);
+    }
+    .rich-figure-empty {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        height: 140px;
+        font-size: 0.82rem;
+        color: var(--rich-muted);
+        background: var(--rich-surface);
+        border: 1px dashed var(--rich-border);
+        border-radius: var(--radius-lg);
+    }
+
+    /* ── Timeline ────────────────────────────────────────────── */
+    .rich-rail {
+        position: relative;
         margin: 0;
         padding: 0;
         list-style: none;
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
     }
-    .rich-map-list {
-        padding-left: 1.25rem;
-        list-style: decimal;
-        font-size: 0.85rem;
-    }
-    .rich-timeline li {
+    .rich-rail > li {
+        position: relative;
         display: flex;
-        flex-direction: column;
-        align-items: flex-start;
+        gap: 12px;
+        padding-bottom: 6px;
+    }
+    .rich-rail > li:not(:last-child)::before {
+        content: "";
+        position: absolute;
+        left: 15px;
+        top: 34px;
+        bottom: -2px;
+        width: 2px;
+        background: linear-gradient(to bottom, var(--rich-accent-soft), var(--rich-border));
+    }
+    .rich-node {
+        z-index: 1;
+        flex: none;
+        display: grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        margin-top: 4px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--rich-accent);
+        background: var(--rich-accent-soft);
+        border: 1px solid color-mix(in srgb, var(--rich-accent) 45%, transparent);
+        border-radius: var(--radius-xl);
+        transition:
+            background 0.15s,
+            color 0.15s;
+    }
+    .rich-node-small {
+        width: 22px;
+        height: 22px;
+        margin: 0;
+        font-size: 0.7rem;
+        border-radius: var(--radius-lg);
+    }
+    .rich-rail > li[data-selected="true"] .rich-node {
+        color: #fff;
+        background: var(--rich-accent);
+    }
+    .rich-rail-card {
+        flex: 1;
+        min-width: 0;
     }
     .rich-timeline-row {
         display: flex;
+        flex-direction: column;
+        gap: 3px;
         width: 100%;
-        gap: 10px;
-        padding: 8px;
+        padding: 8px 10px;
         text-align: left;
         color: inherit;
         background: transparent;
         border: 1px solid transparent;
-        border-radius: var(--radius-md);
+        border-radius: var(--radius-lg);
         cursor: pointer;
+        transition:
+            background 0.15s,
+            border-color 0.15s;
     }
     .rich-timeline-row:hover,
-    .rich-timeline li[data-selected="true"] .rich-timeline-row {
-        background: var(--openui-highlight-subtle);
-        border-color: var(--openui-border-default);
+    .rich-rail > li[data-selected="true"] .rich-timeline-row {
+        background: var(--rich-surface);
+        border-color: var(--rich-border);
     }
-    .rich-step,
-    .rich-marker {
-        flex: none;
-        display: grid;
-        place-items: center;
-        width: 22px;
-        height: 22px;
-        font-size: 0.7rem;
-        font-weight: 700;
-        color: #fff;
-        background: #6366f1;
-        border-radius: var(--radius-lg);
-    }
-    .rich-marker {
-        border: 2px solid #fff;
-        cursor: pointer;
-        box-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
-    }
-    .rich-marker[data-selected="true"] {
-        background: #f59e0b;
-        transform: scale(1.2);
-    }
-    .rich-timeline-body {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-        min-width: 0;
-        font-size: 0.85rem;
-        color: var(--openui-text-neutral-secondary);
+    .rich-timeline-row:focus-visible {
+        outline: 2px solid var(--rich-accent);
+        outline-offset: 1px;
     }
     .rich-timeline-head {
         display: flex;
         flex-wrap: wrap;
+        align-items: center;
         gap: 4px 10px;
-        align-items: baseline;
-        color: var(--openui-text-neutral-primary);
     }
-    .rich-timeline-head em {
+    .rich-timeline-head strong {
+        font-size: 0.95rem;
+        font-weight: 600;
+    }
+    .rich-pill {
+        padding: 1px 8px;
+        font-size: 0.72rem;
         font-style: normal;
-        font-size: 0.75rem;
-        color: var(--openui-text-neutral-secondary);
+        font-weight: 600;
+        color: var(--rich-accent);
+        background: var(--rich-accent-soft);
+        border-radius: var(--radius-xl);
+    }
+    .rich-desc {
+        font-size: 0.85rem;
+        line-height: 1.45;
+        color: var(--rich-muted);
+    }
+    .rich-category {
+        align-self: flex-start;
+        margin-top: 2px;
+        font-size: 0.68rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--rich-muted);
     }
     .rich-link {
-        margin-left: 40px;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        margin: 0 0 2px 10px;
         font-size: 0.75rem;
-        color: var(--openui-text-info-primary);
+        color: var(--openui-text-info-primary, var(--rich-accent));
+        text-decoration: none;
+    }
+    .rich-link:hover {
+        text-decoration: underline;
     }
 
-    .rich-map-head {
-        display: flex;
-        justify-content: space-between;
+    /* ── Shared controls ─────────────────────────────────────── */
+    .rich-button,
+    .rich-chips button {
+        display: inline-flex;
         align-items: center;
-    }
-    .rich-map-head button,
-    .rich-chips button,
-    .rich-suggestions button {
-        padding: 3px 10px;
+        gap: 5px;
+        padding: 4px 11px;
         font-size: 0.75rem;
+        font-weight: 600;
         color: inherit;
-        background: var(--openui-sunk);
-        border: 1px solid var(--openui-border-default);
-        border-radius: var(--radius-md);
+        background: var(--rich-surface);
+        border: 1px solid var(--rich-border);
+        border-radius: var(--radius-xl);
         cursor: pointer;
+        transition:
+            background 0.15s,
+            border-color 0.15s;
     }
-    .rich-chips button[aria-pressed="true"] {
-        background: var(--openui-highlight-strong);
-        border-color: var(--openui-border-interactive-selected);
+    .rich-button:hover,
+    .rich-chips button:hover {
+        border-color: color-mix(in srgb, var(--rich-accent) 55%, transparent);
     }
-    .rich-suggestions button:disabled {
-        opacity: 0.5;
+    .rich-button:focus-visible,
+    .rich-chips button:focus-visible {
+        outline: 2px solid var(--rich-accent);
+        outline-offset: 1px;
+    }
+    .rich-button-primary {
+        color: var(--rich-accent);
+        background: var(--rich-accent-soft);
+        border-color: color-mix(in srgb, var(--rich-accent) 40%, transparent);
+    }
+    .rich-button:disabled {
+        opacity: 0.45;
         cursor: not-allowed;
     }
     .rich-chips {
         display: flex;
         flex-wrap: wrap;
-        gap: 4px;
-        margin-bottom: 6px;
+        gap: 6px;
+        margin-bottom: 8px;
+    }
+    .rich-chips button[aria-pressed="true"] {
+        color: #fff;
+        background: var(--rich-accent);
+        border-color: var(--rich-accent);
+    }
+
+    /* ── Map ─────────────────────────────────────────────────── */
+    .rich-map-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    .rich-map-head .rich-section-title {
+        margin-bottom: 8px;
     }
     .rich-map-canvas {
-        height: 260px;
+        height: 280px;
         overflow: hidden;
-        border-radius: var(--radius-md);
-        border: 1px solid var(--openui-border-default);
-        background: var(--openui-sunk);
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--rich-border);
+        background: var(--rich-surface);
     }
     .rich-map[data-expanded="true"] .rich-map-canvas {
-        height: min(70vh, 520px);
+        height: min(70vh, 540px);
     }
     /* OpenFreeMap's positron style is light. The OpenUI theme is mounted in
        dark mode (openui-registration.tsx), so invert the base tiles; markers
@@ -207,14 +354,93 @@
     .rich-map-canvas .maplibregl-canvas {
         filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.95);
     }
-
-    .rich-suggestions li {
+    .rich-marker {
+        display: grid;
+        place-items: center;
+        width: 26px;
+        height: 26px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: #fff;
+        background: var(--rich-accent, #6366f1);
+        border: 2px solid #fff;
+        border-radius: var(--radius-xl);
+        box-shadow: 0 2px 6px rgb(0 0 0 / 0.55);
+        cursor: pointer;
+        transition: transform 0.15s;
+    }
+    .rich-marker[data-selected="true"] {
+        z-index: 2;
+        background: #f59e0b;
+        transform: scale(1.25);
+    }
+    .rich-map-list {
         display: flex;
-        justify-content: space-between;
+        flex-direction: column;
+        gap: 6px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+    .rich-map-list li {
+        display: flex;
         align-items: center;
         gap: 10px;
-        padding: 8px;
-        border: 1px solid var(--openui-border-default);
-        border-radius: var(--radius-md);
+        font-size: 0.88rem;
+    }
+    .rich-coords {
+        margin-left: auto;
+        font-size: 0.72rem;
+        font-variant-numeric: tabular-nums;
+        color: var(--rich-muted);
+    }
+
+    /* ── Suggestions ─────────────────────────────────────────── */
+    .rich-suggestions ul {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+        gap: 8px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+    .rich-suggestions li {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px;
+        background: var(--rich-surface);
+        border: 1px solid var(--rich-border);
+        border-radius: var(--radius-lg);
+        transition: border-color 0.15s;
+    }
+    .rich-suggestions li:hover {
+        border-color: color-mix(in srgb, var(--rich-accent) 45%, transparent);
+    }
+    .rich-suggestion-icon {
+        flex: none;
+        display: grid;
+        place-items: center;
+        width: 36px;
+        height: 36px;
+        color: var(--rich-accent);
+        background: var(--rich-accent-soft);
+        border-radius: var(--radius-lg);
+    }
+    .rich-suggestion-body {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+    }
+    .rich-suggestion-body strong {
+        font-size: 0.88rem;
+        font-weight: 600;
+    }
+    .rich-suggestion-body span {
+        font-size: 0.78rem;
+        line-height: 1.35;
+        color: var(--rich-muted);
     }
 }

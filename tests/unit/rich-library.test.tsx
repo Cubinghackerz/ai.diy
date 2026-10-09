@@ -2,6 +2,7 @@ import { Renderer, type OpenUIError } from "@openuidev/react-lang";
 import { render, screen, waitFor } from "@testing-library/react";
 import { Fragment, StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ThreadBusyContext } from "~/components/generative-ui/busy";
 import { ExternalMediaContext } from "~/components/generative-ui/media";
 import {
     RICH_EXAMPLE_PROGRAM,
@@ -155,6 +156,29 @@ describe("rich components", () => {
         vi.stubGlobal("fetch", fetchMock);
         const { container } = renderProgram(true, [], true);
         await waitFor(() => expect(container.querySelectorAll("img").length).toBe(3));
+    });
+
+    it("disables suggestion buttons while the thread is busy", () => {
+        vi.stubGlobal("fetch", vi.fn());
+        render(
+            <ThreadBusyContext.Provider value={true}>
+                <Renderer
+                    response={RICH_EXAMPLE_PROGRAM}
+                    library={richLibrary}
+                    isStreaming={false}
+                />
+            </ThreadBusyContext.Provider>,
+        );
+        expect((screen.getByRole("button", { name: "Add" }) as HTMLButtonElement).disabled).toBe(
+            true,
+        );
+    });
+
+    it("renders icon tiles, never emoji, for items without photos", () => {
+        vi.stubGlobal("fetch", vi.fn());
+        const { container } = renderProgram(false);
+        expect(container.querySelectorAll(".rich-node svg").length).toBeGreaterThan(0);
+        expect(container.textContent).not.toMatch(/\p{Extended_Pictographic}/u);
     });
 
     it("falls back to the text list and tears the map down on unmount", async () => {

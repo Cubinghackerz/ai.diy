@@ -166,7 +166,7 @@ export function normalizeToolAccess(
 export function toolAccessKeyForTool(toolName: string): ToolAccessKey | null {
     const name = toolName.trim().toLowerCase();
     if (!name) return null;
-    if (name.endsWith("_openui")) return "generativeUi";
+    if (name.endsWith("_openui") || name.endsWith("_jsonrender")) return "generativeUi";
     if (name.startsWith("mcp_composio_")) return "composio";
     if (name.startsWith("mcp_")) return "mcp";
     if (name.startsWith("knowledge_")) return "knowledge";

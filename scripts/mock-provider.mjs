@@ -6,14 +6,55 @@ const model = "gpt-4o-mini";
 const RICH_PROGRAM = [
     'root = Card([head, gallery, timeline, map, more, FollowUpBlock(["Make it cheaper"])])',
     'head = RichHeading("Mock plan", "Rendered from a tool call")',
-    'a = RichItem("a", "Colosseum", "09:00", "Book ahead.", "🏛️", "Landmark", 41.8902, 12.4922, "Colosseum")',
-    'b = RichItem("b", "Roman Forum", "11:30", "Next door.", "🏺", "Landmark", 41.8925, 12.4853, "Roman Forum")',
+    'a = RichItem("a", "Colosseum", "09:00", "Book ahead.", "landmark", "Landmark", 41.8902, 12.4922, "Colosseum")',
+    'b = RichItem("b", "Roman Forum", "11:30", "Next door.", "museum", "Landmark", 41.8925, 12.4853, "Roman Forum")',
     'gallery = RichGallery([a, b], "Photos")',
     'timeline = RichTimeline([a, b], "The day")',
     'map = RichMap([a, b], "Route", true)',
-    'c = RichItem("c", "Borghese Gallery", null, "Reserve a slot.", "🖼️")',
+    'c = RichItem("c", "Borghese Gallery", null, "Reserve a slot.", "art")',
     'more = RichSuggestions([c], "More ideas")',
 ].join("\n");
+
+// A json-render spec, passed to present_jsonrender as a JSON string.
+const JSON_SPEC = JSON.stringify({
+    root: "main",
+    elements: {
+        main: { type: "Stack", props: {}, children: ["h", "m1", "m2", "bars", "tbl", "ask"] },
+        h: { type: "Heading", props: { text: "Mock dashboard" }, children: [] },
+        m1: {
+            type: "Metric",
+            props: { label: "Revenue", value: "$48k", change: "+8%", trend: "up" },
+            children: [],
+        },
+        m2: {
+            type: "Metric",
+            props: { label: "Churn", value: "1.8%", change: "-0.3%", trend: "down" },
+            children: [],
+        },
+        bars: {
+            type: "BarChart",
+            props: { title: "Signups", labels: ["Mon", "Tue", "Wed"], values: [4, 9, 6] },
+            children: [],
+        },
+        tbl: {
+            type: "Table",
+            props: {
+                columns: ["Plan", "Users"],
+                rows: [
+                    ["Free", "120"],
+                    ["Pro", "34"],
+                ],
+            },
+            children: [],
+        },
+        ask: {
+            type: "Button",
+            props: { label: "Show by region" },
+            children: [],
+            on: { press: { action: "ask", params: { message: "mock-slow Show by region" } } },
+        },
+    },
+});
 
 // One unsafe and one safe link button, to prove only http(s) targets open.
 const RICH_LINKS_PROGRAM = [
@@ -94,26 +135,28 @@ const server = createServer(async (request, response) => {
     };
     send({ role: "assistant", content: "" });
     const promptText = JSON.stringify(prompt);
-    const richProgram = promptText.includes("mock-rich-links")
-        ? RICH_LINKS_PROGRAM
+    const richCall = promptText.includes("mock-rich-links")
+        ? { name: "present_openui", args: { ui: RICH_LINKS_PROGRAM } }
         : promptText.includes("mock-rich")
-          ? RICH_PROGRAM
-          : null;
+          ? { name: "present_openui", args: { ui: RICH_PROGRAM } }
+          : promptText.includes("mock-json")
+            ? { name: "present_jsonrender", args: { spec: JSON_SPEC } }
+            : null;
     const offeredTools = new Set((body.tools ?? []).map((tool) => tool.function?.name));
     // A tool result already follows the call: end the turn with text, never loop.
     const continuation = body.messages?.at(-1)?.role === "tool";
-    if (richProgram && offeredTools.has("present_openui") && !continuation) {
+    if (richCall && offeredTools.has(richCall.name) && !continuation) {
         send({
             tool_calls: [
                 {
                     index: 0,
-                    id: "call_mock_rich",
+                    id: `call_mock_${id}`,
                     type: "function",
-                    function: { name: "present_openui", arguments: "" },
+                    function: { name: richCall.name, arguments: "" },
                 },
             ],
         });
-        const args = JSON.stringify({ ui: richProgram });
+        const args = JSON.stringify(richCall.args);
         for (const part of args.match(/[\s\S]{1,48}/g)) {
             if (response.destroyed) return;
             send({ tool_calls: [{ index: 0, function: { arguments: part } }] });

@@ -56,6 +56,32 @@ describe("handleOpenUIAction", () => {
         }
         expect(open).not.toHaveBeenCalled();
     });
+    it("does not queue follow-ups while a reply is running, but still opens safe links", () => {
+        const append = vi.fn();
+        const open = vi.fn();
+        const sinks = { open, append };
+        handleOpenUIAction(
+            {
+                type: BuiltinActionType.ContinueConversation,
+                params: {},
+                ...base,
+                humanFriendlyMessage: "Next",
+            } as never,
+            sinks,
+            { busy: true },
+        );
+        expect(append).not.toHaveBeenCalled();
+        handleOpenUIAction(
+            {
+                type: BuiltinActionType.OpenUrl,
+                params: { url: "https://example.com" },
+                ...base,
+            } as never,
+            sinks,
+            { busy: true },
+        );
+        expect(open).toHaveBeenCalledTimes(1);
+    });
     it("continues the conversation for follow-ups", () => {
         const append = vi.fn();
         handleOpenUIAction(

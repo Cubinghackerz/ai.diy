@@ -21,6 +21,8 @@ import { createOpenUIIntegration } from "@openuidev/assistant-ui";
 import type { ReactNode } from "react";
 import { richLibrary, richPromptOptions } from "~/components/generative-ui/library";
 import { ExternalMediaContext } from "~/components/generative-ui/media";
+import { buildJsonRenderInstructions } from "~/components/generative-ui/json/instructions";
+import { createJsonRenderToolkit } from "~/components/generative-ui/json/present";
 import { createSafeOpenUIToolkit } from "~/components/generative-ui/safe-openui";
 import { SectionBoundary } from "~/components/ui/SectionBoundary";
 import { useSettings } from "~/lib/providers/SettingsProvider";
@@ -39,8 +41,12 @@ const integration = createOpenUIIntegration({
 
 const safeToolkit = createSafeOpenUIToolkit({ library: richLibrary, theme });
 
+// json-render adds dashboards, charts and Python figures under the same
+// Generative UI switch; its instructions are short because the catalog is fixed.
+const jsonRenderInstructions = buildJsonRenderInstructions();
+
 const toolkit: Toolkit = Object.fromEntries(
-  Object.entries(safeToolkit).map(([name, definition]) => {
+  Object.entries({ ...safeToolkit, ...createJsonRenderToolkit() }).map(([name, definition]) => {
     const Render = definition.render;
     if (!Render) return [name, definition];
     const render: typeof Render = (props) => (
@@ -54,6 +60,7 @@ const toolkit: Toolkit = Object.fromEntries(
 
 function OpenUIInstructions() {
   useAssistantInstructions(integration.instructions);
+  useAssistantInstructions(jsonRenderInstructions);
   return null;
 }
 
