@@ -90,6 +90,24 @@ describe("createChatGPTFetch", () => {
         expect(await response.text()).toBe("late chunk");
     });
 
+    it("keeps the caller's abort wired to the /responses stream after headers arrive", async () => {
+        let upstream: AbortSignal | null | undefined;
+        const base = vi.fn<typeof fetch>(async (_input, init) => {
+            upstream = init?.signal;
+            return new Response("streaming");
+        });
+        const caller = new AbortController();
+        await createChatGPTFetch(base, tiny)("https://chatgpt.com/backend-api/codex/responses", {
+            method: "POST",
+            signal: caller.signal,
+        });
+        expect(upstream?.aborted).toBe(false);
+
+        // "Stop generating" / a closed tab must still stop the upstream stream.
+        caller.abort();
+        expect(upstream?.aborted).toBe(true);
+    });
+
     it("fails a /responses call that never sends headers", async () => {
         vi.spyOn(console, "warn").mockImplementation(() => undefined);
         const error = await createChatGPTFetch(hanging(), tiny)(

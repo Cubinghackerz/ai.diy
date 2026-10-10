@@ -90,6 +90,11 @@ async function withDeadline(
 /**
  * For `/responses` only the wait for response headers is bounded; once they
  * arrive the timer is cleared and the stream runs for as long as it needs.
+ *
+ * The timer aborts its own controller, and the request gets that signal combined
+ * with the caller's. The caller's abort (Stop generating, a closed tab) therefore
+ * stays wired to the upstream stream for its whole life instead of only until
+ * the headers arrive.
  */
 async function withHeadersDeadline(
     base: typeof fetch,
@@ -97,28 +102,23 @@ async function withHeadersDeadline(
     init: RequestInit | undefined,
     ms: number,
 ): Promise<Response> {
-    const controller = new AbortController();
-    const onCallerAbort = () => controller.abort(abortReason(init!.signal!));
-    if (init?.signal) {
-        if (init.signal.aborted) onCallerAbort();
-        else init.signal.addEventListener("abort", onCallerAbort, { once: true });
-    }
+    const deadline = new AbortController();
+    const signal = init?.signal ? AbortSignal.any([init.signal, deadline.signal]) : deadline.signal;
     let timedOut = false;
     const timer = setTimeout(() => {
         timedOut = true;
-        controller.abort(new DOMException("Timed out", "TimeoutError"));
+        deadline.abort(new DOMException("Timed out", "TimeoutError"));
     }, ms);
     try {
-        return await base(input, { ...init, signal: controller.signal });
+        return await base(input, { ...init, signal });
     } catch (error) {
-        if (timedOut) {
+        if (timedOut && !init?.signal?.aborted) {
             console.warn(`[chatgpt] OpenAI responses request sent no headers within ${ms} ms`);
             throw networkError("OpenAI did not start answering in time.", error);
         }
         throw error;
     } finally {
         clearTimeout(timer);
-        init?.signal?.removeEventListener("abort", onCallerAbort);
     }
 }
 
