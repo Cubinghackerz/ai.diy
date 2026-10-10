@@ -5,20 +5,30 @@
  * chats, a complete spec as JSON text) and renders them with a fixed catalog;
  * completed lines render while the call is still streaming. The model can
  * only pick catalog components; there is no HTML, script, URL, or image-source
- * prop, and the one action (`ask`) just sends a chat message, and only when
- * the thread is idle.
+ * prop. Interactivity is data only: a spec may declare a few primitive state
+ * values that sliders, toggles and selects change and that props read with
+ * `$state`. The actions are `ask` (sends a chat message, only when the thread
+ * is idle) and `reset` (restores the card's starting values).
  */
 
 import { defineToolkit, useAui, useAuiState, type Toolkit } from "@assistant-ui/react";
-import { validateSpec } from "@json-render/core";
+import { createStateStore, validateSpec } from "@json-render/core";
 import { JSONUIProvider, Renderer } from "@json-render/react";
 import { Warning } from "@phosphor-icons/react";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod/v4";
 import { useChatGenerating } from "~/components/assistant-ui/ChatSessionContext";
 import { ThreadBusyContext } from "../busy";
 import { jsonCatalog } from "./catalog";
 import { registry } from "./registry";
+import {
+    cleanState,
+    cleanStateValue,
+    findStateExpressions,
+    isStateKey,
+    setAt,
+    type SpecState,
+} from "./state";
 
 import { JSONRENDER_TOOL_NAME } from "./tool-name";
 const MAX_SPEC_CHARS = 60_000;
@@ -31,10 +41,13 @@ export type SafeSpec = {
             type: string;
             props: Record<string, unknown>;
             children: string[];
-            on?: { press: { action: "ask"; params: { message: string } } };
+            on?: PressBinding;
         }
     >;
+    state: SpecState;
 };
+
+type PressBinding = { press: { action: "ask"; params: { message: string } } | { action: "reset" } };
 
 export type ParsedSpec =
     { ok: true; spec: SafeSpec } | { ok: false; reason: "incomplete" | "invalid" };
@@ -43,15 +56,70 @@ const MAX_ELEMENTS = 200;
 const MAX_DEPTH = 12;
 const INVALID = { ok: false, reason: "invalid" } as const;
 
-/** Only `on.press = ask({ message })` is allowed; anything else is dropped. */
-function askBinding(
-    value: unknown,
-): { press: { action: "ask"; params: { message: string } } } | undefined {
+/** Only `on.press = ask({ message })` or `reset` is allowed; anything else is dropped. */
+function pressBinding(value: unknown): PressBinding | undefined {
     const press = (value as { press?: { action?: unknown; params?: { message?: unknown } } } | null)
         ?.press;
+    if (press?.action === "reset") return { press: { action: "reset" } };
     if (press?.action !== "ask" || typeof press.params?.message !== "string") return undefined;
     const message = press.params.message.trim().slice(0, 300);
     return message ? { press: { action: "ask", params: { message } } } : undefined;
+}
+
+const BIND_PROP: Record<string, string> = { Slider: "bind", Toggle: "bind", Select: "bind" };
+/** A `$state` expression sits where a number, string or boolean is expected; try each. */
+const PLACEHOLDERS = [0, "", true] as const;
+const samePath = (issue: PropertyKey[], path: (string | number)[]) =>
+    issue.length === path.length &&
+    issue.every((part, index) => String(part) === String(path[index]));
+
+/**
+ * Validates props against the component's own schema while allowing
+ * `{ "$state": "/name" }` wherever a primitive is expected. The schema is
+ * checked with a placeholder of the right type in each expression's place, then
+ * the expressions are put back.
+ */
+function validateProps(
+    schema: {
+        safeParse: (value: unknown) => {
+            success: boolean;
+            data?: unknown;
+            error?: { issues: { path: PropertyKey[] }[] };
+        };
+    },
+    raw: unknown,
+): { ok: true; props: Record<string, unknown>; keys: string[] } | { ok: false } {
+    const expressions = findStateExpressions(raw);
+    if (expressions.length > 50) return { ok: false };
+    const chosen: unknown[] = expressions.map(() => 0);
+    const build = () =>
+        expressions.reduce<unknown>(
+            (acc, item, index) => setAt(acc, item.path, chosen[index]),
+            raw,
+        );
+    expressions.forEach((item, index) => {
+        for (const placeholder of PLACEHOLDERS) {
+            chosen[index] = placeholder;
+            const result = schema.safeParse(build());
+            if (
+                result.success ||
+                !result.error?.issues.some((issue) => samePath(issue.path, item.path))
+            ) {
+                return;
+            }
+        }
+    });
+    const result = schema.safeParse(build());
+    if (!result.success) return { ok: false };
+    const props = expressions.reduce<unknown>(
+        (acc, item) => setAt(acc, item.path, { $state: `/${item.key}` }),
+        result.data,
+    );
+    return {
+        ok: true,
+        props: props as Record<string, unknown>,
+        keys: expressions.map((item) => item.key),
+    };
 }
 
 /** True when every path from the root stays within the depth limit and never revisits a key. */
@@ -75,7 +143,12 @@ type Built = ParsedSpec;
  * part of a dashboard can render while the rest arrives.
  * Never throws.
  */
-function buildSpec(root: unknown, raw: unknown, progressive: boolean): Built {
+function buildSpec(
+    root: unknown,
+    raw: unknown,
+    progressive: boolean,
+    state: SpecState = {},
+): Built {
     try {
         if (typeof root !== "string" || !raw || typeof raw !== "object" || Array.isArray(raw)) {
             return progressive ? { ok: false, reason: "incomplete" } : INVALID;
@@ -106,11 +179,28 @@ function buildSpec(root: unknown, raw: unknown, progressive: boolean): Built {
                           record.type as keyof typeof jsonCatalog.data.components
                       ]
                     : null;
-            const props = def?.props.safeParse(record.props ?? {});
+            const props = def ? validateProps(def.props, record.props ?? {}) : null;
             const children = record?.children ?? [];
+            // Controls change a named state value: it must exist, and a Select's value must be one of its options.
+            const bound = BIND_PROP[record?.type as string];
+            const boundKey = props?.ok && bound ? String(props.props[bound]) : null;
+            const stateOk =
+                progressive ||
+                ((props?.ok ? props.keys : []).every((name) => Object.hasOwn(state, name)) &&
+                    (boundKey === null ||
+                        (Object.hasOwn(state, boundKey) &&
+                            (record.type !== "Select" ||
+                                (props?.ok &&
+                                    (props.props.options as string[]).includes(
+                                        state[boundKey] as string,
+                                    ))) &&
+                            (record.type !== "Slider" ||
+                                (props?.ok &&
+                                    (props.props.min as number) < (props.props.max as number))))));
             const wellFormed =
                 def &&
-                props?.success &&
+                props?.ok &&
+                stateOk &&
                 Array.isArray(children) &&
                 children.every((child) => typeof child === "string");
             if (!wellFormed) {
@@ -119,10 +209,10 @@ function buildSpec(root: unknown, raw: unknown, progressive: boolean): Built {
             }
             elements[key] = {
                 type: record.type as string,
-                props: props.data as Record<string, unknown>,
+                props: props.props,
                 children: children as string[],
-                ...(record.type === "Button" && askBinding(record.on)
-                    ? { on: askBinding(record.on) }
+                ...(record.type === "Button" && pressBinding(record.on)
+                    ? { on: pressBinding(record.on) }
                     : {}),
             };
         }
@@ -134,9 +224,9 @@ function buildSpec(root: unknown, raw: unknown, progressive: boolean): Built {
             }
             if (!Object.hasOwn(elements, root)) return { ok: false, reason: "incomplete" };
         }
-        const spec: SafeSpec = { root, elements };
+        const spec: SafeSpec = { root, elements, state };
         // Dangling references and a missing root are caught by json-render itself.
-        if (!validateSpec(spec as never).valid) return INVALID;
+        if (!validateSpec({ root, elements } as never).valid) return INVALID;
         if (!isAcyclic(spec)) return INVALID;
         return { ok: true, spec };
     } catch {
@@ -156,7 +246,12 @@ export function parseJsonRenderSpec(text: unknown): ParsedSpec {
     }
     const root = (parsed as { root?: unknown } | null)?.root;
     const elements = (parsed as { elements?: unknown } | null)?.elements;
-    return buildSpec(root, elements, false);
+    return buildSpec(
+        root,
+        elements,
+        false,
+        cleanState((parsed as { state?: unknown } | null)?.state),
+    );
 }
 
 const MAX_PATCHES = 500;
@@ -171,9 +266,14 @@ const isElementKey = (key: string) => ELEMENT_KEY.test(key) && key !== "__proto_
  * honoured; every other path or operation, and any line that is not complete
  * JSON yet, is ignored. Uses a Map so keys such as __proto__ stay inert.
  */
-function applyPatchLines(lines: unknown[]): { root: unknown; elements: Record<string, unknown> } {
+function applyPatchLines(lines: unknown[]): {
+    root: unknown;
+    elements: Record<string, unknown>;
+    state: SpecState;
+} {
     let root: unknown;
     const elements = new Map<string, unknown>();
+    const state = new Map<string, unknown>();
     let total = 0;
     for (const line of lines.slice(0, MAX_PATCHES)) {
         if (typeof line !== "string") continue;
@@ -192,12 +292,32 @@ function applyPatchLines(lines: unknown[]): { root: unknown; elements: Record<st
             if (op !== "remove") root = patch.value;
             continue;
         }
+        if (patch.path === "/state") {
+            // A whole state object, for example the first line of an interactive spec.
+            if (op === "remove") state.clear();
+            else
+                for (const [name, item] of Object.entries(cleanState(patch.value)))
+                    state.set(name, item);
+            continue;
+        }
+        const stateMatch = /^\/state\/([^/]+)$/.exec(patch.path);
+        if (stateMatch) {
+            if (!isStateKey(stateMatch[1])) continue;
+            const value = cleanStateValue(patch.value);
+            if (op === "remove") state.delete(stateMatch[1]);
+            else if (value !== undefined) state.set(stateMatch[1], value);
+            continue;
+        }
         const match = /^\/elements\/([^/]+)$/.exec(patch.path);
         if (!match || !isElementKey(match[1])) continue;
         if (op === "remove") elements.delete(match[1]);
         else elements.set(match[1], patch.value);
     }
-    return { root, elements: Object.fromEntries(elements) };
+    return {
+        root,
+        elements: Object.fromEntries(elements),
+        state: cleanState(Object.fromEntries(state)),
+    };
 }
 
 /**
@@ -206,8 +326,8 @@ function applyPatchLines(lines: unknown[]): { root: unknown; elements: Record<st
  */
 export function parseJsonRenderPatches(patches: unknown, streaming: boolean): ParsedSpec {
     if (!Array.isArray(patches) || patches.length === 0) return { ok: false, reason: "incomplete" };
-    const { root, elements } = applyPatchLines(patches);
-    return buildSpec(root, elements, streaming);
+    const { root, elements, state } = applyPatchLines(patches);
+    return buildSpec(root, elements, streaming, state);
 }
 
 export function JsonRenderContent({
@@ -242,6 +362,18 @@ export function JsonRenderContent({
     useEffect(() => {
         onAskRef.current = onAsk;
     });
+    // Card state lives in one store for the card's lifetime; values that arrive later
+    // in a streamed spec are added without overwriting what the user already moved.
+    const startState = parsed.ok ? parsed.spec.state : null;
+    const startRef = useRef<SpecState>(startState ?? {});
+    const [store] = useState(() => createStateStore({ ...(startState ?? {}) }));
+    useEffect(() => {
+        if (!startState) return;
+        startRef.current = startState;
+        for (const [name, value] of Object.entries(startState)) {
+            if (store.get(`/${name}`) === undefined) store.set(`/${name}`, value);
+        }
+    }, [startState, store]);
     const handlers = useMemo(
         () => ({
             ask: (params: Record<string, unknown>) => {
@@ -249,8 +381,18 @@ export function JsonRenderContent({
                     onAskRef.current(params.message.trim().slice(0, 300));
                 }
             },
+            reset: () => {
+                store.update(
+                    Object.fromEntries(
+                        Object.entries(startRef.current).map(([name, value]) => [
+                            `/${name}`,
+                            value,
+                        ]),
+                    ),
+                );
+            },
         }),
-        [],
+        [store],
     );
     if (!parsed.ok) {
         if (running || parsed.reason === "incomplete") {
@@ -270,7 +412,7 @@ export function JsonRenderContent({
     return (
         <ThreadBusyContext.Provider value={busy}>
             <div className="jr-root" data-busy={busy}>
-                <JSONUIProvider registry={registry} initialState={{}} handlers={handlers}>
+                <JSONUIProvider registry={registry} store={store} handlers={handlers}>
                     <Renderer spec={parsed.spec as never} registry={registry} loading={running} />
                 </JSONUIProvider>
             </div>

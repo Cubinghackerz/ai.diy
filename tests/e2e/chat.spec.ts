@@ -453,3 +453,94 @@ test("OpenUI and json-render calls can follow each other in one conversation", a
     await expect(page.getByRole("heading", { name: "Mock plan" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Show by region" })).toBeEnabled();
 });
+
+test("skill tools and instructions are offered next to generative UI tools", async ({ page }) => {
+    await seed(page, true);
+    await send(page, "mock-toollist what can you do");
+    const reply = page.getByText(/^Tools: /);
+    await expect(reply).toBeVisible();
+    for (const name of [
+        "present_openui",
+        "present_jsonrender",
+        "find_skill",
+        "use_skill",
+        "save_skill",
+    ]) {
+        await expect(reply).toContainText(name);
+    }
+    await expect(reply).toContainText("Skills instructions: yes.");
+});
+
+test("the assistant saves a researched skill, reads it back in full, and the user can remove it", async ({
+    page,
+}) => {
+    await seed(page, false);
+    await send(page, "mock-skill-save make me a skill");
+    const card = page.getByText("Saved skill", { exact: true });
+    await expect(card).toBeVisible();
+    await expect(page.getByText("Status Digest", { exact: true })).toBeVisible();
+    // The card shows exactly what was saved: https sources only.
+    await page.getByText("View skill", { exact: true }).click();
+    const preview = page.locator("details pre");
+    await expect(preview).toContainText("https://example.com/guide");
+    await expect(preview).not.toContainText("javascript:");
+
+    // It survives a reload and the model can read all of it.
+    await page.reload();
+    await expect(page.getByRole("textbox", { name: "Message input", exact: true })).toBeVisible({
+        timeout: 30_000,
+    });
+    await send(page, "mock-skill-use apply it");
+    await expect(page.getByText("Skill loaded: yes.")).toBeVisible();
+
+    // Built-in catalog skills are readable and findable without installing.
+    await send(page, "mock-skill-find look for one");
+    await expect(page.getByText("Found: code-review.")).toBeVisible();
+
+    await page.getByRole("button", { name: "Remove" }).click();
+    await expect(page.getByText("Skill removed", { exact: true })).toBeVisible();
+    await send(page, "mock-skill-use once more");
+    await expect(page.getByText("Skill loaded: no.")).toBeVisible();
+});
+
+test("json-render explainer: sliders rotate a real 3D scene and reset restores it", async ({
+    page,
+}) => {
+    const thirdParty: string[] = [];
+    page.on("request", (request) => {
+        const url = new URL(request.url());
+        if (!["localhost", "127.0.0.1"].includes(url.hostname) && url.protocol.startsWith("http")) {
+            thirdParty.push(request.url());
+        }
+    });
+    await seed(page, true, false);
+    // The app itself fetches fonts and the model catalog; only requests the card makes count.
+    const beforeCard = thirdParty.length;
+    await send(page, "mock-explain how do pitch roll yaw work");
+
+    const scene = page.locator(".jr-scene");
+    await expect(page.getByRole("heading", { name: "Pitch, roll and yaw" })).toBeVisible();
+    // three.js loads on demand and draws into a real WebGL canvas.
+    await expect(scene).toHaveAttribute("data-status", "ready", { timeout: 20_000 });
+    await expect(scene.locator("canvas")).toBeVisible();
+    await expect(scene).toHaveAttribute("data-rotation", "0,0,0");
+
+    await page.getByRole("slider", { name: "Pitch" }).fill("30");
+    await expect(scene).toHaveAttribute("data-rotation", "30,0,0");
+    await expect(page.getByText("30", { exact: true }).first()).toBeVisible();
+    await page.getByRole("slider", { name: "Roll" }).fill("-20");
+    await expect(scene).toHaveAttribute("data-rotation", "30,0,-20");
+
+    // Dragging the canvas orbits the camera without changing the model's state.
+    const box = (await scene.locator("canvas").boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 60, box.y + box.height / 2 + 20, { steps: 5 });
+    await page.mouse.up();
+    await expect(scene).toHaveAttribute("data-rotation", "30,0,-20");
+
+    await page.getByRole("button", { name: "Reset all" }).click();
+    await expect(scene).toHaveAttribute("data-rotation", "0,0,0");
+    await expect(page.getByRole("slider", { name: "Pitch" })).toHaveValue("0");
+    expect(thirdParty.slice(beforeCard)).toEqual([]);
+});

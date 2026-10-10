@@ -780,6 +780,7 @@ export async function action({ request }: ActionFunctionArgs) {
                       body.tools,
                       new Set(Object.keys(tools)),
                       toolAccess.generativeUi,
+                      toolAccess.skills && body.toolSettings?.skillsEnabled !== false,
                   );
         for (const [name, def] of Object.entries(clientTools)) {
             tools[name] = def;

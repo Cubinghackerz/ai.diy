@@ -62,6 +62,72 @@ const JSON_PATCHES = [
     ),
 ];
 
+// An interactive explainer: three sliders rotate a small plane built from parts.
+const EXPLAIN_ELEMENTS = {
+    main: {
+        type: "Stack",
+        props: {},
+        children: ["title", "plane", "pitch", "roll", "yaw", "readout", "reset"],
+    },
+    title: { type: "Heading", props: { text: "Pitch, roll and yaw" }, children: [] },
+    plane: {
+        type: "Scene3D",
+        props: {
+            axes: true,
+            caption: "A small plane",
+            rotation: [{ $state: "/pitch" }, { $state: "/yaw" }, { $state: "/roll" }],
+            parts: [
+                { shape: "cylinder", size: [0.5, 3, 0.5], rotation: [90, 0, 0], color: "white" },
+                { shape: "box", size: [3.2, 0.08, 0.7], color: "blue" },
+                { shape: "box", size: [1, 0.06, 0.4], position: [0, 0, -1.3], color: "blue" },
+            ],
+        },
+        children: [],
+    },
+    pitch: {
+        type: "Slider",
+        props: { label: "Pitch", bind: "pitch", min: -45, max: 45, step: 1, unit: "°" },
+        children: [],
+    },
+    roll: {
+        type: "Slider",
+        props: { label: "Roll", bind: "roll", min: -45, max: 45, step: 1, unit: "°" },
+        children: [],
+    },
+    yaw: {
+        type: "Slider",
+        props: { label: "Yaw", bind: "yaw", min: -45, max: 45, step: 1, unit: "°" },
+        children: [],
+    },
+    readout: {
+        type: "Metric",
+        props: { label: "Pitch now", value: { $state: "/pitch" } },
+        children: [],
+    },
+    reset: {
+        type: "Button",
+        props: { label: "Reset all" },
+        children: [],
+        on: { press: { action: "reset" } },
+    },
+};
+const EXPLAIN_PATCHES = [
+    JSON.stringify({ op: "add", path: "/state", value: { pitch: 0, roll: 0, yaw: 0 } }),
+    JSON.stringify({ op: "add", path: "/root", value: "main" }),
+    ...Object.entries(EXPLAIN_ELEMENTS).map(([key, value]) =>
+        JSON.stringify({ op: "add", path: `/elements/${key}`, value }),
+    ),
+];
+
+// Adaptive skills: a skill the "assistant" researched, with one unsafe source.
+const MOCK_SKILL = {
+    name: "status-digest",
+    description: "Turn raw weekly notes into a project status digest.",
+    content:
+        "When to use: weekly status updates.\n1. Collect the notes. MARKER-STATUS-DIGEST\n2. Group them by project.\n3. Write three bullets per project.\nOutput: a markdown list. Check: every project appears.",
+    sources: ["https://example.com/guide", "javascript:alert(1)"],
+};
+
 // One unsafe and one safe link button, to prove only http(s) targets open.
 const RICH_LINKS_PROGRAM = [
     "root = Card([Buttons([unsafe, safe])])",
@@ -147,7 +213,15 @@ const server = createServer(async (request, response) => {
           ? { name: "present_openui", args: { ui: RICH_PROGRAM } }
           : promptText.includes("mock-json")
             ? { name: "present_jsonrender", args: { patches: JSON_PATCHES } }
-            : null;
+            : promptText.includes("mock-explain")
+              ? { name: "present_jsonrender", args: { patches: EXPLAIN_PATCHES } }
+              : promptText.includes("mock-skill-save")
+                ? { name: "save_skill", args: MOCK_SKILL }
+                : promptText.includes("mock-skill-use")
+                  ? { name: "use_skill", args: { name: "status-digest" } }
+                  : promptText.includes("mock-skill-find")
+                    ? { name: "find_skill", args: { query: "code review" } }
+                    : null;
     // mock-json-slow streams in small, slow chunks so tests can see partial UI.
     const chunkDelay = promptText.includes("mock-json-slow") ? 120 : 10;
     const offeredTools = new Set((body.tools ?? []).map((tool) => tool.function?.name));
@@ -199,19 +273,32 @@ const server = createServer(async (request, response) => {
         return;
     }
     const hostile = promptText.includes("hostile-html");
-    const text = hostile
-        ? [
-              "Hostile reply delivered.",
-              "",
-              "<script>globalThis.__pwned = 1</script>",
-              "",
-              '<img src="http://127.0.0.1:18765/pixel?leak=conversation" alt="leak">',
-              "",
-              '<iframe src="http://127.0.0.1:18765/frame"></iframe>',
-              "",
-              "Math still works: $a^2$ and $$\\int x\\,dx$$",
-          ].join("\n")
-        : "Mock reply: your message arrived and streamed successfully.";
+    const toolResult = continuation
+        ? String(
+              typeof body.messages.at(-1).content === "string"
+                  ? body.messages.at(-1).content
+                  : JSON.stringify(body.messages.at(-1).content),
+          )
+        : "";
+    const text = promptText.includes("mock-toollist")
+        ? `Tools: ${[...offeredTools].sort().join(",")}. Skills instructions: ${JSON.stringify(body.messages).includes("Skills (find_skill") ? "yes" : "no"}.`
+        : continuation && promptText.includes("mock-skill-use")
+          ? `Skill loaded: ${toolResult.includes("MARKER-STATUS-DIGEST") ? "yes" : "no"}.`
+          : continuation && promptText.includes("mock-skill-find")
+            ? `Found: ${toolResult.includes("code-review") ? "code-review" : "nothing"}.`
+            : hostile
+              ? [
+                    "Hostile reply delivered.",
+                    "",
+                    "<script>globalThis.__pwned = 1</script>",
+                    "",
+                    '<img src="http://127.0.0.1:18765/pixel?leak=conversation" alt="leak">',
+                    "",
+                    '<iframe src="http://127.0.0.1:18765/frame"></iframe>',
+                    "",
+                    "Math still works: $a^2$ and $$\\int x\\,dx$$",
+                ].join("\n")
+              : "Mock reply: your message arrived and streamed successfully.";
     for (const content of text.match(/.{1,8}/g)) {
         if (response.destroyed) return;
         send({ content });

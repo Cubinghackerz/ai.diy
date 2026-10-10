@@ -11,6 +11,7 @@ import { ChatLifecycle } from "~/components/assistant-ui/ChatLifecycle";
 import { ChatErrorBanner } from "~/components/assistant-ui/ChatThreadSync";
 import { PreviewWorkspace } from "~/components/assistant-ui/PreviewWorkspace";
 import { ChatGPTRequestRefreshPrompt } from "~/components/settings/ChatGPTRequestRefreshPrompt";
+import { SkillToolsRegistration } from "~/components/assistant-ui/skill-tools";
 import { SubagentProvider } from "~/components/assistant-ui/subagents";
 import { Thread } from "~/components/assistant-ui/Thread";
 import { CanvasPanel } from "~/components/canvas/CanvasPanel";
@@ -283,7 +284,7 @@ function HomeInner() {
                 threadId={activeThreadId}
                 projectInstructions={activeProject?.instructions}
             >
-                {appShell}
+                <SkillToolsRegistration>{appShell}</SkillToolsRegistration>
             </AssistantRuntimeProvider>
         </SubagentProvider>
     );

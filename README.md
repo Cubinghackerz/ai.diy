@@ -103,6 +103,8 @@ Built-in slash commands force matching tools for the next send — including **`
 
 When a request asks for an npm-backed app or Node library, ai.diy activates **NPM Project**. The workflow stays inside a browser-native WebContainer: initialize a project, write its files, install exact public registry packages, run `build`, `dev`, `start`, `preview`, `test`, `lint`, `typecheck`, `check`, or `format`, then read or export the result. It does not depend on the Debian Node 10 CheerpX VM.
 
+**Adaptive skills.** With Skills on, the model sees a short list of your enabled skills and can call `find_skill` (search installed and built-in skills), `use_skill` (read one in full) and `save_skill` (save a new one it wrote, for example after researching it on the web). Saved skills appear in the chat as a card with their content and sources and a Remove button, and in **Settings → Skills**; the model cannot overwrite your own skills or built-in ones, and saves are capped at 25.
+
 Flagship starters include Deep Research, Code Review, GitHub Repository Analysis, PDF Analysis, Incident Investigator, and **General Task Solver** (understand → select skills → execute → verify → synthesize).
 
 Authoring guide for agents: [`.cursor/skills/ai-diy-skill-authoring/SKILL.md`](./.cursor/skills/ai-diy-skill-authoring/SKILL.md).

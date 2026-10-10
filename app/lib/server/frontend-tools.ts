@@ -10,10 +10,14 @@ const FRONTEND_TOOL_NAME = /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/;
 const MAX_FRONTEND_TOOLS = 16;
 const MAX_FRONTEND_SCHEMA_CHARS = 32_768;
 const MAX_FRONTEND_DESCRIPTION_CHARS = 2_000;
-const MAX_MODEL_INSTRUCTIONS_CHARS = 64_000;
+// OpenUI + json-render instructions take about 62k; skills add up to about 5k.
+const MAX_MODEL_INSTRUCTIONS_CHARS = 70_000;
 
 /** OpenUI Lang and json-render frontend tools — gated by the Generative UI tool-access key. */
 const GENERATIVE_UI_TOOL_NAMES = new Set(["present_openui", "prompt_openui", "present_jsonrender"]);
+
+/** Adaptive-skill tools — gated by the Skills tool-access key. */
+const SKILL_TOOL_NAMES = new Set(["find_skill", "use_skill", "save_skill"]);
 
 /**
  * Sanitize client-forwarded tool schemas into no-execute `tool()` defs.
@@ -26,6 +30,7 @@ export function frontendToolsFromBody(
     raw: FrontendToolPayload | undefined,
     reservedNames: ReadonlySet<string>,
     generativeUiEnabled: boolean,
+    skillsEnabled = true,
 ): Record<string, Tool> {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
     const out: Record<string, Tool> = {};
@@ -33,6 +38,7 @@ export function frontendToolsFromBody(
         if (Object.keys(out).length >= MAX_FRONTEND_TOOLS) break;
         if (!FRONTEND_TOOL_NAME.test(name) || reservedNames.has(name)) continue;
         if (!generativeUiEnabled && GENERATIVE_UI_TOOL_NAMES.has(name)) continue;
+        if (!skillsEnabled && SKILL_TOOL_NAMES.has(name)) continue;
         if (!def || typeof def !== "object") continue;
         const parameters = def.parameters;
         if (!parameters || typeof parameters !== "object") continue;

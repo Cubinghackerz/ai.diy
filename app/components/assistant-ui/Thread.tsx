@@ -711,8 +711,10 @@ const ToolCallAtIndex: FC<{
   );
 };
 
+// Rendered inline in the message instead of the collapsed "Tool calls" disclosure.
 const isGenerativeUiTool = (toolName: string | undefined) =>
-  toolName !== undefined && toolAccessKeyForTool(toolName) === "generativeUi";
+  toolName !== undefined &&
+  (toolAccessKeyForTool(toolName) === "generativeUi" || toolName === "save_skill");
 
 const AssistantMessage: FC = () => {
   const { ToolFallback: ToolFallbackComponent = ToolFallback, ReasoningGroup } =

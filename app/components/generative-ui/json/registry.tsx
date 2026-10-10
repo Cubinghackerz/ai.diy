@@ -1,7 +1,15 @@
 "use client";
 
-import { defineRegistry } from "@json-render/react";
-import { useId, useState, Children, type KeyboardEvent, type ReactNode } from "react";
+import { defineRegistry, useStateStore, useStateValue } from "@json-render/react";
+import {
+    Children,
+    Suspense,
+    lazy,
+    useId,
+    useState,
+    type KeyboardEvent,
+    type ReactNode,
+} from "react";
 import {
     ArrowDown,
     ArrowUp,
@@ -17,6 +25,8 @@ import { usePythonImage } from "../python-image";
 import { RichIcon } from "../rich-icons";
 import { jsonCatalog } from "./catalog";
 import "./json.css";
+
+const SceneView = lazy(() => import("./scene"));
 
 const CHART_W = 320;
 const CHART_H = 140;
@@ -199,6 +209,107 @@ function DisclosureBlock({
     );
 }
 
+const finiteNumber = (value: unknown, fallback: number) =>
+    typeof value === "number" && Number.isFinite(value) ? value : fallback;
+
+function SliderControl({
+    label,
+    bind,
+    min,
+    max,
+    step,
+    unit,
+    hint,
+}: {
+    label: string;
+    bind: string;
+    min: number;
+    max: number;
+    step?: number;
+    unit?: string;
+    hint?: string;
+}) {
+    const id = useId();
+    const store = useStateStore();
+    const stored = useStateValue<unknown>(`/${bind}`);
+    const lo = Math.min(min, max);
+    const hi = Math.max(min, max);
+    const value = Math.min(hi, Math.max(lo, finiteNumber(stored, lo)));
+    return (
+        <div className="jr-control">
+            <div className="jr-control-head">
+                <label htmlFor={id}>{label}</label>
+                <output htmlFor={id}>
+                    {Math.round(value * 100) / 100}
+                    {unit ?? ""}
+                </output>
+            </div>
+            <input
+                id={id}
+                type="range"
+                min={lo}
+                max={hi}
+                step={step ?? (hi - lo) / 100}
+                value={value}
+                onChange={(event) => store.set(`/${bind}`, Number(event.target.value))}
+            />
+            {hint ? <p className="jr-control-hint">{hint}</p> : null}
+        </div>
+    );
+}
+
+function ToggleControl({ label, bind }: { label: string; bind: string }) {
+    const store = useStateStore();
+    const on = useStateValue<unknown>(`/${bind}`) === true;
+    return (
+        <button
+            type="button"
+            role="switch"
+            aria-checked={on}
+            className="jr-switch"
+            onClick={() => store.set(`/${bind}`, !on)}
+        >
+            <span className="jr-switch-track" aria-hidden>
+                <span />
+            </span>
+            {label}
+        </button>
+    );
+}
+
+function SelectControl({
+    label,
+    bind,
+    options,
+}: {
+    label: string;
+    bind: string;
+    options: string[];
+}) {
+    const store = useStateStore();
+    const current = useStateValue<unknown>(`/${bind}`);
+    return (
+        <div className="jr-control" role="radiogroup" aria-label={label}>
+            <div className="jr-control-head">
+                <span>{label}</span>
+            </div>
+            <div className="jr-segments">
+                {options.map((option) => (
+                    <button
+                        key={option}
+                        type="button"
+                        role="radio"
+                        aria-checked={current === option}
+                        onClick={() => store.set(`/${bind}`, option)}
+                    >
+                        {option}
+                    </button>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 export const { registry } = defineRegistry(jsonCatalog, {
     components: {
         Stack: ({ props, children }) => (
@@ -233,6 +344,32 @@ export const { registry } = defineRegistry(jsonCatalog, {
             <DisclosureBlock title={props.title} open={props.open}>
                 {children}
             </DisclosureBlock>
+        ),
+        Slider: ({ props }) => (
+            <SliderControl
+                label={props.label}
+                bind={props.bind}
+                min={props.min}
+                max={props.max}
+                step={props.step}
+                unit={props.unit}
+                hint={props.hint}
+            />
+        ),
+        Toggle: ({ props }) => <ToggleControl label={props.label} bind={props.bind} />,
+        Select: ({ props }) => (
+            <SelectControl label={props.label} bind={props.bind} options={props.options} />
+        ),
+        Scene3D: ({ props }) => (
+            <Suspense fallback={<div className="jr-loading">Loading 3D view…</div>}>
+                <SceneView
+                    parts={props.parts}
+                    rotation={props.rotation ?? [0, 0, 0]}
+                    axes={props.axes === true}
+                    height={props.height ?? "md"}
+                    caption={props.caption}
+                />
+            </Suspense>
         ),
         Heading: ({ props }) => {
             const Tag = props.level === "1" ? "h2" : props.level === "3" ? "h4" : "h3";
@@ -356,5 +493,5 @@ export const { registry } = defineRegistry(jsonCatalog, {
         ),
     },
     // Replaced at render time by the thread-aware handler; see JsonRenderContent.
-    actions: { ask: async () => {} },
+    actions: { ask: async () => {}, reset: async () => {} },
 });

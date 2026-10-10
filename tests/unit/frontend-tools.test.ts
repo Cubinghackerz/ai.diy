@@ -31,6 +31,21 @@ describe("frontend tool boundaries", () => {
         ).toBe(false);
         expect(toolAccessAllows(normalizeToolAccess(undefined), "present_jsonrender")).toBe(true);
     });
+    it("gates the skill tools with the Skills switch and keeps them executor-free", () => {
+        const tools = {
+            find_skill: definition,
+            use_skill: definition,
+            save_skill: definition,
+        };
+        expect(frontendToolsFromBody(tools, new Set(), true, false)).toEqual({});
+        const allowed = frontendToolsFromBody(tools, new Set(), false, true);
+        expect(Object.keys(allowed).sort()).toEqual(["find_skill", "save_skill", "use_skill"]);
+        expect(allowed.save_skill.execute).toBeUndefined();
+        // Existing callers that do not pass the argument keep the tools.
+        expect(frontendToolsFromBody(tools, new Set(), false).use_skill).toBeDefined();
+        expect(toolAccessAllows(normalizeToolAccess({ skills: false }), "save_skill")).toBe(false);
+        expect(toolAccessAllows(normalizeToolAccess(undefined), "use_skill")).toBe(true);
+    });
     it("never shadows server tools", () => {
         expect(
             frontendToolsFromBody({ web_search: definition }, new Set(["web_search"]), true),
@@ -52,6 +67,6 @@ describe("frontend tool boundaries", () => {
     it("bounds supplemental instructions and removes controls", () => {
         expect(sanitizeModelInstructions(null)).toBe("");
         expect(sanitizeModelInstructions("a" + String.fromCharCode(0) + "b\n")).toBe("ab");
-        expect(sanitizeModelInstructions("x".repeat(70_000))).toHaveLength(64_000);
+        expect(sanitizeModelInstructions("x".repeat(80_000))).toHaveLength(70_000);
     });
 });

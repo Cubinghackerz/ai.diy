@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { jsonCatalog } from "~/components/generative-ui/json/catalog";
 import {
     JSONRENDER_EXAMPLE_PATCHES,
+    JSONRENDER_INTERACTIVE_PATCHES,
     buildJsonRenderInstructions,
     catalogComponentLines,
 } from "~/components/generative-ui/json/instructions";
@@ -303,6 +304,271 @@ describe("json-render tabs and disclosure", () => {
     });
 });
 
+const bind = (name: string) => ({ $state: `/${name}` });
+
+describe("json-render interactive state", () => {
+    const withState = (state: unknown, elements: Record<string, unknown>) => [
+        add("/state", state),
+        add("/root", "main"),
+        ...Object.entries(elements).map(([key, value]) => add(`/elements/${key}`, value)),
+    ];
+
+    it("accepts the interactive example embedded in the instructions", () => {
+        const result = parseJsonRenderPatches(JSONRENDER_INTERACTIVE_PATCHES, false);
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.spec.state).toEqual({ pitch: 0, roll: 0 });
+        expect(result.spec.elements.reset.on).toEqual({ press: { action: "reset" } });
+        // The bound rotation entries keep their expressions for the renderer.
+        expect(result.spec.elements.plane.props.rotation).toEqual([bind("pitch"), 0, bind("roll")]);
+    });
+    it("keeps only primitive, flat, bounded state", () => {
+        const result = parseJsonRenderPatches(
+            [
+                ...withState(
+                    {
+                        a: 1,
+                        b: "x".repeat(500),
+                        c: true,
+                        d: { nested: 1 },
+                        e: [1],
+                        f: null,
+                        g: Number.POSITIVE_INFINITY,
+                        "bad key": 1,
+                        ["__proto__"]: 1,
+                    },
+                    { main: node("Text", { text: "hi" }) },
+                ),
+                add("/state/h", 5),
+                add("/state/deep/x", 5),
+                add("/state/i", { no: 1 }),
+            ],
+            false,
+        );
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(Object.keys(result.spec.state).sort()).toEqual(["a", "b", "c", "h"]);
+        expect((result.spec.state.b as string).length).toBe(200);
+        const many = Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`k${i}`, i]));
+        const capped = parseJsonRenderPatches(
+            withState(many, { main: node("Text", { text: "hi" }) }),
+            false,
+        );
+        expect(capped.ok && Object.keys(capped.spec.state)).toHaveLength(40);
+    });
+    it("allows $state only where a primitive is expected, and only the plain form", () => {
+        const ok = (props: unknown, type = "Text") =>
+            parseJsonRenderPatches(
+                withState({ x: 1, name: "n" }, { main: node(type, props) }),
+                false,
+            ).ok;
+        expect(ok({ text: bind("name") })).toBe(true);
+        expect(ok({ label: "Users", value: bind("x") }, "Metric")).toBe(true);
+        expect(ok({ label: "p", value: bind("x") }, "Progress")).toBe(true);
+        // Not a primitive position (enum), not the plain form, or not a flat key.
+        expect(ok({ text: "t", tone: bind("name") }, "Badge")).toBe(false);
+        expect(ok({ text: { $cond: { $state: "/x" }, $then: "a", $else: "b" } })).toBe(false);
+        expect(ok({ text: { $bindState: "/x" } })).toBe(false);
+        expect(ok({ text: { $computed: "x" } })).toBe(false);
+        expect(ok({ text: { $state: "/x/y" } })).toBe(false);
+        expect(ok({ text: { $state: "/__proto__" } })).toBe(false);
+        expect(ok({ text: { $state: "x" } })).toBe(false);
+        expect(ok({ text: { $state: "/x", extra: 1 } })).toBe(false);
+    });
+    it("requires bound names to exist once the spec is complete, but not while streaming", () => {
+        const lines = [
+            add("/root", "main"),
+            add("/elements/main", node("Text", { text: bind("later") })),
+        ];
+        expect(parseJsonRenderPatches(lines, false)).toEqual({ ok: false, reason: "invalid" });
+        expect(parseJsonRenderPatches(lines, true).ok).toBe(true);
+    });
+    it("validates controls: existing state name, min below max, select value among options", () => {
+        const slider = (props: Record<string, unknown>, state: unknown = { v: 5 }) =>
+            parseJsonRenderPatches(
+                withState(state, { main: node("Slider", { label: "L", ...props }) }),
+                false,
+            ).ok;
+        expect(slider({ bind: "v", min: 0, max: 10 })).toBe(true);
+        expect(slider({ bind: "missing", min: 0, max: 10 })).toBe(false);
+        expect(slider({ bind: "v", min: 10, max: 0 })).toBe(false);
+        expect(slider({ bind: "v", min: 0, max: 5000 })).toBe(false);
+        expect(slider({ bind: "not a key", min: 0, max: 10 })).toBe(false);
+        const select = (value: unknown) =>
+            parseJsonRenderPatches(
+                withState(
+                    { mode: value },
+                    { main: node("Select", { label: "M", bind: "mode", options: ["a", "b"] }) },
+                ),
+                false,
+            ).ok;
+        expect(select("a")).toBe(true);
+        expect(select("zzz")).toBe(false);
+    });
+    it("accepts only ask and reset as button actions", () => {
+        const on = (action: unknown) => {
+            const result = parseJsonRenderPatches(
+                [
+                    add("/root", "main"),
+                    add("/elements/main", {
+                        ...node("Button", { label: "Go" }),
+                        on: { press: action },
+                    }),
+                ],
+                false,
+            );
+            return result.ok ? result.spec.elements.main.on : "invalid";
+        };
+        expect(on({ action: "reset" })).toEqual({ press: { action: "reset" } });
+        expect(on({ action: "setState", params: { statePath: "/x", value: 1 } })).toBeUndefined();
+        expect(on({ action: "navigate" })).toBeUndefined();
+    });
+    it("reads the legacy single-document state too", () => {
+        const result = parseJsonRenderSpec(
+            JSON.stringify({
+                root: "main",
+                state: { n: 3 },
+                elements: { main: { type: "Text", props: { text: bind("n") }, children: [] } },
+            }),
+        );
+        expect(result.ok && result.spec.state).toEqual({ n: 3 });
+    });
+});
+
+describe("json-render interactive rendering", () => {
+    const content = (lines: string[], extra: Record<string, unknown> = {}) => (
+        <JsonRenderContent
+            patches={lines}
+            running={false}
+            busy={false}
+            onAsk={vi.fn()}
+            {...extra}
+        />
+    );
+
+    it("moves a slider and every prop bound to it follows", () => {
+        render(
+            content([
+                add("/state", { n: 3 }),
+                add("/root", "main"),
+                add("/elements/main", node("Stack", {}, ["s", "t", "m"])),
+                add(
+                    "/elements/s",
+                    node("Slider", { label: "Count", bind: "n", min: 0, max: 10, step: 1 }),
+                ),
+                add("/elements/t", node("Text", { text: bind("n") })),
+                add("/elements/m", node("Metric", { label: "Doubled", value: bind("n") })),
+            ]),
+        );
+        const slider = screen.getByRole("slider", { name: "Count" }) as HTMLInputElement;
+        expect(slider.value).toBe("3");
+        fireEvent.change(slider, { target: { value: "7" } });
+        expect((screen.getByRole("slider", { name: "Count" }) as HTMLInputElement).value).toBe("7");
+        expect(screen.getAllByText("7").length).toBeGreaterThanOrEqual(2);
+    });
+    it("toggles a switch and picks a segment", () => {
+        render(
+            content([
+                add("/state", { on: false, mode: "a" }),
+                add("/root", "main"),
+                add("/elements/main", node("Stack", {}, ["t", "s", "v"])),
+                add("/elements/t", node("Toggle", { label: "Enabled", bind: "on" })),
+                add(
+                    "/elements/s",
+                    node("Select", { label: "Mode", bind: "mode", options: ["a", "b"] }),
+                ),
+                add("/elements/v", node("Text", { text: bind("mode") })),
+            ]),
+        );
+        const toggle = screen.getByRole("switch", { name: "Enabled" });
+        expect(toggle.getAttribute("aria-checked")).toBe("false");
+        fireEvent.click(toggle);
+        expect(screen.getByRole("switch", { name: "Enabled" }).getAttribute("aria-checked")).toBe(
+            "true",
+        );
+        fireEvent.click(screen.getByRole("radio", { name: "b" }));
+        expect(screen.getByRole("radio", { name: "b" }).getAttribute("aria-checked")).toBe("true");
+        expect(screen.getAllByText("b").length).toBeGreaterThanOrEqual(2);
+    });
+    it("resets controls to their starting values", async () => {
+        render(
+            content([
+                add("/state", { n: 2 }),
+                add("/root", "main"),
+                add("/elements/main", node("Stack", {}, ["s", "b"])),
+                add(
+                    "/elements/s",
+                    node("Slider", { label: "N", bind: "n", min: 0, max: 10, step: 1 }),
+                ),
+                add("/elements/b", {
+                    ...node("Button", { label: "Reset" }),
+                    on: { press: { action: "reset" } },
+                }),
+            ]),
+        );
+        fireEvent.change(screen.getByRole("slider", { name: "N" }), { target: { value: "9" } });
+        expect((screen.getByRole("slider", { name: "N" }) as HTMLInputElement).value).toBe("9");
+        fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+        await waitFor(() =>
+            expect((screen.getByRole("slider", { name: "N" }) as HTMLInputElement).value).toBe("2"),
+        );
+    });
+    it("keeps the user's slider value when more of the spec streams in", () => {
+        const first = [
+            add("/state", { n: 1 }),
+            add("/root", "main"),
+            add("/elements/main", node("Stack", {}, ["s"])),
+            add("/elements/s", node("Slider", { label: "N", bind: "n", min: 0, max: 10, step: 1 })),
+        ];
+        const view = render(
+            <JsonRenderContent patches={first} running={true} busy={false} onAsk={vi.fn()} />,
+        );
+        fireEvent.change(screen.getByRole("slider", { name: "N" }), { target: { value: "6" } });
+        view.rerender(
+            <JsonRenderContent
+                patches={[...first, add("/state/extra", 4)]}
+                running={true}
+                busy={false}
+                onAsk={vi.fn()}
+            />,
+        );
+        expect((screen.getByRole("slider", { name: "N" }) as HTMLInputElement).value).toBe("6");
+    });
+    it("shows a text fallback for 3D when WebGL is not available", async () => {
+        vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+        render(
+            content([
+                add("/state", { a: 10 }),
+                add("/root", "main"),
+                add(
+                    "/elements/main",
+                    node("Scene3D", {
+                        rotation: [bind("a"), 0, 0],
+                        parts: [{ shape: "box", size: [1, 1, 1] }],
+                        caption: "A box",
+                    }),
+                ),
+            ]),
+        );
+        expect(await screen.findByText(/needs WebGL/i, undefined, { timeout: 5000 })).toBeTruthy();
+    });
+    it("rejects scenes with too many or malformed parts", () => {
+        const scene = (parts: unknown) =>
+            parseJsonRenderPatches(
+                [add("/root", "main"), add("/elements/main", node("Scene3D", { parts }))],
+                false,
+            ).ok;
+        const box = { shape: "box", size: [1, 1, 1] };
+        expect(scene([box])).toBe(true);
+        expect(scene([])).toBe(false);
+        expect(scene(Array.from({ length: 61 }, () => box))).toBe(false);
+        expect(scene([{ shape: "mesh", size: [1, 1, 1] }])).toBe(false);
+        expect(scene([{ shape: "box", size: [1, 1] }])).toBe(false);
+        expect(scene([{ shape: "box", size: [1, 1, 1e9] }])).toBe(false);
+        expect(scene([{ shape: "box", size: [1, 1, 1], color: "#ff0000" }])).toBe(false);
+    });
+});
+
 describe("json-render content", () => {
     const content = JSON.stringify({
         root: "main",
@@ -383,7 +649,7 @@ describe("json-render instructions", () => {
         expect(lines).toHaveLength(Object.keys(jsonCatalog.data.components).length);
         const text = buildJsonRenderInstructions();
         expect(text).toContain("present_jsonrender");
-        expect(text.length).toBeLessThan(7_000);
+        expect(text.length).toBeLessThan(8_000);
     });
     it("together with the OpenUI prompt, fits the server's modelInstructions cap untruncated", () => {
         const combined = [

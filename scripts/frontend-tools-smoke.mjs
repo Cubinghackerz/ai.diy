@@ -65,10 +65,7 @@ const malformed = frontendToolsFromBody(
     new Set(),
     true,
 );
-check(
-    "malformed entries dropped",
-    Object.keys(malformed).length === 1 && "good_tool" in malformed,
-);
+check("malformed entries dropped", Object.keys(malformed).length === 1 && "good_tool" in malformed);
 
 const oversized = frontendToolsFromBody(
     { big_schema: { parameters: { type: "object", pad: "x".repeat(40_000) } } },
@@ -89,9 +86,7 @@ check(
 );
 
 const capped = frontendToolsFromBody(
-    Object.fromEntries(
-        Array.from({ length: 40 }, (_, i) => [`tool_${i}`, genericTool]),
-    ),
+    Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`tool_${i}`, genericTool])),
     new Set(),
     true,
 );
@@ -99,13 +94,10 @@ check("tool count capped at 16", Object.keys(capped).length === 16);
 
 check("non-string instructions empty", sanitizeModelInstructions(42) === "");
 check(
-    "instructions capped at 64k",
-    sanitizeModelInstructions("z".repeat(70_000)).length === 64_000,
+    "instructions capped at 70k",
+    sanitizeModelInstructions("z".repeat(80_000)).length === 70_000,
 );
-check(
-    "instructions trimmed",
-    sanitizeModelInstructions("  hi  ") === "hi",
-);
+check("instructions trimmed", sanitizeModelInstructions("  hi  ") === "hi");
 check(
     "control chars stripped",
     sanitizeModelInstructions(`a${String.fromCharCode(1)}b${String.fromCharCode(0)}c`) === "abc",
