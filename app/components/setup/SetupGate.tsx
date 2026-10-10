@@ -2,7 +2,7 @@
  * First-run setup — TypingMind-style live key test, then unlock models.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { SearchableModelSelect } from "~/components/ui/ModelPicker";
@@ -26,7 +26,7 @@ import { ArrowRight, CheckCircle, Key, ShieldCheck, XCircle } from "@phosphor-ic
 import { LoaderIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { setThemeOverride } from "~/lib/theme-override";
-import { pickLatestChatGPTModel } from "~/lib/chatgpt-models";
+import { CHATGPT_SAFE_DEFAULT, preferDiscoveredChatGPTModel } from "~/lib/chatgpt-models";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { ToolAccessPicker } from "~/components/settings/ToolAccessPicker";
 
@@ -53,6 +53,12 @@ export function SetupGate() {
     const [testing, setTesting] = useState(false);
     const [verified, setVerified] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // ChatGPT: the account's live catalog is loading / could not be loaded.
+    const [discovering, setDiscovering] = useState(false);
+    const [modelsNote, setModelsNote] = useState<string | null>(null);
+    const [discoverTick, setDiscoverTick] = useState(0);
+    const chatRef = useRef(settings.chat);
+    chatRef.current = settings.chat;
 
     useEffect(() => {
         const root = document.documentElement;
@@ -89,16 +95,48 @@ export function SetupGate() {
         setError(null);
     }, [provider]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Signing out (or a lost session) must take the unlocked models with it.
+    useEffect(() => {
+        if (provider !== "chatgpt" || isAuthenticated || settings.setupComplete) return;
+        setVerified(false);
+        setDiscovering(false);
+        setModelsNote(null);
+        setModels([]);
+        setModel("");
+    }, [provider, isAuthenticated, settings.setupComplete]);
+
     useEffect(() => {
         if (!isAuthenticated || provider !== "chatgpt" || settings.setupComplete) return;
-        const chatGptModel =
-            settings.chat.model ||
-            pickLatestChatGPTModel((DEFAULT_MODELS.chatgpt ?? []).map((item) => item.id)) ||
-            "gpt-5.6-luna";
-        setModels(DEFAULT_MODELS.chatgpt ?? []);
-        setModel(chatGptModel);
-        setVerified(true);
-    }, [isAuthenticated, provider, settings.chat.model, settings.setupComplete]);
+        let cancelled = false;
+        // Ask the account what it can run instead of trusting the bundled list, which
+        // can name models this plan does not include (and misses newer ones).
+        const current = chatRef.current;
+        const preferred =
+            current.provider === "chatgpt" && current.model ? current.model : CHATGPT_SAFE_DEFAULT;
+        setDiscovering(true);
+        setVerified(false);
+        setModelsNote(null);
+        setError(null);
+        void testProviderKey({ provider: "chatgpt", apiKey: "" }).then((result) => {
+            if (cancelled) return;
+            setDiscovering(false);
+            if (result.ok && result.live) {
+                const ids = result.models.map((item) => item.id);
+                setModels(result.models);
+                setModel(preferDiscoveredChatGPTModel(preferred, ids) ?? ids[0] ?? preferred);
+            } else {
+                setModels(DEFAULT_MODELS.chatgpt ?? []);
+                setModel(preferred);
+                setModelsNote(
+                    "Couldn't load the models in your ChatGPT plan, so these are the standard ones and your plan may not include all of them.",
+                );
+            }
+            setVerified(true);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [isAuthenticated, provider, settings.setupComplete, discoverTick]);
 
     useEffect(() => {
         if (!grokAuthenticated || provider !== "grok" || settings.setupComplete) return;
@@ -146,13 +184,10 @@ export function SetupGate() {
 
     useEffect(() => {
         if (!loaded || !isAuthenticated || settings.setupComplete) return;
-        const model =
-            pickLatestChatGPTModel((DEFAULT_MODELS.chatgpt ?? []).map((item) => item.id)) ||
-            "gpt-5.6-luna";
         if (settings.chat.provider !== "chatgpt") {
             updateSettings({ chatgptLoginEnabled: true });
             updateProvider("chatgpt", { apiKey: "", enabled: true });
-            updateChat({ provider: "chatgpt", model });
+            updateChat({ provider: "chatgpt", model: CHATGPT_SAFE_DEFAULT });
             setProvider("chatgpt");
         }
     }, [
@@ -242,13 +277,17 @@ export function SetupGate() {
     ]);
 
     const handleChatGPTAuthenticated = useCallback(() => {
-        const chatGptModel =
-            pickLatestChatGPTModel((DEFAULT_MODELS.chatgpt ?? []).map((item) => item.id)) ||
-            DEFAULT_MODELS.chatgpt?.[0]?.id ||
-            "gpt-5.6-luna";
+        // The real model is chosen from the account's live catalog once it loads.
+        const current = chatRef.current;
         updateSettings({ chatgptLoginEnabled: true });
         updateProvider("chatgpt", { apiKey: "", enabled: true });
-        updateChat({ provider: "chatgpt", model: chatGptModel });
+        updateChat({
+            provider: "chatgpt",
+            model:
+                current.provider === "chatgpt" && current.model
+                    ? current.model
+                    : CHATGPT_SAFE_DEFAULT,
+        });
     }, [updateChat, updateProvider, updateSettings]);
     useOnChatGPTConnected(handleChatGPTAuthenticated);
 
@@ -399,7 +438,7 @@ export function SetupGate() {
                             <KimiSubscriptionSettings onConnected={handleKimiConnected} />
                         ) : null}
 
-                        <ChatGPTConnect />
+                        {provider === "chatgpt" ? <ChatGPTConnect /> : null}
 
                         {!local &&
                         provider !== "grok" &&
@@ -505,10 +544,33 @@ export function SetupGate() {
                                     value={model}
                                     onChange={setModel}
                                 />
-                                <p className="text-xs text-zinc-400">
-                                    Live test succeeded — choose a model to continue.
-                                </p>
+                                {modelsNote ? (
+                                    <p className="flex flex-wrap items-center gap-x-2 text-xs leading-relaxed text-amber-400">
+                                        <span>{modelsNote}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setDiscoverTick((tick) => tick + 1)}
+                                            className="rounded-[2px] underline underline-offset-2 outline-none hover:text-amber-300 focus-visible:ring-2 focus-visible:ring-white/40"
+                                        >
+                                            Retry
+                                        </button>
+                                    </p>
+                                ) : (
+                                    <p className="text-xs text-zinc-400">
+                                        {provider === "chatgpt"
+                                            ? "These are the models in your ChatGPT plan, newest first."
+                                            : "Live test succeeded — choose a model to continue."}
+                                    </p>
+                                )}
                             </div>
+                        ) : discovering ? (
+                            <p
+                                role="status"
+                                className="flex items-center gap-2 rounded-[2px] border border-dashed border-white/10 bg-white/[0.025] px-3.5 py-3 text-xs leading-relaxed text-zinc-400"
+                            >
+                                <LoaderIcon className="size-3.5 shrink-0 animate-spin [animation-duration:0.6s]" />
+                                Loading the models in your ChatGPT plan…
+                            </p>
                         ) : (
                             <p className="rounded-[2px] border border-dashed border-white/10 bg-white/[0.025] px-3.5 py-3 text-xs leading-relaxed text-zinc-400">
                                 {provider === "chatgpt"

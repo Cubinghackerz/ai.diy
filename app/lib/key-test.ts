@@ -86,8 +86,10 @@ export async function testProviderKey(options: {
 }): Promise<KeyTestResult> {
     const { provider, apiKey, baseUrl, headers, timeoutMs, maxRetries, authMode } = options;
     const key = apiKey.trim();
+    // Subscription providers sign in on the server; there is no key to paste.
+    const subscription = provider === "chatgpt" || provider === "grok" || provider === "kimi";
 
-    if (provider !== "grok" && provider !== "kimi" && !isLocalProvider(provider) && !key) {
+    if (!subscription && !isLocalProvider(provider) && !key) {
         return {
             ok: false,
             models: [],
@@ -98,14 +100,14 @@ export async function testProviderKey(options: {
         };
     }
 
-    if (provider !== "grok" && provider !== "kimi" && !isLocalProvider(provider) && !looksLikeApiKey(provider, key)) {
+    if (!subscription && !isLocalProvider(provider) && !looksLikeApiKey(provider, key)) {
         return {
             ok: false,
             models: [],
-            error: formatProviderError(
-                "Invalid API key format for this provider",
-                { provider, context: "setup" },
-            ),
+            error: formatProviderError("Invalid API key format for this provider", {
+                provider,
+                context: "setup",
+            }),
         };
     }
 
@@ -116,17 +118,16 @@ export async function testProviderKey(options: {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 provider,
-                    apiKey:
-                        provider === "grok" || provider === "kimi"
-                            ? ""
-                            : provider === "custom"
-                            ? key
-                            : key || localProviderKey(provider),
-                    baseUrl: baseUrl || undefined,
-                    headers,
-                    timeoutMs,
-                    maxRetries,
-                    authMode,
+                apiKey: subscription
+                    ? ""
+                    : provider === "custom"
+                      ? key
+                      : key || localProviderKey(provider),
+                baseUrl: baseUrl || undefined,
+                headers,
+                timeoutMs,
+                maxRetries,
+                authMode,
             }),
         });
         const data = (await res.json()) as {
@@ -143,10 +144,11 @@ export async function testProviderKey(options: {
                 models: [],
                 error:
                     data.error ||
-                    formatProviderError(
-                        `Provider rejected the key (HTTP ${res.status})`,
-                        { provider, status: res.status, context: "setup" },
-                    ),
+                    formatProviderError(`Provider rejected the key (HTTP ${res.status})`, {
+                        provider,
+                        status: res.status,
+                        context: "setup",
+                    }),
                 live: data.live,
                 latencyMs: Math.round(performance.now() - startedAt),
                 resolvedBaseUrl: data.resolvedBaseUrl,
@@ -154,9 +156,7 @@ export async function testProviderKey(options: {
         }
 
         const models = (
-            data.models && data.models.length > 0
-                ? data.models
-                : (DEFAULT_MODELS[provider] ?? [])
+            data.models && data.models.length > 0 ? data.models : (DEFAULT_MODELS[provider] ?? [])
         ).map((m) =>
             enrichModelInfo({
                 ...m,

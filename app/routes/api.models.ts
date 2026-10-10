@@ -6,17 +6,15 @@ import { isLocalProvider } from "~/lib/setup";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { corsPreflight, withCors } from "~/lib/server/cors";
 import { chatgptModelsFromSlugs } from "~/lib/chatgpt-models";
-import { getChatGPTHandler } from "~/lib/server/chatgpt-auth";
+import { readCookie } from "@opencoredev/loginwithchatgpt-server";
+import { CHATGPT_COOKIE_NAME, getChatGPTHandler } from "~/lib/server/chatgpt-auth";
+import { chatGPTModelCache } from "~/lib/server/chatgpt-model-cache";
 import {
     getGrokBuildSession,
     listGrokBuildModels,
     grokBuildProxyUrl,
 } from "~/lib/server/grok-build-auth";
-import {
-    getKimiSession,
-    listKimiModels,
-    kimiProxyUrl,
-} from "~/lib/server/kimi-auth";
+import { getKimiSession, listKimiModels, kimiProxyUrl } from "~/lib/server/kimi-auth";
 import {
     assertConfiguredHttpUrlResolved,
     normalizeProviderBaseUrl,
@@ -30,10 +28,7 @@ import {
 export function loader({ request }: LoaderFunctionArgs) {
     const preflight = corsPreflight(request);
     if (preflight) return preflight;
-    return withCors(
-        request,
-        new Response("Method Not Allowed", { status: 405 }),
-    );
+    return withCors(request, new Response("Method Not Allowed", { status: 405 }));
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -41,10 +36,7 @@ export async function action({ request }: ActionFunctionArgs) {
     if (preflight) return preflight;
 
     if (request.method !== "POST") {
-        return withCors(
-            request,
-            new Response("Method Not Allowed", { status: 405 }),
-        );
+        return withCors(request, new Response("Method Not Allowed", { status: 405 }));
     }
 
     let body: {
@@ -61,10 +53,7 @@ export async function action({ request }: ActionFunctionArgs) {
     } catch {
         return withCors(
             request,
-            Response.json(
-                { error: "Invalid JSON body", models: [] },
-                { status: 400 },
-            ),
+            Response.json({ error: "Invalid JSON body", models: [] }, { status: 400 }),
         );
     }
 
@@ -98,7 +87,21 @@ export async function action({ request }: ActionFunctionArgs) {
                     ),
                 );
             }
-            const slugs = (await auth.getModels(request)) ?? [];
+            const cacheKey = readCookie(request, CHATGPT_COOKIE_NAME) ?? "";
+            let slugs = chatGPTModelCache.fresh(cacheKey) ?? [];
+            let stale = false;
+            if (slugs.length === 0) {
+                try {
+                    slugs = (await auth.getModels(request)) ?? [];
+                    chatGPTModelCache.remember(cacheKey, slugs);
+                } catch (error) {
+                    // Keep showing the last live list rather than the bundled catalog.
+                    const previous = chatGPTModelCache.stale(cacheKey);
+                    if (!previous) throw error;
+                    slugs = previous;
+                    stale = true;
+                }
+            }
             const raw: ModelInfo[] =
                 slugs.length > 0
                     ? chatgptModelsFromSlugs(slugs)
@@ -111,6 +114,7 @@ export async function action({ request }: ActionFunctionArgs) {
                     {
                         models: raw,
                         live: slugs.length > 0,
+                        ...(stale ? { stale: true } : {}),
                         fetchedAt: Date.now(),
                         checks: {
                             keyValid: true,
@@ -320,9 +324,7 @@ export async function action({ request }: ActionFunctionArgs) {
     try {
         const provider = getProvider(body.provider);
         const live = await provider.listModels(
-            body.provider === "custom"
-                ? apiKey
-                : apiKey || localProviderKey(body.provider),
+            body.provider === "custom" ? apiKey : apiKey || localProviderKey(body.provider),
             baseUrl,
             body.headers,
             body.timeoutMs,

@@ -15,17 +15,24 @@ import {
     serializeCookie,
     type ChatGPTHandler,
 } from "@opencoredev/loginwithchatgpt-server";
-import { pickLatestChatGPTModel } from "~/lib/chatgpt-models";
+import { CHATGPT_SAFE_DEFAULT } from "~/lib/chatgpt-models";
+import { createChatGPTFetch } from "~/lib/server/chatgpt-fetch";
 import { createChatGPTGuard, type ChatGPTGuard } from "~/lib/server/chatgpt-guard";
 import {
     isServerlessRuntime,
     resolveChatGPTSecret,
     resolveChatGPTSessionStore,
 } from "~/lib/server/local-persist";
-import { DEFAULT_MODELS } from "~/lib/types";
 
-/** Stable Codex CLI version known to expose current GPT-5.6 / 5.5 catalog. */
-const DEFAULT_LWC_CLIENT_VERSION = "0.147.0";
+/**
+ * Codex CLI version reported to ChatGPT. The account's model catalog is gated
+ * on it: clients that report an old version are silently denied newer models
+ * (GPT-6 / GPT-6.1 Sol and Luna are only listed for recent releases), so a stale
+ * value is indistinguishable from "this plan has no new models". 0.162.1 was the
+ * current stable release on 2026-10-09. Raise it when new models stop appearing,
+ * or override per deployment with LWC_CLIENT_VERSION.
+ */
+export const DEFAULT_LWC_CLIENT_VERSION = "0.162.1";
 const DEFAULT_LWC_SESSION_DAYS = 180;
 export const CHATGPT_COOKIE_NAME = "lwc_session";
 
@@ -54,21 +61,6 @@ export function chatGPTPersistence(): "durable" | "ephemeral" {
     return redis && process.env.LWC_SECRET?.trim() ? "durable" : "ephemeral";
 }
 
-/** Logs why OpenAI refused a token request (status + OAuth error code only, never tokens). */
-const loggingFetch: typeof fetch = async (input, init) => {
-    const response = await fetch(input, init);
-    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    if (!response.ok && url.includes("/oauth/token")) {
-        const code = await response
-            .clone()
-            .json()
-            .then((body: { error?: unknown }) => (typeof body?.error === "string" ? body.error : undefined))
-            .catch(() => undefined);
-        console.warn(`[chatgpt] OpenAI token endpoint answered ${response.status}${code ? ` (${code})` : ""}`);
-    }
-    return response;
-};
-
 function getRawHandler(): ChatGPTHandler {
     if (rawHandler) return rawHandler;
 
@@ -79,21 +71,19 @@ function getRawHandler(): ChatGPTHandler {
         .map((origin) => origin.trim())
         .filter(Boolean);
 
-    const clientVersion =
-        process.env.LWC_CLIENT_VERSION?.trim() || DEFAULT_LWC_CLIENT_VERSION;
+    const clientVersion = process.env.LWC_CLIENT_VERSION?.trim() || DEFAULT_LWC_CLIENT_VERSION;
 
     rawHandler = createChatGPTHandler({
         secret,
-        fetch: loggingFetch,
+        fetch: createChatGPTFetch(),
         sessionStore: resolveChatGPTSessionStore("chatgpt-sessions.json"),
         sessionTtlMs: resolveSessionTtlMs(),
         cookieName: CHATGPT_COOKIE_NAME,
         basePath: "/api/chatgpt",
         clientVersion,
-        // Fallback only. Live /models still returns the account catalog, ranked newest-first.
-        defaultModel:
-            pickLatestChatGPTModel((DEFAULT_MODELS.chatgpt ?? []).map((model) => model.id)) ||
-            "gpt-5.6-luna",
+        // Only used if a request omits `model` (ours never do). Live /models still
+        // returns the account's catalog, ranked newest-first.
+        defaultModel: CHATGPT_SAFE_DEFAULT,
         allowedOrigins: allowedOrigins.length ? allowedOrigins : undefined,
         responsesProxy: {
             // Unset allowedModels → any model the signed-in account can use.
@@ -129,9 +119,7 @@ export function getChatGPTHandler(): ChatGPTHandler {
 }
 
 /** Renews an authenticated browser cookie without changing its signed value. */
-export async function refreshChatGPTSessionCookie(
-    request: Request,
-): Promise<string | undefined> {
+export async function refreshChatGPTSessionCookie(request: Request): Promise<string | undefined> {
     const signed = readCookie(request, CHATGPT_COOKIE_NAME);
     if (!signed) return undefined;
 
@@ -139,10 +127,7 @@ export async function refreshChatGPTSessionCookie(
     if (session.status !== "authenticated") return undefined;
 
     const url = new URL(request.url);
-    const forwardedProtocol = request.headers
-        .get("x-forwarded-proto")
-        ?.split(",", 1)[0]
-        ?.trim();
+    const forwardedProtocol = request.headers.get("x-forwarded-proto")?.split(",", 1)[0]?.trim();
     return serializeCookie(CHATGPT_COOKIE_NAME, signed, {
         path: "/",
         httpOnly: true,

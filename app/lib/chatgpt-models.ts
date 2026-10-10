@@ -9,10 +9,19 @@
 import { enrichModelInfo } from "~/lib/model-capabilities";
 import type { ModelInfo } from "~/lib/types";
 
+/**
+ * The model used until the account's live catalog says what it can run. It is
+ * the long-standing default that every ChatGPT plan (including Free and Go) has
+ * had; a newer id taken from the bundled fallback list could be one the signed-in
+ * account is not entitled to.
+ */
+export const CHATGPT_SAFE_DEFAULT = "gpt-5.6-luna";
+
 /** Previous auto-selected default. Upgrade only this id when a newer series appears. */
-export const CHATGPT_STALE_DEFAULTS = ["gpt-5.6-luna"] as const;
+export const CHATGPT_STALE_DEFAULTS = [CHATGPT_SAFE_DEFAULT] as const;
 
 const VARIANT_RANK: Array<[RegExp, number]> = [
+    [/(?:^|-)astra$/, -1],
     [/(?:^|-)(?:luna|sol|terra)$/, 0],
     [/(?:^|-)pro$/, 1],
     [/(?:^|-)(?:mini|nano)$/, 4],
@@ -55,9 +64,7 @@ export function compareChatGPTSlugs(a: string, b: string): number {
 
 /** Sort account-discovered model slugs with the newest GPT series first. */
 export function sortChatGPTModelSlugs(slugs: string[]): string[] {
-    return [...new Set(slugs.map((slug) => slug.trim()).filter(Boolean))].sort(
-        compareChatGPTSlugs,
-    );
+    return [...new Set(slugs.map((slug) => slug.trim()).filter(Boolean))].sort(compareChatGPTSlugs);
 }
 
 export function formatChatGPTModelName(slug: string): string {

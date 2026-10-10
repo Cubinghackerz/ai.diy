@@ -12,6 +12,7 @@ const vite = await createServer({
 const models = await vite.ssrLoadModule(path.join(root, "app/lib/chatgpt-models.ts"));
 const skills = await vite.ssrLoadModule(path.join(root, "app/lib/skill-command.ts"));
 const {
+    CHATGPT_SAFE_DEFAULT,
     compareChatGPTSlugs,
     formatChatGPTModelName,
     pickLatestChatGPTModel,
@@ -62,7 +63,40 @@ check(
     "missing id falls through to latest",
     preferDiscoveredChatGPTModel("gpt-retired", ["gpt-6", "gpt-5.6"]) === "gpt-6",
 );
-check("name formats series and codename", formatChatGPTModelName("gpt-6.1-luna") === "GPT-6.1 Luna");
+check(
+    "name formats series and codename",
+    formatChatGPTModelName("gpt-6.1-luna") === "GPT-6.1 Luna",
+);
+
+check("astra leads its own version", compareChatGPTSlugs("gpt-6-astra", "gpt-6-sol") < 0);
+check("gpt-6.1 sol outranks gpt-6 astra", compareChatGPTSlugs("gpt-6.1-sol", "gpt-6-astra") < 0);
+check(
+    "live GPT-6 catalog picks the newest chat model",
+    pickLatestChatGPTModel(["gpt-6-luna", "gpt-6.1-sol", "gpt-6-sol", "gpt-5.6-luna"]) ===
+        "gpt-6.1-sol",
+);
+check(
+    "stale default is only upgraded from a catalog that has something newer",
+    preferDiscoveredChatGPTModel(CHATGPT_SAFE_DEFAULT, ["gpt-5.6-luna", "gpt-5.5"]) ===
+        CHATGPT_SAFE_DEFAULT,
+);
+check("safe default is a long-standing model id", CHATGPT_SAFE_DEFAULT === "gpt-5.6-luna");
+
+const types = await vite.ssrLoadModule(path.join(root, "app/lib/types.ts"));
+const fallbackIds = (types.DEFAULT_MODELS.chatgpt ?? []).map((model) => model.id);
+check(
+    "bundled fallback lists the newest series first",
+    sortChatGPTModelSlugs(fallbackIds)[0] === fallbackIds[0],
+    fallbackIds.slice(0, 4).join(","),
+);
+
+const auth = await vite.ssrLoadModule(path.join(root, "app/lib/server/chatgpt-auth.ts"));
+const [, minor, patch] = auth.DEFAULT_LWC_CLIENT_VERSION.split(".").map(Number);
+check(
+    "default Codex client version is recent enough to list GPT-6.x (>= 0.159.0)",
+    minor > 159 || (minor === 159 && patch >= 0),
+    auth.DEFAULT_LWC_CLIENT_VERSION,
+);
 
 check("finance intent: earnings", detectFinanceIntent("What did NVDA report in earnings?"));
 check("finance intent: mortgage", detectFinanceIntent("Compare this mortgage rate to last year"));
