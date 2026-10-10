@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ChatGPTMark } from "@opencoredev/loginwithchatgpt-react";
 import {
     ArrowSquareOut,
@@ -18,12 +18,8 @@ import {
     DialogFooter,
     DialogTitle,
 } from "~/components/ui/dialog";
-import {
-    formatCountdown,
-    formatPlan,
-    secondsUntil,
-    splitDeviceCode,
-} from "~/lib/chatgpt-errors";
+import { formatCountdown, formatPlan, secondsUntil, splitDeviceCode } from "~/lib/chatgpt-errors";
+import { formatChatGPTModelName, pickLatestChatGPTModel } from "~/lib/chatgpt-models";
 import {
     useChatGPTSession,
     type ChatGPTSessionStatus,
@@ -83,9 +79,7 @@ export function ChatGPTConnect({ className }: { className?: string }) {
     const { status } = session;
     const connected = status === "authenticated";
 
-    const subtitle = connected
-        ? (session.user?.email ?? "Connected")
-        : SUBTITLES[status];
+    const subtitle = connected ? (session.user?.email ?? "Connected") : SUBTITLES[status];
 
     let action: ReactNode = null;
     if (status === "unauthenticated" || status === "expired") {
@@ -96,11 +90,23 @@ export function ChatGPTConnect({ className }: { className?: string }) {
             </PillButton>
         );
     } else if (status === "starting") {
+        // Cancel stays available: a slow or stalled request must never trap the user here.
         action = (
-            <PillButton disabled>
-                <Spinner />
-                Connecting…
-            </PillButton>
+            <>
+                <PillButton disabled>
+                    <Spinner />
+                    Connecting…
+                </PillButton>
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className={cn("h-9 rounded-[2px] px-3", FOCUS)}
+                    onClick={session.cancel}
+                >
+                    Cancel
+                </Button>
+            </>
         );
     } else if (status === "error") {
         action = (
@@ -157,8 +163,8 @@ export function ChatGPTConnect({ className }: { className?: string }) {
 
             {status === "expired" ? (
                 <p className="mt-3 text-xs leading-relaxed text-amber-600 dark:text-amber-400">
-                    ChatGPT signed this workspace out (the session expired or was revoked). Reconnect to
-                    keep using your plan.
+                    ChatGPT signed this workspace out (the session expired or was revoked).
+                    Reconnect to keep using your plan.
                 </p>
             ) : null}
 
@@ -201,7 +207,10 @@ function DeviceCodePanel() {
                 type="button"
                 onClick={() => void session.copyCode()}
                 aria-label={`Sign-in code ${session.userCode}. Activate to copy.`}
-                className={cn("mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg", FOCUS)}
+                className={cn(
+                    "mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg",
+                    FOCUS,
+                )}
             >
                 {groups.map((group, g) => (
                     <span key={g} className="flex items-center gap-3">
@@ -238,11 +247,7 @@ function DeviceCodePanel() {
                     className={cn("h-9 rounded-[2px] px-3", FOCUS)}
                     onClick={() => void session.copyCode()}
                 >
-                    {session.copied ? (
-                        <Check size={14} weight="bold" />
-                    ) : (
-                        <Copy size={14} />
-                    )}
+                    {session.copied ? <Check size={14} weight="bold" /> : <Copy size={14} />}
                     {session.copied ? "Copied" : "Copy code"}
                 </Button>
                 <Button
@@ -274,6 +279,10 @@ function DeviceCodePanel() {
                 <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
                     Your browser blocked the sign-in window. Use Open OpenAI.
                 </p>
+            ) : session.copyFailed ? (
+                <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                    Couldn&apos;t copy automatically. Select the code above and copy it by hand.
+                </p>
             ) : session.copied ? (
                 <p className="mt-2 text-xs text-muted-foreground">
                     Code copied. Paste it on OpenAI.
@@ -287,7 +296,17 @@ function ConnectedDetails() {
     const session = useChatGPTSession();
     const plan = formatPlan(session.user?.plan);
     const isFree = /free/i.test(session.user?.plan ?? "");
-    const { verify } = session;
+    const { verify, verifyConnection } = session;
+    const newest = verify.slugs ? pickLatestChatGPTModel(verify.slugs) : undefined;
+
+    // Check once per page load, the first time this card shows a connected account,
+    // so the model list below reflects the real account instead of a guess.
+    const checked = useRef(false);
+    useEffect(() => {
+        if (checked.current || verify.state !== "idle") return;
+        checked.current = true;
+        void verifyConnection();
+    }, [verify.state, verifyConnection]);
 
     return (
         <div className="cgpt-rise mt-3">
@@ -298,14 +317,13 @@ function ConnectedDetails() {
                     </span>
                 ) : null}
                 {verify.state === "running" ? (
-                    <span className="animate-pulse text-muted-foreground">
-                        Testing connection…
-                    </span>
+                    <span className="animate-pulse text-muted-foreground">Testing connection…</span>
                 ) : null}
                 {verify.state === "ok" ? (
                     <span className="inline-flex items-center gap-1 text-success">
                         <CheckCircle size={14} weight="fill" />
                         Verified · {verify.models} model{verify.models === 1 ? "" : "s"} available
+                        {newest ? ` · newest ${formatChatGPTModelName(newest)}` : ""}
                     </span>
                 ) : null}
                 {verify.state === "error" ? (

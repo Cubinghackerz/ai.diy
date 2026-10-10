@@ -40,12 +40,39 @@ export type ChatGPTGuardOptions = {
 
 const TOKEN_ROUTES = ["/models", "/responses"];
 
+/**
+ * A validation waits for chat/model calls that are mid-refresh so one token is
+ * never rotated twice at once. Upstream calls are bounded (see chatgpt-fetch.ts),
+ * but if one is somehow stuck the validation proceeds after this long rather
+ * than hanging every status check behind it.
+ */
+export const MAX_TOKEN_USER_WAIT_MS = 25_000;
+
+async function settleWithin(promises: Promise<unknown>[], ms: number): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+        await Promise.race([
+            Promise.allSettled(promises),
+            new Promise<void>((resolve) => {
+                timer = setTimeout(resolve, ms);
+            }),
+        ]);
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 function errorResponse(error: unknown): Response {
     const code = chatGPTErrorCode(error);
     const info = describeChatGPTError(code);
     if (!code) console.error("[chatgpt] unexpected route error", error);
     return Response.json(
-        { status: "error", error: code ?? "unknown", message: info.message, retryable: info.retryable },
+        {
+            status: "error",
+            error: code ?? "unknown",
+            message: info.message,
+            retryable: info.retryable,
+        },
         { status: info.status },
     );
 }
@@ -75,7 +102,7 @@ export function createChatGPTGuard(options: ChatGPTGuardOptions) {
         // Snapshot synchronously: anything registered after this waits for us instead.
         const inFlightUsers = key ? [...(tokenUsers.get(key) ?? [])] : [];
         const run = (async (): Promise<Reply> => {
-            if (inFlightUsers.length) await Promise.allSettled(inFlightUsers);
+            if (inFlightUsers.length) await settleWithin(inFlightUsers, MAX_TOKEN_USER_WAIT_MS);
             const response = await options.getHandler().handler(toStatusRequest(request));
             return { status: response.status, body: await response.text() };
         })();
@@ -137,7 +164,8 @@ export function createChatGPTGuard(options: ChatGPTGuardOptions) {
             if (current.status === "authenticated") {
                 const reply = await validate(request, key);
                 const json = { "content-type": "application/json" };
-                if (reply.status >= 400) return new Response(reply.body, { status: reply.status, headers: json });
+                if (reply.status >= 400)
+                    return new Response(reply.body, { status: reply.status, headers: json });
                 const parsed = JSON.parse(reply.body || "{}") as { status?: string };
                 if (parsed.status === "authenticated") {
                     return new Response(reply.body, { status: 200, headers: json });
@@ -152,7 +180,10 @@ export function createChatGPTGuard(options: ChatGPTGuardOptions) {
         if (!options.persistence) return reply;
         try {
             const parsed = JSON.parse(reply.body) as Record<string, unknown>;
-            return { ...reply, body: JSON.stringify({ ...parsed, persistence: options.persistence() }) };
+            return {
+                ...reply,
+                body: JSON.stringify({ ...parsed, persistence: options.persistence() }),
+            };
         } catch {
             return reply;
         }

@@ -24,7 +24,8 @@ const KNOWN: Record<string, ChatGPTErrorInfo> = {
     token_exchange_failed: {
         status: 502,
         retryable: false,
-        message: "OpenAI approved the code but the sign-in couldn't be completed. Start again for a fresh code.",
+        message:
+            "OpenAI approved the code but the sign-in couldn't be completed. Start again for a fresh code.",
     },
     token_refresh_failed: {
         status: 502,
@@ -44,7 +45,8 @@ const KNOWN: Record<string, ChatGPTErrorInfo> = {
     network_error: {
         status: 503,
         retryable: true,
-        message: "Couldn't reach OpenAI from this server. Check the server's network connection and retry.",
+        message:
+            "Couldn't reach OpenAI from this server. Check the server's network connection and retry.",
     },
     models_request_failed: {
         status: 502,
@@ -73,7 +75,10 @@ export function chatGPTErrorCode(error: unknown): string | undefined {
 /** Formats "ABCD-EFGH" style codes into groups; leaves unknown shapes untouched. */
 export function splitDeviceCode(code: string | undefined): string[] {
     if (!code) return [];
-    const groups = code.trim().split(/[\s-]+/).filter(Boolean);
+    const groups = code
+        .trim()
+        .split(/[\s-]+/)
+        .filter(Boolean);
     return groups.length > 1 ? groups : [code.trim()];
 }
 
@@ -110,3 +115,44 @@ export function shouldFailLostSession(strikes: number): boolean {
 
 export const LOST_SESSION_MESSAGE =
     "The server lost track of this sign-in — a restart can do that, and blocked cookies will too. Start again for a fresh code.";
+
+/** Device codes live ~15 minutes; used when the server does not say. */
+export const DEFAULT_DEVICE_CODE_TTL_MS = 15 * 60_000;
+
+/**
+ * How far the server's clock is ahead of this browser's, from a response `Date`
+ * header. Differences under a few seconds are header rounding and latency, not
+ * a wrong clock, so they read as zero.
+ */
+export function serverClockSkewMs(
+    dateHeader: string | null | undefined,
+    clientNow: number,
+): number {
+    if (!dateHeader) return 0;
+    const serverNow = Date.parse(dateHeader);
+    if (!Number.isFinite(serverNow)) return 0;
+    const skew = serverNow - clientNow;
+    return Math.abs(skew) < 5_000 ? 0 : skew;
+}
+
+/**
+ * The server stamps `expiresAt` with its own clock. A browser whose clock is
+ * minutes off would otherwise show a wrong countdown, or give up on a code that
+ * is still valid; expressing the deadline on the browser's clock avoids both.
+ */
+export function deviceCodeDeadline(
+    serverExpiresAt: number | undefined,
+    skewMs: number,
+    clientNow: number,
+): number {
+    if (typeof serverExpiresAt !== "number" || !Number.isFinite(serverExpiresAt)) {
+        return clientNow + DEFAULT_DEVICE_CODE_TTL_MS;
+    }
+    return serverExpiresAt - skewMs;
+}
+
+/** Poll cadence: the server's interval (2–8 s), backing off after consecutive failures. */
+export function pollDelayMs(intervalSeconds: number, failures: number): number {
+    const base = Math.min(8_000, Math.max(2_000, intervalSeconds * 1000));
+    return Math.min(15_000, base * 2 ** Math.min(Math.max(failures, 0), 2));
+}
