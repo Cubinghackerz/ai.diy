@@ -176,13 +176,6 @@ export const links: LinksFunction = () => [
         type: "image/png",
     },
     {
-        rel: "preload",
-        as: "image",
-        href: "/landing/workspace-demo.avif",
-        type: "image/avif",
-        fetchPriority: "high",
-    },
-    {
         rel: "stylesheet",
         href: "https://cdn.jsdelivr.net/npm/geist@1.3.1/dist/fonts/geist-sans/style.css",
     },

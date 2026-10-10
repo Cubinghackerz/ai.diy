@@ -1,7 +1,13 @@
 import { SectionLabel } from "./SectionLabel";
-import { PROVIDER_INTEGRATION_COUNT, PROVIDER_LOGOS } from "./constants";
+import { DOCS_URL, PROVIDER_INTEGRATION_COUNT, PROVIDER_LOGOS } from "./constants";
 import { MaskedHeading } from "./MaskedHeading";
 import { Reveal } from "./DoubleBezel";
+
+const MORE_PROVIDERS = PROVIDER_INTEGRATION_COUNT - PROVIDER_LOGOS.length;
+
+/** Eight cells (seven logos plus the "more" link) fill two clean rows at every width. */
+const CELL =
+    "group flex min-h-16 items-center gap-3 border-b border-white/[0.08] px-2 py-4 transition-colors duration-200 hover:bg-white/[0.03] sm:px-3 lg:min-h-[4.5rem] max-sm:[&:nth-child(2n)]:border-l max-sm:[&:nth-last-child(-n+2)]:border-b-0 sm:[&:not(:nth-child(4n+1))]:border-l sm:[&:nth-last-child(-n+4)]:border-b-0";
 
 export function ProviderMarquee() {
     return (
@@ -23,12 +29,9 @@ export function ProviderMarquee() {
             </div>
 
             <Reveal delayMs={40} className="mt-12">
-                <ul className="mx-auto grid max-w-6xl grid-cols-2 border-y border-white/[0.08] px-5 sm:grid-cols-3 sm:px-8 lg:grid-cols-5">
+                <ul className="mx-auto grid max-w-6xl grid-cols-2 border-y border-white/[0.08] px-5 sm:grid-cols-4 sm:px-8">
                     {PROVIDER_LOGOS.map((logo) => (
-                        <li
-                            key={logo.id}
-                            className="group flex min-h-16 items-center gap-3 border-b border-white/[0.08] px-2 py-4 transition-colors duration-200 hover:bg-white/[0.03] sm:px-3 lg:min-h-[4.5rem] lg:[&:nth-child(-n+5)]:border-t-0"
-                        >
+                        <li key={logo.id} className={CELL}>
                             <img
                                 src={logo.src}
                                 alt={logo.label}
@@ -42,10 +45,22 @@ export function ProviderMarquee() {
                             </span>
                         </li>
                     ))}
+                    <li className={CELL}>
+                        <a
+                            href={DOCS_URL}
+                            className="flex min-h-10 flex-1 items-center text-sm text-zinc-300 underline-offset-4 outline-none transition-colors duration-200 hover:text-white hover:underline focus-visible:ring-2 focus-visible:ring-white/50"
+                        >
+                            +{MORE_PROVIDERS} more providers
+                        </a>
+                    </li>
                 </ul>
-                <p className="mx-auto mt-6 max-w-6xl px-5 text-[13px] leading-relaxed text-zinc-500 sm:px-8">
+                <p className="mx-auto mt-6 max-w-6xl px-5 text-[13px] leading-relaxed text-zinc-400 sm:px-8">
                     Also supported: Anthropic, Groq, Mistral, Bedrock, Azure, Vertex, Together,
                     Hugging Face, LM Studio, and custom OpenAI-compatible endpoints.
+                </p>
+                <p className="mx-auto mt-2 max-w-6xl px-5 text-[13px] leading-relaxed text-zinc-400 sm:px-8">
+                    No key to paste? Sign in with a ChatGPT, Grok, or Kimi plan instead (beta).
+                    Those sessions live in an encrypted server session, not in browser storage.
                 </p>
             </Reveal>
         </section>

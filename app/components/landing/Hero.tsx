@@ -18,12 +18,12 @@ export function Hero() {
         <section
             aria-labelledby="hero-heading"
             data-anim-gate="hero"
-            className="relative mx-auto max-w-6xl px-5 py-20 sm:px-8 sm:py-28"
+            className="relative mx-auto max-w-6xl px-5 pb-16 pt-24 sm:px-8 sm:pb-24 sm:pt-24"
         >
             <div className="mx-auto max-w-3xl text-center">
                 <div
                     className={cn(
-                        "mb-8 flex flex-wrap items-center justify-center gap-2",
+                        "mb-6 flex flex-wrap items-center justify-center gap-2",
                         !reduced && "landing-hero-step opacity-0",
                     )}
                     data-hero-step="1"
@@ -52,7 +52,7 @@ export function Hero() {
 
                 <div
                     className={cn(
-                        "mt-10 flex flex-wrap items-center justify-center gap-3",
+                        "mt-8 flex flex-wrap items-center justify-center gap-3",
                         !reduced && "landing-hero-step opacity-0",
                     )}
                     data-hero-step="3"
@@ -103,7 +103,7 @@ export function Hero() {
             <div
                 id="demo"
                 className={cn(
-                    "relative mt-12 min-w-0 scroll-mt-28 lg:mt-14",
+                    "relative mt-10 min-w-0 scroll-mt-28",
                     !reduced && "landing-hero-step opacity-0",
                 )}
                 data-hero-step="5"

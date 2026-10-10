@@ -31,22 +31,16 @@ const CIPHER = {
 } as const;
 
 const HEADING =
-    "mx-auto max-w-[20rem] text-center text-[clamp(1.85rem,4.2vw,3.15rem)] font-medium leading-[1.12] tracking-[-0.035em] text-white sm:max-w-[28rem]";
+    "mx-auto max-w-[20rem] text-balance text-center text-[clamp(1.85rem,4.2vw,3.15rem)] font-medium leading-[1.12] tracking-[-0.035em] text-white sm:max-w-[40rem]";
 
-export function CipherHeadline({
-    id,
-    children,
-}: {
-    id: string;
-    children: string;
-}) {
+export function CipherHeadline({ id, children }: { id: string; children: string }) {
     const reduced = usePrefersReducedMotion();
     const fine = useFinePointer();
     const native = useSyncExternalStore(emptySubscribe, supportsHtmlInCanvas, () => false);
     const active = native && fine && !reduced;
 
     return (
-        <div className="relative mx-auto w-full max-w-[28rem]">
+        <div className="relative mx-auto w-full max-w-[28rem] sm:max-w-[40rem]">
             <h1 id={id} className={cn(HEADING, active && "invisible")}>
                 {children}
             </h1>
