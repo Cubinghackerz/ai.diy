@@ -30,6 +30,17 @@ export const jsonCatalog = defineCatalog(schema, {
             slots: ["default"],
             description: "A bordered panel with an optional title, subtitle and icon.",
         },
+        Tabs: {
+            props: z.object({ labels: z.array(z.string().max(60)).min(1).max(8) }),
+            slots: ["default"],
+            description:
+                "Switchable panels. labels has one tab name per child, in order; child N is shown under label N. Use for views of the same data (for example by month or by region).",
+        },
+        Disclosure: {
+            props: z.object({ title: z.string(), open: z.boolean().optional() }),
+            slots: ["default"],
+            description: "A collapsible section for secondary detail. open: true expands it first.",
+        },
         Heading: {
             props: z.object({ text: z.string(), level: z.enum(["1", "2", "3"]).optional() }),
             slots: [],

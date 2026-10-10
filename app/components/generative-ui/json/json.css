@@ -359,4 +359,68 @@
         outline: 2px solid var(--jr-accent);
         outline-offset: 1px;
     }
+
+    .jr-tabs {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        min-width: 0;
+    }
+    .jr-tablist {
+        display: flex;
+        gap: 4px;
+        overflow-x: auto;
+        border-bottom: 1px solid var(--jr-border);
+    }
+    .jr-tablist button {
+        flex: none;
+        padding: 8px 12px;
+        font: inherit;
+        font-size: 0.85rem;
+        color: var(--jr-muted);
+        background: none;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px;
+        cursor: pointer;
+    }
+    .jr-tablist button[aria-selected="true"] {
+        color: var(--jr-text);
+        font-weight: 600;
+        border-bottom-color: var(--jr-accent);
+    }
+    .jr-tablist button:focus-visible,
+    .jr-disclosure > button:focus-visible {
+        outline: 2px solid var(--jr-accent);
+        outline-offset: 2px;
+    }
+    .jr-tabpanel {
+        min-width: 0;
+    }
+
+    .jr-disclosure {
+        border: 1px solid var(--jr-border);
+        border-radius: var(--radius-xl);
+        background: var(--jr-surface);
+    }
+    .jr-disclosure > button {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        width: 100%;
+        padding: 10px 14px;
+        font: inherit;
+        font-weight: 600;
+        color: var(--jr-text);
+        background: none;
+        border: 0;
+        cursor: pointer;
+    }
+    .jr-disclosure[data-open="true"] > button svg {
+        transform: rotate(180deg);
+    }
+    .jr-disclosure-body {
+        padding: 0 14px 14px;
+    }
 }

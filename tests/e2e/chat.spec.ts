@@ -393,6 +393,9 @@ test("renders a json-render dashboard and locks its buttons while a reply is run
     await expect(page.getByText("$48k")).toBeVisible();
     await expect(page.getByRole("table")).toContainText("Pro");
     await expect(page.getByRole("img", { name: "Bar chart" })).toBeVisible();
+    await page.getByRole("tab", { name: "Region" }).click();
+    await expect(page.getByText("EMEA leads with 52 users.")).toBeVisible();
+    await expect(page.getByRole("table")).toHaveCount(0);
     // Specs are data: no network is needed to draw them.
     expect(mediaRequests).toEqual([]);
 
@@ -405,6 +408,23 @@ test("renders a json-render dashboard and locks its buttons while a reply is run
     await button.click({ force: true });
     await expect(page.getByText("mock-slow Show by region", { exact: true })).toHaveCount(1);
     await expect(button).toBeEnabled({ timeout: 20_000 });
+});
+
+test("json-render shows finished elements while the call is still streaming", async ({ page }) => {
+    await seed(page, true);
+    await send(page, "mock-json-slow show me a dashboard");
+    // The heading arrives early; the table (a later patch) must not exist yet,
+    // while the thread is still running.
+    const heading = page.getByRole("heading", { name: "Mock dashboard" });
+    await expect(heading).toBeVisible();
+    await expect(page.getByRole("button", { name: "Stop generating", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Show by region" })).toHaveCount(0);
+    // Once complete, everything is there and the loading line is gone.
+    await expect(page.getByRole("button", { name: "Show by region" })).toBeVisible({
+        timeout: 20_000,
+    });
+    await expect(page.getByRole("table")).toContainText("Pro");
+    await expect(page.getByText("Building interface…")).toHaveCount(0);
 });
 
 test("OpenUI suggestion buttons are locked while a reply is running", async ({ page }) => {

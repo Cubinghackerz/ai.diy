@@ -18,32 +18,34 @@ export function catalogComponentLines(): string[] {
         .filter((line) => /^- [A-Z][A-Za-z]+: /.test(line));
 }
 
-/** Kept as data and validated by a test, so the prompt example is always a legal spec. */
-export const JSONRENDER_EXAMPLE_SPEC = JSON.stringify({
-    root: "main",
-    elements: {
-        main: { type: "Stack", props: {}, children: ["m1", "t1", "b1"] },
-        m1: {
-            type: "Metric",
-            props: { label: "Revenue", value: "$48k", change: "+8%", trend: "up" },
-        },
-        t1: { type: "Table", props: { columns: ["Item", "Qty"], rows: [["A", "3"]] } },
-        b1: {
-            type: "Button",
-            props: { label: "Break down by month" },
-            on: { press: { action: "ask", params: { message: "Break revenue down by month" } } },
-        },
-    },
+const el = (key: string, type: string, props: object, children: string[] = [], on?: object) => ({
+    op: "add",
+    path: `/elements/${key}`,
+    value: { type, props, children, ...(on ? { on } : {}) },
 });
+
+/**
+ * One JSON Patch operation per item, kept as data and validated by a test, so
+ * the prompt example is always a legal spec.
+ */
+export const JSONRENDER_EXAMPLE_PATCHES: string[] = [
+    { op: "add", path: "/root", value: "main" },
+    el("main", "Stack", {}, ["m1", "t1", "b1"]),
+    el("m1", "Metric", { label: "Revenue", value: "$48k", change: "+8%", trend: "up" }),
+    el("t1", "Table", { columns: ["Item", "Qty"], rows: [["A", "3"]] }),
+    el("b1", "Button", { label: "Break down by month" }, [], {
+        press: { action: "ask", params: { message: "Break revenue down by month" } },
+    }),
+].map((patch) => JSON.stringify(patch));
 
 export function buildJsonRenderInstructions(): string {
     return [
         `## Dashboards, charts and data views (${JSONRENDER_TOOL_NAME})`,
-        `Call ${JSONRENDER_TOOL_NAME} with spec set to a JSON string for dashboards, metric summaries, tables, bar or line charts, progress and comparisons. Use present_openui instead for plans, itineraries, photos, maps, forms and follow-up suggestions. Use one UI tool per answer; do not render the same content twice.`,
-        `Spec format: ${JSONRENDER_EXAMPLE_SPEC}`,
-        `Rules: use only the component types listed below and give every element a unique key; every element has a children array (use [] for leaves) and every key in it must exist; props must match exactly; use plain text only (no markdown or HTML); never include URLs or image data. Do not use state, repeat, visible or $-expressions. For a chart or image from data analysis, call run_python first and save it with matplotlib savefig, then show it with Figure using the exact filename.`,
+        `Call ${JSONRENDER_TOOL_NAME} with patches for dashboards, metric summaries, tables, bar or line charts, progress, comparisons and tabbed views. Use present_openui instead for plans, itineraries, photos, maps, forms and follow-up suggestions. Use one UI tool per answer; do not render the same content twice.`,
+        `patches is an array of strings; each string is one JSON Patch operation. Send /root first, then each element with its parent before its children. Finished elements appear while you are still writing. Example: ${JSON.stringify(JSONRENDER_EXAMPLE_PATCHES)}`,
+        `Rules: use only the component types listed below and give every element a unique key (letters, digits, - and _); every element has a children array (use [] for leaves) and every key in it must be added; props must match exactly; use plain text only (no markdown or HTML); never include URLs or image data; only add operations on /root and /elements/<key>. Tabs has one child per label. For a chart or image from data analysis, call run_python first and save it with matplotlib savefig, then show it with Figure using the exact filename.`,
         "Components:",
         ...catalogComponentLines(),
-        'Action ask: on.press = {action:"ask",params:{message}} sends message as the user\'s next turn.',
+        'Action ask: on.press = {action:"ask",params:{message}} on a Button sends message as the user\'s next turn.',
     ].join("\n");
 }

@@ -15,46 +15,52 @@ const RICH_PROGRAM = [
     'more = RichSuggestions([c], "More ideas")',
 ].join("\n");
 
-// A json-render spec, passed to present_jsonrender as a JSON string.
-const JSON_SPEC = JSON.stringify({
-    root: "main",
-    elements: {
-        main: { type: "Stack", props: {}, children: ["h", "m1", "m2", "bars", "tbl", "ask"] },
-        h: { type: "Heading", props: { text: "Mock dashboard" }, children: [] },
-        m1: {
-            type: "Metric",
-            props: { label: "Revenue", value: "$48k", change: "+8%", trend: "up" },
-            children: [],
-        },
-        m2: {
-            type: "Metric",
-            props: { label: "Churn", value: "1.8%", change: "-0.3%", trend: "down" },
-            children: [],
-        },
-        bars: {
-            type: "BarChart",
-            props: { title: "Signups", labels: ["Mon", "Tue", "Wed"], values: [4, 9, 6] },
-            children: [],
-        },
-        tbl: {
-            type: "Table",
-            props: {
-                columns: ["Plan", "Users"],
-                rows: [
-                    ["Free", "120"],
-                    ["Pro", "34"],
-                ],
-            },
-            children: [],
-        },
-        ask: {
-            type: "Button",
-            props: { label: "Show by region" },
-            children: [],
-            on: { press: { action: "ask", params: { message: "mock-slow Show by region" } } },
-        },
+// json-render JSON Patch lines, passed to present_jsonrender as an array of
+// strings; the table and region text sit in tabs.
+const JSON_ELEMENTS = {
+    main: { type: "Stack", props: {}, children: ["h", "m1", "m2", "bars", "views", "ask"] },
+    h: { type: "Heading", props: { text: "Mock dashboard" }, children: [] },
+    m1: {
+        type: "Metric",
+        props: { label: "Revenue", value: "$48k", change: "+8%", trend: "up" },
+        children: [],
     },
-});
+    m2: {
+        type: "Metric",
+        props: { label: "Churn", value: "1.8%", change: "-0.3%", trend: "down" },
+        children: [],
+    },
+    bars: {
+        type: "BarChart",
+        props: { title: "Signups", labels: ["Mon", "Tue", "Wed"], values: [4, 9, 6] },
+        children: [],
+    },
+    views: { type: "Tabs", props: { labels: ["Plans", "Region"] }, children: ["tbl", "region"] },
+    tbl: {
+        type: "Table",
+        props: {
+            columns: ["Plan", "Users"],
+            rows: [
+                ["Free", "120"],
+                ["Pro", "34"],
+            ],
+        },
+        children: [],
+    },
+    region: { type: "Text", props: { text: "EMEA leads with 52 users." }, children: [] },
+    ask: {
+        type: "Button",
+        props: { label: "Show by region" },
+        children: [],
+        on: { press: { action: "ask", params: { message: "mock-slow Show by region" } } },
+    },
+};
+const JSON_PATCHES = [
+    JSON.stringify({ op: "add", path: "/root", value: "main" }),
+    ...Object.entries(JSON_ELEMENTS).map(([key, value]) =>
+        JSON.stringify({ op: "add", path: `/elements/${key}`, value }),
+    ),
+];
 
 // One unsafe and one safe link button, to prove only http(s) targets open.
 const RICH_LINKS_PROGRAM = [
@@ -140,8 +146,10 @@ const server = createServer(async (request, response) => {
         : promptText.includes("mock-rich")
           ? { name: "present_openui", args: { ui: RICH_PROGRAM } }
           : promptText.includes("mock-json")
-            ? { name: "present_jsonrender", args: { spec: JSON_SPEC } }
+            ? { name: "present_jsonrender", args: { patches: JSON_PATCHES } }
             : null;
+    // mock-json-slow streams in small, slow chunks so tests can see partial UI.
+    const chunkDelay = promptText.includes("mock-json-slow") ? 120 : 10;
     const offeredTools = new Set((body.tools ?? []).map((tool) => tool.function?.name));
     // A tool result already follows the call: end the turn with text, never loop.
     const continuation = body.messages?.at(-1)?.role === "tool";
@@ -160,7 +168,7 @@ const server = createServer(async (request, response) => {
         for (const part of args.match(/[\s\S]{1,48}/g)) {
             if (response.destroyed) return;
             send({ tool_calls: [{ index: 0, function: { arguments: part } }] });
-            await new Promise((resolve) => setTimeout(resolve, 10));
+            await new Promise((resolve) => setTimeout(resolve, chunkDelay));
         }
         send({}, "tool_calls");
         response.write(

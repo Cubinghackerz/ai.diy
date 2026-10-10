@@ -1,6 +1,7 @@
 "use client";
 
 import { defineRegistry } from "@json-render/react";
+import { useId, useState, Children, type KeyboardEvent, type ReactNode } from "react";
 import {
     ArrowDown,
     ArrowUp,
@@ -9,6 +10,7 @@ import {
     CheckCircle,
     Info,
     XCircle,
+    CaretDown,
 } from "@phosphor-icons/react";
 import { useThreadBusy } from "../busy";
 import { usePythonImage } from "../python-image";
@@ -132,6 +134,71 @@ function AskButton({ label, onPress }: { label: string; onPress: () => void }) {
     );
 }
 
+function TabsBlock({ labels, children }: { labels: string[]; children: ReactNode }) {
+    const id = useId();
+    const [active, setActive] = useState(0);
+    const panels = Children.toArray(children);
+    const current = Math.min(active, labels.length - 1);
+    const onKeyDown = (event: KeyboardEvent) => {
+        const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+        if (!step) return;
+        event.preventDefault();
+        const next = (current + step + labels.length) % labels.length;
+        setActive(next);
+        document.getElementById(`${id}-tab-${next}`)?.focus();
+    };
+    return (
+        <div className="jr-tabs">
+            <div className="jr-tablist" role="tablist">
+                {labels.map((label, index) => (
+                    <button
+                        key={`${label}-${index}`}
+                        id={`${id}-tab-${index}`}
+                        type="button"
+                        role="tab"
+                        aria-selected={index === current}
+                        aria-controls={`${id}-panel-${index}`}
+                        tabIndex={index === current ? 0 : -1}
+                        onClick={() => setActive(index)}
+                        onKeyDown={onKeyDown}
+                    >
+                        {label}
+                    </button>
+                ))}
+            </div>
+            <div
+                id={`${id}-panel-${current}`}
+                className="jr-tabpanel"
+                role="tabpanel"
+                aria-labelledby={`${id}-tab-${current}`}
+            >
+                {panels[current] ?? null}
+            </div>
+        </div>
+    );
+}
+
+function DisclosureBlock({
+    title,
+    open,
+    children,
+}: {
+    title: string;
+    open?: boolean;
+    children: ReactNode;
+}) {
+    const [expanded, setExpanded] = useState(open === true);
+    return (
+        <div className="jr-disclosure" data-open={expanded}>
+            <button type="button" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+                <span>{title}</span>
+                <CaretDown size={14} weight="bold" aria-hidden />
+            </button>
+            {expanded ? <div className="jr-disclosure-body">{children}</div> : null}
+        </div>
+    );
+}
+
 export const { registry } = defineRegistry(jsonCatalog, {
     components: {
         Stack: ({ props, children }) => (
@@ -160,6 +227,12 @@ export const { registry } = defineRegistry(jsonCatalog, {
                 ) : null}
                 {children}
             </section>
+        ),
+        Tabs: ({ props, children }) => <TabsBlock labels={props.labels}>{children}</TabsBlock>,
+        Disclosure: ({ props, children }) => (
+            <DisclosureBlock title={props.title} open={props.open}>
+                {children}
+            </DisclosureBlock>
         ),
         Heading: ({ props }) => {
             const Tag = props.level === "1" ? "h2" : props.level === "3" ? "h4" : "h3";
