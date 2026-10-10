@@ -2,7 +2,7 @@
 
 ## Direction
 
-The landing page is **Vercel/Resend blackfield with an instrumented, squared frame**: a centered product-window first viewport. Ownership copy and actions sit above the real ai.diy workspace screenshot, not beside it. The page then proves the claim through the Local Data Plane, provider freedom, private workflows, capability controls, and a real deploy terminal. Structure comes from typography, spacing, hairlines, and a numbered section grid. No gradients.
+The landing page is **Vercel/Resend blackfield with an instrumented, squared frame**: a centered product-window first viewport. Ownership copy and actions sit above a live, scripted preview of the ai.diy workspace (real text and SVG, not an image), not beside it. The page then proves the claim through the Local Data Plane, provider freedom, private workflows, capability controls, and a real deploy terminal. Structure comes from typography, spacing, hairlines, and a numbered section grid. No gradients.
 
 ## Shape Language
 
@@ -47,7 +47,7 @@ Persuade. Understand BYOK local-first ownership, then open `/workspace` or deplo
 ## Composition
 
 1. Floating island navigation
-2. Centered ownership hero: status row, cipher headline, one-line sub copy, actions, a copyable `git clone` chip, and a corner-framed product window
+2. Centered ownership hero: status row, cipher headline, one-line sub copy, actions, a copyable `git clone` chip, and a corner-framed product window that plays a short scripted workspace preview (`HeroWorkspace`)
 3. Key-facts band inside the rail
 4. Interactive Local Data Plane: three focusable nodes and one mint packet stepped through a request
 5. Static provider shelf
@@ -69,7 +69,8 @@ Persuade. Understand BYOK local-first ownership, then open `/workspace` or deplo
 - Section headings use a one-time masked word reveal (`MaskedHeading`); other section reveals stay subtle (`Reveal`)
 - Local Data Plane: one mint packet, moved only while a visitor steps "Follow one request". No looping packet. Reduced motion and no-JS render the four stages as a numbered list
 - Closing wordmark fills from outline to a 6% wash on hover
-- Motion budget: one packet, one headline decrypt, no scroll-pinned scene
+- Hero preview (`HeroWorkspace`, script in `demo-timeline.ts`): prompt types, Python runs in the tab, the answer streams, a Canvas chart appears, provider chips rotate, then it loops. It is illustrative playback with sample data and says so ("Preview · sample data"); it never claims to be live and invents no metrics or model benchmarks. It renders its finished frame as real DOM text on the server, with no JavaScript and under reduced motion. It plays only while in view and the tab is visible, and it has a visible Pause control (the finished frame shows while paused). The real recorded demo stays one click away. The hero image is no longer on the LCP path
+- Motion budget: one packet, one headline decrypt, one hero preview loop, no scroll-pinned scene
 - Honor `prefers-reduced-motion`; reduced-motion visitors get visible static final states
 
 ## Icons

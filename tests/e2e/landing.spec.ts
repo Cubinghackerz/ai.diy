@@ -99,3 +99,20 @@ test("JSON-LD parses and FAQ schema matches the rendered FAQ", async ({ page }) 
         answers.map((item) => item.trim()),
     );
 });
+
+test("hero preview shows the product, says it is sample data, and can be paused", async ({
+    page,
+}) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/");
+    const preview = page.getByRole("group", { name: "Preview of the ai.diy workspace" });
+    await expect(preview).toBeVisible();
+    await expect(preview.getByText("Preview · sample data")).toBeVisible();
+
+    // Paused shows the finished frame (real text, not an image) and stays put.
+    await preview.getByRole("button", { name: "Pause preview" }).click();
+    await expect(preview.getByText("Ran Python in this tab")).toBeVisible();
+    await expect(preview.getByText(/Saved in this browser/)).toBeVisible();
+    await expect(preview.getByRole("button", { name: "Play preview" })).toBeVisible();
+    await expect(preview.locator("img")).toHaveCount(0);
+});

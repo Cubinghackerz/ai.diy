@@ -237,6 +237,14 @@ test("storage usage is available in Import & Export", async ({ page }) => {
     await expect(page.getByRole("region", { name: "Browser storage" })).toContainText("Quota");
 });
 
+test("narrow screens open exactly one Settings dialog", async ({ page }) => {
+    await page.setViewportSize({ width: 600, height: 900 });
+    await seed(page);
+    await page.getByTitle("Toggle sidebar").click();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await expect(page.getByLabel("Search settings")).toHaveCount(1);
+});
+
 test("hostile model HTML is sanitized and cannot exfiltrate", async ({ page }) => {
     const requestedUrls: string[] = [];
     page.on("request", (request) => requestedUrls.push(request.url()));
