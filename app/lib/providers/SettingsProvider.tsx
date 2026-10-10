@@ -15,6 +15,7 @@ import {
     useState,
     useEffect,
     useCallback,
+    useMemo,
     useRef,
     type ReactNode,
 } from "react";
@@ -62,6 +63,14 @@ interface SettingsContextValue {
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
+
+/** True when every key in `patch` already holds the same value in `target`. */
+function patchIsNoop<T extends object>(target: T | undefined, patch: Partial<T>): boolean {
+    if (!target) return false;
+    return (Object.keys(patch) as Array<keyof T>).every((key) =>
+        Object.is(target[key], patch[key]),
+    );
+}
 
 /** Merge persisted settings over defaults, preserving free-search MCP presets. */
 function mergeLoadedSettings(parsed: Partial<AppSettings>): AppSettings {
@@ -333,8 +342,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         return () => mq.removeEventListener("change", applyTheme);
     }, [settings.theme, loaded]);
 
+    // Updaters return `prev` when nothing changes. Sections such as the Grok/Kimi
+    // sign-in cards re-assert their toggles every time they mount; without this
+    // each of those calls re-rendered every settings consumer and queued another
+    // encrypt + write, which is what made opening Settings stutter.
     const updateSettings = useCallback((patch: Partial<AppSettings>) => {
-        setSettings((prev) => ({ ...prev, ...patch }));
+        setSettings((prev) => (patchIsNoop(prev, patch) ? prev : { ...prev, ...patch }));
     }, []);
 
     const updateToolAccess = useCallback((key: ToolAccessKey, enabled: boolean) => {
@@ -353,13 +366,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const updateProvider = useCallback((id: ProviderId, patch: Partial<ProviderConfig>) => {
-        setSettings((prev) => ({
-            ...prev,
-            providers: {
-                ...prev.providers,
-                [id]: { ...prev.providers[id], ...patch },
-            },
-        }));
+        setSettings((prev) =>
+            patchIsNoop(prev.providers[id], patch)
+                ? prev
+                : {
+                      ...prev,
+                      providers: {
+                          ...prev.providers,
+                          [id]: { ...prev.providers[id], ...patch },
+                      },
+                  },
+        );
     }, []);
 
     const updateChat = useCallback((patch: Partial<ChatSettings>) => {
@@ -374,6 +391,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                     [provider]: model,
                 };
             }
+            const remembered =
+                !provider || !model || prev.chat.lastModelsByProvider?.[provider] === model;
+            if (remembered && patchIsNoop(prev.chat, patch)) return prev;
             return { ...prev, chat };
         });
     }, []);
@@ -434,21 +454,35 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         void clearSettingsEnvelopeKey();
     }, []);
 
+    const value = useMemo<SettingsContextValue>(
+        () => ({
+            settings,
+            loaded,
+            updateSettings,
+            updateToolAccess,
+            updateProvider,
+            updateChat,
+            addMcpServer,
+            removeMcpServer,
+            updateMcpServer,
+            resetSettings,
+        }),
+        [
+            settings,
+            loaded,
+            updateSettings,
+            updateToolAccess,
+            updateProvider,
+            updateChat,
+            addMcpServer,
+            removeMcpServer,
+            updateMcpServer,
+            resetSettings,
+        ],
+    );
+
     return (
-        <SettingsContext.Provider
-            value={{
-                settings,
-                loaded,
-                updateSettings,
-                updateToolAccess,
-                updateProvider,
-                updateChat,
-                addMcpServer,
-                removeMcpServer,
-                updateMcpServer,
-                resetSettings,
-            }}
-        >
+        <SettingsContext.Provider value={value}>
             <PersistenceToast />
             {children}
         </SettingsContext.Provider>

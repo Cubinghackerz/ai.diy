@@ -3,7 +3,7 @@
  * models, tools, and theme).
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { SectionBoundary } from "~/components/ui/SectionBoundary";
 import { StorageHealthPanel } from "~/components/ui/StorageNotices";
@@ -34,6 +34,7 @@ import {
 import { testProviderKey } from "~/lib/key-test";
 import { useChatGenerating } from "~/components/assistant-ui/ChatSessionContext";
 import { useSettings } from "~/lib/providers/SettingsProvider";
+import { setSidebarPanel, useSidebarPanel } from "~/lib/sidebar-panel";
 import { isLocalProvider, isProviderReady } from "~/lib/setup";
 import {
     DEFAULT_MODELS,
@@ -158,7 +159,6 @@ import {
     uploadBackup,
 } from "~/lib/cloud-storage";
 
-type SidebarPanel = "chats" | "settings";
 type SettingsSection =
     | "keys"
     | "instructions"
@@ -323,6 +323,52 @@ function SidebarBrand() {
     );
 }
 
+function SidebarTabs() {
+    const panel = useSidebarPanel();
+    return (
+        <div className="mx-3 mb-3 grid grid-cols-2 gap-1 rounded-2xl border border-border/60 bg-background/35 p-1 shadow-sm">
+            <button
+                type="button"
+                onClick={() => {
+                    hapticSelect();
+                    setSidebarPanel("chats");
+                }}
+                className={cn(
+                    "flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-medium transition-[background-color,color,box-shadow] outline-none focus-visible:bg-background/80",
+                    panel === "chats"
+                        ? "bg-foreground text-background shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                )}
+            >
+                <ChatCircleDots size={14} />
+                Chats
+            </button>
+            <button
+                type="button"
+                onClick={() => {
+                    hapticSelect();
+                    setSidebarPanel("settings");
+                }}
+                className={cn(
+                    "flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-medium transition-[background-color,color,box-shadow] outline-none focus-visible:bg-background/80",
+                    panel === "settings"
+                        ? "bg-foreground text-background shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                )}
+            >
+                <GearSix size={14} />
+                Settings
+            </button>
+        </div>
+    );
+}
+
+/**
+ * The sidebar mounts twice below the `md` breakpoint (hidden desktop aside plus
+ * the mobile overlay), so it must not own the Settings dialog: two copies used
+ * to open at once and doubled every section's work. `SettingsDialog` is mounted
+ * once by the workspace route and driven by `~/lib/sidebar-panel`.
+ */
 export function AppSidebar({
     threads,
     projects,
@@ -335,9 +381,6 @@ export function AppSidebar({
     onCreateProject,
     onUpdateProject,
     onDeleteProject,
-    panel,
-    onPanelChange,
-    onImportComplete,
 }: {
     threads: ThreadItem[];
     projects: Project[];
@@ -350,81 +393,63 @@ export function AppSidebar({
     onCreateProject: (name: string, color: string, instructions: string) => void;
     onUpdateProject: (id: string, patch: Partial<Project>) => void;
     onDeleteProject: (id: string) => void;
-    panel: SidebarPanel;
-    onPanelChange: (panel: SidebarPanel) => void;
+}) {
+    return (
+        <div className="flex h-full flex-col">
+            <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-3">
+                <div className="flex items-center gap-2 min-w-0">
+                    <SidebarBrand />
+                    <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-primary">
+                        Beta
+                    </span>
+                </div>
+            </div>
+
+            <SidebarTabs />
+
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-3">
+                <ChatsPanel
+                    threads={threads}
+                    projects={projects}
+                    activeThreadId={activeThreadId}
+                    onSelectThread={onSelectThread}
+                    onNewChat={onNewChat}
+                    onDeleteThread={onDeleteThread}
+                    onRenameThread={onRenameThread}
+                    onMoveThread={onMoveThread}
+                    onCreateProject={onCreateProject}
+                    onUpdateProject={onUpdateProject}
+                    onDeleteProject={onDeleteProject}
+                />
+            </div>
+        </div>
+    );
+}
+
+export const SettingsDialog = memo(function SettingsDialog({
+    scopeId,
+    onImportComplete,
+}: {
+    scopeId: string | null;
     /** Called after an import writes new chats, so the list can refresh. */
     onImportComplete?: () => void;
 }) {
     useCloudAutoBackup();
+    const panel = useSidebarPanel();
+    const popupRef = useRef<HTMLDivElement>(null);
 
     return (
         <Dialog
             open={panel === "settings"}
-            onOpenChange={(open) => onPanelChange(open ? "settings" : "chats")}
+            onOpenChange={(open) => setSidebarPanel(open ? "settings" : "chats")}
         >
-            <div className="flex h-full flex-col">
-                <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-3">
-                    <div className="flex items-center gap-2 min-w-0">
-                        <SidebarBrand />
-                        <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-primary">
-                            Beta
-                        </span>
-                    </div>
-                </div>
-
-                <div className="mx-3 mb-3 grid grid-cols-2 gap-1 rounded-2xl border border-border/60 bg-background/35 p-1 shadow-sm">
-                    <button
-                        type="button"
-                        onClick={() => {
-                            hapticSelect();
-                            onPanelChange("chats");
-                        }}
-                        className={cn(
-                            "flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-medium transition-[background-color,color,box-shadow] outline-none focus-visible:bg-background/80",
-                            panel === "chats"
-                                ? "bg-foreground text-background shadow-sm"
-                                : "text-muted-foreground hover:text-foreground",
-                        )}
-                    >
-                        <ChatCircleDots size={14} />
-                        Chats
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => {
-                            hapticSelect();
-                            onPanelChange("settings");
-                        }}
-                        className={cn(
-                            "flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-medium transition-[background-color,color,box-shadow] outline-none focus-visible:bg-background/80",
-                            panel === "settings"
-                                ? "bg-foreground text-background shadow-sm"
-                                : "text-muted-foreground hover:text-foreground",
-                        )}
-                    >
-                        <GearSix size={14} />
-                        Settings
-                    </button>
-                </div>
-
-                <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-3">
-                    <ChatsPanel
-                        threads={threads}
-                        projects={projects}
-                        activeThreadId={activeThreadId}
-                        onSelectThread={onSelectThread}
-                        onNewChat={onNewChat}
-                        onDeleteThread={onDeleteThread}
-                        onRenameThread={onRenameThread}
-                        onMoveThread={onMoveThread}
-                        onCreateProject={onCreateProject}
-                        onUpdateProject={onUpdateProject}
-                        onDeleteProject={onDeleteProject}
-                    />
-                </div>
-            </div>
             <DialogContent
+                ref={popupRef}
                 showCloseButton={false}
+                // Focus the dialog itself: the default scans every control in the
+                // (large) settings tree for the first tabbable one, and focusing the
+                // search field would pop the keyboard on touch devices.
+                initialFocus={() => popupRef.current}
                 className="!flex h-[min(92vh,48rem)] max-w-6xl flex-col gap-0 overflow-hidden p-0 sm:!max-w-6xl"
             >
                 <DialogTitle className="sr-only">Settings</DialogTitle>
@@ -432,17 +457,14 @@ export function AppSidebar({
                     Configure providers, tools, workspace behavior, and appearance.
                 </DialogDescription>
                 <div className="min-h-0 flex-1 overflow-hidden">
-                    <SectionBoundary label="Settings" resetKey={activeThreadId}>
-                        <SettingsPanel
-                            scopeId={activeThreadId}
-                            onImportComplete={onImportComplete}
-                        />
+                    <SectionBoundary label="Settings" resetKey={scopeId}>
+                        <SettingsPanel scopeId={scopeId} onImportComplete={onImportComplete} />
                     </SectionBoundary>
                 </div>
             </DialogContent>
         </Dialog>
     );
-}
+});
 
 function ChatsPanel({
     threads,

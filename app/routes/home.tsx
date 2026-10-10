@@ -18,7 +18,7 @@ import { CanvasPanel } from "~/components/canvas/CanvasPanel";
 import { SectionBoundary } from "~/components/ui/SectionBoundary";
 import { PersistenceBanner } from "~/components/ui/StorageNotices";
 import { ArtifactLauncher } from "~/components/canvas/ArtifactLauncher";
-import { AppSidebar } from "~/components/sidebar/AppSidebar";
+import { AppSidebar, SettingsDialog } from "~/components/sidebar/AppSidebar";
 import { SetupGate, useNeedsSetup } from "~/components/setup/SetupGate";
 import { CanvasProvider } from "~/lib/canvas";
 import { haptic, hapticSelect } from "~/lib/haptics";
@@ -26,6 +26,7 @@ import { WORKSPACE_DOCUMENT_HEADERS } from "~/lib/http-headers";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import { useThreads } from "~/lib/hooks/useThreads";
 import { useProjects } from "~/lib/hooks/useProjects";
+import { setSidebarPanel } from "~/lib/sidebar-panel";
 import { Sidebar as SidebarIcon } from "@phosphor-icons/react";
 import { cn } from "~/lib/utils";
 import { reportStorageFailure } from "~/lib/storage-notices";
@@ -72,7 +73,6 @@ function HomeInner() {
     // All local UI state must stay above any early returns (Rules of Hooks).
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-    const [sidebarPanel, setSidebarPanel] = useState<"chats" | "settings">("chats");
     const handleTitleChange = useCallback(
         (threadId: string, title: string) => {
             void updateThreadTitle(threadId, title).catch(reportWorkspaceStorageError);
@@ -90,6 +90,8 @@ function HomeInner() {
         });
     }, [settings.preview, updateSettings]);
 
+    const openSettings = useCallback(() => setSidebarPanel("settings"), []);
+
     const handleNewChat = useCallback(
         (projectId: string | null = null) => {
             haptic();
@@ -100,6 +102,10 @@ function HomeInner() {
         },
         [createNewThread, leavePreview],
     );
+
+    const handleImportComplete = useCallback(() => {
+        void refreshThreads().catch(reportWorkspaceStorageError);
+    }, [refreshThreads]);
 
     const activeThread = threads.find((t) => t.id === activeThreadId);
     const activeProject = activeThread?.projectId
@@ -159,24 +165,13 @@ function HomeInner() {
                     await refreshThreads();
                 })().catch(reportWorkspaceStorageError);
             }}
-            onImportComplete={() => {
-                void refreshThreads().catch(reportWorkspaceStorageError);
-            }}
-            panel={sidebarPanel}
-            onPanelChange={setSidebarPanel}
         />
     );
 
     const appShell = (
         <div className="flex h-full w-full overflow-hidden bg-background text-foreground">
-            <WorkspaceHotkeys
-                onNewChat={handleNewChat}
-                onOpenSettings={() => {
-                    setSidebarOpen(true);
-                    setSidebarPanel("settings");
-                    setMobileSidebarOpen(true);
-                }}
-            />
+            <WorkspaceHotkeys onNewChat={handleNewChat} onOpenSettings={openSettings} />
+            <SettingsDialog scopeId={activeThreadId} onImportComplete={handleImportComplete} />
             <aside
                 className={cn(
                     "hidden flex-col border-r border-border/80 bg-sidebar transition-[width] duration-200 md:flex",
