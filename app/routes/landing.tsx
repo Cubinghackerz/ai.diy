@@ -1,26 +1,22 @@
 /**
- * THESIS: The product is the proof — a black, flat, Vercel-grade workspace in the first viewport; rejects the text-left/media-right SaaS hero.
- * OWN-WORLD: #000 canvas, #0a0a0a surfaces, white/10 hairlines, flat mint signal, Geist Sans/Mono, zero gradients; depth from borders and soft shadows.
- * STORY: See the browser-owned workspace at full size, then open it or self-host it.
- * FIRST VIEWPORT: Centered cipher headline and actions above a full-width product window that plays a scripted, clearly labelled workspace preview (sample data).
- * FORM: User-pinned canon (Vercel/Resend fidelity), built as responsive product proof.
- * FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md.
+ * THESIS: Clean, simple, minimal. Say what it is, show it working, then get out of the way.
+ * OWN-WORLD: #000 canvas, hairline borders, Geist, solid white actions, no gradients, no ornament.
+ * STORY: A browser-owned workspace you can open now or self-host in one command.
+ * FIRST VIEWPORT: A plain headline, one sentence, two buttons, and a scripted, clearly labelled workspace preview (sample data).
+ * FORM: Vercel-style flat top bar, full-width hairline sections, one column of content.
  */
+import type { ReactNode } from "react";
 import type { HeadersFunction, LinksFunction, MetaFunction } from "react-router";
-import { CapabilityRack } from "~/components/landing/CapabilityRack";
-import { ChangelogSection } from "~/components/landing/ChangelogSection";
 import { ClosingBand } from "~/components/landing/ClosingBand";
 import { DeployTerminal } from "~/components/landing/DeployTerminal";
 import { FAQ_ITEMS, Faq } from "~/components/landing/Faq";
-import { FactsBand } from "~/components/landing/FactsBand";
+import { Features } from "~/components/landing/Features";
 import { Hero } from "~/components/landing/Hero";
-import { IslandNav } from "~/components/landing/IslandNav";
 import { LandingFooter } from "~/components/landing/LandingFooter";
 import { LandingShell } from "~/components/landing/LandingShell";
 import { OwnershipStage } from "~/components/landing/OwnershipStage";
-import { ComposioApps } from "~/components/landing/ComposioApps";
-import { ProviderMarquee } from "~/components/landing/ProviderMarquee";
-import { InUse } from "~/components/landing/InUse";
+import { Providers } from "~/components/landing/Providers";
+import { SiteNav } from "~/components/landing/SiteNav";
 import { PROVIDER_INTEGRATION_COUNT } from "~/components/landing/constants";
 import { versionedAsset } from "~/lib/build";
 import { PUBLIC_DOCUMENT_HEADERS } from "~/lib/http-headers";
@@ -185,25 +181,35 @@ export const links: LinksFunction = () => [
     },
 ];
 
+/** Full-width hairline between sections; the content inside stays on one column. */
+function Band({ children }: { children: ReactNode }) {
+    return <div className="border-t border-white/[0.08]">{children}</div>;
+}
+
 export default function LandingPage() {
     return (
         <LandingShell>
-            <IslandNav />
-            <main
-                id="main-content"
-                className="mx-auto max-w-6xl border-x border-white/[0.08] [&>*+*]:border-t [&>*+*]:border-white/[0.08]"
-            >
+            <SiteNav />
+            <main id="main-content">
                 <Hero />
-                <FactsBand />
-                <OwnershipStage />
-                <ProviderMarquee />
-                <ComposioApps />
-                <InUse />
-                <CapabilityRack />
-                <DeployTerminal />
-                <Faq />
-                <ChangelogSection />
-                <ClosingBand />
+                <Band>
+                    <OwnershipStage />
+                </Band>
+                <Band>
+                    <Providers />
+                </Band>
+                <Band>
+                    <Features />
+                </Band>
+                <Band>
+                    <DeployTerminal />
+                </Band>
+                <Band>
+                    <Faq />
+                </Band>
+                <Band>
+                    <ClosingBand />
+                </Band>
             </main>
             <LandingFooter />
         </LandingShell>

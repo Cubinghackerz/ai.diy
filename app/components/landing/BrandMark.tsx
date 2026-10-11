@@ -10,9 +10,7 @@ export function BrandMark({
     height?: number;
     invert?: boolean;
 }) {
-    const src = versionedAsset(
-        invert ? "/ai-diy-mark.png" : "/ai-diy-mark-white.png",
-    );
+    const src = versionedAsset(invert ? "/ai-diy-mark.png" : "/ai-diy-mark-white.png");
     return (
         <img
             src={src}

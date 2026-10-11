@@ -1,8 +1,7 @@
 import { PROVIDER_INTEGRATION_SUMMARY } from "./constants";
-import { SectionLabel } from "./SectionLabel";
 import { CaretDown } from "@phosphor-icons/react";
-import { Reveal } from "./DoubleBezel";
-import { MaskedHeading } from "./MaskedHeading";
+import { Reveal } from "./Reveal";
+import { SectionHeader } from "./SectionHeader";
 
 /** Matches --acc-collapse / --acc-chevron in app/styles/app.css. */
 const ACC_CLOSE_MS = 250;
@@ -39,27 +38,18 @@ export function Faq() {
         <section
             id="faq"
             aria-labelledby="faq-heading"
-            className="mx-auto max-w-4xl scroll-mt-28 px-5 py-20 sm:px-8 sm:py-28"
+            className="mx-auto max-w-6xl scroll-mt-14 px-6 py-24 sm:py-32"
             data-anim-gate="faq"
         >
-            <Reveal>
-                <SectionLabel index="07">FAQ</SectionLabel>
-                <MaskedHeading
-                    id="faq-heading"
-                    className="max-w-[18ch] text-3xl font-medium tracking-[-0.035em] text-white sm:text-4xl"
-                >
-                    Frequently asked questions.
-                </MaskedHeading>
-                <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-zinc-400">
-                    Understand the ownership model, supported AI providers, browser storage, and
-                    self-hosting path before you open the workspace.
-                </p>
-            </Reveal>
+            <SectionHeader id="faq-heading" title="Frequently asked questions.">
+                The ownership model, supported providers, browser storage, and the self-hosting
+                path.
+            </SectionHeader>
 
-            <Reveal delayMs={40} className="mt-8">
-                <div className="divide-y divide-white/[0.08] border-t border-white/[0.08]">
+            <Reveal delayMs={40} className="mt-10">
+                <div className="max-w-3xl divide-y divide-white/[0.08] border-y border-white/[0.08]">
                     {FAQ_ITEMS.map((item) => (
-                        <details key={item.question} className="t-acc py-5 first:pt-1 last:pb-1">
+                        <details key={item.question} className="t-acc">
                             <summary
                                 onClick={(event) => {
                                     const details = event.currentTarget.closest("details");
@@ -71,7 +61,7 @@ export function Faq() {
                                         details.classList.remove("is-closing");
                                     }, ACC_CLOSE_MS);
                                 }}
-                                className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-5 py-4 text-left text-[16px] font-medium text-white outline-none transition-colors marker:hidden hover:text-zinc-200 focus-visible:text-zinc-200 [&::-webkit-details-marker]:hidden"
+                                className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-5 py-4 text-left text-[15px] font-medium text-white outline-none transition-colors marker:hidden hover:text-zinc-200 focus-visible:text-zinc-200 [&::-webkit-details-marker]:hidden"
                             >
                                 {item.question}
                                 <span className="t-acc-chevron shrink-0" aria-hidden>
@@ -80,7 +70,7 @@ export function Faq() {
                             </summary>
                             <div className="t-acc-panel">
                                 <div className="t-acc-panel-inner">
-                                    <p className="max-w-3xl pb-3 pr-8 text-[14px] leading-relaxed text-zinc-400">
+                                    <p className="max-w-3xl pb-5 pr-8 text-[14px] leading-relaxed text-zinc-400">
                                         {item.answer}
                                     </p>
                                 </div>

@@ -55,12 +55,9 @@ export const LANDING_JUMPS = [
     { href: "#demo", label: "Demo" },
     { href: "#features", label: "Ownership" },
     { href: "#providers", label: "Providers" },
-    { href: "#apps", label: "Apps" },
-    { href: "#in-use", label: "In use" },
-    { href: "#capabilities", label: "Capabilities" },
+    { href: "#capabilities", label: "Features" },
     { href: "#deploy", label: "Deploy" },
     { href: "#faq", label: "FAQ" },
-    { href: "#changelog", label: "Changelog" },
 ] as const;
 
 /** Featured provider marks for landing shelves (no infinite marquee). */

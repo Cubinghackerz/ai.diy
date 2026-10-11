@@ -2,16 +2,15 @@
 
 ## Direction
 
-The landing page is **Vercel/Resend blackfield with an instrumented, squared frame**: a centered product-window first viewport. Ownership copy and actions sit above a live, scripted preview of the ai.diy workspace (real text and SVG, not an image), not beside it. The page then proves the claim through the Local Data Plane, provider freedom, private workflows, capability controls, and a real deploy terminal. Structure comes from typography, spacing, hairlines, and a numbered section grid. No gradients.
+The landing page is **clean, simple, and minimal, in the Vercel style**: a black canvas, Geist, hairlines, solid white actions, and nothing that does not earn its place. It says what the product is, shows it working, and gets out of the way. One column of content, generous space, full-width hairlines between sections, no ornament, no gradients.
+
+The first viewport is a plain headline, one sentence, two buttons, and a scripted, clearly labelled preview of the ai.diy workspace (real text and SVG, not an image). The page then proves the claim in six short sections: ownership (the Local Data Plane), providers, features, self-hosting, FAQ, and a closing call to action.
 
 ## Shape Language
 
-- Corners are square: `--radius-xs` 1px through `--radius-4xl` 6px, defined once in `app/styles/app.css`. Every non-chat surface reads those tokens, so a shape change is a token change.
+- Corners follow the app tokens, `--radius-xs` 1px through `--radius-4xl` 6px, defined once in `app/styles/app.css`. Landing buttons and surfaces use 6px; inner controls 4px.
 - The chat surface is the exception. `.legacy-round` (set on the workspace main column in `app/routes/home.tsx`) restores the original soft radii for the header, thread, canvas, and preview panels. The composer keeps its pill shell and circular buttons.
-- Status dots, pills, and controls are rectangles or near-rectangles; only the composer and genuinely circular affordances (avatars, switch thumbs, spinner) stay round.
-- Evidence sits inside a hairline rail: the landing `main` is one `max-w-6xl` column with side borders, and each section is separated by a shared top border. Sections carry a mono index kicker (`SectionLabel`, "01 / OWNERSHIP") and a mint 6px square.
-- Hero evidence is framed with `CornerFrame` selection handles, the squarish signature.
-- Wordmark: the closing band sets `ai.diy` as outlined type that fills in on hover.
+- Structure comes from typography, spacing, and hairlines. Sections are separated by a full-width `white/[0.08]` top border (`Band` in `app/routes/landing.tsx`); content sits in one `max-w-6xl` column with a 24px gutter. No side rails, corner handles, dashed frames, dot fields, noise, nested bezels, or index kickers.
 
 ## Mode
 
@@ -20,58 +19,43 @@ Persuade. Understand BYOK local-first ownership, then open `/workspace` or deplo
 ## Palette
 
 - Canvas: `#000000` (`--landing-canvas`)
-- Surfaces: `#0a0a0a` / `#111111`, used where containment communicates product or terminal structure
-- Type: white headings, zinc-400 body, zinc-500/600 metadata
+- Surfaces: `#0a0a0a`, used only where containment communicates product or terminal structure
+- Type: white headings, zinc-400 body, zinc-500 metadata (the landing scope lifts zinc-500 to zinc-400 for contrast)
 - Borders: `white/[0.08–0.1]` hairlines
-- Primary CTA: solid white rectangle with a squared nested arrow cell (`LandingCta`)
-- Live signal: mint `#3DFFB0`, reserved for status squares, cipher glyphs, and the Local Data Plane packet
-- Provider shelf: static official marks with grayscale-to-color hover; no pill containers or marquee loop
+- Primary action: a solid white button with black text; secondary: the same shape outlined (`LandingCta`). No arrow cells, no magnet effect
+- Mint `#3DFFB0` is a small status accent only (the Local Data Plane stage marker, "keys stay in this browser" dot, a done check)
+- Provider shelf: static official marks, grayscale until hovered; no pill containers or marquee loop
 
 ## Typography
 
 - Landing: Geist Sans for display and body, scoped in `LandingShell`; Geist font stylesheets are linked by the landing route.
 - Workspace: Hanken Grotesk for body/UI and Fragment Mono for code/data, from `app/styles/app.css`. The root also loads Bricolage Grotesque; this is not a universal Geist-only system.
-- Font stylesheets currently use external CDNs/Google Fonts. Self-hosting is a separate privacy/code-health task, not part of this reliability milestone.
-- Medium display weight, compact leading, tracking no tighter than `-0.04em`
-- Display scale tops out below 6rem; body measure remains near 65 characters
+- Font stylesheets currently use external CDNs/Google Fonts. Self-hosting is a separate privacy/code-health task.
+- Semibold display weight, compact leading, tracking no tighter than `-0.04em`, balanced wrapping (`text-balance`)
+- Display scale tops out below 6rem (hero: up to 4.5rem); body measure stays near 65 characters
+- Mono is for code, commands, and tiny labels only
 - No gradient text
-
-## Shape And Depth
-
-- The page canvas is open black; evidence uses hairline containment, not decorative frames
-- Product and terminal surfaces earn square shells (2–3px) and a single large offset shadow
-- The product bezel may take a gentle pointer tilt (≤3°)
-- Hairlines divide information; decorative dot fields, SVG noise, dashed frames, gradients, and nested bezels are not page scaffolding. The single rail around `main` and its section dividers are the only structural lines
-- Floating island navigation remains the primary chrome, squared and hairline-bordered
 
 ## Composition
 
-1. Floating island navigation
-2. Centered ownership hero: status row, cipher headline, one-line sub copy, actions, a copyable `git clone` chip, and a corner-framed product window that plays a short scripted workspace preview (`HeroWorkspace`)
-3. Key-facts band inside the rail
-4. Interactive Local Data Plane: three focusable nodes and one mint packet stepped through a request
-5. Static provider shelf
-6. Composio app shelf (12 marks; the rest is a text claim)
-7. In-use evidence (Canvas, browser Python, Knowledge Base) plus product-guide links
-8. Interactive capability lanes (Tools, Canvas, Python, Storage; deploy lives in the terminal section)
-9. Copyable self-host terminal
-10. FAQ
-11. Changelog
-12. Closing statement with outlined wordmark, then footer
+1. Flat top bar (`SiteNav`): logo, a few anchors, GitHub, `⌘K` jump palette, and the one primary action
+2. Hero: headline, one sentence, "Open workspace" and "View on GitHub", then the scripted preview (`HeroWorkspace`)
+3. Ownership: the interactive Local Data Plane (three focusable nodes; "Follow one request" steps a marker through four stages)
+4. Providers: a 4×2 shelf of seven marks plus a "+N more" link, and one sentence on subscription sign-in
+5. Features: a hairline 3×2 grid (Canvas, Python, Knowledge base, Tools and MCP, Connected apps, Backups) and product-guide links
+6. Self-hosting: a copyable command with npm, Docker, and Vercel tabs
+7. FAQ (content is mirrored into JSON-LD)
+8. Closing statement with two actions, then the footer
 
 ## Motion
 
 - Custom ease `cubic-bezier(0.32, 0.72, 0, 1)` / GSAP power3
-- Press and hover feedback settles in 150ms; the primary CTA scales to 0.97 on press
-- Focal moment: the hero ownership headline decrypts under the cursor (Canvas UI DecryptReveal, mint on `#0a0a0a`). Hover-capable pointers only; touch and reduced-motion see crisp type
-- Remaining hero steps keep the blur-up stagger; the headline is excluded so the cipher owns the entrance
-- CTAs magnet toward the pointer; product window tilts
-- Section headings use a one-time masked word reveal (`MaskedHeading`); other section reveals stay subtle (`Reveal`)
-- Local Data Plane: one mint packet, moved only while a visitor steps "Follow one request". No looping packet. Reduced motion and no-JS render the four stages as a numbered list
-- Closing wordmark fills from outline to a 6% wash on hover
-- Hero preview (`HeroWorkspace`, script in `demo-timeline.ts`): prompt types, Python runs in the tab, the answer streams, a Canvas chart appears, provider chips rotate, then it loops. It is illustrative playback with sample data and says so ("Preview · sample data"); it never claims to be live and invents no metrics or model benchmarks. It renders its finished frame as real DOM text on the server, with no JavaScript and under reduced motion. It plays only while in view and the tab is visible, and it has a visible Pause control (the finished frame shows while paused). The real recorded demo stays one click away. The hero image is no longer on the LCP path
-- Motion budget: one packet, one headline decrypt, one hero preview loop, no scroll-pinned scene
-- Honor `prefers-reduced-motion`; reduced-motion visitors get visible static final states
+- Hover and press feedback settles in 150ms; there are no magnet, tilt, decrypt, or masked-word effects
+- Hero steps fade in once with a short stagger; section blocks fade in once as they scroll into view (`Reveal`). Reduced-motion visitors get visible final states
+- Local Data Plane: one marker, moved only while a visitor steps "Follow one request". Reduced motion and no-JS render the four stages as a numbered list
+- Hero preview (`HeroWorkspace`, script in `demo-timeline.ts`): prompt types, Python runs in the tab, the answer streams, a Canvas chart appears, provider chips rotate, then it loops. It is illustrative playback with sample data and says so ("Preview · sample data"); it never claims to be live and invents no metrics or model benchmarks. It renders its finished frame as real DOM text on the server, with no JavaScript and under reduced motion. It plays only while in view and the tab is visible, and it has a visible Pause control (the finished frame shows while paused). The real recorded demo stays one click away. No hero image is on the LCP path
+- Motion budget: one preview loop, one stepped marker, no scroll-pinned scene
+- Honor `prefers-reduced-motion`
 
 ## Icons
 
@@ -79,13 +63,13 @@ Persuade. Understand BYOK local-first ownership, then open `/workspace` or deplo
 
 ## Accessibility
 
-- Semantic landmarks, visible focus rings, and at least 40px interactive targets
-- Real GitHub stars and deploy commands; no fabricated metrics, testimonials, or customers
-- Zinc text contrast is evaluated against `#000000` without route-level color overrides
+- Semantic landmarks, visible focus rings, and at least 36px interactive targets in the nav and 44px for primary actions
+- Real GitHub stars and deploy commands; no fabricated metrics, testimonials, customers, or status claims
+- Zinc text contrast is evaluated against `#000000`; metadata never drops below 4.5:1
 - Reduced-motion visitors receive visible static final states
 
 ## Form Contract
 
-- THESIS: The product is the proof — a black, flat, Vercel-grade workspace in the first viewport
-- FORM: Vercel/Resend blackfield × squared instrumented rail × centered product window
-- SHAPE: 1–6px radii everywhere except the workspace chat surface, which keeps its soft radii
+- THESIS: Say what it is, show it working, get out of the way
+- FORM: Vercel-style flat bar, full-width hairline sections, one column
+- SHAPE: 6px radii on landing surfaces; the workspace chat surface keeps its soft radii

@@ -4,7 +4,6 @@ import { X } from "@phosphor-icons/react";
 import { cn } from "~/lib/utils";
 import { usePrefersReducedMotion } from "./hooks";
 import { HeroWorkspace } from "./HeroWorkspace";
-import { TiltedCard } from "./TiltedCard";
 
 const DEMO_VIDEO_SRC = "/AI-DIY_DEMO.mp4";
 /** Matches --modal-close-dur in app/styles/app.css. */
@@ -68,10 +67,8 @@ export function ProductBezel({ className }: { className?: string }) {
 
     return (
         <div className={cn("w-full", className)}>
-            <TiltedCard maxTilt={3}>
-                <HeroWorkspace onWatchDemo={() => setOpen(true)} />
-            </TiltedCard>
-            <p className="mt-4 text-center font-mono text-[10px] tracking-[0.16em] text-zinc-400">
+            <HeroWorkspace onWatchDemo={() => setOpen(true)} />
+            <p className="mt-4 text-center text-[13px] text-zinc-400">
                 Illustrative playback with sample data. The real demo is one click away.
             </p>
 

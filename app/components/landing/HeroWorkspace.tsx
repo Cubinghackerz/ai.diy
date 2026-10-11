@@ -29,7 +29,6 @@ import {
 } from "./demo-timeline";
 import { usePrefersReducedMotion } from "./hooks";
 import { EASE_OUT } from "./motion";
-import { StatusPill } from "./StatusPill";
 
 const SIDEBAR_CHATS = ["Chart sales.csv by month", "Release notes draft", "Local model smoke test"];
 
@@ -194,7 +193,7 @@ function SalesChart({ animate }: { animate: boolean }) {
 function FileChip({ icon, name }: { icon: "image" | "csv"; name: string }) {
     const Icon = icon === "image" ? ImageSquare : FileCsv;
     return (
-        <span className="inline-flex min-w-0 items-center gap-1.5 rounded-[2px] border border-white/[0.12] bg-white/[0.04] px-2 py-1 font-mono text-[11px] text-zinc-200">
+        <span className="inline-flex min-w-0 items-center gap-1.5 rounded-[4px] border border-white/[0.12] bg-white/[0.04] px-2 py-1 font-mono text-[11px] text-zinc-200">
             <Icon weight="light" className="size-3.5 shrink-0" />
             <span className="truncate">{name}</span>
         </span>
@@ -212,25 +211,25 @@ export function HeroWorkspace({ onWatchDemo }: { onWatchDemo: () => void }) {
             ref={rootRef}
             role="group"
             aria-label="Preview of the ai.diy workspace"
-            className="overflow-hidden rounded-[2px] border border-white/[0.1] bg-[#0a0a0a] shadow-[0_48px_120px_-48px_rgba(0,0,0,0.95)]"
+            className="overflow-hidden rounded-[6px] border border-white/[0.1] bg-[#0a0a0a]"
         >
             <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.08] px-4 py-2.5">
-                <span aria-hidden className="size-2 rounded-[2px] bg-zinc-700" />
-                <span aria-hidden className="size-2 rounded-[2px] bg-zinc-700" />
-                <span aria-hidden className="size-2 rounded-[2px] bg-zinc-700" />
+                <span aria-hidden className="size-2 rounded-[4px] bg-zinc-700" />
+                <span aria-hidden className="size-2 rounded-[4px] bg-zinc-700" />
+                <span aria-hidden className="size-2 rounded-[4px] bg-zinc-700" />
                 <span className="ml-3 font-mono text-[10px] tracking-wide text-zinc-400">
                     ai.diy workspace
                 </span>
                 <div className="ml-auto flex items-center gap-2">
-                    <span className="hidden sm:inline-flex">
-                        <StatusPill>Preview · sample data</StatusPill>
+                    <span className="hidden font-mono text-[10px] tracking-wide text-zinc-400 sm:inline">
+                        Preview · sample data
                     </span>
                     {reduced ? null : (
                         <button
                             type="button"
                             onClick={toggle}
                             aria-pressed={paused}
-                            className="inline-flex min-h-8 items-center gap-1.5 rounded-[2px] border border-white/[0.12] bg-white/[0.04] px-2.5 font-mono text-[10px] tracking-wide text-zinc-300 transition-[background-color,border-color,color] duration-200 hover:border-white/25 hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                            className="inline-flex min-h-8 items-center gap-1.5 rounded-[4px] border border-white/[0.12] bg-white/[0.04] px-2.5 font-mono text-[10px] tracking-wide text-zinc-300 transition-[background-color,border-color,color] duration-200 hover:border-white/25 hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                         >
                             {paused ? (
                                 <Play weight="fill" className="size-3" />
@@ -243,7 +242,7 @@ export function HeroWorkspace({ onWatchDemo }: { onWatchDemo: () => void }) {
                     <button
                         type="button"
                         onClick={onWatchDemo}
-                        className="inline-flex min-h-8 items-center gap-1.5 rounded-[2px] border border-white/[0.12] bg-white/[0.04] px-2.5 font-mono text-[10px] tracking-wide text-zinc-300 transition-[background-color,border-color,color] duration-200 hover:border-white/25 hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                        className="inline-flex min-h-8 items-center gap-1.5 rounded-[4px] border border-white/[0.12] bg-white/[0.04] px-2.5 font-mono text-[10px] tracking-wide text-zinc-300 transition-[background-color,border-color,color] duration-200 hover:border-white/25 hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                     >
                         <Play weight="fill" className="size-3" />
                         Watch real demo
@@ -264,7 +263,7 @@ export function HeroWorkspace({ onWatchDemo }: { onWatchDemo: () => void }) {
                 <aside className="hidden min-h-0 flex-col border-r border-white/[0.08] bg-[#050505] p-3 md:flex">
                     <div className="flex items-center justify-between">
                         <span className="text-[13px] font-medium text-white">ai.diy</span>
-                        <span className="grid size-6 place-items-center rounded-[2px] border border-white/[0.12] text-zinc-300">
+                        <span className="grid size-6 place-items-center rounded-[4px] border border-white/[0.12] text-zinc-300">
                             <Plus weight="light" className="size-3.5" />
                         </span>
                     </div>
@@ -276,7 +275,7 @@ export function HeroWorkspace({ onWatchDemo }: { onWatchDemo: () => void }) {
                             <li
                                 key={title}
                                 className={cn(
-                                    "flex items-center gap-2 truncate rounded-[2px] px-2 py-1.5 text-[12px]",
+                                    "flex items-center gap-2 truncate rounded-[4px] px-2 py-1.5 text-[12px]",
                                     index === 0 ? "bg-white/[0.07] text-white" : "text-zinc-400",
                                 )}
                             >
@@ -310,7 +309,7 @@ export function HeroWorkspace({ onWatchDemo }: { onWatchDemo: () => void }) {
                         ) : null}
 
                         {reached(stage, "sent") ? (
-                            <div className="ml-auto max-w-[85%] rounded-[2px] border border-white/[0.12] bg-white/[0.05] px-3 py-2 text-zinc-100">
+                            <div className="ml-auto max-w-[85%] rounded-[4px] border border-white/[0.12] bg-white/[0.05] px-3 py-2 text-zinc-100">
                                 {DEMO_PROMPT}
                             </div>
                         ) : null}
@@ -363,7 +362,7 @@ export function HeroWorkspace({ onWatchDemo }: { onWatchDemo: () => void }) {
                     </div>
 
                     <div className="shrink-0 px-4 pb-4">
-                        <div className="rounded-[2px] border border-white/[0.14] bg-[#050505] p-3">
+                        <div className="rounded-[4px] border border-white/[0.14] bg-[#050505] p-3">
                             <p className="min-h-5 truncate text-[13px] text-zinc-100">
                                 {composing ? (
                                     <>
@@ -375,14 +374,14 @@ export function HeroWorkspace({ onWatchDemo }: { onWatchDemo: () => void }) {
                                 )}
                             </p>
                             <div className="mt-3 flex items-center gap-2">
-                                <span className="grid size-7 place-items-center rounded-[2px] border border-white/[0.12] text-zinc-300">
+                                <span className="grid size-7 place-items-center rounded-[4px] border border-white/[0.12] text-zinc-300">
                                     <Plus weight="light" className="size-3.5" />
                                 </span>
-                                <span className="inline-flex h-7 min-w-[8.75rem] items-center justify-between gap-2 rounded-[2px] border border-white/[0.12] px-2 font-mono text-[11px] text-zinc-200">
+                                <span className="inline-flex h-7 min-w-[8.75rem] items-center justify-between gap-2 rounded-[4px] border border-white/[0.12] px-2 font-mono text-[11px] text-zinc-200">
                                     <span className="truncate">{DEMO_PROVIDERS[chip]}</span>
                                     <CaretDown weight="light" className="size-3 shrink-0" />
                                 </span>
-                                <span className="ml-auto grid size-7 place-items-center rounded-[2px] bg-white text-black">
+                                <span className="ml-auto grid size-7 place-items-center rounded-[4px] bg-white text-black">
                                     <ArrowUp weight="bold" className="size-3.5" />
                                 </span>
                             </div>
