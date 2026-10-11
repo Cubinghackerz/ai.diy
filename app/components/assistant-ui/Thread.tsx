@@ -8,6 +8,7 @@ import {
 import { ComposerPlusMenu } from "~/components/assistant-ui/ComposerPlusMenu";
 import { ComposerModelControls } from "~/components/assistant-ui/ComposerModelControls";
 import { ModelPicker } from "~/components/ui/ModelPicker";
+import { ReasoningEffortSelector } from "~/components/assistant-ui/ReasoningEffortSelector";
 import { SubagentDock, useSubagentOptional } from "~/components/assistant-ui/subagents";
 import { BorderBeam } from "~/components/ui/border-beam";
 import { ThreadFollowupSuggestions } from "~/components/assistant-ui/follow-up-suggestions";
@@ -50,7 +51,6 @@ import {
   DownloadIcon,
   MicIcon,
   MoreHorizontalIcon,
-  PaperclipIcon,
   PencilIcon,
   RefreshCwIcon,
   SparklesIcon,
@@ -74,8 +74,13 @@ import {
   useChatGenerating,
   useChatSession,
 } from "~/components/assistant-ui/ChatSessionContext";
-import { useInterfaceMode, useSettings } from "~/lib/providers/SettingsProvider";
+import {
+  useInterfaceMode,
+  useSettings,
+  useSettingsSelector,
+} from "~/lib/providers/SettingsProvider";
 import { isProviderReady } from "~/lib/setup";
+import { useChatGPTSession } from "~/lib/providers/ChatGPTSessionProvider";
 import {
   BUILTIN_FORCED_SKILLS,
   dedupeForcedSkills,
@@ -473,7 +478,7 @@ const ComposerInput: FC<{ simple?: boolean }> = ({ simple = false }) => {
         }
         className={cn(
           "aui-composer-input caret-foreground placeholder:text-muted-foreground/70 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none ring-0 shadow-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
-          simple && "py-2",
+          simple && "block py-2",
         )}
         autoFocus
         enterKeyHint="send"
@@ -577,6 +582,7 @@ const Composer: FC = () => {
     <ComposerDraftContext.Provider
       value={{ value, setText, send, canSend, isRunning, stop, appliedSkills, setAppliedSkills }}
     >
+      {simple ? <SimpleReconnectNotice /> : null}
       <ComposerPrimitive.Root
         className="aui-composer-root relative flex w-full flex-col"
         onSubmit={(e) => {
@@ -593,7 +599,7 @@ const Composer: FC = () => {
             <div
               data-slot="aui_composer-shell"
               data-variant="simple"
-              className="relative flex w-full flex-col rounded-[1.75rem] border border-border/60 bg-(--composer-bg) px-2 py-1.5 shadow-sm transition-[border-color,box-shadow] focus-within:border-foreground/25 focus-within:shadow-md"
+              className="relative flex w-full flex-col rounded-[1.75rem] border border-border/50 bg-(--composer-bg) p-2 shadow-sm transition-[border-color,box-shadow] focus-within:border-foreground/20 focus-within:shadow-md"
             >
               <BorderBeam
                 active={isRunning}
@@ -602,12 +608,15 @@ const Composer: FC = () => {
               />
               <ComposerAttachments />
               <ComposerAttachmentGuard />
-              <div className="flex items-end gap-1">
-                <SimpleAttachButton />
+              <div className="flex items-end gap-1.5">
+                <div className="flex h-10 shrink-0 items-center">
+                  <ComposerPlusMenu large />
+                </div>
                 <div className="min-w-0 flex-1">
                   <ComposerInput simple />
                 </div>
-                <div className="flex h-10 shrink-0 items-center">
+                <div className="flex h-10 shrink-0 items-center gap-1">
+                  <SimpleDictateButton />
                   <ComposerSendButton large />
                 </div>
               </div>
@@ -635,28 +644,84 @@ const Composer: FC = () => {
   );
 };
 
-/** The simple input bar's only extra: attach. Everything else lives in Settings. */
-const SimpleAttachButton: FC = () => {
-  const { isRunning } = useComposerDraft();
+/** Voice input in the simple bar: the same dictation as the full composer, shown only when the browser supports it. */
+const SimpleDictateButton: FC = () => {
+  const dictationStatus = useAuiState((s) => s.composer.dictation?.status.type);
   return (
-    <div className="flex h-10 shrink-0 items-center">
-      <ComposerPrimitive.AddAttachment
-        multiple
-        render={
-          <TooltipIconButton
-            tooltip="Attach files"
-            side="bottom"
-            type="button"
-            variant="ghost"
-            size="icon"
-            disabled={isRunning}
-            className="size-8 rounded-full text-muted-foreground hover:text-foreground"
-            aria-label="Attach files"
-          />
-        }
+    <AuiIf condition={(s) => s.thread.capabilities.dictation && !s.thread.isRunning}>
+      <AuiIf condition={(s) => s.composer.dictation == null}>
+        <ComposerPrimitive.Dictate
+          render={
+            <TooltipIconButton
+              tooltip="Voice input"
+              side="bottom"
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-9 rounded-full text-muted-foreground hover:text-foreground"
+              aria-label="Start voice input"
+            />
+          }
+        >
+          <MicIcon className="size-4.5" />
+        </ComposerPrimitive.Dictate>
+      </AuiIf>
+      <AuiIf condition={(s) => s.composer.dictation != null}>
+        <ComposerPrimitive.StopDictation
+          render={
+            <TooltipIconButton
+              tooltip="Stop dictation"
+              side="bottom"
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="text-destructive size-9 rounded-full"
+              aria-label="Stop voice input"
+            />
+          }
+        >
+          <SquareIcon className="size-3.5 animate-pulse fill-current" />
+        </ComposerPrimitive.StopDictation>
+      </AuiIf>
+      <span className="sr-only" aria-live="polite">
+        {dictationStatus === "starting"
+          ? "Starting voice input"
+          : dictationStatus === "running"
+            ? "Listening for voice input"
+            : ""}
+      </span>
+    </AuiIf>
+  );
+};
+
+/**
+ * ChatGPT signed this workspace out (the server restarted or the session was revoked).
+ * Say so before they type a message that cannot be sent, and make coming back one click.
+ */
+const SimpleReconnectNotice: FC = () => {
+  const provider = useSettingsSelector((settings) => settings.chat.provider);
+  const session = useChatGPTSession();
+  if (provider !== "chatgpt" || session.status === "authenticated") return null;
+  if (session.status !== "expired" && session.status !== "pending" && session.status !== "starting")
+    return null;
+  const working = session.status === "pending" || session.status === "starting";
+  return (
+    <div
+      role="status"
+      className="-mb-2 flex items-center justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-300"
+    >
+      <span>
+        {working
+          ? "Finish signing in on OpenAI, then send your message."
+          : "ChatGPT signed you out. Sign in again to keep chatting."}
+      </span>
+      <button
+        type="button"
+        onClick={() => (working ? session.reopen() : session.login())}
+        className="shrink-0 rounded-md px-2 py-1 font-medium underline underline-offset-2 outline-none hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring/50"
       >
-        <PaperclipIcon className="size-4.5" />
-      </ComposerPrimitive.AddAttachment>
+        {working ? "Open OpenAI" : "Reconnect"}
+      </button>
     </div>
   );
 };
@@ -667,7 +732,7 @@ const SimpleComposerFooter: FC = () => {
   const providerReady = isProviderReady(settings);
   return (
     <div className="-mt-2 flex items-center justify-between gap-2 px-2 text-xs text-muted-foreground">
-      <div className="min-w-0">
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         {providerReady ? (
           <ModelPicker
             provider={settings.chat.provider}
@@ -679,6 +744,7 @@ const SimpleComposerFooter: FC = () => {
             className="max-w-[14rem]"
           />
         ) : null}
+        <ReasoningEffortSelector />
       </div>
       <button
         type="button"

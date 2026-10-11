@@ -13,7 +13,7 @@ export function ClosingBand() {
                     self-host in one command.
                 </p>
                 <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-                    <LandingCta to="/workspace">Open workspace</LandingCta>
+                    <LandingCta to="/workspace">Start chatting</LandingCta>
                     <LandingCta href={GITHUB_URL} external variant="ghost">
                         View on GitHub
                     </LandingCta>

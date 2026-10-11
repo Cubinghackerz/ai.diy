@@ -86,7 +86,7 @@ export function SiteNav() {
                             ⌘K
                         </button>
                         <LandingCta to="/workspace" size="compact">
-                            Open workspace
+                            Start chatting
                         </LandingCta>
                         <button
                             type="button"

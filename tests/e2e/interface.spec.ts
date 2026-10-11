@@ -63,6 +63,25 @@ test.describe("simple interface", () => {
         await expect(page.getByText("Verify", { exact: true })).toHaveCount(0);
     });
 
+    test("on a server that cannot keep ChatGPT sign-ins, OpenRouter is the recommended choice", async ({
+        page,
+    }) => {
+        await page.route("**/api/chatgpt/session", (route) =>
+            route.fulfill({
+                status: 200,
+                contentType: "application/json",
+                body: JSON.stringify({ status: "unauthenticated", persistence: "ephemeral" }),
+            }),
+        );
+        await page.route(/https:\/\//, (route) => route.abort());
+        await page.goto("/workspace");
+        await expect(page.getByText(/forgets ChatGPT sign-ins when it restarts/)).toBeVisible({
+            timeout: 30_000,
+        });
+        await expect(page.getByText(/Recommended on this server/)).toBeVisible();
+        await expect(page.getByText(/Recommended · no API key/)).toHaveCount(0);
+    });
+
     test("an API key is one click away, and so is the way back", async ({ page }) => {
         await page.route(/https:\/\//, (route) => route.abort());
         await page.goto("/workspace");
@@ -126,10 +145,10 @@ test.describe("simple interface", () => {
         });
         await expect(page.getByRole("heading", { name: "What can I help with?" })).toBeVisible();
         // None of the full interface's chrome.
-        await expect(page.getByRole("button", { name: "Composer extras" })).toHaveCount(0);
         await expect(page.getByText("USE A PRESET")).toHaveCount(0);
-        await expect(page.getByRole("button", { name: "Start voice input" })).toHaveCount(0);
-        await expect(page.getByRole("button", { name: "Attach files" })).toBeVisible();
+        // The input bar is a plus menu, the text, voice and send, nothing else.
+        await expect(page.getByRole("button", { name: "Composer extras" })).toBeVisible();
+        await expect(page.getByRole("button", { name: "Send message" })).toBeVisible();
         await expect(page.locator("aside").getByRole("button", { name: "Chats" })).toHaveCount(0);
 
         await input(page).pressSequentially("hello from the simple bar", { delay: 20 });

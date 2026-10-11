@@ -51,7 +51,11 @@ const CREDENTIAL_HINTS: Partial<Record<ProviderId, string>> = {
 export function SetupGate() {
     const { settings, loaded, updateProvider, updateChat, updateSettings, updateToolAccess } =
         useSettings();
-    const { isAuthenticated, status: chatgptStatus } = useChatGPTSession();
+    const {
+        isAuthenticated,
+        status: chatgptStatus,
+        ephemeral: chatgptEphemeral,
+    } = useChatGPTSession();
     const { session: grokSession } = useGrokBuildSession();
     const { session: kimiSession } = useKimiSession();
 
@@ -375,10 +379,17 @@ export function SetupGate() {
                     </header>
 
                     <section aria-label="Sign in" className="flex flex-col gap-3">
-                        <span className="inline-flex items-center gap-1.5 self-center rounded-[2px] border border-emerald-400/25 bg-emerald-400/10 px-2 py-0.5 font-mono text-[10px] text-emerald-300">
-                            <ShieldCheck weight="fill" className="size-3" />
-                            Recommended · no API key to copy
-                        </span>
+                        {chatgptEphemeral ? (
+                            <p className="self-center text-center text-[11px] leading-relaxed text-amber-400">
+                                This server forgets ChatGPT sign-ins when it restarts, so you may
+                                have to sign in again. OpenRouter below stays signed in.
+                            </p>
+                        ) : (
+                            <span className="inline-flex items-center gap-1.5 self-center rounded-[2px] border border-emerald-400/25 bg-emerald-400/10 px-2 py-0.5 font-mono text-[10px] text-emerald-300">
+                                <ShieldCheck weight="fill" className="size-3" />
+                                Recommended · no API key to copy
+                            </span>
+                        )}
                         <ChatGPTHeroConnect />
                     </section>
 
@@ -393,6 +404,12 @@ export function SetupGate() {
                                 <span className="h-px flex-1 bg-white/10" />
                             </div>
                             <div className="flex flex-col gap-2">
+                                {chatgptEphemeral ? (
+                                    <span className="inline-flex items-center gap-1.5 self-center rounded-[2px] border border-emerald-400/25 bg-emerald-400/10 px-2 py-0.5 font-mono text-[10px] text-emerald-300">
+                                        <ShieldCheck weight="fill" className="size-3" />
+                                        Recommended on this server · stays signed in
+                                    </span>
+                                ) : null}
                                 <OpenRouterConnectButton className="h-11 w-full rounded-xl border-white/12 bg-white/[0.04] text-zinc-100 hover:border-white/25 hover:bg-white/[0.08] hover:text-white" />
                                 <p className="text-center text-[11px] leading-relaxed text-zinc-500">
                                     OpenRouter: one sign-in, pay-as-you-go credits, hundreds of

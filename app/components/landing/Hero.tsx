@@ -17,6 +17,15 @@ export function Hero() {
             className="mx-auto max-w-6xl px-6 pb-24 pt-32 sm:pb-32 sm:pt-40"
         >
             <div className="mx-auto max-w-3xl text-center">
+                <p
+                    data-hero-step="0"
+                    className={cn(
+                        "mb-5 font-mono text-[11px] uppercase tracking-[0.16em] text-zinc-500",
+                        step,
+                    )}
+                >
+                    Free · open source · bring your own key
+                </p>
                 <h1
                     id="hero-heading"
                     data-hero-step="1"
@@ -41,7 +50,7 @@ export function Hero() {
                     data-hero-step="3"
                     className={cn("mt-10 flex flex-wrap items-center justify-center gap-3", step)}
                 >
-                    <LandingCta to="/workspace">Open workspace</LandingCta>
+                    <LandingCta to="/workspace">Start chatting</LandingCta>
                     <LandingCta
                         href={GITHUB_URL}
                         external
@@ -51,6 +60,9 @@ export function Hero() {
                         View on GitHub
                     </LandingCta>
                 </div>
+                <p data-hero-step="3" className={cn("mt-5 text-sm text-zinc-500", step)}>
+                    Sign in with ChatGPT or paste an API key. No account to create.
+                </p>
             </div>
 
             <div

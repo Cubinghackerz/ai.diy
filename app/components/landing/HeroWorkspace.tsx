@@ -4,12 +4,16 @@ import {
     CaretDown,
     ChatCircle,
     Check,
+    Brain,
     Database,
     FileCsv,
+    GearSix,
     ImageSquare,
+    Microphone,
     Pause,
     Play,
     Plus,
+    SidebarSimple,
     Terminal,
 } from "@phosphor-icons/react";
 import { cn } from "~/lib/utils";
@@ -211,7 +215,7 @@ export function HeroWorkspace({ onWatchDemo }: { onWatchDemo: () => void }) {
             ref={rootRef}
             role="group"
             aria-label="Preview of the ai.diy workspace"
-            className="overflow-hidden rounded-[6px] border border-white/[0.1] bg-[#0a0a0a]"
+            className="overflow-hidden rounded-2xl border border-white/[0.1] bg-[#0a0a0a]"
         >
             <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.08] px-4 py-2.5">
                 <span aria-hidden className="size-2 rounded-[4px] bg-zinc-700" />
@@ -258,65 +262,90 @@ export function HeroWorkspace({ onWatchDemo }: { onWatchDemo: () => void }) {
 
             <div
                 aria-hidden
-                className="grid h-[27rem] grid-cols-1 text-left sm:h-[29rem] md:grid-cols-[13rem_minmax(0,1fr)] lg:h-[31rem] lg:grid-cols-[13rem_minmax(0,1fr)_minmax(0,19rem)]"
+                className="grid h-[28rem] grid-cols-1 text-left sm:h-[30rem] md:grid-cols-[14.5rem_minmax(0,1fr)] lg:h-[33rem] lg:grid-cols-[14.5rem_minmax(0,1fr)_minmax(0,19rem)]"
             >
-                <aside className="hidden min-h-0 flex-col border-r border-white/[0.08] bg-[#050505] p-3 md:flex">
-                    <div className="flex items-center justify-between">
-                        <span className="text-[13px] font-medium text-white">ai.diy</span>
-                        <span className="grid size-6 place-items-center rounded-[4px] border border-white/[0.12] text-zinc-300">
-                            <Plus weight="light" className="size-3.5" />
+                {/* Sidebar: the real workspace's brand, tabs, actions and chat list. */}
+                <aside className="hidden min-h-0 flex-col gap-3 border-r border-white/[0.08] bg-[#0c0c0c] p-3 md:flex">
+                    <div className="flex items-center gap-2 px-1 pt-1">
+                        <span className="text-[17px] font-semibold tracking-[-0.04em] text-white">
+                            ai.diy
+                        </span>
+                        <span className="rounded-full border border-white/20 bg-white/10 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.12em] text-zinc-200">
+                            Beta
                         </span>
                     </div>
-                    <p className="mt-5 font-mono text-[10px] tracking-[0.14em] text-zinc-400">
+                    <div className="grid grid-cols-2 gap-1 rounded-xl border border-white/[0.08] bg-white/[0.03] p-1 text-[12px] font-medium">
+                        <span className="flex items-center justify-center gap-1.5 rounded-lg bg-white/[0.1] py-1.5 text-white">
+                            <ChatCircle weight="regular" className="size-3.5" />
+                            Chats
+                        </span>
+                        <span className="flex items-center justify-center gap-1.5 py-1.5 text-zinc-400">
+                            <GearSix weight="regular" className="size-3.5" />
+                            Settings
+                        </span>
+                    </div>
+                    <div className="grid grid-cols-[1fr_auto] gap-1.5 text-[12px] text-zinc-200">
+                        <span className="flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.1] py-2">
+                            <Plus weight="regular" className="size-3.5" />
+                            New Thread
+                        </span>
+                        <span className="flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.1] px-3 py-2">
+                            <Brain weight="regular" className="size-3.5" />
+                            Memory
+                        </span>
+                    </div>
+                    <p className="mt-1 px-1 font-mono text-[10px] tracking-[0.14em] text-zinc-500">
                         CHATS
                     </p>
-                    <ul className="mt-2 flex flex-col gap-0.5">
+                    <ul className="flex flex-col gap-0.5">
                         {SIDEBAR_CHATS.map((title, index) => (
                             <li
                                 key={title}
                                 className={cn(
-                                    "flex items-center gap-2 truncate rounded-[4px] px-2 py-1.5 text-[12px]",
-                                    index === 0 ? "bg-white/[0.07] text-white" : "text-zinc-400",
+                                    "flex items-center gap-2 truncate rounded-xl px-2.5 py-2 text-[12.5px]",
+                                    index === 0 ? "bg-white/[0.08] text-white" : "text-zinc-400",
                                 )}
                             >
-                                <ChatCircle weight="light" className="size-3.5 shrink-0" />
+                                <ChatCircle weight="regular" className="size-3.5 shrink-0" />
                                 <span className="truncate">{title}</span>
                             </li>
                         ))}
                     </ul>
-                    <p className="mt-auto flex items-center gap-2 font-mono text-[10px] text-zinc-400">
-                        <span className="size-1.5 shrink-0 bg-[var(--landing-mint,#3DFFB0)]" />
+                    <p className="mt-auto flex items-center gap-2 px-1 font-mono text-[10px] text-zinc-400">
+                        <span className="size-1.5 shrink-0 rounded-full bg-[var(--landing-mint,#3DFFB0)]" />
                         Keys stay in this browser
                     </p>
                 </aside>
 
-                <div className="flex min-h-0 min-w-0 flex-col">
-                    <div className="flex h-10 shrink-0 items-center border-b border-white/[0.08] px-4 text-[12px] font-medium text-zinc-200">
+                <div className="flex min-h-0 min-w-0 flex-col bg-[#0a0a0a]">
+                    <div className="flex h-11 shrink-0 items-center gap-3 border-b border-white/[0.08] px-3 text-[13px] font-semibold text-zinc-100">
+                        <SidebarSimple weight="regular" className="size-[18px] text-zinc-400" />
                         <span className="truncate">Chart sales.csv by month</span>
                     </div>
 
-                    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-4 py-4 text-[13px] leading-relaxed">
+                    <div className="mx-auto flex min-h-0 w-full max-w-[40rem] flex-1 flex-col gap-3 overflow-hidden px-4 py-4 text-[13px] leading-relaxed">
                         {composing ? (
                             // The workspace's own empty state, so the thread is never blank while the prompt types.
                             <div className="m-auto text-center">
-                                <p className="text-xl font-medium tracking-[-0.02em] text-white">
+                                <p className="text-3xl font-semibold tracking-[-0.03em] text-white">
                                     ai.diy
                                 </p>
-                                <p className="mt-1 text-[13px] text-zinc-400">
-                                    Local-first chat. Your keys stay on this device.
+                                <p className="mx-auto mt-2 max-w-xs text-[13px] text-zinc-400">
+                                    Your local-first workspace is ready. Ask a question, attach a
+                                    file, or type / to run a skill.
                                 </p>
                             </div>
                         ) : null}
 
                         {reached(stage, "sent") ? (
-                            <div className="ml-auto max-w-[85%] rounded-[4px] border border-white/[0.12] bg-white/[0.05] px-3 py-2 text-zinc-100">
+                            <div className="ml-auto max-w-[85%] rounded-2xl bg-white/[0.07] px-4 py-2 text-zinc-100">
                                 {DEMO_PROMPT}
                             </div>
                         ) : null}
 
                         {reached(stage, "tool") ? (
-                            <div className="flex items-center gap-2 font-mono text-[11px] text-zinc-300">
-                                <Terminal weight="light" className="size-3.5 shrink-0" />
+                            <div className="flex w-fit items-center gap-2 rounded-lg border border-white/[0.1] px-2.5 py-1.5 font-mono text-[11px] text-zinc-300">
+                                <Terminal weight="regular" className="size-3.5 shrink-0" />
                                 <span>Ran Python in this tab</span>
                                 <span className="flex items-center gap-1 text-zinc-400">
                                     {stage === "tool" ? (
@@ -361,27 +390,44 @@ export function HeroWorkspace({ onWatchDemo }: { onWatchDemo: () => void }) {
                         ) : null}
                     </div>
 
-                    <div className="shrink-0 px-4 pb-4">
-                        <div className="rounded-[4px] border border-white/[0.14] bg-[#050505] p-3">
-                            <p className="min-h-5 truncate text-[13px] text-zinc-100">
+                    {/* Composer: the full interface's rounded input with provider and model chips. */}
+                    <div className="mx-auto w-full max-w-[40rem] shrink-0 px-4 pb-4">
+                        <div className="rounded-3xl border border-white/[0.1] bg-[#161616] p-2.5">
+                            <p className="min-h-10 truncate px-2.5 py-2 text-[14px] text-zinc-100">
                                 {composing ? (
                                     <>
                                         <Typed text={DEMO_PROMPT} mode="typing" msPerChar={34} />
-                                        <span className="ml-px inline-block h-3.5 w-px translate-y-0.5 bg-zinc-200" />
+                                        <span className="ml-px inline-block h-4 w-px translate-y-0.5 bg-zinc-200" />
                                     </>
                                 ) : (
-                                    <span className="text-zinc-400">Message ai.diy</span>
+                                    <span className="text-zinc-500">
+                                        Send a message... (type / to use a command or a skill)
+                                    </span>
                                 )}
                             </p>
-                            <div className="mt-3 flex items-center gap-2">
-                                <span className="grid size-7 place-items-center rounded-[4px] border border-white/[0.12] text-zinc-300">
-                                    <Plus weight="light" className="size-3.5" />
+                            <div className="mt-1 flex items-center gap-1.5">
+                                <span className="grid size-7 place-items-center rounded-full text-zinc-300">
+                                    <Plus weight="bold" className="size-4" />
                                 </span>
-                                <span className="inline-flex h-7 min-w-[8.75rem] items-center justify-between gap-2 rounded-[4px] border border-white/[0.12] px-2 font-mono text-[11px] text-zinc-200">
+                                <span className="inline-flex h-7 min-w-[8.5rem] items-center justify-between gap-2 rounded-lg border border-white/[0.1] px-2 text-[11px] font-medium text-zinc-200">
                                     <span className="truncate">{DEMO_PROVIDERS[chip]}</span>
-                                    <CaretDown weight="light" className="size-3 shrink-0" />
+                                    <CaretDown weight="regular" className="size-3 shrink-0" />
                                 </span>
-                                <span className="ml-auto grid size-7 place-items-center rounded-[4px] bg-white text-black">
+                                <span className="hidden h-7 items-center gap-2 rounded-lg border border-white/[0.1] px-2 text-[11px] font-medium text-zinc-200 sm:inline-flex">
+                                    GPT-6 Luna
+                                    <CaretDown weight="regular" className="size-3 shrink-0" />
+                                </span>
+                                <span className="ml-auto grid size-7 place-items-center rounded-full text-zinc-400">
+                                    <Microphone weight="regular" className="size-4" />
+                                </span>
+                                <span
+                                    className={cn(
+                                        "grid size-7 place-items-center rounded-full",
+                                        composing
+                                            ? "bg-white text-black"
+                                            : "bg-zinc-600 text-zinc-300",
+                                    )}
+                                >
                                     <ArrowUp weight="bold" className="size-3.5" />
                                 </span>
                             </div>
@@ -389,15 +435,19 @@ export function HeroWorkspace({ onWatchDemo }: { onWatchDemo: () => void }) {
                     </div>
                 </div>
 
-                <aside className="hidden min-h-0 flex-col border-l border-white/[0.08] bg-[#050505] lg:flex">
-                    <div className="flex h-10 shrink-0 items-center gap-1 border-b border-white/[0.08] px-3 font-mono text-[10px] tracking-[0.14em] text-zinc-400">
-                        CANVAS
+                {/* Canvas: where charts, files and previews open, saved with the chat. */}
+                <aside className="hidden min-h-0 flex-col border-l border-white/[0.08] bg-[#0c0c0c] lg:flex">
+                    <div className="flex h-11 shrink-0 items-center gap-2 border-b border-white/[0.08] px-3 text-[12px] font-semibold text-zinc-300">
+                        <Database weight="regular" className="size-3.5 text-zinc-500" />
+                        Canvas
                     </div>
                     <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
                         {showArtifact ? (
                             <>
                                 <FileChip icon="image" name="sales-by-month.png" />
-                                <SalesChart animate={animateArtifact} />
+                                <div className="rounded-xl border border-white/[0.08] bg-[#0a0a0a] p-3">
+                                    <SalesChart animate={animateArtifact} />
+                                </div>
                             </>
                         ) : (
                             <p className="text-[12px] leading-relaxed text-zinc-400">

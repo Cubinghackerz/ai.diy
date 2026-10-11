@@ -126,7 +126,14 @@ export function AssistantRuntimeProvider({
     // Fetch the runtime/disk metadata early, but boot only when the user
     // opens the environment or a tool needs it. Eager boots can race the
     // first client tool and leave its reply waiting on a failed mount.
-    prefetchCheerpX();
+    // Idle, not inline: turning Linux on in Settings should not wait for the runtime fetch.
+    const idle = window.requestIdleCallback;
+    if (!idle) {
+      const timer = window.setTimeout(prefetchCheerpX, 1_500);
+      return () => window.clearTimeout(timer);
+    }
+    const handle = idle(() => prefetchCheerpX(), { timeout: 4_000 });
+    return () => window.cancelIdleCallback?.(handle);
   }, [linuxEnabled]);
 
   const transport = useMemo(

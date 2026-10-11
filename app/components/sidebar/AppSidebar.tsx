@@ -3,7 +3,7 @@
  * models, tools, and theme).
  */
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { SectionBoundary } from "~/components/ui/SectionBoundary";
 import { StorageHealthPanel } from "~/components/ui/StorageNotices";
@@ -11,7 +11,6 @@ import { Input } from "~/components/ui/input";
 import { ModelPicker } from "~/components/ui/ModelPicker";
 import { ProviderPicker } from "~/components/ui/ProviderPicker";
 import { ModelLogo } from "~/components/ui/ModelLogo";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import {
     Dialog,
     DialogClose,
@@ -36,7 +35,7 @@ import { testProviderKey } from "~/lib/key-test";
 import { findEnabledSearchConnector, isSearchConnectorKind } from "~/lib/search/connectors";
 import { useChatGenerating } from "~/components/assistant-ui/ChatSessionContext";
 import { useDraftSetting } from "~/lib/hooks/useDraftSetting";
-import { useSettings } from "~/lib/providers/SettingsProvider";
+import { useSettings, useSettingsSelector } from "~/lib/providers/SettingsProvider";
 import { setSidebarPanel, useSidebarPanel } from "~/lib/sidebar-panel";
 import { isLocalProvider, isProviderReady } from "~/lib/setup";
 import {
@@ -431,6 +430,31 @@ export function AppSidebar({
     );
 }
 
+/** What the dialog shows for the first frame while the real panel mounts behind it. */
+function SettingsPanelSkeleton() {
+    return (
+        <div
+            aria-hidden
+            className="grid h-full min-h-0 grid-cols-1 lg:grid-cols-[236px_minmax(0,1fr)]"
+        >
+            <div className="hidden border-r border-border/70 bg-muted/20 p-4 lg:block">
+                <div className="h-4 w-20 rounded bg-muted/60" />
+                <div className="mt-2 h-6 w-28 rounded bg-muted/60" />
+                <div className="mt-6 h-10 rounded-xl bg-muted/50" />
+                <div className="mt-5 flex flex-col gap-2">
+                    {Array.from({ length: 7 }, (_, index) => (
+                        <div key={index} className="h-9 rounded-xl bg-muted/40" />
+                    ))}
+                </div>
+            </div>
+            <div className="p-9">
+                <div className="h-4 w-24 rounded bg-muted/50" />
+                <div className="mt-3 h-8 w-48 rounded bg-muted/60" />
+            </div>
+        </div>
+    );
+}
+
 export const SettingsDialog = memo(function SettingsDialog({
     scopeId,
     onImportComplete,
@@ -442,15 +466,19 @@ export const SettingsDialog = memo(function SettingsDialog({
     useCloudAutoBackup();
     const panel = useSidebarPanel();
     const popupRef = useRef<HTMLDivElement>(null);
+    const open = panel === "settings";
+    // The click only has to open the dialog. The large panel mounts a moment later, at low
+    // priority, so the dialog appears (and its animation runs) before the heavy render.
+    const panelReady = useDeferredValue(open);
 
     return (
-        <Dialog
-            open={panel === "settings"}
-            onOpenChange={(open) => setSidebarPanel(open ? "settings" : "chats")}
-        >
+        <Dialog open={open} onOpenChange={(next) => setSidebarPanel(next ? "settings" : "chats")}>
             <DialogContent
                 ref={popupRef}
                 showCloseButton={false}
+                // A flat dim instead of the default blur: re-blurring the whole workspace behind a
+                // large dialog on every frame of its animation is the costliest paint on the page.
+                overlayClassName="bg-black/50 supports-backdrop-filter:backdrop-blur-none"
                 // Focus the dialog itself: the default scans every control in the
                 // (large) settings tree for the first tabbable one, and focusing the
                 // search field would pop the keyboard on touch devices.
@@ -463,7 +491,11 @@ export const SettingsDialog = memo(function SettingsDialog({
                 </DialogDescription>
                 <div className="min-h-0 flex-1 overflow-hidden">
                     <SectionBoundary label="Settings" resetKey={scopeId}>
-                        <SettingsPanel scopeId={scopeId} onImportComplete={onImportComplete} />
+                        {panelReady ? (
+                            <SettingsPanel scopeId={scopeId} onImportComplete={onImportComplete} />
+                        ) : (
+                            <SettingsPanelSkeleton />
+                        )}
                     </SectionBoundary>
                 </div>
             </DialogContent>
@@ -1091,6 +1123,192 @@ function ChatsPanel({
     );
 }
 
+/** The settings sidebar. Memoized: it only changes when the section or the search text does. */
+const SettingsNav = memo(function SettingsNav({
+    section,
+    onSelect,
+    query,
+    onQueryChange,
+}: {
+    section: SettingsSection;
+    onSelect: (id: SettingsSection) => void;
+    query: string;
+    onQueryChange: (value: string) => void;
+}) {
+    const searchQuery = query.trim().toLowerCase();
+    const visibleGroups = SETTINGS_GROUPS.map((group) => ({
+        ...group,
+        items: group.items.filter((item) =>
+            `${item.label} ${item.description} ${group.label}`.toLowerCase().includes(searchQuery),
+        ),
+    })).filter((group) => group.items.length > 0);
+
+    return (
+        <aside className="flex min-h-0 flex-col border-b border-border/70 bg-muted/20 lg:border-b-0 lg:border-r">
+            <div className="flex items-center justify-between px-4 pb-3 pt-4">
+                <div>
+                    <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                        Workspace
+                    </p>
+                    <h2 className="mt-1 text-lg font-semibold tracking-[-0.025em]">Settings</h2>
+                </div>
+                <DialogClose
+                    type="button"
+                    className="flex size-9 items-center justify-center rounded-xl border border-border/80 bg-background text-muted-foreground shadow-sm outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
+                    aria-label="Close settings"
+                >
+                    <XCircle size={18} />
+                </DialogClose>
+            </div>
+
+            <div className="px-3 pb-3">
+                <div className="relative">
+                    <MagnifyingGlass
+                        size={16}
+                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <Input
+                        value={query}
+                        onChange={(event) => onQueryChange(event.target.value)}
+                        placeholder="Search settings"
+                        aria-label="Search settings"
+                        className="h-10 rounded-xl pl-9 text-sm"
+                    />
+                </div>
+            </div>
+
+            <nav
+                className="min-h-0 flex-1 overflow-y-auto px-3 pb-4"
+                aria-label="Settings sections"
+            >
+                {visibleGroups.length === 0 ? (
+                    <p className="px-2 py-4 text-sm text-muted-foreground">
+                        No settings match your search.
+                    </p>
+                ) : (
+                    visibleGroups.map((group) => (
+                        <div key={group.label} className="mb-4 last:mb-0">
+                            <p className="px-2 pb-1.5 pt-2 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                                {group.label}
+                            </p>
+                            <div className="flex flex-col gap-0.5">
+                                {group.items.map((item) => {
+                                    const Icon = item.icon;
+                                    const selected = section === item.id;
+                                    const featured = item.id === "apps";
+                                    return (
+                                        <div
+                                            key={item.id}
+                                            className={cn(
+                                                "flex min-h-10 min-w-0 items-center rounded-xl pr-1.5",
+                                                selected
+                                                    ? "bg-accent text-foreground shadow-sm"
+                                                    : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
+                                                featured &&
+                                                    !selected &&
+                                                    "bg-primary/8 text-foreground",
+                                                featured && selected && "ring-1 ring-primary/35",
+                                            )}
+                                        >
+                                            <button
+                                                type="button"
+                                                onClick={() => onSelect(item.id)}
+                                                className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                                                aria-current={selected ? "page" : undefined}
+                                            >
+                                                <Icon
+                                                    size={17}
+                                                    className={cn(
+                                                        "shrink-0",
+                                                        featured && "text-primary",
+                                                    )}
+                                                />
+                                                <span className="min-w-0 flex-1 truncate">
+                                                    {item.label}
+                                                </span>
+                                                {featured ? (
+                                                    <span className="shrink-0 rounded-[2px] border border-primary/30 bg-primary/15 px-1.5 py-px text-[9px] font-semibold uppercase tracking-[0.12em] text-primary">
+                                                        New
+                                                    </span>
+                                                ) : null}
+                                            </button>
+                                            {/* A native title instead of a Tooltip per row: 17 tooltips cost
+                                                more to mount than the rest of the nav together. */}
+                                            <button
+                                                type="button"
+                                                title={item.description}
+                                                className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 outline-none transition-colors hover:bg-background/80 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+                                                aria-label={`About ${item.label}: ${item.description}`}
+                                            >
+                                                <Info size={14} weight="regular" />
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    ))
+                )}
+            </nav>
+        </aside>
+    );
+});
+
+const SURFACE_LABELS: Record<AppSettings["theme"], string> = {
+    oled: "OLED / pure black",
+    system: "System",
+    dark: "Dark",
+    light: "Light",
+};
+
+/** Title and the Route / Surface chips. Reads only what it shows, so other settings writes skip it. */
+const SettingsHeader = memo(function SettingsHeader({ section }: { section: SettingsSection }) {
+    const provider = useSettingsSelector((settings) => settings.chat.provider);
+    const theme = useSettingsSelector((settings) => settings.theme);
+    const activeNavItem = SETTINGS_GROUPS.flatMap((group) => group.items).find(
+        (item) => item.id === section,
+    );
+    const ActiveIcon = activeNavItem?.icon;
+
+    return (
+        <div className="border-b border-border/80 pb-5">
+            <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                        {ActiveIcon ? <ActiveIcon size={18} className="text-primary" /> : null}
+                        <span className="text-sm font-medium">Settings</span>
+                    </div>
+                    <h3 className="mt-3 text-2xl font-semibold tracking-[-0.035em]">
+                        {activeNavItem?.label}
+                    </h3>
+                    <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                        Private by design. Changes stay in this browser.
+                    </p>
+                </div>
+                <span className="shrink-0 rounded-[2px] border border-success/25 bg-success/10 px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-success">
+                    Local
+                </span>
+            </div>
+            <div className="mt-5 flex flex-wrap gap-2">
+                <div className="rounded-lg border border-border/70 bg-muted/35 px-3 py-2">
+                    <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                        Route
+                    </span>
+                    <span className="ml-2 text-sm font-medium">
+                        {PROVIDER_DEFAULTS[provider]?.name || provider}
+                    </span>
+                </div>
+                <div className="rounded-lg border border-border/70 bg-muted/35 px-3 py-2">
+                    <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                        Surface
+                    </span>
+                    <span className="ml-2 text-sm font-medium">{SURFACE_LABELS[theme]}</span>
+                </div>
+            </div>
+        </div>
+    );
+});
+
 function SettingsPanel({
     scopeId,
     onImportComplete,
@@ -1109,6 +1327,13 @@ function SettingsPanel({
         resetSettings,
     } = useSettings();
     const [section, setSection] = useState<SettingsSection>("keys");
+    // The nav highlights the click at once; the (heavy) section renders right behind it and
+    // can be interrupted, so clicking around never freezes the dialog.
+    const contentSection = useDeferredValue(section);
+    const selectSection = useCallback((id: SettingsSection) => {
+        hapticSelect();
+        setSection(id);
+    }, []);
     const [settingsSearch, setSettingsSearch] = useState("");
     const [mcpName, setMcpName] = useState("");
     const [mcpUrl, setMcpUrl] = useState("");
@@ -1155,201 +1380,33 @@ function SettingsPanel({
         setMcpError(null);
     };
 
-    const activeNavItem = SETTINGS_GROUPS.flatMap((group) => group.items).find(
-        (item) => item.id === section,
-    );
-    const ActiveIcon = activeNavItem?.icon;
-    const searchQuery = settingsSearch.trim().toLowerCase();
-    const visibleGroups = SETTINGS_GROUPS.map((group) => ({
-        ...group,
-        items: group.items.filter((item) =>
-            `${item.label} ${item.description} ${group.label}`.toLowerCase().includes(searchQuery),
-        ),
-    })).filter((group) => group.items.length > 0);
-
     return (
         <div className="grid min-h-0 h-full grid-cols-1 lg:grid-cols-[236px_minmax(0,1fr)]">
-            <aside className="flex min-h-0 flex-col border-b border-border/70 bg-muted/20 lg:border-b-0 lg:border-r">
-                <div className="flex items-center justify-between px-4 pb-3 pt-4">
-                    <div>
-                        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                            Workspace
-                        </p>
-                        <h2 className="mt-1 text-lg font-semibold tracking-[-0.025em]">Settings</h2>
-                    </div>
-                    <DialogClose
-                        type="button"
-                        className="flex size-9 items-center justify-center rounded-xl border border-border/80 bg-background text-muted-foreground shadow-sm outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
-                        aria-label="Close settings"
-                    >
-                        <XCircle size={18} />
-                    </DialogClose>
-                </div>
-
-                <div className="px-3 pb-3">
-                    <div className="relative">
-                        <MagnifyingGlass
-                            size={16}
-                            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                        />
-                        <Input
-                            value={settingsSearch}
-                            onChange={(event) => setSettingsSearch(event.target.value)}
-                            placeholder="Search settings"
-                            aria-label="Search settings"
-                            className="h-10 rounded-xl pl-9 text-sm"
-                        />
-                    </div>
-                </div>
-
-                <nav
-                    className="min-h-0 flex-1 overflow-y-auto px-3 pb-4"
-                    aria-label="Settings sections"
-                >
-                    {visibleGroups.length === 0 ? (
-                        <p className="px-2 py-4 text-sm text-muted-foreground">
-                            No settings match your search.
-                        </p>
-                    ) : (
-                        visibleGroups.map((group) => (
-                            <div key={group.label} className="mb-4 last:mb-0">
-                                <p className="px-2 pb-1.5 pt-2 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                                    {group.label}
-                                </p>
-                                <div className="flex flex-col gap-0.5">
-                                    {group.items.map((item) => {
-                                        const Icon = item.icon;
-                                        const selected = section === item.id;
-                                        const featured = item.id === "apps";
-                                        return (
-                                            <div
-                                                key={item.id}
-                                                className={cn(
-                                                    "flex min-h-10 min-w-0 items-center rounded-xl pr-1.5",
-                                                    selected
-                                                        ? "bg-accent text-foreground shadow-sm"
-                                                        : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
-                                                    featured &&
-                                                        !selected &&
-                                                        "bg-primary/8 text-foreground",
-                                                    featured &&
-                                                        selected &&
-                                                        "ring-1 ring-primary/35",
-                                                )}
-                                            >
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        hapticSelect();
-                                                        setSection(item.id);
-                                                    }}
-                                                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                                                    aria-current={selected ? "page" : undefined}
-                                                >
-                                                    <Icon
-                                                        size={17}
-                                                        className={cn(
-                                                            "shrink-0",
-                                                            featured && "text-primary",
-                                                        )}
-                                                    />
-                                                    <span className="min-w-0 flex-1 truncate">
-                                                        {item.label}
-                                                    </span>
-                                                    {featured ? (
-                                                        <span className="shrink-0 rounded-[2px] border border-primary/30 bg-primary/15 px-1.5 py-px text-[9px] font-semibold uppercase tracking-[0.12em] text-primary">
-                                                            New
-                                                        </span>
-                                                    ) : null}
-                                                </button>
-                                                <Tooltip>
-                                                    <TooltipTrigger
-                                                        render={
-                                                            <button
-                                                                type="button"
-                                                                className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 outline-none transition-colors hover:bg-background/80 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
-                                                                aria-label={`About ${item.label}`}
-                                                            />
-                                                        }
-                                                    >
-                                                        <Info size={14} weight="regular" />
-                                                    </TooltipTrigger>
-                                                    <TooltipContent
-                                                        side="bottom"
-                                                        align="end"
-                                                        sideOffset={6}
-                                                        className="max-w-56 leading-relaxed"
-                                                    >
-                                                        {item.description}
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        ))
-                    )}
-                </nav>
-            </aside>
+            <SettingsNav
+                section={section}
+                onSelect={selectSection}
+                query={settingsSearch}
+                onQueryChange={setSettingsSearch}
+            />
 
             <main className="min-h-0 overflow-y-auto p-5 sm:p-7 lg:p-9">
                 <div className="mx-auto max-w-3xl">
-                    <div className="border-b border-border/80 pb-5">
-                        <div className="flex items-start justify-between gap-4">
-                            <div className="min-w-0">
-                                <div className="flex items-center gap-2 text-muted-foreground">
-                                    {ActiveIcon ? (
-                                        <ActiveIcon size={18} className="text-primary" />
-                                    ) : null}
-                                    <span className="text-sm font-medium">Settings</span>
-                                </div>
-                                <h3 className="mt-3 text-2xl font-semibold tracking-[-0.035em]">
-                                    {activeNavItem?.label}
-                                </h3>
-                                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                                    Private by design. Changes stay in this browser.
-                                </p>
-                            </div>
-                            <span className="shrink-0 rounded-[2px] border border-success/25 bg-success/10 px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-success">
-                                Local
-                            </span>
-                        </div>
-                        <div className="mt-5 flex flex-wrap gap-2">
-                            <div className="rounded-lg border border-border/70 bg-muted/35 px-3 py-2">
-                                <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                                    Route
-                                </span>
-                                <span className="ml-2 text-sm font-medium">
-                                    {PROVIDER_DEFAULTS[settings.chat.provider]?.name ||
-                                        settings.chat.provider}
-                                </span>
-                            </div>
-                            <div className="rounded-lg border border-border/70 bg-muted/35 px-3 py-2">
-                                <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                                    Surface
-                                </span>
-                                <span className="ml-2 text-sm font-medium">
-                                    {settings.theme === "oled"
-                                        ? "OLED / pure black"
-                                        : settings.theme === "system"
-                                          ? "System"
-                                          : settings.theme === "dark"
-                                            ? "Dark"
-                                            : "Light"}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
+                    <SettingsHeader section={contentSection} />
 
-                    <div className="aidiy-settings-content mt-7">
-                        {section === "keys" && <KeysSection />}
+                    <div
+                        className={cn(
+                            "aidiy-settings-content mt-7 transition-opacity duration-150",
+                            section !== contentSection && "opacity-60",
+                        )}
+                        aria-busy={section !== contentSection}
+                    >
+                        {contentSection === "keys" && <KeysSection />}
 
-                        {section === "instructions" && <CustomInstructionsSection />}
+                        {contentSection === "instructions" && <CustomInstructionsSection />}
 
-                        {section === "tokens" && <TokenModeSettingsSection />}
+                        {contentSection === "tokens" && <TokenModeSettingsSection />}
 
-                        {section === "tools" && (
+                        {contentSection === "tools" && (
                             <div className="flex flex-col gap-2">
                                 <ToolAccessPicker
                                     value={settings.toolAccess}
@@ -1360,7 +1417,7 @@ function SettingsPanel({
                             </div>
                         )}
 
-                        {section === "mcp" && (
+                        {contentSection === "mcp" && (
                             <div className="flex flex-col gap-3">
                                 <p className="text-[11px] leading-relaxed text-muted-foreground">
                                     Remote HTTP/SSE MCP tools are loaded for each chat request. Add
@@ -1474,33 +1531,33 @@ function SettingsPanel({
                             </div>
                         )}
 
-                        {section === "connect" && <ConnectedAppsSection />}
+                        {contentSection === "connect" && <ConnectedAppsSection />}
 
-                        {section === "experimental" && (
+                        {contentSection === "experimental" && (
                             <div className="flex flex-col gap-3">
                                 <SubagentsSettingsSection scopeId={scopeId} />
                                 <PreviewSettingsSection />
                             </div>
                         )}
 
-                        {section === "memory" && <MemorySettingsSection />}
+                        {contentSection === "memory" && <MemorySettingsSection />}
 
-                        {section === "knowledge" && <KnowledgeSettingsSection />}
+                        {contentSection === "knowledge" && <KnowledgeSettingsSection />}
 
-                        {section === "connectors" && <ConnectorsSection />}
-                        {section === "apps" && <ComposioSettings />}
+                        {contentSection === "connectors" && <ConnectorsSection />}
+                        {contentSection === "apps" && <ComposioSettings />}
 
-                        {section === "cloud" && (
+                        {contentSection === "cloud" && (
                             <CloudStorageSection onImportComplete={onImportComplete} />
                         )}
 
-                        {section === "data" && (
+                        {contentSection === "data" && (
                             <DataInteropSection onImportComplete={onImportComplete} />
                         )}
 
-                        {section === "usage" && <UsageSection />}
+                        {contentSection === "usage" && <UsageSection />}
 
-                        {section === "appearance" && (
+                        {contentSection === "appearance" && (
                             <div className="flex flex-col gap-3">
                                 <InterfaceModePicker />
                                 <p className="text-[11px] leading-relaxed text-muted-foreground">
