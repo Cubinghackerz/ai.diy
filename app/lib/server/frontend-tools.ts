@@ -13,6 +13,13 @@ const MAX_FRONTEND_DESCRIPTION_CHARS = 2_000;
 // OpenUI + json-render instructions take about 62k; skills add up to about 5k.
 const MAX_MODEL_INSTRUCTIONS_CHARS = 70_000;
 
+/**
+ * Tool names the model must never be offered, even by a client. The built-in
+ * `web_search` was retired: live search is Parallel / Firecrawl or a connector,
+ * and a forwarded tool with this name could only ever be a stand-in for it.
+ */
+const RETIRED_TOOL_NAMES = new Set(["web_search"]);
+
 /** OpenUI Lang and json-render frontend tools — gated by the Generative UI tool-access key. */
 const GENERATIVE_UI_TOOL_NAMES = new Set(["present_openui", "prompt_openui", "present_jsonrender"]);
 
@@ -37,6 +44,7 @@ export function frontendToolsFromBody(
     for (const [name, def] of Object.entries(raw).slice(0, MAX_FRONTEND_TOOLS * 4)) {
         if (Object.keys(out).length >= MAX_FRONTEND_TOOLS) break;
         if (!FRONTEND_TOOL_NAME.test(name) || reservedNames.has(name)) continue;
+        if (RETIRED_TOOL_NAMES.has(name)) continue;
         if (!generativeUiEnabled && GENERATIVE_UI_TOOL_NAMES.has(name)) continue;
         if (!skillsEnabled && SKILL_TOOL_NAMES.has(name)) continue;
         if (!def || typeof def !== "object") continue;

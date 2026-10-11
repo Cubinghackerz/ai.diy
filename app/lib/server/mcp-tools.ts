@@ -1,11 +1,8 @@
 import { createMCPClient } from "@ai-sdk/mcp";
 import type { ToolSet } from "ai";
+import { isBundledSearchMcpServer } from "~/lib/mcp-servers";
 import type { McpServerConfig } from "~/lib/types";
-import {
-    connectAvailable,
-    connectCredentialHint,
-    requestConnectToken,
-} from "~/lib/server/connect";
+import { connectAvailable, connectCredentialHint, requestConnectToken } from "~/lib/server/connect";
 import { assertConfiguredHttpUrlResolved } from "~/lib/server/provider-url";
 import type { TokenModePolicy } from "~/lib/token-mode";
 import {
@@ -24,35 +21,20 @@ export type McpClientHandle = {
  * have a content array. Keep that contract when local wrappers synthesize a
  * result or compact a primitive returned by a remote server.
  */
-export function ensureMcpToolResult(
-    value: unknown,
-    options: { isError?: boolean } = {},
-): unknown {
+export function ensureMcpToolResult(value: unknown, options: { isError?: boolean } = {}): unknown {
     if (isMcpContentEnvelope(value)) {
         return options.isError ? { ...value, isError: true } : value;
     }
 
     const text =
-        typeof value === "string"
-            ? value
-            : safeJsonStringify(value) || String(value ?? "");
+        typeof value === "string" ? value : safeJsonStringify(value) || String(value ?? "");
     return {
         ...(options.isError ? { isError: true } : {}),
         content: [{ type: "text", text }],
     };
 }
 
-/** The two bundled search servers are optional discovery infrastructure. */
-export function isBundledSearchMcpServer(server: McpServerConfig): boolean {
-    const id = server.id.trim().toLowerCase();
-    const url = server.url?.trim().toLowerCase() ?? "";
-    return (
-        id === "mcp_parallel_search" ||
-        id === "mcp_firecrawl_keyless" ||
-        url.includes("search.parallel.ai/mcp") ||
-        url.includes("mcp.firecrawl.dev/")
-    );
-}
+export { isBundledSearchMcpServer };
 
 /** The Composio session is an MCP transport, but has its own user-facing gate. */
 export function isComposioMcpServer(server: McpServerConfig): boolean {
@@ -60,26 +42,57 @@ export function isComposioMcpServer(server: McpServerConfig): boolean {
 }
 
 /**
- * The bundled search MCP servers (Parallel Search / Firecrawl) load only for
- * research requests, or when a previous turn already used an MCP tool and the
- * conversation needs to continue it. Custom MCP servers remain user-controlled
- * and are loaded whenever enabled.
+ * Choose which configured MCP servers to connect for a request.
+ *
+ * Parallel Search and Firecrawl are the model's web search (there is no
+ * built-in `web_search` tool), so they load on every request while web search
+ * is on, not only when the user's wording looks like research. A BYOK search
+ * connector replaces them. Custom MCP servers remain user-controlled and load
+ * whenever they are enabled.
  */
 export function selectMcpServersForRequest(
     servers: McpServerConfig[] | undefined,
     options: {
-        searchIntent: boolean;
         activeSearchConnector: boolean;
         webSearchEnabled: boolean;
-        mcpToolAlreadyUsed: boolean;
     },
 ): McpServerConfig[] {
     return (servers ?? []).filter((server) => {
         if (server.enabled === false) return false;
         if (!isBundledSearchMcpServer(server)) return true;
-        if (!options.webSearchEnabled || options.activeSearchConnector) return false;
-        return options.searchIntent || options.mcpToolAlreadyUsed;
+        return options.webSearchEnabled && !options.activeSearchConnector;
     });
+}
+
+/** Upper bound on connecting to, and listing the tools of, a user-configured MCP server. */
+const MCP_CONNECT_TIMEOUT_MS = 8_000;
+/**
+ * The bundled search servers load on every request, so an unreachable one
+ * (blocked host, outage) must cost a few seconds, not eight, and not on every
+ * message: after a failure it is skipped for a short while.
+ */
+const BUNDLED_SEARCH_CONNECT_TIMEOUT_MS = 4_000;
+const BUNDLED_SEARCH_RETRY_AFTER_MS = 60_000;
+const bundledSearchFailures = new Map<string, number>();
+
+function bundledSearchKey(server: McpServerConfig): string {
+    return (server.url ?? server.id).trim().toLowerCase();
+}
+
+/** Test hook: forget which bundled search servers recently failed. */
+export function resetBundledSearchFailures() {
+    bundledSearchFailures.clear();
+}
+
+function listToolsWithin(
+    client: { tools: () => Promise<ToolSet> },
+    timeoutMs: number,
+): Promise<ToolSet> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("MCP tool listing timed out")), timeoutMs);
+    });
+    return Promise.race([client.tools(), timeout]).finally(() => clearTimeout(timer));
 }
 
 export async function loadMcpTools(
@@ -98,32 +111,57 @@ export async function loadMcpTools(
     const clients: McpClientHandle[] = [];
     const enabled = (servers ?? []).filter((s) => s.enabled !== false);
 
-    for (const server of enabled) {
-        let client: (McpClientHandle & { tools: () => Promise<ToolSet> }) | null = null;
-        try {
-            client = await connectMcpServer(server, signal);
-            if (!client) continue;
-            const serverTools = await client.tools();
-            clients.push(client);
-            const requestedPrefix = slugify(server.name || server.id);
-            const prefix = isComposioMcpServer(server)
-                ? "composio"
-                : requestedPrefix === "composio"
-                  ? "custom_composio"
-                  : requestedPrefix;
-            for (const [name, t] of Object.entries(serverTools)) {
-                const key = `mcp_${prefix}_${name}`.replace(/[^a-zA-Z0-9_-]/g, "_");
-                const wrapped = policy
-                    ? wrapMcpToolForBudget(key, t as ToolSet[string], policy)
-                    : (t as ToolSet[string]);
-                tools[key] = wrapped;
+    // Connect to every server at once (two bundled search servers would otherwise
+    // add their round trips together), then register tools in configured order.
+    const connected = await Promise.all(
+        enabled.map(async (server) => {
+            const bundled = isBundledSearchMcpServer(server);
+            const failedAt = bundled
+                ? bundledSearchFailures.get(bundledSearchKey(server))
+                : undefined;
+            if (failedAt !== undefined && Date.now() - failedAt < BUNDLED_SEARCH_RETRY_AFTER_MS) {
+                return null;
             }
-        } catch (err) {
-            if (client) await client.close().catch(() => undefined);
-            console.warn(
-                `[mcp] Failed to initialize ${isComposioMcpServer(server) ? "Composio" : "an MCP server"}:`,
-                err instanceof Error ? err.name : "UnknownError",
-            );
+            let client: (McpClientHandle & { tools: () => Promise<ToolSet> }) | null = null;
+            try {
+                const timeoutMs = bundled
+                    ? BUNDLED_SEARCH_CONNECT_TIMEOUT_MS
+                    : MCP_CONNECT_TIMEOUT_MS;
+                client = await connectMcpServer(server, signal, timeoutMs);
+                if (!client) return null;
+                const serverTools = await listToolsWithin(client, timeoutMs);
+                if (bundled) bundledSearchFailures.delete(bundledSearchKey(server));
+                return { server, client, serverTools };
+            } catch (err) {
+                if (client) await client.close().catch(() => undefined);
+                // A cancelled request says nothing about the server's health.
+                if (bundled && !signal?.aborted) {
+                    bundledSearchFailures.set(bundledSearchKey(server), Date.now());
+                }
+                console.warn(
+                    `[mcp] Failed to initialize ${isComposioMcpServer(server) ? "Composio" : "an MCP server"}:`,
+                    err instanceof Error ? err.name : "UnknownError",
+                );
+                return null;
+            }
+        }),
+    );
+
+    for (const entry of connected) {
+        if (!entry) continue;
+        const { server, client, serverTools } = entry;
+        clients.push(client);
+        const requestedPrefix = slugify(server.name || server.id);
+        const prefix = isComposioMcpServer(server)
+            ? "composio"
+            : requestedPrefix === "composio"
+              ? "custom_composio"
+              : requestedPrefix;
+        for (const [name, t] of Object.entries(serverTools)) {
+            const key = `mcp_${prefix}_${name}`.replace(/[^a-zA-Z0-9_-]/g, "_");
+            tools[key] = policy
+                ? wrapMcpToolForBudget(key, t as ToolSet[string], policy)
+                : (t as ToolSet[string]);
         }
     }
 
@@ -165,13 +203,13 @@ export function wrapMcpToolForBudget(
     const bodyChars =
         kind === "search"
             ? Math.min(1_200, Math.max(600, Math.floor(policy.maxMcpResultChars / 4)))
-            : Math.min(policy.maxMcpResultChars, Math.max(4_000, Math.floor(policy.maxMcpResultChars * 0.75)));
+            : Math.min(
+                  policy.maxMcpResultChars,
+                  Math.max(4_000, Math.floor(policy.maxMcpResultChars * 0.75)),
+              );
     const resultBudget =
         kind === "search"
-            ? Math.min(
-                  policy.maxMcpResultChars,
-                  policy.maxSearchResults * (snippetChars + 120),
-              )
+            ? Math.min(policy.maxMcpResultChars, policy.maxSearchResults * (snippetChars + 120))
             : policy.maxMcpResultChars;
 
     return {
@@ -180,9 +218,7 @@ export function wrapMcpToolForBudget(
             try {
                 const [rawArgs, ...rest] = callArgs;
                 const args =
-                    kind === "search"
-                        ? clampMcpSearchArgs(rawArgs, policy, original)
-                        : rawArgs;
+                    kind === "search" ? clampMcpSearchArgs(rawArgs, policy, original) : rawArgs;
                 const result = await execute(args, ...rest);
                 if (kind === "search") {
                     const formatted = formatMcpSearchToolOutput(result, {
@@ -192,19 +228,16 @@ export function wrapMcpToolForBudget(
                         includeSnippets: true,
                     });
                     if (formatted !== result) {
-                        return usesMcpOutputAdapter
-                            ? ensureMcpToolResult(formatted)
-                            : formatted;
+                        return usesMcpOutputAdapter ? ensureMcpToolResult(formatted) : formatted;
                     }
                 }
                 const compacted = compactMcpToolResult(result, resultBudget, {
-                    maxItems: kind === "search" ? Math.max(policy.maxSearchResults * 2, 8) : undefined,
+                    maxItems:
+                        kind === "search" ? Math.max(policy.maxSearchResults * 2, 8) : undefined,
                     maxSnippetChars: snippetChars,
                     maxBodyChars: bodyChars,
                 });
-                return usesMcpOutputAdapter
-                    ? ensureMcpToolResult(compacted)
-                    : compacted;
+                return usesMcpOutputAdapter ? ensureMcpToolResult(compacted) : compacted;
             } catch (error) {
                 const message = error instanceof Error ? error.message : "unknown error";
                 const failure = `Tool ${toolName} failed: ${message.slice(0, 300)}`;
@@ -361,19 +394,13 @@ export function compactMcpToolResult(
                 content: [
                     {
                         type: "text",
-                        text: truncateText(
-                            `${text}\n\n[Truncated for token budget]`,
-                            maxChars,
-                        ),
+                        text: truncateText(`${text}\n\n[Truncated for token budget]`, maxChars),
                     },
                 ],
             };
         }
 
-        return truncateText(
-            `${serialized}\n\n[Truncated for token budget]`,
-            maxChars,
-        );
+        return truncateText(`${serialized}\n\n[Truncated for token budget]`, maxChars);
     }
 
     return result;
@@ -392,8 +419,7 @@ function compactJsonValue(
     const bodyChars = options.maxBodyChars ?? 1_200;
 
     if (Array.isArray(value)) {
-        const limited =
-            typeof maxItems === "number" ? value.slice(0, maxItems) : value;
+        const limited = typeof maxItems === "number" ? value.slice(0, maxItems) : value;
         return limited.map((item) => compactJsonValue(item, options));
     }
     if (!value || typeof value !== "object") return value;
@@ -406,9 +432,7 @@ function compactJsonValue(
             Array.isArray(child) &&
             /^(results?|items|hits|documents|data|organic)$/i.test(key)
         ) {
-            next[key] = child
-                .slice(0, maxItems)
-                .map((item) => compactJsonValue(item, options));
+            next[key] = child.slice(0, maxItems).map((item) => compactJsonValue(item, options));
             if (child.length > maxItems) {
                 next[`${key}_truncated`] = `Showing ${maxItems} of ${child.length}`;
             }
@@ -418,7 +442,10 @@ function compactJsonValue(
             next[key] = truncateText(child, bodyChars);
             continue;
         }
-        if (typeof child === "string" && /^(snippet|description|excerpt|summary|title)$/i.test(key)) {
+        if (
+            typeof child === "string" &&
+            /^(snippet|description|excerpt|summary|title)$/i.test(key)
+        ) {
             next[key] = truncateText(child, key === "title" ? 80 : snippetChars);
             continue;
         }
@@ -442,8 +469,8 @@ function compactJsonValue(
 function isMcpContentEnvelope(value: unknown): value is { content: unknown[] } {
     return Boolean(
         value &&
-            typeof value === "object" &&
-            Array.isArray((value as { content?: unknown }).content),
+        typeof value === "object" &&
+        Array.isArray((value as { content?: unknown }).content),
     );
 }
 
@@ -562,8 +589,7 @@ function parseMcpSearchResultItem(item: unknown): SearchResult | null {
     const record = item as Record<string, unknown>;
     const url = pickMcpString(record, ["url", "link", "href", "uri", "source"]);
     if (!url || !/^https?:\/\//i.test(url)) return null;
-    const title =
-        pickMcpString(record, ["title", "name", "heading", "page_title"]) || "Untitled";
+    const title = pickMcpString(record, ["title", "name", "heading", "page_title"]) || "Untitled";
     const snippet =
         pickMcpString(record, [
             "snippet",
@@ -621,10 +647,13 @@ function dedupeSearchResults(results: SearchResult[]): SearchResult[] {
 async function connectMcpServer(
     server: McpServerConfig,
     signal?: AbortSignal,
+    timeoutMs = MCP_CONNECT_TIMEOUT_MS,
 ): Promise<(McpClientHandle & { tools: () => Promise<ToolSet> }) | null> {
     if (server.kind === "stdio") {
         // Browser-controlled settings must never execute commands on the host.
-        throw new Error("Stdio MCP servers are disabled. Connect a remote HTTP or SSE MCP server instead.");
+        throw new Error(
+            "Stdio MCP servers are disabled. Connect a remote HTTP or SSE MCP server instead.",
+        );
     }
 
     if (!server.url?.trim()) return null;
@@ -666,7 +695,7 @@ async function connectMcpServer(
             redirect: "error",
         },
         clientName: `prismium-${slugify(server.name)}`,
-        initializationOptions: { timeout: 8_000, signal },
+        initializationOptions: { timeout: timeoutMs, signal },
     });
     return {
         tools: () => client.tools() as Promise<ToolSet>,
@@ -686,9 +715,11 @@ function sanitizeHeaders(headers?: Record<string, string>): Record<string, strin
 }
 
 function slugify(name: string): string {
-    return name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "_")
-        .replace(/^_|_$/g, "")
-        .slice(0, 24) || "server";
+    return (
+        name
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "_")
+            .replace(/^_|_$/g, "")
+            .slice(0, 24) || "server"
+    );
 }

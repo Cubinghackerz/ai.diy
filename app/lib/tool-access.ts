@@ -162,12 +162,43 @@ export function normalizeToolAccess(
     return result;
 }
 
+/**
+ * Tools of the two bundled keyless search servers (Parallel Search MCP and
+ * Firecrawl). They are web-search tools: web search access owns them, not MCP.
+ */
+export function isBundledSearchToolName(toolName: string): boolean {
+    return /^mcp_(?:parallel_search_mcp|firecrawl_keyless)_/i.test(toolName.trim());
+}
+
+/** The Parallel / Firecrawl tools that actually search or read the live web. */
+const BUNDLED_LIVE_SEARCH_TOOL =
+    /^mcp_(?:parallel_search_mcp_(?:web_search|web_fetch)|firecrawl_keyless_firecrawl_(?:search|scrape|parse))$/i;
+
+/** Parallel Search / Firecrawl search, scrape, fetch, or parse tool (not a connector). */
+export function isBundledLiveSearchToolName(toolName: string): boolean {
+    return BUNDLED_LIVE_SEARCH_TOOL.test(toolName.trim());
+}
+
+/**
+ * True for any tool that can search the live web: a BYOK search connector
+ * (tavily/brave/exa/parallel) or Parallel / Firecrawl search. The model has no
+ * built-in `web_search` tool.
+ */
+export function isLiveSearchToolName(toolName: string): boolean {
+    const name = toolName.trim();
+    return (
+        /^(?:tavily|brave|exa|parallel)_search$/i.test(name) ||
+        /^mcp_(?:parallel_search_mcp_web_search|firecrawl_keyless_firecrawl_search)$/i.test(name)
+    );
+}
+
 /** Map both canonical and legacy ids to the setup capability that owns them. */
 export function toolAccessKeyForTool(toolName: string): ToolAccessKey | null {
     const name = toolName.trim().toLowerCase();
     if (!name) return null;
     if (name.endsWith("_openui") || name.endsWith("_jsonrender")) return "generativeUi";
     if (name.startsWith("mcp_composio_")) return "composio";
+    if (isBundledSearchToolName(name)) return "webSearch";
     if (name.startsWith("mcp_")) return "mcp";
     if (name.startsWith("knowledge_")) return "knowledge";
     if (/search|fetch_url|read_url|youtube|url_doctor|research_skill|duckduckgo/.test(name))

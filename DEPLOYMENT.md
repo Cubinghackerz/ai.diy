@@ -7,7 +7,7 @@ ai.diy is **BYOK (Bring Your Own Key)**. The hosted app does not need OpenAI/Ant
 | What                                | Who pays                                     |
 | ----------------------------------- | -------------------------------------------- |
 | LLM API calls                       | **End user** (their key in browser settings) |
-| DuckDuckGo web search               | Free (server-side scrape)                    |
+| Parallel / Firecrawl web search     | Free (hosted keyless MCP servers)            |
 | Hosting (VPS / bare metal / Docker) | **You**                                      |
 
 **No paid third-party APIs are required** to run this project.
@@ -184,7 +184,7 @@ Notes: app-subject tokens carry the operator-configured scopes (no per-user cons
 ## Security notes for public deployments
 
 - `fetch_url` blocks private/local network URLs (SSRF guard).
-- Provider roots, SearXNG, and remote MCP URLs reject private targets in production unless `ALLOW_PRIVATE_PROVIDER_URLS=true`.
+- Provider roots and remote MCP URLs reject private targets in production unless `ALLOW_PRIVATE_PROVIDER_URLS=true`.
 - Stdio MCP is rejected server-side.
 - Built-in server rate limiting uses `RATE_LIMIT_RPM` (default 60 requests/minute per API key or client IP); set `RATE_LIMIT_DISABLED=true` only for local development. Clients also support soft spend/token/RPM caps under Settings → Usage & cost.
 - Users should treat shared public demos like any BYOK client: only use keys they trust the instance with.

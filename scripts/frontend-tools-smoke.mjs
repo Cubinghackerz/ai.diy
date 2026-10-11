@@ -47,12 +47,20 @@ check(
 check("non-openui tools still pass when disabled", "my_card" in gated);
 
 const shadowed = frontendToolsFromBody(
-    { web_search: genericTool, my_card: genericTool },
-    new Set(["web_search"]),
+    { calculator: genericTool, my_card: genericTool },
+    new Set(["calculator"]),
     true,
 );
-check("server-tool collision dropped", !("web_search" in shadowed));
+check("server-tool collision dropped", !("calculator" in shadowed));
 check("non-colliding tools survive", "my_card" in shadowed);
+
+const retired = frontendToolsFromBody(
+    { web_search: genericTool, my_card: genericTool },
+    new Set(),
+    true,
+);
+check("a client cannot bring back the retired web_search tool", !("web_search" in retired));
+check("other tools survive next to a retired name", "my_card" in retired);
 
 const malformed = frontendToolsFromBody(
     {

@@ -23,15 +23,9 @@ try {
     const compaction = await vite.ssrLoadModule(
         path.join(root, "app/lib/server/context-compaction.ts"),
     );
-    const budget = await vite.ssrLoadModule(
-        path.join(root, "app/lib/server/prompt-budget.ts"),
-    );
-    const mcp = await vite.ssrLoadModule(
-        path.join(root, "app/lib/server/mcp-tools.ts"),
-    );
-    const chatTools = await vite.ssrLoadModule(
-        path.join(root, "app/lib/server/chat-tools.ts"),
-    );
+    const budget = await vite.ssrLoadModule(path.join(root, "app/lib/server/prompt-budget.ts"));
+    const mcp = await vite.ssrLoadModule(path.join(root, "app/lib/server/mcp-tools.ts"));
+    const chatTools = await vite.ssrLoadModule(path.join(root, "app/lib/server/chat-tools.ts"));
 
     const balancedTools = await chatTools.buildChatTools(
         {
@@ -92,7 +86,10 @@ try {
         { provider: "openai", messages: [] },
     );
     check("disabled web tools are absent", !deniedTools.web_search && !deniedTools.fetch_url);
-    check("disabled code tools are absent", !deniedTools.run_python && !deniedTools.linux_run_command);
+    check(
+        "disabled code tools are absent",
+        !deniedTools.run_python && !deniedTools.linux_run_command,
+    );
     check("disabled file tool is absent", !deniedTools.create_file);
     check("disabled interaction tools are absent", !deniedTools.ask_user && !deniedTools.memory);
 
@@ -129,10 +126,7 @@ try {
         "historical source URL survives",
         projected[1].parts[0].output.includes("https://example.com/source"),
     );
-    check(
-        "recent tool output stays untouched",
-        projected[3].parts[0].output === recentToolOutput,
-    );
+    check("recent tool output stays untouched", projected[3].parts[0].output === recentToolOutput);
 
     const promptBudget = budget.estimatePromptBudget({
         systemText: "system prompt",
@@ -144,7 +138,10 @@ try {
             mcp_search: { description: "search", inputSchema: { query: "string" } },
         },
     });
-    check("prompt budget counts tools", promptBudget.builtInTools === 1 && promptBudget.mcpTools === 1);
+    check(
+        "prompt budget counts tools",
+        promptBudget.builtInTools === 1 && promptBudget.mcpTools === 1,
+    );
     check("prompt budget is additive", promptBudget.totalTokens > promptBudget.historyTokens);
 
     const bundled = {
@@ -162,28 +159,29 @@ try {
         enabled: true,
     };
     check(
-        "bundled MCP is deferred without search intent",
+        "bundled search MCP loads whenever web search is on, with no search intent needed",
         mcp.selectMcpServersForRequest([bundled, custom], {
-            searchIntent: false,
             activeSearchConnector: false,
             webSearchEnabled: true,
-            mcpToolAlreadyUsed: false,
+        }).length === 2,
+    );
+    check(
+        "bundled search MCP is dropped when web search is off",
+        mcp.selectMcpServersForRequest([bundled, custom], {
+            activeSearchConnector: false,
+            webSearchEnabled: false,
         }).length === 1,
     );
     check(
-        "bundled MCP loads for search intent",
-        mcp.selectMcpServersForRequest([bundled], {
-            searchIntent: true,
-            activeSearchConnector: false,
+        "bundled search MCP is replaced by an active search connector",
+        mcp.selectMcpServersForRequest([bundled, custom], {
+            activeSearchConnector: true,
             webSearchEnabled: true,
-            mcpToolAlreadyUsed: false,
         }).length === 1,
     );
 
     const mcpOutputAdapter = ({ output }) =>
-        output &&
-        typeof output === "object" &&
-        Array.isArray(output.content);
+        output && typeof output === "object" && Array.isArray(output.content);
     const mcpPolicy = {
         defaultSearchResults: 5,
         maxSearchResults: 10,
@@ -222,34 +220,82 @@ try {
     const efficient = modes.tokenModePolicy("efficient");
     const full = modes.tokenModePolicy("full");
     const balanced = modes.tokenModePolicy("balanced");
-    check("efficient search is shorter than full", efficient.maxSearchResults < full.maxSearchResults);
+    check(
+        "efficient search is shorter than full",
+        efficient.maxSearchResults < full.maxSearchResults,
+    );
     check("efficient query cap is shorter than full", efficient.maxQueryChars < full.maxQueryChars);
     check("efficient fetch cap is shorter than full", efficient.maxFetchChars < full.maxFetchChars);
-    check("caching search matches balanced", modes.tokenModePolicy("caching").maxSearchResults === balanced.maxSearchResults);
+    check(
+        "caching search matches balanced",
+        modes.tokenModePolicy("caching").maxSearchResults === balanced.maxSearchResults,
+    );
+    const connector = {
+        id: "connector_tavily",
+        kind: "tavily",
+        name: "Tavily",
+        enabled: true,
+        apiKey: "tvly-test",
+    };
     const efficientTools = await chatTools.buildChatTools(
-        { tokenMode: "efficient", webSearchEnabled: true, toolAccess: { webSearch: true } },
+        {
+            tokenMode: "efficient",
+            webSearchEnabled: true,
+            toolAccess: { webSearch: true },
+            connectors: [connector],
+        },
         { provider: "openai", messages: [] },
     );
+    check("there is no built-in web_search tool", !efficientTools.web_search);
     check(
         "efficient search tool advertises its cap",
-        String(efficientTools.web_search?.description ?? "").includes(`max ${efficient.maxSearchResults}`),
+        String(efficientTools.tavily_search?.description ?? "").includes(
+            `max ${efficient.maxSearchResults}`,
+        ),
     );
     check(
         "full search tool advertises a higher cap",
         String(
             (
                 await chatTools.buildChatTools(
-                    { tokenMode: "full", webSearchEnabled: true, toolAccess: { webSearch: true } },
+                    {
+                        tokenMode: "full",
+                        webSearchEnabled: true,
+                        toolAccess: { webSearch: true },
+                        connectors: [connector],
+                    },
                     { provider: "openai", messages: [] },
                 )
-            ).web_search?.description ?? "",
+            ).tavily_search?.description ?? "",
         ).includes(`max ${full.maxSearchResults}`),
     );
     const prompt = await vite.ssrLoadModule(path.join(root, "app/lib/server/prompt.ts"));
-    const efficientPrompt = prompt.buildChatSystemPrompt(undefined, undefined, undefined, "main", undefined, false, "efficient");
-    const fullPrompt = prompt.buildChatSystemPrompt(undefined, undefined, undefined, "main", undefined, false, "full");
-    check("efficient prompt states its hit cap", efficientPrompt.includes(`Never request more than ${efficient.maxSearchResults}`));
-    check("full prompt states a higher hit cap", fullPrompt.includes(`Never request more than ${full.maxSearchResults}`));
+    const efficientPrompt = prompt.buildChatSystemPrompt(
+        undefined,
+        undefined,
+        undefined,
+        "main",
+        undefined,
+        false,
+        "efficient",
+    );
+    const fullPrompt = prompt.buildChatSystemPrompt(
+        undefined,
+        undefined,
+        undefined,
+        "main",
+        undefined,
+        false,
+        "full",
+    );
+    check(
+        "efficient prompt states its hit cap",
+        efficientPrompt.includes(`Never request more than ${efficient.maxSearchResults}`),
+    );
+    check(
+        "full prompt states a higher hit cap",
+        fullPrompt.includes(`Never request more than ${full.maxSearchResults}`),
+    );
 
     check(
         "MCP execution failures stay inside the tool protocol",

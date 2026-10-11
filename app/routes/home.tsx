@@ -23,7 +23,12 @@ import { SetupGate, useNeedsSetup } from "~/components/setup/SetupGate";
 import { CanvasProvider } from "~/lib/canvas";
 import { haptic, hapticSelect } from "~/lib/haptics";
 import { WORKSPACE_DOCUMENT_HEADERS } from "~/lib/http-headers";
-import { useSettings } from "~/lib/providers/SettingsProvider";
+import {
+    useSettingsActions,
+    useSettingsGetter,
+    useSettingsLoaded,
+    useSettingsSelector,
+} from "~/lib/providers/SettingsProvider";
 import { useThreads } from "~/lib/hooks/useThreads";
 import { useProjects } from "~/lib/hooks/useProjects";
 import { setSidebarPanel } from "~/lib/sidebar-panel";
@@ -56,7 +61,12 @@ export default function Home() {
 }
 
 function HomeInner() {
-    const { loaded, settings, updateSettings } = useSettings();
+    // Narrow reads only: `useSettings()` here re-rendered the whole workspace (chat runtime
+    // included) on every settings write, which made typing in Settings lag.
+    const loaded = useSettingsLoaded();
+    const { updateSettings } = useSettingsActions();
+    const getSettings = useSettingsGetter();
+    const previewEnabled = useSettingsSelector((s) => s.preview.enabled);
     const {
         threads,
         activeThreadId,
@@ -81,14 +91,10 @@ function HomeInner() {
     );
 
     const leavePreview = useCallback(() => {
-        if (!settings.preview.enabled) return;
-        updateSettings({
-            preview: {
-                ...settings.preview,
-                enabled: false,
-            },
-        });
-    }, [settings.preview, updateSettings]);
+        const preview = getSettings().preview;
+        if (!preview.enabled) return;
+        updateSettings({ preview: { ...preview, enabled: false } });
+    }, [getSettings, updateSettings]);
 
     const openSettings = useCallback(() => setSidebarPanel("settings"), []);
 
@@ -144,7 +150,7 @@ function HomeInner() {
             }}
             onNewChat={handleNewChat}
             onDeleteThread={(id) => {
-                if (settings.preview.enabled && id === activeThreadId) {
+                if (previewEnabled && id === activeThreadId) {
                     leavePreview();
                 }
                 void deleteThread(id).catch(reportWorkspaceStorageError);
@@ -215,22 +221,17 @@ function HomeInner() {
                             <SidebarIcon size={18} />
                         </button>
                         <span className="truncate text-sm font-semibold">
-                            {settings.preview.enabled
+                            {previewEnabled
                                 ? "Multi-model preview"
                                 : activeThread?.title || "New Chat"}
                         </span>
                     </div>
-                    {settings.preview.enabled ? (
+                    {previewEnabled ? (
                         <button
                             type="button"
                             onClick={() => {
                                 hapticSelect();
-                                updateSettings({
-                                    preview: {
-                                        ...settings.preview,
-                                        enabled: false,
-                                    },
-                                });
+                                leavePreview();
                             }}
                             className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground"
                         >
@@ -241,7 +242,7 @@ function HomeInner() {
 
                 <div className="relative flex min-h-0 flex-1">
                     <main className="relative min-w-0 flex-1 overflow-hidden">
-                        {settings.preview.enabled ? (
+                        {previewEnabled ? (
                             <PreviewWorkspace />
                         ) : (
                             <>
@@ -270,7 +271,7 @@ function HomeInner() {
         </div>
     );
 
-    const workspace = settings.preview.enabled ? (
+    const workspace = previewEnabled ? (
         appShell
     ) : (
         <SubagentProvider threadId={activeThreadId}>

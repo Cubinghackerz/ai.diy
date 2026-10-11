@@ -14,9 +14,11 @@ import {
     useContext,
     useState,
     useEffect,
+    useLayoutEffect,
     useCallback,
     useMemo,
     useRef,
+    useSyncExternalStore,
     type ReactNode,
 } from "react";
 import { PersistenceToast } from "~/components/ui/StorageNotices";
@@ -70,6 +72,92 @@ function patchIsNoop<T extends object>(target: T | undefined, patch: Partial<T>)
     return (Object.keys(patch) as Array<keyof T>).every((key) =>
         Object.is(target[key], patch[key]),
     );
+}
+
+/**
+ * A tiny external mirror of the settings state.
+ *
+ * `useSettings()` re-renders its component on every settings change, which is
+ * right for most UI but costly for the chat runtime: every keystroke in a
+ * settings field used to re-render it. Components that only need a slice read it
+ * through `useSettingsSelector`, which re-renders only when that slice changes.
+ */
+type SettingsStore = {
+    get: () => AppSettings;
+    set: (next: AppSettings) => void;
+    subscribe: (listener: () => void) => () => void;
+};
+
+function createSettingsStore(initial: AppSettings): SettingsStore {
+    let state = initial;
+    const listeners = new Set<() => void>();
+    return {
+        get: () => state,
+        set: (next) => {
+            if (Object.is(next, state)) return;
+            state = next;
+            for (const listener of [...listeners]) listener();
+        },
+        subscribe: (listener) => {
+            listeners.add(listener);
+            return () => {
+                listeners.delete(listener);
+            };
+        },
+    };
+}
+
+const SettingsStoreContext = createContext<SettingsStore | null>(null);
+
+const SettingsLoadedContext = createContext(false);
+type SettingsActions = Omit<SettingsContextValue, "settings" | "loaded">;
+const SettingsActionsContext = createContext<SettingsActions | null>(null);
+
+/** Whether stored settings have finished loading. Changes once; never on a settings write. */
+export function useSettingsLoaded(): boolean {
+    return useContext(SettingsLoadedContext);
+}
+
+/** The settings updaters. Their identities never change, so using them never re-renders. */
+export function useSettingsActions(): SettingsActions {
+    const actions = useContext(SettingsActionsContext);
+    if (!actions) throw new Error("useSettingsActions must be used within SettingsProvider");
+    return actions;
+}
+
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+function useSettingsStore(): SettingsStore {
+    const store = useContext(SettingsStoreContext);
+    if (!store) throw new Error("useSettingsSelector must be used within SettingsProvider");
+    return store;
+}
+
+/** Re-renders only when `selector(settings)` changes (by `isEqual`, default `Object.is`). */
+export function useSettingsSelector<T>(
+    selector: (settings: AppSettings) => T,
+    isEqual: (a: T, b: T) => boolean = Object.is,
+): T {
+    const store = useSettingsStore();
+    const cache = useRef<{ source: AppSettings; value: T } | null>(null);
+    const getSnapshot = () => {
+        const source = store.get();
+        const cached = cache.current;
+        if (cached && cached.source === source) return cached.value;
+        const value = selector(source);
+        if (cached && isEqual(cached.value, value)) {
+            cache.current = { source, value: cached.value };
+            return cached.value;
+        }
+        cache.current = { source, value };
+        return value;
+    };
+    return useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot);
+}
+
+/** The latest settings, read on demand (for callbacks and refs) without subscribing. */
+export function useSettingsGetter(): () => AppSettings {
+    return useSettingsStore().get;
 }
 
 /** Merge persisted settings over defaults, preserving free-search MCP presets. */
@@ -179,6 +267,12 @@ function mergeLoadedSettings(parsed: Partial<AppSettings>): AppSettings {
 export function SettingsProvider({ children }: { children: ReactNode }) {
     const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
     const [loaded, setLoaded] = useState(false);
+    const storeRef = useRef<SettingsStore | null>(null);
+    storeRef.current ??= createSettingsStore(DEFAULT_SETTINGS);
+    const store = storeRef.current;
+    useIsomorphicLayoutEffect(() => {
+        store.set(settings);
+    }, [store, settings]);
     // True when stored ciphertext exists but cannot be decrypted. While in
     // recovery mode the unreadable payload is never overwritten.
     const recoveryRef = useRef(false);
@@ -481,11 +575,40 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         ],
     );
 
+    const actions = useMemo<SettingsActions>(
+        () => ({
+            updateSettings,
+            updateToolAccess,
+            updateProvider,
+            updateChat,
+            addMcpServer,
+            removeMcpServer,
+            updateMcpServer,
+            resetSettings,
+        }),
+        [
+            updateSettings,
+            updateToolAccess,
+            updateProvider,
+            updateChat,
+            addMcpServer,
+            removeMcpServer,
+            updateMcpServer,
+            resetSettings,
+        ],
+    );
+
     return (
-        <SettingsContext.Provider value={value}>
-            <PersistenceToast />
-            {children}
-        </SettingsContext.Provider>
+        <SettingsStoreContext.Provider value={store}>
+            <SettingsActionsContext.Provider value={actions}>
+                <SettingsLoadedContext.Provider value={loaded}>
+                    <SettingsContext.Provider value={value}>
+                        <PersistenceToast />
+                        {children}
+                    </SettingsContext.Provider>
+                </SettingsLoadedContext.Provider>
+            </SettingsActionsContext.Provider>
+        </SettingsStoreContext.Provider>
     );
 }
 

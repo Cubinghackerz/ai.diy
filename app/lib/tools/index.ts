@@ -1,13 +1,12 @@
 /**
- * Built-in Tools — Web search, calculator, fetch URL
- * 
+ * Built-in Tools — calculator, fetch URL (live web search is Parallel / Firecrawl MCP or a connector)
+ *
  * These tools are available to all chat models. The tool schemas are sent
  * to the LLM, and when the LLM calls a tool, the server executes it and
  * feeds the result back in a multi-turn loop.
  */
 
 import type { LLMTool } from "~/lib/llm/types";
-import { duckDuckGoSearch, formatCompactSearchResults } from "~/lib/search";
 import { formatMathResult } from "~/lib/math-evaluator";
 import { fetchPublicHttpUrl } from "~/lib/server/ssrf";
 
@@ -18,33 +17,12 @@ export interface ToolExecutor {
 
 // ─── Tool Schemas (sent to LLM) ──────────────────────────────────
 
-export const WEB_SEARCH_TOOL: LLMTool = {
-    type: "function",
-    function: {
-        name: "web_search",
-        description: "Search the web for current information. Returns titles, URLs, and snippets for the top results. Use this when you need up-to-date information that may not be in your training data.",
-        parameters: {
-            type: "object",
-            properties: {
-                query: {
-                    type: "string",
-                    description: "The search query",
-                },
-                maxResults: {
-                    type: "number",
-                    description: "Maximum number of results to return (default: 5)",
-                },
-            },
-            required: ["query"],
-        },
-    },
-};
-
 export const CALCULATOR_TOOL: LLMTool = {
     type: "function",
     function: {
         name: "calculator",
-        description: "Evaluate a mathematical expression. Supports basic arithmetic, parentheses, and common math functions (sqrt, sin, cos, tan, log, pow, abs, round, floor, ceil). Example: 'sqrt(144) + 2^3'",
+        description:
+            "Evaluate a mathematical expression. Supports basic arithmetic, parentheses, and common math functions (sqrt, sin, cos, tan, log, pow, abs, round, floor, ceil). Example: 'sqrt(144) + 2^3'",
         parameters: {
             type: "object",
             properties: {
@@ -62,7 +40,8 @@ export const FETCH_URL_TOOL: LLMTool = {
     type: "function",
     function: {
         name: "fetch_url",
-        description: "Fetch the content of a web page URL and return the text content. Useful for reading articles or documentation.",
+        description:
+            "Fetch the content of a web page URL and return the text content. Useful for reading articles or documentation.",
         parameters: {
             type: "object",
             properties: {
@@ -79,24 +58,6 @@ export const FETCH_URL_TOOL: LLMTool = {
 // ─── Tool Executors (run on server) ──────────────────────────────
 
 export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
-    web_search: {
-        name: "web_search",
-        execute: async (args) => {
-            const query = String(args.query ?? "");
-            const maxResults = Number(args.maxResults ?? 5);
-            if (!query) return "Error: No query provided";
-
-            try {
-                const results = await duckDuckGoSearch(query, Math.min(maxResults, 3));
-                if (results.length === 0) return "No results found.";
-
-                return formatCompactSearchResults(results, { maxSnippetChars: 160 });
-            } catch (err) {
-                return `Search error: ${err instanceof Error ? err.message : String(err)}`;
-            }
-        },
-    },
-
     calculator: {
         name: "calculator",
         execute: async (args) => formatMathResult(args.expression),
@@ -111,7 +72,7 @@ export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
                 const res = await fetchPublicHttpUrl(url, {
                     headers: {
                         "User-Agent": "Mozilla/5.0 (compatible; ai.diy/0.1)",
-                        "Accept": "text/html,application/json,text/plain",
+                        Accept: "text/html,application/json,text/plain",
                     },
                     signal: AbortSignal.timeout(10000),
                 });
@@ -145,10 +106,9 @@ export function getEnabledTools(settings: {
     const tools: LLMTool[] = [];
     const executors: Record<string, ToolExecutor> = {};
 
+    // No built-in web_search: live search is Parallel / Firecrawl or a BYOK connector.
     if (settings.webSearchEnabled) {
-        tools.push(WEB_SEARCH_TOOL);
         tools.push(FETCH_URL_TOOL);
-        executors.web_search = TOOL_EXECUTORS.web_search;
         executors.fetch_url = TOOL_EXECUTORS.fetch_url;
     }
 

@@ -23,7 +23,7 @@ const FEATURES = [
     {
         icon: Plug,
         title: "Tools and MCP",
-        body: "Keyless web search (DuckDuckGo, Firecrawl, Parallel), URL fetch, a calculator, remote MCP servers, and skills. You choose what the model may use.",
+        body: "Keyless web search (Firecrawl, Parallel), URL fetch, a calculator, remote MCP servers, and skills. You choose what the model may use.",
     },
     {
         icon: AppWindow,

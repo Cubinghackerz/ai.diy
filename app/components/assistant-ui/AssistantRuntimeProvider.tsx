@@ -5,688 +5,620 @@
  * Thread-scoped useChat id syncs with IndexedDB via ChatThreadSync.
  */
 
-import {
-    AssistantRuntimeProvider as AuiRuntimeProvider,
-} from "@assistant-ui/react";
-import {
-    useAISDKRuntime,
-    AssistantChatTransport,
-} from "@assistant-ui/react-ai-sdk";
+import { AssistantRuntimeProvider as AuiRuntimeProvider } from "@assistant-ui/react";
+import { useAISDKRuntime, AssistantChatTransport } from "@assistant-ui/react-ai-sdk";
 import { useChat } from "@ai-sdk/react";
 import { lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import {
-    ChatSessionProvider,
-    isGenerationStopRequested,
+  ChatSessionProvider,
+  isGenerationStopRequested,
 } from "~/components/assistant-ui/ChatSessionContext";
 import { ChatThreadSync } from "~/components/assistant-ui/ChatThreadSync";
-import { useSettings } from "~/lib/providers/SettingsProvider";
+import { useSettingsGetter, useSettingsSelector } from "~/lib/providers/SettingsProvider";
 import { createAttachmentAdapter } from "~/lib/attachments";
 import { getAttachmentPolicy } from "~/lib/attachment-policy";
 import { getModelModalities } from "~/lib/model-modalities";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { collectPythonInputFiles, runBrowserPython } from "~/lib/pyodide";
 import {
-    cheerpxAvailable,
-    executeLinuxClientTool,
-    isLinuxClientTool,
-    linuxGenerationAborted,
-    prefetchCheerpX,
+  cheerpxAvailable,
+  executeLinuxClientTool,
+  isLinuxClientTool,
+  linuxGenerationAborted,
+  prefetchCheerpX,
 } from "~/lib/cheerpx";
 import { executeNpmProjectClientTool } from "~/lib/npm-project.client";
 import type { NpmProjectInput } from "~/lib/npm-project";
 import { artifactContentHash, inferArtifactMimeType } from "~/lib/artifacts";
 import { persistArtifactForScope } from "~/lib/artifact-persist.client";
 import { useCanvas } from "~/lib/canvas";
-import {
-    buildLocalMemoryContext,
-    hasLocalMemoryEntries,
-    readLocalMemory,
-} from "~/lib/memory";
+import { buildLocalMemoryContext, hasLocalMemoryEntries, readLocalMemory } from "~/lib/memory";
 import { askUserInChat } from "~/lib/ask-user";
 import { forcedSkillStore, toolNameForForcedSkill } from "~/lib/skill-command";
 import {
-    applyCreditsFallback,
-    findCreditsFallbackTarget,
-    notifyCreditsFallback,
+  applyCreditsFallback,
+  findCreditsFallbackTarget,
+  notifyCreditsFallback,
 } from "~/lib/credits-fallback";
 import { detectProviderCreditError } from "~/lib/provider-errors";
 import { notifyChatGPTRequestFailure } from "~/lib/chatgpt-refresh";
 import { useSubagent } from "~/components/assistant-ui/subagents";
-import {
-    createWebSpeechDictationAdapter,
-    isWebSpeechDictationSupported,
-} from "~/lib/dictation";
+import { createWebSpeechDictationAdapter, isWebSpeechDictationSupported } from "~/lib/dictation";
 import { useEffect, useMemo, useRef, lazy, Suspense, type ReactNode } from "react";
 import { shouldContinueAfterOpenUIPrompt } from "@openuidev/assistant-ui/ai-sdk";
 import { assertClientUsageAllowed } from "~/lib/usage-ledger.client";
-import {
-    normalizeToolAccess,
-    toolAccessAllows,
-} from "~/lib/tool-access";
+import { mcpServersForRequest } from "~/lib/mcp-servers";
+import { normalizeToolAccess, toolAccessAllows } from "~/lib/tool-access";
 
 const OpenUIRegistration = lazy(() => {
-    // @openuidev/react-lang auto-mounts its Inspect overlay in dev builds;
-    // the flag must be set before that module evaluates.
-    (globalThis as Record<symbol, unknown>)[
-        Symbol.for("openui.devtools.autoMount")
-    ] = true;
-    return import("~/components/assistant-ui/openui-registration");
+  // @openuidev/react-lang auto-mounts its Inspect overlay in dev builds;
+  // the flag must be set before that module evaluates.
+  (globalThis as Record<symbol, unknown>)[Symbol.for("openui.devtools.autoMount")] = true;
+  return import("~/components/assistant-ui/openui-registration");
 });
 
 function parseErrorText(text: string, status: number): string {
-    try {
-        const json = JSON.parse(text) as { error?: string; message?: string };
-        if (json.error) return json.error;
-        if (json.message) return json.message;
-    } catch {
-        // not JSON
-    }
-    return text.trim() || `Chat request failed (HTTP ${status})`;
+  try {
+    const json = JSON.parse(text) as { error?: string; message?: string };
+    if (json.error) return json.error;
+    if (json.message) return json.message;
+  } catch {
+    // not JSON
+  }
+  return text.trim() || `Chat request failed (HTTP ${status})`;
 }
 
 /** Read the outgoing request body once, without consuming it for the retry. */
 function captureRequestBody(
-    input: RequestInfo | URL,
-    init?: RequestInit,
+  input: RequestInfo | URL,
+  init?: RequestInit,
 ): Record<string, unknown> | null {
-    let raw: string | null = null;
-    if (init && typeof init.body === "string") raw = init.body;
-    else if (input instanceof Request) {
-        const body = (input as unknown as { body?: unknown }).body;
-        if (typeof body === "string") raw = body;
-    }
-    if (!raw) return null;
-    try {
-        return JSON.parse(raw) as Record<string, unknown>;
-    } catch {
-        return null;
-    }
+  let raw: string | null = null;
+  if (init && typeof init.body === "string") raw = init.body;
+  else if (input instanceof Request) {
+    const body = (input as unknown as { body?: unknown }).body;
+    if (typeof body === "string") raw = body;
+  }
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
 }
 
 export function AssistantRuntimeProvider({
-    threadId,
-    projectInstructions,
-    children,
+  threadId,
+  projectInstructions,
+  children,
 }: {
-    threadId: string | null;
-    /** Project-level instructions appended to the system prompt. */
-    projectInstructions?: string;
-    children: ReactNode;
+  threadId: string | null;
+  /** Project-level instructions appended to the system prompt. */
+  projectInstructions?: string;
+  children: ReactNode;
 }) {
-    const { settings } = useSettings();
-    const { addArtifact } = useCanvas();
-    const { runSubagent, runSubagentsBatch } = useSubagent();
-    const settingsRef = useRef(settings);
-    settingsRef.current = settings;
-    const projectInstructionsRef = useRef(projectInstructions ?? "");
-    projectInstructionsRef.current = projectInstructions ?? "";
+  // The runtime reads settings through selectors and a getter instead of
+  // `useSettings()`: that context re-rendered the whole chat runtime on every
+  // settings write, including each keystroke in a settings text field.
+  const getSettings = useSettingsGetter();
+  const settingsRef = useMemo(
+    () => ({
+      get current() {
+        return getSettings();
+      },
+    }),
+    [getSettings],
+  );
+  const linuxEnabled = useSettingsSelector(
+    (s) => s.linuxEnvironment !== false && s.toolAccess.linux !== false,
+  );
+  const chatProvider = useSettingsSelector((s) => s.chat.provider);
+  const chatModel = useSettingsSelector((s) => s.chat.model);
+  const generativeUi = useSettingsSelector((s) => s.toolAccess.generativeUi === true);
+  const { addArtifact } = useCanvas();
+  const { runSubagent, runSubagentsBatch } = useSubagent();
+  const projectInstructionsRef = useRef(projectInstructions ?? "");
+  projectInstructionsRef.current = projectInstructions ?? "";
 
-    useEffect(() => {
-        if (settings.linuxEnvironment === false || settings.toolAccess.linux === false) return;
-        if (typeof window === "undefined" || !cheerpxAvailable()) return;
-        // Fetch the runtime/disk metadata early, but boot only when the user
-        // opens the environment or a tool needs it. Eager boots can race the
-        // first client tool and leave its reply waiting on a failed mount.
-        prefetchCheerpX();
-    }, [settings.linuxEnvironment, settings.toolAccess.linux]);
+  useEffect(() => {
+    if (!linuxEnabled) return;
+    if (typeof window === "undefined" || !cheerpxAvailable()) return;
+    // Fetch the runtime/disk metadata early, but boot only when the user
+    // opens the environment or a tool needs it. Eager boots can race the
+    // first client tool and leave its reply waiting on a failed mount.
+    prefetchCheerpX();
+  }, [linuxEnabled]);
 
-    const transport = useMemo(
-        () =>
-            new AssistantChatTransport({
-                api: "/api/chat",
-                fetch: async (input, init) => {
-                    const payload = captureRequestBody(input, init);
-                    const res = await globalThis.fetch(input, {
-                        ...init,
-                        credentials: "include",
-                    });
-                    if (res.ok) return res;
-                    const raw = await res.text();
-                    const creditExhausted = detectProviderCreditError(
-                        raw,
-                        res.status,
-                    );
-                    if (creditExhausted && payload) {
-                        // Credits exhausted → retry once on the next provider.
-                        const s = settingsRef.current;
-                        const fallback = findCreditsFallbackTarget(
-                            s,
-                            s.chat.provider,
-                        );
-                        if (fallback) {
-                            try {
-                                const rerun = await globalThis.fetch(input, {
-                                    ...init,
-                                    credentials: "include",
-                                    body: JSON.stringify(
-                                        applyCreditsFallback(payload, fallback),
-                                    ),
-                                });
-                                if (rerun.ok) {
-                                    notifyCreditsFallback(
-                                        s.chat.provider,
-                                        fallback.provider,
-                                    );
-                                    return rerun;
-                                }
-                                throw new Error(
-                                    parseErrorText(
-                                        await rerun.text(),
-                                        rerun.status,
-                                    ),
-                                );
-                            } catch (err) {
-                                console.error("[credits-fallback]", err);
-                            }
-                        }
-                    }
-                    throw new Error(parseErrorText(raw, res.status));
-                },
-                prepareSendMessagesRequest: async (options) => {
-                    const s = settingsRef.current;
-                    const provider = s.chat.provider;
-                    const providerConfig = s.providers[provider];
-                    const apiKey = providerConfig?.apiKey?.trim() || "";
-                    const baseUrl = providerConfig?.baseUrl?.trim() || undefined;
-                    const resolvedApiKey =
-                        provider === "chatgpt"
-                            ? localProviderKey("chatgpt")
-                            : provider === "custom" &&
-                                providerConfig?.openAICompatible?.authMode &&
-                                providerConfig.openAICompatible.authMode !== "bearer"
-                              ? ""
-                              : apiKey || localProviderKey(provider);
-
-                    await assertClientUsageAllowed(s, provider, resolvedApiKey);
-
-                    const access = normalizeToolAccess(s.toolAccess, {
-                        webSearch: s.webSearchEnabled !== false,
-                        calculator: s.calculatorEnabled !== false,
-                        python: s.pythonEnabled !== false,
-                        linux: s.linuxEnvironment !== false,
-                        skills: s.skillsEnabled !== false,
-                        memory: s.memoryEnabled !== false,
-                        knowledge: s.knowledgeEnabled !== false,
-                        subagents: s.subagentsEnabled === true,
-                    });
-                    const memoryEnabled = access.memory && s.memoryEnabled !== false;
-                    const knowledgeEnabled =
-                        access.knowledge && s.knowledgeEnabled !== false;
-                    const memoryContext = memoryEnabled && s.memoryAutoAttach
-                        ? await buildLocalMemoryContext()
-                        : "";
-                    const lastMsg = [...(options.messages ?? [])]
-                        .reverse()
-                        .find((m) => m.role === "user") as
-                        | { parts?: Array<{ type?: string; text?: string }> }
-                        | undefined;
-                    const lastUserText =
-                        lastMsg?.parts
-                            ?.filter((p) => p.type === "text" && typeof p.text === "string")
-                            .map((p) => p.text ?? "")
-                            .join(" ") ?? "";
-                    const knowledgeContext =
-                        knowledgeEnabled && lastUserText.trim()
-                            ? await import("~/lib/knowledge/store.client").then(
-                                  ({ buildLocalKnowledgeContext }) =>
-                                      buildLocalKnowledgeContext(lastUserText),
-                              )
-                            : "";
-                    const combinedContext = [memoryContext, knowledgeContext]
-                        .filter(Boolean)
-                        .join("\n\n");
-                    const memoryAvailable =
-                        memoryEnabled && (await hasLocalMemoryEntries());
-                    const forcedSkills = forcedSkillStore.current;
-                    forcedSkillStore.current = [];
-                    const forceSubagents = access.subagents && forcedSkills.some(
-                        (skill) =>
-                            toolNameForForcedSkill(skill.name) === "spawn_subagents",
-                    );
-                    // assistant-ui forwards model-context `system` (registered
-                    // instructions, e.g. the OpenUI Lang spec). Send it as
-                    // `modelInstructions` so it is appended to the server-side
-                    // prompt instead of replacing it via the `system` field.
-                    const {
-                        system: modelInstructions,
-                        ...forwardedBody
-                    } = (options.body ?? {}) as {
-                        system?: string;
-                        [key: string]: unknown;
-                    };
-                    return {
-                        body: {
-                            // Keep assistant-ui forwarded context (tools/etc).
-                            ...forwardedBody,
-                            modelInstructions,
-                            messages: options.messages,
-                            id: options.id,
-                            chatId: threadId ?? "draft",
-                            trigger: options.trigger,
-                            messageId: options.messageId,
-                            metadata: options.requestMetadata,
-                            model: s.chat.model,
-                            provider,
-                            apiKey:
-                                provider === "chatgpt"
-                                    ? ""
-                                    : resolvedApiKey,
-                            baseUrl,
-                            openAICompatible: providerConfig?.openAICompatible,
-                             systemPrompt: s.chat.systemPrompt,
-                             advancedSystemPrompt: s.chat.advancedSystemPrompt,
-                             projectInstructions: projectInstructionsRef.current || undefined,
-                            temperature: s.chat.temperature,
-                            maxTokens: s.chat.maxTokens,
-                            topP: s.chat.topP,
-                             reasoningEffort: s.chat.reasoningEffort,
-                             imageSettings: {
-                                 size: s.chat.imageSize,
-                                 count: s.chat.imageCount,
-                             },
-                            toolSettings: {
-                                 webSearchEnabled: access.webSearch && s.webSearchEnabled,
-                                 calculatorEnabled: access.calculator && s.calculatorEnabled,
-                                 pythonEnabled: access.python && s.pythonEnabled,
-                                 linuxEnvironment: access.linux && s.linuxEnvironment,
-                                webSearchEngine: s.webSearchEngine,
-                                searxngUrl: s.searxngUrl,
-                                 skillsEnabled: access.skills && s.skillsEnabled,
-                                 connectors: access.connectors ? s.connectors : [],
-                                 composioEnabled:
-                                     access.composio &&
-                                     s.composio?.enabled === true &&
-                                     Boolean(s.composio.apiKey && s.composio.mcpUrl),
-                                 composioAutoApproveWrites:
-                                     s.composio?.autoApproveWrites === true,
-                                memoryAvailable,
-                                knowledgeEnabled,
-                                 subagentsEnabled:
-                                     access.subagents &&
-                                     (s.subagentsEnabled === true || forceSubagents),
-                                tokenMode: s.tokenMode ?? "balanced",
-                                toolAccess: access,
-                            },
-                             mcpServers: [
-                                 ...(access.mcp
-                                     ? s.mcpServers.filter((m) => m.enabled)
-                                     : []),
-                                 ...(access.composio &&
-                                 s.composio?.enabled &&
-                                 s.composio.apiKey &&
-                                 s.composio.mcpUrl
-                                     ? [
-                                           {
-                                               id: "composio",
-                                               name: "Composio",
-                                               kind: "http" as const,
-                                               url: s.composio.mcpUrl,
-                                               headers: s.composio.mcpHeaders,
-                                               enabled: true,
-                                           },
-                                       ]
-                                     : []),
-                             ],
-                            memoryContext: combinedContext,
-                            agentMode: s.agentModeEnabled === true,
-                            ...(forcedSkills.length ? { customSkills: forcedSkills } : {}),
-                        },
-                    };
-                },
-            }),
-        [],
-    );
-
-    const chatRef = useRef<ReturnType<typeof useChat> | null>(null);
-    const pendingClientCalls = useRef(0);
-    const resumeTimerRef = useRef<number | null>(null);
-    const scheduleMainChatResume = () => {
-        if (typeof window === "undefined") return;
-        if (resumeTimerRef.current != null) {
-            window.clearTimeout(resumeTimerRef.current);
-        }
-        let attempts = 0;
-        const tryResume = () => {
-            const current = chatRef.current;
-            if (!current) return;
-            if (linuxGenerationAborted() || isGenerationStopRequested()) return;
-            if (
-                current.status === "submitted" ||
-                current.status === "streaming"
-            ) {
-                if (attempts++ < 120) {
-                    resumeTimerRef.current = window.setTimeout(tryResume, 50);
-                }
-                return;
-            }
-            if (!lastAssistantMessageIsCompleteWithToolCalls(current)) {
-                if (attempts++ < 120) {
-                    resumeTimerRef.current = window.setTimeout(tryResume, 50);
-                }
-                return;
-            }
-            resumeTimerRef.current = null;
-            pendingClientCalls.current = 0;
-            void current.sendMessage().catch((error) => {
-                console.error("[chat] failed to resume after tool output", error);
-            });
-        };
-        resumeTimerRef.current = window.setTimeout(tryResume, 50);
-    };
-    const chat = useChat({
-        id: threadId ?? "draft",
-        transport,
-        onToolCall: ({ toolCall }) => {
-            if (![
-                "run_python",
-                "run_code",
-                "run_command",
-                "read_file",
-                "linux_run_command",
-                "linux_read_file",
-                "linux_background_start",
-                "linux_list_processes",
-                "linux_kill_process",
-                "npm_project",
-                "ask_user",
-                "memory",
-                "knowledge_search",
-                "knowledge_list",
-                "spawn_subagent",
-                "spawn_subagents",
-            ].includes(toolCall.toolName)) return;
-            if (!toolAccessAllows(settingsRef.current.toolAccess, toolCall.toolName)) {
-                pendingClientCalls.current += 1;
-                const addToolOutput = chatRef.current
-                    ?.addToolOutput as unknown as
-                    | ((args: {
-                          tool: string;
-                          toolCallId: string;
-                          state: "output-available";
-                          output: string;
-                      }) => void)
-                    | undefined;
-                addToolOutput?.({
-                    tool: toolCall.toolName,
-                    toolCallId: toolCall.toolCallId,
-                    state: "output-available",
-                    output: `Tool access is disabled in Settings: ${toolCall.toolName}. Continue without it.`,
+  const transport = useMemo(
+    () =>
+      new AssistantChatTransport({
+        api: "/api/chat",
+        fetch: async (input, init) => {
+          const payload = captureRequestBody(input, init);
+          const res = await globalThis.fetch(input, {
+            ...init,
+            credentials: "include",
+          });
+          if (res.ok) return res;
+          const raw = await res.text();
+          const creditExhausted = detectProviderCreditError(raw, res.status);
+          if (creditExhausted && payload) {
+            // Credits exhausted → retry once on the next provider.
+            const s = settingsRef.current;
+            const fallback = findCreditsFallbackTarget(s, s.chat.provider);
+            if (fallback) {
+              try {
+                const rerun = await globalThis.fetch(input, {
+                  ...init,
+                  credentials: "include",
+                  body: JSON.stringify(applyCreditsFallback(payload, fallback)),
                 });
-                scheduleMainChatResume();
-                return;
+                if (rerun.ok) {
+                  notifyCreditsFallback(s.chat.provider, fallback.provider);
+                  return rerun;
+                }
+                throw new Error(parseErrorText(await rerun.text(), rerun.status));
+              } catch (err) {
+                console.error("[credits-fallback]", err);
+              }
             }
-            pendingClientCalls.current += 1;
-            const input = toolCall.input as {
-                code?: string;
-                command?: string;
-                cwd?: string;
-                path?: string;
-                maxBytes?: number;
-                question?: string;
-                questionType?: "single" | "multiple" | "short";
-                options?: string[];
-                query?: string;
-                k?: number;
-                task?: string;
-                tasks?: string[];
-                 action?: NpmProjectInput["action"];
-                 project?: string;
-                 files?: Record<string, string>;
-                 packages?: string[];
-                 script?: string;
-             };
-            const task =
-                toolCall.toolName === "ask_user"
-                    ? askUserInChat(toolCall.toolCallId, {
-                          question: input.question ?? "Please provide more information.",
-                          questionType: input.questionType,
-                          options: input.options,
-                      })
-                    : toolCall.toolName === "spawn_subagents"
-                      ? runSubagentsBatch(
-                            toolCall.toolCallId,
-                            input.tasks ?? [],
-                        )
-                      : toolCall.toolName === "spawn_subagent"
-                        ? runSubagent(toolCall.toolCallId, input.task ?? "")
-                        : toolCall.toolName === "memory"
-                        ? settingsRef.current.memoryEnabled !== false
-                            ? readLocalMemory(input.query)
-                            : Promise.resolve("Memory is disabled for this chat.")
-                          : toolCall.toolName === "knowledge_list"
-                            ? settingsRef.current.knowledgeEnabled !== false
-                              ? import("~/lib/knowledge/store.client").then(
-                                    ({ listKnowledgeDocuments }) =>
-                                        listKnowledgeDocuments().then((docs) =>
-                                            docs.length
-                                                ? docs
-                                                      .map(
-                                                          (d, i) =>
-                                                              `${i + 1}. ${d.name} (${d.chunkCount} chunks)`,
-                                                      )
-                                                      .join("\n")
-                                                : "Knowledge base is empty.",
-                                        ),
-                                )
-                              : Promise.resolve("Knowledge base is disabled.")
-                          : toolCall.toolName === "knowledge_search"
-                             ? settingsRef.current.knowledgeEnabled !== false
-                                ? import("~/lib/knowledge/store.client").then(
-                                      ({ readLocalKnowledge }) =>
-                                          readLocalKnowledge(input.query),
-                                  )
-                                : Promise.resolve("Knowledge base is disabled.")
-                             : toolCall.toolName === "npm_project"
-                               ? executeNpmProjectClientTool(
-                                     {
-                                         action: input.action ?? "inspect",
-                                         project: input.project ?? "app",
-                                         files: input.files,
-                                         packages: input.packages,
-                                         script: input.script,
-                                         path: input.path,
-                                     },
-                                     threadId ?? "draft",
-                                 )
-                               : isLinuxClientTool(toolCall.toolName)
-                               ? executeLinuxClientTool(
-                                    toolCall.toolName,
-                                    input,
-                                    threadId ?? "draft",
-                                )
-                              : runBrowserPython(
-                                    input.code ?? "",
-                                    collectPythonInputFiles(
-                                        ((chatRef.current as unknown as { messages?: unknown[] } | null)
-                                            ?.messages ?? []),
-                                    ),
-                                );
-            void task.then(
-                (result) => {
-                    const output =
-                        typeof result === "string" ? result : result.output;
-                    const pythonResult =
-                        typeof result === "string" ? null : result;
-                    if (pythonResult) {
-                        const sourcePrefix =
-                            toolCall.toolName === "npm_project"
-                                ? "npm"
-                                : isLinuxClientTool(toolCall.toolName)
-                                  ? "linux"
-                                  : "python";
-                        for (const artifact of pythonResult.artifacts) {
-                            const mimeType = inferArtifactMimeType(artifact.filename);
-                            const sourceKey = `${sourcePrefix}:${artifact.filename}:${artifact.contentEncoding}:${artifact.content.length}:${artifactContentHash(artifact.content)}`;
-                            const kind =
-                                /\.html?$/i.test(artifact.filename) || /text\/html/i.test(mimeType)
-                                    ? ("html" as const)
-                                    : ("file" as const);
-                            const artifactId = addArtifact(
-                                {
-                                    kind,
-                                    title: artifact.filename,
-                                    filename: artifact.filename,
-                                    content: artifact.content,
-                                    contentEncoding: artifact.contentEncoding,
-                                    mimeType,
-                                    sourceKey,
-                                },
-                                { scopeId: threadId },
-                            );
-                            persistArtifactForScope(threadId, {
-                                id: artifactId,
-                                kind,
-                                title: artifact.filename,
-                                filename: artifact.filename,
-                                content: artifact.content,
-                                contentEncoding: artifact.contentEncoding,
-                                mimeType,
-                                sourceKey,
-                                scopeId: threadId,
-                                createdAt: Date.now(),
-                            });
-                        }
-                    }
-                    const addToolOutput = chatRef.current
-                        ?.addToolOutput as unknown as
-                        | ((args: {
-                              tool: string;
-                              toolCallId: string;
-                              state: "output-available";
-                              output: string;
-                          }) => void)
-                        | undefined;
-                    addToolOutput?.({
-                        tool: toolCall.toolName,
-                        toolCallId: toolCall.toolCallId,
-                        state: "output-available",
-                        output,
-                    });
-                    scheduleMainChatResume();
-                },
-                (error) => {
-                    const isSubagent =
-                        toolCall.toolName === "spawn_subagent" ||
-                        toolCall.toolName === "spawn_subagents";
-                    const errorText =
-                        error instanceof Error
-                            ? error.message
-                            : isSubagent
-                              ? "Subagent run failed"
-                               : toolCall.toolName === "npm_project"
-                                 ? "NPM project execution failed"
-                                 : isLinuxClientTool(toolCall.toolName)
-                                 ? "Linux environment execution failed"
-                              : "Pyodide execution failed";
-                    // Always resume the main chat — never leave spawn_* hanging.
-                    const addToolOutput = chatRef.current
-                        ?.addToolOutput as unknown as
-                        | ((args: {
-                              tool: string;
-                              toolCallId: string;
-                              state: "output-available" | "output-error";
-                              output?: string;
-                              errorText?: string;
-                          }) => void)
-                        | undefined;
-                    if (isSubagent) {
-                        addToolOutput?.({
-                            tool: toolCall.toolName,
-                            toolCallId: toolCall.toolCallId,
-                            state: "output-available",
-                            output: `Status: error\n${errorText}\nContinue without this subagent result, or finish the work yourself.`,
-                        });
-                    } else {
-                        addToolOutput?.({
-                            tool: toolCall.toolName,
-                            toolCallId: toolCall.toolCallId,
-                            state: "output-available",
-                            output: errorText,
-                        });
-                    }
-                    scheduleMainChatResume();
-                },
-            );
+          }
+          throw new Error(parseErrorText(raw, res.status));
         },
-        sendAutomaticallyWhen: ({ messages }) => {
-            // A completed prompt_openui form is a user answer, not the end of
-            // the turn — continue the run so the model can react to it.
-            if (shouldContinueAfterOpenUIPrompt({ messages })) return true;
-            if (linuxGenerationAborted()) {
-                pendingClientCalls.current = 0;
-                return false;
-            }
-            if (pendingClientCalls.current === 0) return false;
-            if (!lastAssistantMessageIsCompleteWithToolCalls({ messages })) {
-                return false;
-            }
-            pendingClientCalls.current = 0;
-            return true;
-        },
-        onError: (err) => {
-            console.error("[chat]", err);
-            if (!isGenerationStopRequested() && settingsRef.current.chat.provider === "chatgpt") {
-                notifyChatGPTRequestFailure();
-            }
-        },
-    });
-    chatRef.current = chat;
+        prepareSendMessagesRequest: async (options) => {
+          const s = settingsRef.current;
+          const provider = s.chat.provider;
+          const providerConfig = s.providers[provider];
+          const apiKey = providerConfig?.apiKey?.trim() || "";
+          const baseUrl = providerConfig?.baseUrl?.trim() || undefined;
+          const resolvedApiKey =
+            provider === "chatgpt"
+              ? localProviderKey("chatgpt")
+              : provider === "custom" &&
+                  providerConfig?.openAICompatible?.authMode &&
+                  providerConfig.openAICompatible.authMode !== "bearer"
+                ? ""
+                : apiKey || localProviderKey(provider);
 
-    const modalities = getModelModalities(
-        settings.chat.model,
-        settings.chat.provider,
-    );
-    const attachmentPolicy = getAttachmentPolicy(
-        settings.chat.provider,
-        settings.chat.model,
-    );
-    const dictation = useMemo(() => {
-        if (
-            typeof window === "undefined" ||
-            !isWebSpeechDictationSupported()
-        ) {
-            return undefined;
+          await assertClientUsageAllowed(s, provider, resolvedApiKey);
+
+          const access = normalizeToolAccess(s.toolAccess, {
+            webSearch: s.webSearchEnabled !== false,
+            calculator: s.calculatorEnabled !== false,
+            python: s.pythonEnabled !== false,
+            linux: s.linuxEnvironment !== false,
+            skills: s.skillsEnabled !== false,
+            memory: s.memoryEnabled !== false,
+            knowledge: s.knowledgeEnabled !== false,
+            subagents: s.subagentsEnabled === true,
+          });
+          const memoryEnabled = access.memory && s.memoryEnabled !== false;
+          const knowledgeEnabled = access.knowledge && s.knowledgeEnabled !== false;
+          const memoryContext =
+            memoryEnabled && s.memoryAutoAttach ? await buildLocalMemoryContext() : "";
+          const lastMsg = [...(options.messages ?? [])].reverse().find((m) => m.role === "user") as
+            { parts?: Array<{ type?: string; text?: string }> } | undefined;
+          const lastUserText =
+            lastMsg?.parts
+              ?.filter((p) => p.type === "text" && typeof p.text === "string")
+              .map((p) => p.text ?? "")
+              .join(" ") ?? "";
+          const knowledgeContext =
+            knowledgeEnabled && lastUserText.trim()
+              ? await import("~/lib/knowledge/store.client").then(
+                  ({ buildLocalKnowledgeContext }) => buildLocalKnowledgeContext(lastUserText),
+                )
+              : "";
+          const combinedContext = [memoryContext, knowledgeContext].filter(Boolean).join("\n\n");
+          const memoryAvailable = memoryEnabled && (await hasLocalMemoryEntries());
+          const forcedSkills = forcedSkillStore.current;
+          forcedSkillStore.current = [];
+          const forceSubagents =
+            access.subagents &&
+            forcedSkills.some((skill) => toolNameForForcedSkill(skill.name) === "spawn_subagents");
+          // assistant-ui forwards model-context `system` (registered
+          // instructions, e.g. the OpenUI Lang spec). Send it as
+          // `modelInstructions` so it is appended to the server-side
+          // prompt instead of replacing it via the `system` field.
+          const { system: modelInstructions, ...forwardedBody } = (options.body ?? {}) as {
+            system?: string;
+            [key: string]: unknown;
+          };
+          return {
+            body: {
+              // Keep assistant-ui forwarded context (tools/etc).
+              ...forwardedBody,
+              modelInstructions,
+              messages: options.messages,
+              id: options.id,
+              chatId: threadId ?? "draft",
+              trigger: options.trigger,
+              messageId: options.messageId,
+              metadata: options.requestMetadata,
+              model: s.chat.model,
+              provider,
+              apiKey: provider === "chatgpt" ? "" : resolvedApiKey,
+              baseUrl,
+              openAICompatible: providerConfig?.openAICompatible,
+              systemPrompt: s.chat.systemPrompt,
+              advancedSystemPrompt: s.chat.advancedSystemPrompt,
+              projectInstructions: projectInstructionsRef.current || undefined,
+              temperature: s.chat.temperature,
+              maxTokens: s.chat.maxTokens,
+              topP: s.chat.topP,
+              reasoningEffort: s.chat.reasoningEffort,
+              imageSettings: {
+                size: s.chat.imageSize,
+                count: s.chat.imageCount,
+              },
+              toolSettings: {
+                webSearchEnabled: access.webSearch && s.webSearchEnabled,
+                calculatorEnabled: access.calculator && s.calculatorEnabled,
+                pythonEnabled: access.python && s.pythonEnabled,
+                linuxEnvironment: access.linux && s.linuxEnvironment,
+                webSearchEngine: s.webSearchEngine,
+                searxngUrl: s.searxngUrl,
+                skillsEnabled: access.skills && s.skillsEnabled,
+                connectors: access.connectors ? s.connectors : [],
+                composioEnabled:
+                  access.composio &&
+                  s.composio?.enabled === true &&
+                  Boolean(s.composio.apiKey && s.composio.mcpUrl),
+                composioAutoApproveWrites: s.composio?.autoApproveWrites === true,
+                memoryAvailable,
+                knowledgeEnabled,
+                subagentsEnabled:
+                  access.subagents && (s.subagentsEnabled === true || forceSubagents),
+                tokenMode: s.tokenMode ?? "balanced",
+                toolAccess: access,
+              },
+              mcpServers: [
+                ...mcpServersForRequest(s.mcpServers, access, s.webSearchEnabled),
+                ...(access.composio && s.composio?.enabled && s.composio.apiKey && s.composio.mcpUrl
+                  ? [
+                      {
+                        id: "composio",
+                        name: "Composio",
+                        kind: "http" as const,
+                        url: s.composio.mcpUrl,
+                        headers: s.composio.mcpHeaders,
+                        enabled: true,
+                      },
+                    ]
+                  : []),
+              ],
+              memoryContext: combinedContext,
+              agentMode: s.agentModeEnabled === true,
+              ...(forcedSkills.length ? { customSkills: forcedSkills } : {}),
+            },
+          };
+        },
+      }),
+    [],
+  );
+
+  const chatRef = useRef<ReturnType<typeof useChat> | null>(null);
+  const pendingClientCalls = useRef(0);
+  const resumeTimerRef = useRef<number | null>(null);
+  const scheduleMainChatResume = () => {
+    if (typeof window === "undefined") return;
+    if (resumeTimerRef.current != null) {
+      window.clearTimeout(resumeTimerRef.current);
+    }
+    let attempts = 0;
+    const tryResume = () => {
+      const current = chatRef.current;
+      if (!current) return;
+      if (linuxGenerationAborted() || isGenerationStopRequested()) return;
+      if (current.status === "submitted" || current.status === "streaming") {
+        if (attempts++ < 120) {
+          resumeTimerRef.current = window.setTimeout(tryResume, 50);
         }
-        return createWebSpeechDictationAdapter(navigator.language || "en-US");
-    }, []);
+        return;
+      }
+      if (!lastAssistantMessageIsCompleteWithToolCalls(current)) {
+        if (attempts++ < 120) {
+          resumeTimerRef.current = window.setTimeout(tryResume, 50);
+        }
+        return;
+      }
+      resumeTimerRef.current = null;
+      pendingClientCalls.current = 0;
+      void current.sendMessage().catch((error) => {
+        console.error("[chat] failed to resume after tool output", error);
+      });
+    };
+    resumeTimerRef.current = window.setTimeout(tryResume, 50);
+  };
+  const chat = useChat({
+    id: threadId ?? "draft",
+    transport,
+    onToolCall: ({ toolCall }) => {
+      if (
+        ![
+          "run_python",
+          "run_code",
+          "run_command",
+          "read_file",
+          "linux_run_command",
+          "linux_read_file",
+          "linux_background_start",
+          "linux_list_processes",
+          "linux_kill_process",
+          "npm_project",
+          "ask_user",
+          "memory",
+          "knowledge_search",
+          "knowledge_list",
+          "spawn_subagent",
+          "spawn_subagents",
+        ].includes(toolCall.toolName)
+      )
+        return;
+      if (!toolAccessAllows(settingsRef.current.toolAccess, toolCall.toolName)) {
+        pendingClientCalls.current += 1;
+        const addToolOutput = chatRef.current?.addToolOutput as unknown as
+          | ((args: {
+              tool: string;
+              toolCallId: string;
+              state: "output-available";
+              output: string;
+            }) => void)
+          | undefined;
+        addToolOutput?.({
+          tool: toolCall.toolName,
+          toolCallId: toolCall.toolCallId,
+          state: "output-available",
+          output: `Tool access is disabled in Settings: ${toolCall.toolName}. Continue without it.`,
+        });
+        scheduleMainChatResume();
+        return;
+      }
+      pendingClientCalls.current += 1;
+      const input = toolCall.input as {
+        code?: string;
+        command?: string;
+        cwd?: string;
+        path?: string;
+        maxBytes?: number;
+        question?: string;
+        questionType?: "single" | "multiple" | "short";
+        options?: string[];
+        query?: string;
+        k?: number;
+        task?: string;
+        tasks?: string[];
+        action?: NpmProjectInput["action"];
+        project?: string;
+        files?: Record<string, string>;
+        packages?: string[];
+        script?: string;
+      };
+      const task =
+        toolCall.toolName === "ask_user"
+          ? askUserInChat(toolCall.toolCallId, {
+              question: input.question ?? "Please provide more information.",
+              questionType: input.questionType,
+              options: input.options,
+            })
+          : toolCall.toolName === "spawn_subagents"
+            ? runSubagentsBatch(toolCall.toolCallId, input.tasks ?? [])
+            : toolCall.toolName === "spawn_subagent"
+              ? runSubagent(toolCall.toolCallId, input.task ?? "")
+              : toolCall.toolName === "memory"
+                ? settingsRef.current.memoryEnabled !== false
+                  ? readLocalMemory(input.query)
+                  : Promise.resolve("Memory is disabled for this chat.")
+                : toolCall.toolName === "knowledge_list"
+                  ? settingsRef.current.knowledgeEnabled !== false
+                    ? import("~/lib/knowledge/store.client").then(({ listKnowledgeDocuments }) =>
+                        listKnowledgeDocuments().then((docs) =>
+                          docs.length
+                            ? docs
+                                .map((d, i) => `${i + 1}. ${d.name} (${d.chunkCount} chunks)`)
+                                .join("\n")
+                            : "Knowledge base is empty.",
+                        ),
+                      )
+                    : Promise.resolve("Knowledge base is disabled.")
+                  : toolCall.toolName === "knowledge_search"
+                    ? settingsRef.current.knowledgeEnabled !== false
+                      ? import("~/lib/knowledge/store.client").then(({ readLocalKnowledge }) =>
+                          readLocalKnowledge(input.query),
+                        )
+                      : Promise.resolve("Knowledge base is disabled.")
+                    : toolCall.toolName === "npm_project"
+                      ? executeNpmProjectClientTool(
+                          {
+                            action: input.action ?? "inspect",
+                            project: input.project ?? "app",
+                            files: input.files,
+                            packages: input.packages,
+                            script: input.script,
+                            path: input.path,
+                          },
+                          threadId ?? "draft",
+                        )
+                      : isLinuxClientTool(toolCall.toolName)
+                        ? executeLinuxClientTool(toolCall.toolName, input, threadId ?? "draft")
+                        : runBrowserPython(
+                            input.code ?? "",
+                            collectPythonInputFiles(
+                              (chatRef.current as unknown as { messages?: unknown[] } | null)
+                                ?.messages ?? [],
+                            ),
+                          );
+      void task.then(
+        (result) => {
+          const output = typeof result === "string" ? result : result.output;
+          const pythonResult = typeof result === "string" ? null : result;
+          if (pythonResult) {
+            const sourcePrefix =
+              toolCall.toolName === "npm_project"
+                ? "npm"
+                : isLinuxClientTool(toolCall.toolName)
+                  ? "linux"
+                  : "python";
+            for (const artifact of pythonResult.artifacts) {
+              const mimeType = inferArtifactMimeType(artifact.filename);
+              const sourceKey = `${sourcePrefix}:${artifact.filename}:${artifact.contentEncoding}:${artifact.content.length}:${artifactContentHash(artifact.content)}`;
+              const kind =
+                /\.html?$/i.test(artifact.filename) || /text\/html/i.test(mimeType)
+                  ? ("html" as const)
+                  : ("file" as const);
+              const artifactId = addArtifact(
+                {
+                  kind,
+                  title: artifact.filename,
+                  filename: artifact.filename,
+                  content: artifact.content,
+                  contentEncoding: artifact.contentEncoding,
+                  mimeType,
+                  sourceKey,
+                },
+                { scopeId: threadId },
+              );
+              persistArtifactForScope(threadId, {
+                id: artifactId,
+                kind,
+                title: artifact.filename,
+                filename: artifact.filename,
+                content: artifact.content,
+                contentEncoding: artifact.contentEncoding,
+                mimeType,
+                sourceKey,
+                scopeId: threadId,
+                createdAt: Date.now(),
+              });
+            }
+          }
+          const addToolOutput = chatRef.current?.addToolOutput as unknown as
+            | ((args: {
+                tool: string;
+                toolCallId: string;
+                state: "output-available";
+                output: string;
+              }) => void)
+            | undefined;
+          addToolOutput?.({
+            tool: toolCall.toolName,
+            toolCallId: toolCall.toolCallId,
+            state: "output-available",
+            output,
+          });
+          scheduleMainChatResume();
+        },
+        (error) => {
+          const isSubagent =
+            toolCall.toolName === "spawn_subagent" || toolCall.toolName === "spawn_subagents";
+          const errorText =
+            error instanceof Error
+              ? error.message
+              : isSubagent
+                ? "Subagent run failed"
+                : toolCall.toolName === "npm_project"
+                  ? "NPM project execution failed"
+                  : isLinuxClientTool(toolCall.toolName)
+                    ? "Linux environment execution failed"
+                    : "Pyodide execution failed";
+          // Always resume the main chat — never leave spawn_* hanging.
+          const addToolOutput = chatRef.current?.addToolOutput as unknown as
+            | ((args: {
+                tool: string;
+                toolCallId: string;
+                state: "output-available" | "output-error";
+                output?: string;
+                errorText?: string;
+              }) => void)
+            | undefined;
+          if (isSubagent) {
+            addToolOutput?.({
+              tool: toolCall.toolName,
+              toolCallId: toolCall.toolCallId,
+              state: "output-available",
+              output: `Status: error\n${errorText}\nContinue without this subagent result, or finish the work yourself.`,
+            });
+          } else {
+            addToolOutput?.({
+              tool: toolCall.toolName,
+              toolCallId: toolCall.toolCallId,
+              state: "output-available",
+              output: errorText,
+            });
+          }
+          scheduleMainChatResume();
+        },
+      );
+    },
+    sendAutomaticallyWhen: ({ messages }) => {
+      // A completed prompt_openui form is a user answer, not the end of
+      // the turn — continue the run so the model can react to it.
+      if (shouldContinueAfterOpenUIPrompt({ messages })) return true;
+      if (linuxGenerationAborted()) {
+        pendingClientCalls.current = 0;
+        return false;
+      }
+      if (pendingClientCalls.current === 0) return false;
+      if (!lastAssistantMessageIsCompleteWithToolCalls({ messages })) {
+        return false;
+      }
+      pendingClientCalls.current = 0;
+      return true;
+    },
+    onError: (err) => {
+      console.error("[chat]", err);
+      if (!isGenerationStopRequested() && settingsRef.current.chat.provider === "chatgpt") {
+        notifyChatGPTRequestFailure();
+      }
+    },
+  });
+  chatRef.current = chat;
 
-    const adapters = useMemo(
-        () => ({
-            attachments: createAttachmentAdapter(modalities, attachmentPolicy),
-            dictation,
-        }),
-        [
-            attachmentPolicy.maxFileBytes,
-            attachmentPolicy.maxFiles,
-            attachmentPolicy.maxTotalBytes,
-            dictation,
-            modalities.documents,
-            modalities.tools,
-            modalities.vision,
-        ],
-    );
+  const modalities = getModelModalities(chatModel, chatProvider);
+  const attachmentPolicy = getAttachmentPolicy(chatProvider, chatModel);
+  const dictation = useMemo(() => {
+    if (typeof window === "undefined" || !isWebSpeechDictationSupported()) {
+      return undefined;
+    }
+    return createWebSpeechDictationAdapter(navigator.language || "en-US");
+  }, []);
 
-    const runtime = useAISDKRuntime(chat, { adapters });
+  const adapters = useMemo(
+    () => ({
+      attachments: createAttachmentAdapter(modalities, attachmentPolicy),
+      dictation,
+    }),
+    [
+      attachmentPolicy.maxFileBytes,
+      attachmentPolicy.maxFiles,
+      attachmentPolicy.maxTotalBytes,
+      dictation,
+      modalities.documents,
+      modalities.tools,
+      modalities.vision,
+    ],
+  );
 
-    useEffect(() => {
-        transport.setRuntime(runtime);
-    }, [transport, runtime]);
+  const runtime = useAISDKRuntime(chat, { adapters });
 
-    const generativeUiEnabled =
-        settings.toolAccess.generativeUi === true && modalities.tools === true;
+  useEffect(() => {
+    transport.setRuntime(runtime);
+  }, [transport, runtime]);
 
-    return (
-        <ChatSessionProvider value={chat}>
-            <AuiRuntimeProvider runtime={runtime}>
-                <ChatThreadSync threadId={threadId} />
-                {generativeUiEnabled ? (
-                    <Suspense fallback={null}>
-                        <OpenUIRegistration>{children}</OpenUIRegistration>
-                    </Suspense>
-                ) : (
-                    children
-                )}
-            </AuiRuntimeProvider>
-        </ChatSessionProvider>
-    );
+  const generativeUiEnabled = generativeUi && modalities.tools === true;
+
+  return (
+    <ChatSessionProvider value={chat}>
+      <AuiRuntimeProvider runtime={runtime}>
+        <ChatThreadSync threadId={threadId} />
+        {generativeUiEnabled ? (
+          <Suspense fallback={null}>
+            <OpenUIRegistration>{children}</OpenUIRegistration>
+          </Suspense>
+        ) : (
+          children
+        )}
+      </AuiRuntimeProvider>
+    </ChatSessionProvider>
+  );
 }

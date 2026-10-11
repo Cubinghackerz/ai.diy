@@ -1,6 +1,8 @@
 /**
  * Server-side chat tools — shared by /api/chat.
- * Uses free DuckDuckGo / optional SearXNG; LLM calls are BYOK (user's key).
+ * Live web search is Parallel / Firecrawl (bundled MCP, loaded in api.chat) or a
+ * BYOK search connector; there is no built-in `web_search` tool. LLM calls are
+ * BYOK (user's key).
  */
 
 import { tool, type Tool } from "ai";
@@ -11,7 +13,6 @@ import {
     focusSearchQuery,
     formatCompactSearchResults,
     clipSearchText,
-    webSearch,
     type DuckDuckGoInstantAnswer,
     type SearchEngine,
 } from "~/lib/search";
@@ -26,22 +27,14 @@ import {
     resolveConnectConnector,
     startConnectAuthorization,
 } from "~/lib/server/connect";
-import {
-    assertConfiguredHttpUrlResolved,
-} from "~/lib/server/provider-url";
+import { assertConfiguredHttpUrlResolved } from "~/lib/server/provider-url";
 import { formatMathResult } from "~/lib/math-evaluator";
 import { compactMcpToolResult } from "~/lib/server/mcp-tools";
-import {
-    formatUrlDoctorReport,
-    runUrlDoctor,
-} from "~/lib/server/url-doctor";
+import { formatUrlDoctorReport, runUrlDoctor } from "~/lib/server/url-doctor";
 import { fetchYoutubeTranscript } from "~/lib/server/youtube";
+import { normalizeTokenMode, tokenModePolicy, type TokenMode } from "~/lib/token-mode";
 import {
-    normalizeTokenMode,
-    tokenModePolicy,
-    type TokenMode,
-} from "~/lib/token-mode";
-import {
+    isLiveSearchToolName,
     normalizeToolAccess,
     type ToolAccessSettings,
 } from "~/lib/tool-access";
@@ -66,7 +59,9 @@ export type ToolSettings = {
     calculatorEnabled?: boolean;
     pythonEnabled?: boolean;
     linuxEnvironment?: boolean;
+    /** Legacy: still sent by older clients; no model-facing search tool uses them. */
     webSearchEngine?: SearchEngine;
+    /** Legacy: see webSearchEngine. */
     searxngUrl?: string;
     skillsEnabled?: boolean;
     connectors?: ConnectorConfig[];
@@ -83,7 +78,8 @@ function normalizeEncodedArtifactContent(
     content: string,
     encoding: ArtifactContentEncoding,
 ): string | null {
-    let normalized = content.trim()
+    let normalized = content
+        .trim()
         .replace(/^```(?:base64|hex)?\s*/i, "")
         .replace(/\s*```$/i, "")
         .trim();
@@ -195,8 +191,16 @@ function skillArchitectDocument(input: {
     references?: string;
     evaluations?: string;
 }) {
-    const name = input.name.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "") || "custom-skill";
-    const description = input.description.trim() || input.purpose?.trim() || "Reusable instructions for a defined AI task.";
+    const name =
+        input.name
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9-]+/g, "-")
+            .replace(/^-|-$/g, "") || "custom-skill";
+    const description =
+        input.description.trim() ||
+        input.purpose?.trim() ||
+        "Reusable instructions for a defined AI task.";
     const section = (heading: string, value?: string) =>
         value?.trim() ? `\n## ${heading}\n${value.trim()}\n` : "";
 
@@ -241,19 +245,25 @@ ${input.evaluations?.trim() || `Include at least three positive activation cases
 }
 
 type PromptArchitectType =
-    | "system"
-    | "user"
-    | "tool-description"
-    | "agent-constitution"
-    | "eval-suite";
+    "system" | "user" | "tool-description" | "agent-constitution" | "eval-suite";
 
 function normalizePromptType(raw?: string): PromptArchitectType {
-    const key = (raw || "system").trim().toLowerCase().replace(/[_\s]+/g, "-");
+    const key = (raw || "system")
+        .trim()
+        .toLowerCase()
+        .replace(/[_\s]+/g, "-");
     if (key === "user" || key === "user-prompt") return "user";
-    if (key === "tool" || key === "tool-description" || key === "tool-desc") return "tool-description";
-    if (key === "agent" || key === "agent-constitution" || key === "constitution" || key === "orchestrator")
+    if (key === "tool" || key === "tool-description" || key === "tool-desc")
+        return "tool-description";
+    if (
+        key === "agent" ||
+        key === "agent-constitution" ||
+        key === "constitution" ||
+        key === "orchestrator"
+    )
         return "agent-constitution";
-    if (key === "eval" || key === "eval-suite" || key === "evals" || key === "evaluation") return "eval-suite";
+    if (key === "eval" || key === "eval-suite" || key === "evals" || key === "evaluation")
+        return "eval-suite";
     return "system";
 }
 
@@ -272,7 +282,8 @@ function promptArchitectDocument(input: {
     rationale?: string;
     evaluations?: string;
 }) {
-    const goal = input.goal.trim() || "Complete the stated job with a clear, inspectable deliverable.";
+    const goal =
+        input.goal.trim() || "Complete the stated job with a clear, inspectable deliverable.";
     const promptType = normalizePromptType(input.promptType);
     const audience = input.audience?.trim() || "the end user";
     const tools = input.tools?.trim() || "";
@@ -480,7 +491,9 @@ ${defaultEvals}
 - Tone: ${tone}
 - Risk level: ${riskLevel}
 ${tools ? `- Tools provided by caller\n` : "- No tools listed by caller (system draft assumes none)"}${
-        draft ? "- Final prompt uses caller-supplied draft (tool did not overwrite)\n" : "- Final prompt synthesized from structured fields; refine wording if needed\n"
+        draft
+            ? "- Final prompt uses caller-supplied draft (tool did not overwrite)\n"
+            : "- Final prompt synthesized from structured fields; refine wording if needed\n"
     }- Do not paste third-party leaked/GPL system prompts into this artifact
 - For Prismium SKILL.md authoring, use Skill Architect / create_skill instead
 
@@ -493,11 +506,7 @@ ${tools ? `- Tools provided by caller\n` : "- No tools listed by caller (system 
 `;
 }
 
-function frontendDesignBrief(input: {
-    request: string;
-    surface?: string;
-    constraints?: string;
-}) {
+function frontendDesignBrief(input: { request: string; surface?: string; constraints?: string }) {
     const skill = `---
 name: frontend-design
 description: Guidance for distinctive, intentional visual design when building new UI or reshaping an existing one. Helps with aesthetic direction, typography, and making choices that do not read as templated defaults.
@@ -552,7 +561,9 @@ Return the completed implementation or implementation-ready brief, followed by m
             instructions: skill,
             request: input.request.trim(),
             surface: input.surface?.trim() || "web interface",
-            constraints: input.constraints?.trim() || "Use the existing design system and preserve accessibility.",
+            constraints:
+                input.constraints?.trim() ||
+                "Use the existing design system and preserve accessibility.",
             workflow: [
                 "Clarify the primary user task and success state.",
                 "Establish hierarchy, layout, responsive behavior, and empty/error/loading states before styling.",
@@ -572,11 +583,7 @@ Return the completed implementation or implementation-ready brief, followed by m
     );
 }
 
-function htmlCraftSkill(input: {
-    request: string;
-    surface?: string;
-    constraints?: string;
-}) {
+function htmlCraftSkill(input: { request: string; surface?: string; constraints?: string }) {
     return JSON.stringify(
         {
             skill: "html_craft",
@@ -660,7 +667,9 @@ function ultimateFrontendUISkill(input: {
             ],
             request: input.request.trim(),
             surface: input.surface?.trim() || "web interface",
-            constraints: input.constraints?.trim() || "Use the existing design system and preserve accessibility.",
+            constraints:
+                input.constraints?.trim() ||
+                "Use the existing design system and preserve accessibility.",
         },
         null,
         2,
@@ -674,15 +683,22 @@ function connectorGuide(connectors: ConnectorConfig[]): string {
         tavily: "Tavily: web search and content-oriented search results; cite returned URLs.",
         brave: "Brave Search: web search results; respect rate limits and cite returned URLs.",
         exa: "Exa: semantic web search with highlights; cite returned URLs and distinguish excerpts from verified facts.",
-        parallel: "Parallel: advanced web search; cite returned URLs and do not treat snippets as proof without fetching.",
+        parallel:
+            "Parallel: advanced web search; cite returned URLs and do not treat snippets as proof without fetching.",
         github: "GitHub: use only explicitly enabled read tools by default; commits, merges, deletion, and writes require separate confirmation.",
-        supabase: "Supabase: inspect schemas and use publishable/anon access safely; never expose service-role keys and respect RLS.",
-        postgres: "PostgreSQL: default to read-only SELECT, statement timeouts, and row limits; writes require explicit activation and confirmation.",
+        supabase:
+            "Supabase: inspect schemas and use publishable/anon access safely; never expose service-role keys and respect RLS.",
+        postgres:
+            "PostgreSQL: default to read-only SELECT, statement timeouts, and row limits; writes require explicit activation and confirmation.",
         s3: "S3-compatible storage: restrict bucket/prefix access, use signed URLs, and confirm writes/deletes.",
-        "remote-mcp": "Remote MCP: inspect discovered tools and permissions first; separate read, write, and destructive actions.",
+        "remote-mcp":
+            "Remote MCP: inspect discovered tools and permissions first; separate read, write, and destructive actions.",
     };
     return enabled
-        .map((connector) => `- ${connector.name}: ${guides[connector.kind] || "Use only discovered, explicitly enabled capabilities."}`)
+        .map(
+            (connector) =>
+                `- ${connector.name}: ${guides[connector.kind] || "Use only discovered, explicitly enabled capabilities."}`,
+        )
         .join("\n");
 }
 
@@ -715,7 +731,7 @@ function formatDuckDuckGoInstantAnswer(answer: DuckDuckGoInstantAnswer): string 
     }
     if (lines.length === 2) {
         lines.push(
-            "No instant answer was available. Use web_search, third-party search, and read_url instead.",
+            "No instant answer was available. Use the Parallel or Firecrawl search tool (or a search connector) and read_url instead.",
         );
     }
     return lines.join("\n").slice(0, 2_500);
@@ -935,8 +951,7 @@ function extractMainContentFromHtml(html: string, maxChars: number): string {
         .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, "")
         .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, "");
 
-    const blockRegex =
-        /<(article|main|h[1-6]|p|section|li|div)[^>]*>([\s\S]*?)<\/\1>/gi;
+    const blockRegex = /<(article|main|h[1-6]|p|section|li|div)[^>]*>([\s\S]*?)<\/\1>/gi;
     const tagWeight: Record<string, number> = {
         article: 8,
         main: 7,
@@ -1013,7 +1028,11 @@ export async function buildChatTools(
         subagentMode?: boolean;
         /** Preview compares models with a deliberately small, deterministic tool surface. */
         previewMode?: boolean;
-        suppressWebSearch?: boolean;
+        /**
+         * Parallel / Firecrawl (bundled MCP) loaded for this request. They search
+         * and fetch pages, so the free fetch_url fallback is not added.
+         */
+        bundledSearchLoaded?: boolean;
         /** Current thread messages — used by compaction_skill. */
         messages?: CompactableMessage[];
         /** When `chatgpt`, omit Codex-reserved Linux tool aliases. */
@@ -1045,8 +1064,7 @@ export async function buildChatTools(
     const forceCompaction = forcedTools.has("compaction_skill");
     const forceUrlDoctor = forcedTools.has("url_doctor");
     const forceYoutube =
-        forcedTools.has("youtube_transcript") ||
-        forcedTools.has("summarize_youtube");
+        forcedTools.has("youtube_transcript") || forcedTools.has("summarize_youtube");
     const forceSkillSuite =
         forcedTools.has("html_craft") ||
         forcedTools.has("ultimate_frontend_ui") ||
@@ -1072,17 +1090,15 @@ export async function buildChatTools(
     const enableSearch =
         access.webSearch &&
         settings.webSearchEnabled !== false &&
-        options.suppressWebSearch !== true;
-    const enableCalc =
-        !previewMode && access.calculator && settings.calculatorEnabled !== false;
+        options.bundledSearchLoaded !== true;
+    const enableCalc = !previewMode && access.calculator && settings.calculatorEnabled !== false;
     // Python is a client-side tool. The browser executes it in Pyodide and
     // sends the result back before the model continues.
     const enablePython = access.python && settings.pythonEnabled !== false;
     // Toggle is the only gate. Token efficiency used to hide these tools
     // even when Linux environment was on, so every provider reported them
     // missing. ChatGPT/Codex also reserves `run_command` / `read_file`.
-    const enableLinux =
-        !previewMode && access.linux && settings.linuxEnvironment !== false;
+    const enableLinux = !previewMode && access.linux && settings.linuxEnvironment !== false;
     const enableSkillSuite =
         !previewMode &&
         access.skills &&
@@ -1094,35 +1110,35 @@ export async function buildChatTools(
     const tools: Record<string, Tool> = {};
 
     // Always available in the full chat; forceable via /Compaction.
-    if (!previewMode && access.compaction) tools.compaction_skill = tool({
-        description:
-            "Compress prior chat into a faithful carry-forward brief (goals, decisions, constraints, open threads, URLs). Call when /Compaction is selected or the user asks to compact context. Does not invent facts.",
-        needsApproval: false,
-        inputSchema: z.object({
-            focus: z.string().optional(),
-            reason: z.string().optional(),
-        }),
-        execute: async ({ focus, reason }) => {
-            const source = (options.messages ?? []) as UIMessage[];
-            const result = compactUiMessages(source, {
-                contextWindow: 32_000,
-                force: true,
-                focus,
-                reason: reason || (forceCompaction ? "forced /Compaction" : "compaction_skill"),
-                keepRecent: 6,
-            });
-            return compactionSkillGuide({
-                focus,
-                reason: reason || (forceCompaction ? "forced /Compaction" : "compaction_skill"),
-                summary:
-                    result.summary ||
-                    "No older turns to compact; recent messages already fit.",
-                beforeTokens: result.beforeTokens,
-                afterTokens: result.afterTokens,
-                droppedMessages: result.droppedMessages,
-            });
-        },
-    });
+    if (!previewMode && access.compaction)
+        tools.compaction_skill = tool({
+            description:
+                "Compress prior chat into a faithful carry-forward brief (goals, decisions, constraints, open threads, URLs). Call when /Compaction is selected or the user asks to compact context. Does not invent facts.",
+            needsApproval: false,
+            inputSchema: z.object({
+                focus: z.string().optional(),
+                reason: z.string().optional(),
+            }),
+            execute: async ({ focus, reason }) => {
+                const source = (options.messages ?? []) as UIMessage[];
+                const result = compactUiMessages(source, {
+                    contextWindow: 32_000,
+                    force: true,
+                    focus,
+                    reason: reason || (forceCompaction ? "forced /Compaction" : "compaction_skill"),
+                    keepRecent: 6,
+                });
+                return compactionSkillGuide({
+                    focus,
+                    reason: reason || (forceCompaction ? "forced /Compaction" : "compaction_skill"),
+                    summary:
+                        result.summary || "No older turns to compact; recent messages already fit.",
+                    beforeTokens: result.beforeTokens,
+                    afterTokens: result.afterTokens,
+                    droppedMessages: result.droppedMessages,
+                });
+            },
+        });
 
     if (enableResearch) {
         tools.research_skill = tool({
@@ -1163,7 +1179,7 @@ export async function buildChatTools(
                         await duckDuckGoInstantAnswer(query, maxRelatedTopics ?? 3),
                     );
                 } catch (err) {
-                    return `DuckDuckGo Instant Answer unavailable: ${err instanceof Error ? err.message : "the service failed"}. Continue with web_search and read_url.`;
+                    return `DuckDuckGo Instant Answer unavailable: ${err instanceof Error ? err.message : "the service failed"}. Continue with the Parallel or Firecrawl search tool (or a search connector) and read_url.`;
                 }
             },
         });
@@ -1200,7 +1216,9 @@ export async function buildChatTools(
                 path: z
                     .string()
                     .optional()
-                    .describe("Absolute https URL, or a path resolved against the connector base URL"),
+                    .describe(
+                        "Absolute https URL, or a path resolved against the connector base URL",
+                    ),
                 body: z.record(z.string(), z.unknown()).optional(),
                 headers: z.record(z.string(), z.string()).optional(),
             }),
@@ -1244,16 +1262,17 @@ export async function buildChatTools(
                             inspection.token.externalSubject
                                 ? `Authenticated as: ${inspection.token.externalSubject}`
                                 : "",
-                            inspection.token.tenantId
-                                ? `Tenant: ${inspection.token.tenantId}`
-                                : "",
+                            inspection.token.tenantId ? `Tenant: ${inspection.token.tenantId}` : "",
                         ]
                             .filter(Boolean)
                             .join("\n");
                     }
 
                     if (action === "authorize") {
-                        const started = await startConnectAuthorization(entry.connectorId, entry.scopes);
+                        const started = await startConnectAuthorization(
+                            entry.connectorId,
+                            entry.scopes,
+                        );
                         if (!started.ok) return `Could not start authorization: ${started.error}`;
                         return `Open this URL in a new tab and complete the consent as the operator, then retry (authorize URL): ${started.url}`;
                     }
@@ -1270,10 +1289,17 @@ export async function buildChatTools(
                             if (!entry.baseUrl) {
                                 return `A relative path was given but no CONNECT_BASE_URL_${entry.key} is configured for this connector. Pass an absolute https URL instead.`;
                             }
-                            const base = entry.baseUrl.endsWith("/") ? entry.baseUrl : `${entry.baseUrl}/`;
-                            target = await assertConfiguredHttpUrlResolved(new URL(raw, base).toString());
+                            const base = entry.baseUrl.endsWith("/")
+                                ? entry.baseUrl
+                                : `${entry.baseUrl}/`;
+                            target = await assertConfiguredHttpUrlResolved(
+                                new URL(raw, base).toString(),
+                            );
                         }
-                        const tokenResult = await requestConnectToken(entry.connectorId, entry.scopes);
+                        const tokenResult = await requestConnectToken(
+                            entry.connectorId,
+                            entry.scopes,
+                        );
                         if (!tokenResult.ok) {
                             if (tokenResult.kind === "authorization-required") {
                                 return `Authorization required before API calls. Ask the user to complete the consent:\n${tokenResult.authorizeUrl ?? "open Settings → Connect Beta"}\nThen retry.`;
@@ -1313,104 +1339,31 @@ export async function buildChatTools(
     }
 
     if (enableSearch) {
-        const engine = settings.webSearchEngine ?? "duckduckgo";
-        let searxngUrl = settings.searxngUrl?.trim();
-        let searchConfigurationError: string | null = null;
-        if (engine === "searxng" && searxngUrl) {
-            try {
-                searxngUrl = (await assertConfiguredHttpUrlResolved(searxngUrl)).toString();
-            } catch (err) {
-                searchConfigurationError =
-                    err instanceof Error ? err.message : "Invalid SearXNG URL";
-                searxngUrl = undefined;
-            }
-        }
+        // There is deliberately no built-in `web_search` tool. Live web search is
+        // Parallel or Firecrawl (the bundled MCP servers loaded in api.chat) or,
+        // when the user enabled one, a BYOK connector (tavily/brave/exa/parallel).
         const activeConnector = findEnabledSearchConnector(settings.connectors);
-        const engineLabel =
-            activeConnector?.name ||
-            (engine === "searxng" && searxngUrl
-                ? "SearXNG"
-                : "DuckDuckGo");
-
-        let searchCitationFooterShown = false;
-
-        const formatResults = (results: Awaited<ReturnType<typeof webSearch>>) => {
-            const formatted = formatCompactSearchResults(results, {
-                maxSnippetChars: policy.maxSnippetChars,
-                maxTitleChars: 72,
-                includeSnippets: true,
-                includeCitationFooter: !searchCitationFooterShown,
-            });
-            if (!searchCitationFooterShown) searchCitationFooterShown = true;
-            return formatted;
-        };
-
-        const builtInSearch = async (query: string, maxResults: number) =>
-            searchConfigurationError
-                ? Promise.reject(new Error(searchConfigurationError))
-                : formatResults(
-                      await webSearch(query, {
-                          maxResults,
-                          engine,
-                          searxngUrl,
-                      }),
-                  );
-
-        const defaultHits = policy.defaultSearchResults;
-        const maxHits = policy.maxSearchResults;
-
-        const resolveHitCount = (requested?: number) => {
-            if (typeof requested !== "number" || !Number.isFinite(requested)) {
-                return defaultHits;
-            }
-            return Math.max(1, Math.min(maxHits, Math.round(requested)));
-        };
-
-        const searchTool = tool({
-            description: `Search the web using ${engineLabel}. Pass a short keyword query (3–10 words), not an essay. Default ${defaultHits} results (max ${maxHits}). Cite result URLs.`,
-            needsApproval: false,
-            inputSchema: z.object({
-                query: z
-                    .string()
-                    .optional()
-                    .describe("Short keyword query (3–10 words). Prefer exact phrases and site: filters."),
-                maxResults: z.number().int().min(1).max(maxHits).optional(),
-            }),
-            execute: async ({ query, maxResults }) => {
-                const normalizedQuery = focusSearchQuery(query ?? "", policy.maxQueryChars);
-                if (!normalizedQuery) {
-                    return "Search query required. Retry with a focused 3–10 word keyword query.";
-                }
-                const hits = resolveHitCount(maxResults);
-                try {
-                    const results = activeConnector
-                        ? await connectorSearch(activeConnector, normalizedQuery, hits)
-                        : await webSearch(normalizedQuery, {
-                              maxResults: hits,
-                              engine,
-                               searxngUrl,
-                          });
-                    return formatResults(results);
-                } catch (err) {
-                    if (activeConnector) {
-                        try {
-                            return `${await builtInSearch(normalizedQuery, hits)}\n\nNote: ${activeConnector.name} was unavailable, so built-in web search was used instead.`;
-                        } catch {
-                            // Return a model-readable result instead of failing the stream.
-                        }
-                    }
-                    return `Search unavailable: ${err instanceof Error ? err.message : "the search provider failed"}`;
-                }
-            },
-        });
-        tools[activeConnector ? `${activeConnector.kind}_search` : "web_search"] = searchTool;
         if (activeConnector) {
-            tools.web_search = tool({
-                description:
-                    "Built-in web search fallback. Use a short keyword query when the configured provider search connector is unavailable.",
+            let searchCitationFooterShown = false;
+            const defaultHits = policy.defaultSearchResults;
+            const maxHits = policy.maxSearchResults;
+            const resolveHitCount = (requested?: number) => {
+                if (typeof requested !== "number" || !Number.isFinite(requested)) {
+                    return defaultHits;
+                }
+                return Math.max(1, Math.min(maxHits, Math.round(requested)));
+            };
+
+            tools[`${activeConnector.kind}_search`] = tool({
+                description: `Search the web using ${activeConnector.name}. Pass a short keyword query (3–10 words), not an essay. Default ${defaultHits} results (max ${maxHits}). Cite result URLs.`,
                 needsApproval: false,
                 inputSchema: z.object({
-                    query: z.string().optional(),
+                    query: z
+                        .string()
+                        .optional()
+                        .describe(
+                            "Short keyword query (3–10 words). Prefer exact phrases and site: filters.",
+                        ),
                     maxResults: z.number().int().min(1).max(maxHits).optional(),
                 }),
                 execute: async ({ query, maxResults }) => {
@@ -1419,9 +1372,21 @@ export async function buildChatTools(
                         return "Search query required. Retry with a focused 3–10 word keyword query.";
                     }
                     try {
-                        return await builtInSearch(normalizedQuery, resolveHitCount(maxResults));
+                        const results = await connectorSearch(
+                            activeConnector,
+                            normalizedQuery,
+                            resolveHitCount(maxResults),
+                        );
+                        const formatted = formatCompactSearchResults(results, {
+                            maxSnippetChars: policy.maxSnippetChars,
+                            maxTitleChars: 72,
+                            includeSnippets: true,
+                            includeCitationFooter: !searchCitationFooterShown,
+                        });
+                        searchCitationFooterShown = true;
+                        return formatted;
                     } catch (err) {
-                        return `Search unavailable: ${err instanceof Error ? err.message : "the built-in provider failed"}`;
+                        return `Search unavailable: ${activeConnector.name} failed (${err instanceof Error ? err.message : "the search provider failed"}). Tell the user to check this connector in Settings → Connectors; use fetch_url for any URL already known.`;
                     }
                 },
             });
@@ -1438,8 +1403,7 @@ export async function buildChatTools(
                 try {
                     const res = await fetchPublicHttpUrl(url, {
                         headers: {
-                            "User-Agent":
-                                "Mozilla/5.0 (compatible; ai.diy/0.1)",
+                            "User-Agent": "Mozilla/5.0 (compatible; ai.diy/0.1)",
                             Accept: "text/html,application/json,text/plain",
                         },
                         signal: AbortSignal.timeout(10_000),
@@ -1455,7 +1419,7 @@ export async function buildChatTools(
         if (exposeLegacyAlias("read_url")) tools.read_url = tools.fetch_url;
     }
 
-    // Available even when MCP suppresses built-in web_search/fetch_url —
+    // Available even when Parallel / Firecrawl replace the built-in fetch_url —
     // URL Doctor is a scored audit, not a generic search fallback.
     if (
         !previewMode &&
@@ -1467,9 +1431,7 @@ export async function buildChatTools(
                 "Fetch a YouTube video's title, channel, and captions/transcript so you can summarize or quote it. Pass a youtube.com, youtu.be, shorts, or live URL. Do not invent a transcript; use this tool first.",
             needsApproval: false,
             inputSchema: z.object({
-                url: z
-                    .string()
-                    .describe("YouTube watch, share, shorts, or live URL"),
+                url: z.string().describe("YouTube watch, share, shorts, or live URL"),
             }),
             execute: async ({ url }) => {
                 try {
@@ -1548,7 +1510,9 @@ export async function buildChatTools(
                     .int()
                     .min(1)
                     .max(300)
-                    .describe("Optional kill timeout for this command in seconds (1-300; default 90). Use for long compiles or servers, not for streaming jobs."),
+                    .describe(
+                        "Optional kill timeout for this command in seconds (1-300; default 90). Use for long compiles or servers, not for streaming jobs.",
+                    ),
             }),
         });
         const linuxRead = tool({
@@ -1598,7 +1562,6 @@ export async function buildChatTools(
             execute: async (input) => linuxEnvironmentSkill(input, options.chatId),
         });
         tools.linux_environment_skill = linuxSkill;
-
     }
 
     if (enableNpmProject) {
@@ -1609,13 +1572,8 @@ export async function buildChatTools(
             inputSchema: z.object({
                 action: z.enum(NPM_PROJECT_ACTIONS),
                 project: z.string().min(1).max(48),
-                files: z
-                    .record(z.string(), z.string().max(MAX_NPM_PROJECT_FILE_BYTES))
-                    .optional(),
-                packages: z
-                    .array(z.string().max(128))
-                    .max(MAX_NPM_PACKAGE_SPECS)
-                    .optional(),
+                files: z.record(z.string(), z.string().max(MAX_NPM_PROJECT_FILE_BYTES)).optional(),
+                packages: z.array(z.string().max(128)).max(MAX_NPM_PACKAGE_SPECS).optional(),
                 script: z.string().max(64).optional(),
                 path: z.string().max(160).optional(),
             }),
@@ -1656,18 +1614,19 @@ export async function buildChatTools(
         }
     }
 
-    if (!previewMode && access.currentTime) tools.get_current_time = tool({
-        description: "Return the current ISO date/time in a requested IANA timezone.",
-        inputSchema: z.object({ timezone: z.string().optional() }),
-        execute: async ({ timezone }) => {
-            const now = new Date();
-            return JSON.stringify({
-                iso: now.toISOString(),
-                timezone: timezone || "UTC",
-                readable: now.toLocaleString("en-US", { timeZone: timezone || "UTC" }),
-            });
-        },
-    });
+    if (!previewMode && access.currentTime)
+        tools.get_current_time = tool({
+            description: "Return the current ISO date/time in a requested IANA timezone.",
+            inputSchema: z.object({ timezone: z.string().optional() }),
+            execute: async ({ timezone }) => {
+                const now = new Date();
+                return JSON.stringify({
+                    iso: now.toISOString(),
+                    timezone: timezone || "UTC",
+                    readable: now.toLocaleString("en-US", { timeZone: timezone || "UTC" }),
+                });
+            },
+        });
 
     if (!previewMode && access.memory && settings.memoryAvailable) {
         tools.memory = tool({
@@ -1697,7 +1656,8 @@ export async function buildChatTools(
 
     if (!previewMode && access.connectors && policy.connectorsMeta) {
         tools.list_connections = tool({
-            description: "List enabled integrations and their capability categories without exposing credentials.",
+            description:
+                "List enabled integrations and their capability categories without exposing credentials.",
             inputSchema: z.object({}),
             execute: async () =>
                 JSON.stringify(
@@ -1706,7 +1666,10 @@ export async function buildChatTools(
                         .map((connector) => ({
                             name: connector.name,
                             kind: connector.kind,
-                            capabilities: connector.kind === "remote-mcp" ? ["discovered tools"] : ["configured connector"],
+                            capabilities:
+                                connector.kind === "remote-mcp"
+                                    ? ["discovered tools"]
+                                    : ["configured connector"],
                         })),
                 ),
         });
@@ -1714,7 +1677,8 @@ export async function buildChatTools(
 
     if (!previewMode && !subagentMode && access.askUser) {
         tools.ask_user = tool({
-            description: "Ask the user a focused multiple-choice, multi-select, or short-answer question when required information cannot be safely inferred.",
+            description:
+                "Ask the user a focused multiple-choice, multi-select, or short-answer question when required information cannot be safely inferred.",
             inputSchema: z.object({
                 question: z.string(),
                 questionType: z.enum(["single", "multiple", "short"]).default("short"),
@@ -1766,13 +1730,7 @@ export async function buildChatTools(
         const promptArchitectInput = z.object({
             goal: z.string(),
             promptType: z
-                .enum([
-                    "system",
-                    "user",
-                    "tool-description",
-                    "agent-constitution",
-                    "eval-suite",
-                ])
+                .enum(["system", "user", "tool-description", "agent-constitution", "eval-suite"])
                 .optional(),
             audience: z.string().optional(),
             tools: z.string().optional(),
@@ -1833,27 +1791,24 @@ export async function buildChatTools(
         }
     }
 
-    if (access.fileCreation) tools.create_file = tool({
-        description: policy.compactToolDescriptions
-            ? "Create the requested Canvas file (text/code/HTML/SVG or base64/hex binary). This is the default file-creation tool. Mention the filename in backticks, not as a markdown link."
-            : "Create a document, code file, SVG, interactive HTML preview, or downloadable binary file in the Canvas panel. This is the preferred and default tool for file creation. Do not use run_python, run_code, or generate_file for ordinary files. For binary bytes produced by run_python, pass the exact Base64 or hex string with contentEncoding set to base64 or hex; the client decodes it before download. For interactive HTML, use in-page # anchors or absolute https:// links only—never root-relative paths like /pricing that would leave the preview. Always mention the resulting filename in backticks (never as a markdown link).",
-        inputSchema: z.object({
-            filename: z.string(),
-            title: z.string(),
-            content: z.string(),
-            kind: z.string(),
-            mimeType: z.string().optional(),
-            contentEncoding: z.enum(["base64", "hex"]).optional(),
-        }),
-        execute: async ({ title, filename, content, kind, mimeType, contentEncoding }) =>
-            artifactPayload({ title, filename, content, kind, mimeType, contentEncoding }),
-    });
+    if (access.fileCreation)
+        tools.create_file = tool({
+            description: policy.compactToolDescriptions
+                ? "Create the requested Canvas file (text/code/HTML/SVG or base64/hex binary). This is the default file-creation tool. Mention the filename in backticks, not as a markdown link."
+                : "Create a document, code file, SVG, interactive HTML preview, or downloadable binary file in the Canvas panel. This is the preferred and default tool for file creation. Do not use run_python, run_code, or generate_file for ordinary files. For binary bytes produced by run_python, pass the exact Base64 or hex string with contentEncoding set to base64 or hex; the client decodes it before download. For interactive HTML, use in-page # anchors or absolute https:// links only—never root-relative paths like /pricing that would leave the preview. Always mention the resulting filename in backticks (never as a markdown link).",
+            inputSchema: z.object({
+                filename: z.string(),
+                title: z.string(),
+                content: z.string(),
+                kind: z.string(),
+                mimeType: z.string().optional(),
+                contentEncoding: z.enum(["base64", "hex"]).optional(),
+            }),
+            execute: async ({ title, filename, content, kind, mimeType, contentEncoding }) =>
+                artifactPayload({ title, filename, content, kind, mimeType, contentEncoding }),
+        });
 
-    if (
-        policy.generateFile &&
-        access.fileCreation &&
-        exposeLegacyAlias("generate_file")
-    ) {
+    if (policy.generateFile && access.fileCreation && exposeLegacyAlias("generate_file")) {
         tools.generate_file = tool({
             description: policy.compactToolDescriptions
                 ? "Legacy file-generation alias. Prefer create_file for ordinary files and Canvas previews. Do not duplicate run_python binary artifacts."
@@ -1874,7 +1829,14 @@ export async function buildChatTools(
                 ) {
                     return "No duplicate artifact was generated. The binary/image file was already created by run_python; do not Base64-encode it again unless the user explicitly asks for a separate downloadable copy.";
                 }
-                return artifactPayload({ title, filename, content, kind, mimeType, contentEncoding });
+                return artifactPayload({
+                    title,
+                    filename,
+                    content,
+                    kind,
+                    mimeType,
+                    contentEncoding,
+                });
             },
         });
     }
@@ -1908,7 +1870,6 @@ export async function buildChatTools(
 
     if (previewMode) {
         const allowedPreviewTools = new Set([
-            "web_search",
             "fetch_url",
             "read_url",
             "run_python",
@@ -1917,7 +1878,9 @@ export async function buildChatTools(
             "generate_file",
         ]);
         return Object.fromEntries(
-            Object.entries(tools).filter(([name]) => allowedPreviewTools.has(name)),
+            Object.entries(tools).filter(
+                ([name]) => allowedPreviewTools.has(name) || isLiveSearchToolName(name),
+            ),
         );
     }
 

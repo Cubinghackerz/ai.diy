@@ -19,7 +19,11 @@ import {
 } from "~/components/settings/KimiSubscriptionSettings";
 import { haptic, hapticConfirm, hapticSelect } from "~/lib/haptics";
 import { testProviderKey } from "~/lib/key-test";
-import { useSettings } from "~/lib/providers/SettingsProvider";
+import {
+    useSettings,
+    useSettingsLoaded,
+    useSettingsSelector,
+} from "~/lib/providers/SettingsProvider";
 import { isLocalProvider, isProviderReady } from "~/lib/setup";
 import { DEFAULT_MODELS, PROVIDER_DEFAULTS, type ModelInfo, type ProviderId } from "~/lib/types";
 import { ArrowRight, CheckCircle, Key, ShieldCheck, XCircle } from "@phosphor-icons/react";
@@ -619,8 +623,11 @@ export function SetupGate() {
 
 /** True when first-run setup should block the chat shell. */
 export function useNeedsSetup(): boolean {
-    const { settings, loaded } = useSettings();
-    if (!loaded) return true;
-    if (!settings.setupComplete) return true;
-    return !isProviderReady(settings);
+    // Selectors, not useSettings(): the workspace route calls this, and reading the whole
+    // settings object there re-rendered the entire chat tree on every settings write.
+    const loaded = useSettingsLoaded();
+    const needs = useSettingsSelector(
+        (settings) => !settings.setupComplete || !isProviderReady(settings),
+    );
+    return !loaded || needs;
 }

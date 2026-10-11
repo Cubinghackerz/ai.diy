@@ -17,6 +17,7 @@ import { createChatGPTProxyProvider } from "@opencoredev/loginwithchatgpt-ai";
 import { buildChatTools } from "~/lib/server/chat-tools";
 import {
     closeMcpClients,
+    isBundledSearchMcpServer,
     isComposioMcpServer,
     loadMcpTools,
     selectMcpServersForRequest,
@@ -38,7 +39,6 @@ import {
     ensureLinuxSkill,
     ensureNpmProjectSkill,
     ensureResearchSkill,
-    detectResearchIntent,
     ensureUrlDoctorSkill,
     lastUserTextFromMessages,
     resolveRequiredSkillTools,
@@ -46,7 +46,11 @@ import {
     toolNamesInvokedInThread,
     type ForcedSkill,
 } from "~/lib/skill-command";
-import { normalizeToolAccess, toolAccessKeyForTool } from "~/lib/tool-access";
+import {
+    isBundledLiveSearchToolName,
+    normalizeToolAccess,
+    toolAccessKeyForTool,
+} from "~/lib/tool-access";
 import {
     compactUiMessages,
     estimateTokensFromText,
@@ -625,31 +629,26 @@ export async function action({ request }: ActionFunctionArgs) {
         const activeSearchConnector = toolAccess.connectors
             ? findEnabledSearchConnector(body.toolSettings?.connectors)
             : undefined;
-        const invokedToolNameIndex = toolNamesInvokedInThread(body.messages);
-        const invokedToolNames = invokedToolNameIndex.all;
-        let mcpToolAlreadyUsed = false;
-        for (const name of invokedToolNameIndex.parts) {
-            if (name.startsWith("mcp_")) {
-                mcpToolAlreadyUsed = true;
-                break;
-            }
-        }
-        const searchIntent =
-            detectResearchIntent(userText) ||
-            /\b(search|browse|look\s*up|find\s+(?:sources?|pages?|results?))\b/i.test(userText);
+        const invokedToolNames = toolNamesInvokedInThread(body.messages).all;
+        const searchEnabled = toolAccess.webSearch && body.toolSettings?.webSearchEnabled !== false;
 
-        if (body.previewMode !== true) {
-            const allowedMcpServers = (body.mcpServers ?? []).filter((server) =>
-                isComposioMcpServer(server)
-                    ? toolAccess.composio && body.toolSettings?.composioEnabled === true
-                    : toolAccess.mcp,
-            );
+        // Parallel Search and Firecrawl are the model's web search (there is no
+        // built-in web_search tool), so they ride on web search access rather
+        // than MCP access, and also load in the model preview. Everything else
+        // (custom MCP, Composio) stays gated by its own access and is skipped
+        // in previews.
+        const allowedMcpServers = (body.mcpServers ?? []).filter((server) => {
+            if (isBundledSearchMcpServer(server)) return searchEnabled;
+            if (body.previewMode === true) return false;
+            return isComposioMcpServer(server)
+                ? toolAccess.composio && body.toolSettings?.composioEnabled === true
+                : toolAccess.mcp;
+        });
+        // A provider that cannot call tools gets none, so skip the connections too.
+        if (body.openAICompatible?.capabilityOverrides?.tools !== false) {
             const selectedMcpServers = selectMcpServersForRequest(allowedMcpServers, {
-                searchIntent,
                 activeSearchConnector: Boolean(activeSearchConnector),
-                webSearchEnabled:
-                    toolAccess.webSearch && body.toolSettings?.webSearchEnabled !== false,
-                mcpToolAlreadyUsed,
+                webSearchEnabled: searchEnabled,
             });
             const loadedMcp = await loadMcpTools(selectedMcpServers, policy, request.signal);
             mcpTools = loadedMcp.tools;
@@ -673,22 +672,9 @@ export async function action({ request }: ActionFunctionArgs) {
                 body.toolSettings?.composioAutoApproveWrites === true,
             );
         }
-        if (activeSearchConnector) {
-            for (const name of Object.keys(mcpTools)) {
-                if (
-                    /^mcp_(?:parallel_search_mcp_(?:web_search|web_fetch)|firecrawl_keyless_firecrawl_(?:search|scrape|parse))$/i.test(
-                        name,
-                    )
-                ) {
-                    delete mcpTools[name];
-                }
-            }
-        }
-        const mcpSearchAvailable = Object.keys(mcpTools).some((name) =>
-            /^mcp_(?:parallel_search_mcp_(?:web_search|web_fetch)|firecrawl_keyless_firecrawl_(?:search|scrape|parse))$/i.test(
-                name,
-            ),
-        );
+        // Parallel / Firecrawl cover search and page fetching, so the free
+        // fetch_url fallback is only added when they did not load.
+        const bundledSearchLoaded = Object.keys(mcpTools).some(isBundledLiveSearchToolName);
 
         // Slash-selected skills + auto Research / Frontend / URL Doctor when intent is clear.
         // Once-per-conversation skills: don't re-inject the forced skill when
@@ -758,7 +744,7 @@ export async function action({ request }: ActionFunctionArgs) {
             {
                 subagentMode: body.subagentMode === true,
                 previewMode: body.previewMode === true,
-                suppressWebSearch: mcpSearchAvailable && !activeSearchConnector,
+                bundledSearchLoaded,
                 messages: body.messages,
                 provider: body.provider,
                 chatId: body.chatId,
@@ -767,7 +753,7 @@ export async function action({ request }: ActionFunctionArgs) {
         const tools: Record<string, Tool> =
             body.openAICompatible?.capabilityOverrides?.tools === false
                 ? {}
-                : { ...builtIn, ...(body.previewMode === true ? {} : mcpTools) };
+                : { ...builtIn, ...mcpTools };
 
         // Frontend (client-executed) tool schemas forwarded by assistant-ui.
         // Skipped for subagents and previews: they can't render tool UIs.

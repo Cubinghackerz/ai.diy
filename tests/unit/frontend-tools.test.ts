@@ -16,6 +16,19 @@ describe("frontend tool boundaries", () => {
         expect(normalizeToolAccess(undefined).externalMedia).toBe(true);
         expect(normalizeToolAccess({ externalMedia: false }).externalMedia).toBe(false);
     });
+    it("never forwards a client-supplied web_search tool", () => {
+        // The built-in web_search is retired; a client must not be able to bring it back.
+        expect(frontendToolsFromBody({ web_search: definition }, new Set(), true)).toEqual({});
+        expect(
+            Object.keys(
+                frontendToolsFromBody(
+                    { web_search: definition, present_openui: definition },
+                    new Set(),
+                    true,
+                ),
+            ),
+        ).toEqual(["present_openui"]);
+    });
     it("only forwards enabled OpenUI tools without executors", () => {
         expect(frontendToolsFromBody({ present_openui: definition }, new Set(), false)).toEqual({});
         const tools = frontendToolsFromBody({ present_openui: definition }, new Set(), true);

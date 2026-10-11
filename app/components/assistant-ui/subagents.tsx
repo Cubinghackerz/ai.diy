@@ -15,122 +15,108 @@ import { useChat } from "@ai-sdk/react";
 import { AssistantChatTransport } from "@assistant-ui/react-ai-sdk";
 import { lastAssistantMessageIsCompleteWithToolCalls, type UIMessage } from "ai";
 import {
-    AlertCircle,
-    Check,
-    ChevronDown,
-    ChevronUp,
-    FileText,
-    Loader2,
-    ShieldCheck,
-    X,
+  AlertCircle,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  Loader2,
+  ShieldCheck,
+  X,
 } from "lucide-react";
 import {
-    createContext,
-    useCallback,
-    useContext,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-    type ReactNode,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
 } from "react";
 import { artifactContentHash, inferArtifactMimeType } from "~/lib/artifacts";
 import { persistArtifactForScope } from "~/lib/artifact-persist.client";
 import { useCanvas } from "~/lib/canvas";
-import {
-    buildLocalMemoryContext,
-    hasLocalMemoryEntries,
-    readLocalMemory,
-} from "~/lib/memory";
+import { buildLocalMemoryContext, hasLocalMemoryEntries, readLocalMemory } from "~/lib/memory";
 import { localProviderKey } from "~/lib/provider-credentials";
 import { assertClientUsageAllowed } from "~/lib/usage-ledger.client";
 import { collectPythonInputFiles, runBrowserPython } from "~/lib/pyodide";
-import {
-    executeLinuxClientTool,
-    isLinuxClientTool,
-    linuxGenerationAborted,
-} from "~/lib/cheerpx";
+import { executeLinuxClientTool, isLinuxClientTool, linuxGenerationAborted } from "~/lib/cheerpx";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import {
-    applyCreditsFallback,
-    findCreditsFallbackTarget,
-    notifyCreditsFallback,
+  applyCreditsFallback,
+  findCreditsFallbackTarget,
+  notifyCreditsFallback,
 } from "~/lib/credits-fallback";
 import { detectProviderCreditError } from "~/lib/provider-errors";
 import { toolHumanLabel } from "~/components/assistant-ui/work-summary";
-import {
-    normalizeToolAccess,
-    toolAccessAllows,
-} from "~/lib/tool-access";
+import { mcpServersForRequest } from "~/lib/mcp-servers";
+import { normalizeToolAccess, toolAccessAllows } from "~/lib/tool-access";
 
 /** Read the outgoing subagent request body without consuming it. */
 function captureSubagentRequestBody(
-    input: RequestInfo | URL,
-    init?: RequestInit,
+  input: RequestInfo | URL,
+  init?: RequestInit,
 ): Record<string, unknown> | null {
-    let raw: string | null = null;
-    if (init && typeof init.body === "string") raw = init.body;
-    else if (input instanceof Request) {
-        const body = (input as unknown as { body?: unknown }).body;
-        if (typeof body === "string") raw = body;
-    }
-    if (!raw) return null;
-    try {
-        return JSON.parse(raw) as Record<string, unknown>;
-    } catch {
-        return null;
-    }
+  let raw: string | null = null;
+  if (init && typeof init.body === "string") raw = init.body;
+  else if (input instanceof Request) {
+    const body = (input as unknown as { body?: unknown }).body;
+    if (typeof body === "string") raw = body;
+  }
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
 }
 
 export type SubagentSessionStatus =
-    | "awaiting-approval"
-    | "running"
-    | "complete"
-    | "declined"
-    | "error";
+  "awaiting-approval" | "running" | "complete" | "declined" | "error";
 
 export type SubagentSession = {
-    id: string;
-    task: string;
-    status: SubagentSessionStatus;
-    output?: string;
-    error?: string;
+  id: string;
+  task: string;
+  status: SubagentSessionStatus;
+  output?: string;
+  error?: string;
 };
 
 const MAX_CONCURRENT_SUBAGENTS = 3;
 const SUBAGENT_DECLINED_MESSAGE =
-    "Status: declined\nThe user declined this subagent. Continue without it, or finish the work directly with your own tools.";
+  "Status: declined\nThe user declined this subagent. Continue without it, or finish the work directly with your own tools.";
 const SUBAGENT_CANCELLED_MESSAGE =
-    "Status: cancelled\nThe subagent session was closed before it finished. Continue without its result, or finish the work directly.";
+  "Status: cancelled\nThe subagent session was closed before it finished. Continue without its result, or finish the work directly.";
 const SUBAGENT_EMPTY_BATCH_MESSAGE =
-    "Status: error\nNo subagent tasks were provided. Call spawn_subagents again with 1–3 concrete task strings, or complete the work yourself.";
+  "Status: error\nNo subagent tasks were provided. Call spawn_subagents again with 1–3 concrete task strings, or complete the work yourself.";
 
 function formatSubagentFailure(error: string): string {
-    const cleaned = error.trim() || "Unknown subagent error";
-    return `Status: error\nThe subagent failed: ${cleaned}\nContinue with any other subagent results you have, or finish the remaining work yourself. Do not pretend the subagent succeeded.`;
+  const cleaned = error.trim() || "Unknown subagent error";
+  return `Status: error\nThe subagent failed: ${cleaned}\nContinue with any other subagent results you have, or finish the remaining work yourself. Do not pretend the subagent succeeded.`;
 }
 
 function formatSubagentSuccess(output: string): string {
-    const cleaned = output.trim();
-    if (!cleaned) {
-        return "Status: error\nThe subagent finished without returning usable text. Continue without its result, or retry with a narrower task.";
-    }
-    return `Status: complete\n${cleaned}`;
+  const cleaned = output.trim();
+  if (!cleaned) {
+    return "Status: error\nThe subagent finished without returning usable text. Continue without its result, or retry with a narrower task.";
+  }
+  return `Status: complete\n${cleaned}`;
 }
 
 type SubagentContextValue = {
-    threadId: string | null;
-    sessions: SubagentSession[];
-    runSubagent: (toolCallId: string, task: string) => Promise<string>;
-    runSubagentsBatch: (parentToolCallId: string, tasks: string[]) => Promise<string>;
-    approve: (id: string) => void;
-    deny: (id: string) => void;
-    approveAll: () => void;
-    denyAll: () => void;
-    complete: (id: string, output: string) => void;
-    fail: (id: string, error: string) => void;
-    dismiss: (id: string) => void;
-    abortAll: () => void;
+  threadId: string | null;
+  sessions: SubagentSession[];
+  runSubagent: (toolCallId: string, task: string) => Promise<string>;
+  runSubagentsBatch: (parentToolCallId: string, tasks: string[]) => Promise<string>;
+  approve: (id: string) => void;
+  deny: (id: string) => void;
+  approveAll: () => void;
+  denyAll: () => void;
+  complete: (id: string, output: string) => void;
+  fail: (id: string, error: string) => void;
+  dismiss: (id: string) => void;
+  abortAll: () => void;
 };
 
 const sessionListeners = new Set<() => void>();
@@ -139,1084 +125,963 @@ let abortActiveSubagentsImpl: (() => void) | null = null;
 const activeSubagentStops = new Map<string, () => void>();
 
 function notifySubagentListeners() {
-    for (const listener of sessionListeners) listener();
+  for (const listener of sessionListeners) listener();
 }
 
 export function subscribeSubagentSessions(listener: () => void): () => void {
-    sessionListeners.add(listener);
-    return () => {
-        sessionListeners.delete(listener);
-    };
+  sessionListeners.add(listener);
+  return () => {
+    sessionListeners.delete(listener);
+  };
 }
 
 export function hasActiveSubagent(): boolean {
-    return latestSessions.some(
-        (session) =>
-            session.status === "awaiting-approval" ||
-            session.status === "running",
-    );
+  return latestSessions.some(
+    (session) => session.status === "awaiting-approval" || session.status === "running",
+  );
 }
 
 export function abortActiveSubagents(): void {
-    abortActiveSubagentsImpl?.();
+  abortActiveSubagentsImpl?.();
 }
 
 const SubagentContext = createContext<SubagentContextValue | null>(null);
 
 export function SubagentProvider({
-    threadId,
-    children,
+  threadId,
+  children,
 }: {
-    threadId: string | null;
-    children: ReactNode;
+  threadId: string | null;
+  children: ReactNode;
 }) {
-    const [sessions, setSessions] = useState<SubagentSession[]>([]);
-    const resolversRef = useRef(new Map<string, (value: string) => void>());
-    const settledRef = useRef(new Set<string>());
+  const [sessions, setSessions] = useState<SubagentSession[]>([]);
+  const resolversRef = useRef(new Map<string, (value: string) => void>());
+  const settledRef = useRef(new Set<string>());
 
-    const resolveOnce = useCallback((id: string, value: string) => {
-        if (settledRef.current.has(id)) return false;
-        settledRef.current.add(id);
-        const resolve = resolversRef.current.get(id);
-        resolversRef.current.delete(id);
-        resolve?.(value);
-        return true;
-    }, []);
+  const resolveOnce = useCallback((id: string, value: string) => {
+    if (settledRef.current.has(id)) return false;
+    settledRef.current.add(id);
+    const resolve = resolversRef.current.get(id);
+    resolversRef.current.delete(id);
+    resolve?.(value);
+    return true;
+  }, []);
 
-    const patchSession = useCallback(
-        (id: string, patch: Partial<SubagentSession>) => {
-            setSessions((current) =>
-                current.map((session) =>
-                    session.id === id ? { ...session, ...patch } : session,
-                ),
-            );
-        },
-        [],
+  const patchSession = useCallback((id: string, patch: Partial<SubagentSession>) => {
+    setSessions((current) =>
+      current.map((session) => (session.id === id ? { ...session, ...patch } : session)),
     );
+  }, []);
 
-    const runSubagent = useCallback((toolCallId: string, task: string) => {
+  const runSubagent = useCallback((toolCallId: string, task: string) => {
+    return new Promise<string>((resolve) => {
+      settledRef.current.delete(toolCallId);
+      resolversRef.current.set(toolCallId, resolve);
+      setSessions((current) => [
+        ...current.filter((session) => session.id !== toolCallId),
+        {
+          id: toolCallId,
+          task: task.trim() || "Unspecified subtask",
+          status: "awaiting-approval",
+        },
+      ]);
+    });
+  }, []);
+
+  const runSubagentsBatch = useCallback((parentToolCallId: string, tasks: string[]) => {
+    const limitedTasks = tasks
+      .map((task) => task.trim())
+      .filter(Boolean)
+      .slice(0, MAX_CONCURRENT_SUBAGENTS);
+
+    if (limitedTasks.length === 0) {
+      return Promise.resolve(SUBAGENT_EMPTY_BATCH_MESSAGE);
+    }
+
+    return new Promise<string>((resolveParent) => {
+      const childPromises = limitedTasks.map((_task, index) => {
+        const sessionId = `${parentToolCallId}:${index}`;
+        settledRef.current.delete(sessionId);
         return new Promise<string>((resolve) => {
-            settledRef.current.delete(toolCallId);
-            resolversRef.current.set(toolCallId, resolve);
-            setSessions((current) => [
-                ...current.filter((session) => session.id !== toolCallId),
-                {
-                    id: toolCallId,
-                    task: task.trim() || "Unspecified subtask",
-                    status: "awaiting-approval",
-                },
-            ]);
+          resolversRef.current.set(sessionId, resolve);
         });
-    }, []);
+      });
 
-    const runSubagentsBatch = useCallback(
-        (parentToolCallId: string, tasks: string[]) => {
-            const limitedTasks = tasks
-                .map((task) => task.trim())
-                .filter(Boolean)
-                .slice(0, MAX_CONCURRENT_SUBAGENTS);
-
-            if (limitedTasks.length === 0) {
-                return Promise.resolve(SUBAGENT_EMPTY_BATCH_MESSAGE);
-            }
-
-            return new Promise<string>((resolveParent) => {
-                const childPromises = limitedTasks.map((_task, index) => {
-                    const sessionId = `${parentToolCallId}:${index}`;
-                    settledRef.current.delete(sessionId);
-                    return new Promise<string>((resolve) => {
-                        resolversRef.current.set(sessionId, resolve);
-                    });
-                });
-
-                setSessions((current) => {
-                    const withoutStale = current.filter(
-                        (session) => !session.id.startsWith(`${parentToolCallId}:`),
-                    );
-                    return [
-                        ...withoutStale,
-                        ...limitedTasks.map((task, index) => ({
-                            id: `${parentToolCallId}:${index}`,
-                            task,
-                            status: "awaiting-approval" as const,
-                        })),
-                    ];
-                });
-
-                void Promise.allSettled(childPromises).then((results) => {
-                    const combined = results
-                        .map((result, index) => {
-                            const header = `### Subagent ${index + 1}\nTask: ${limitedTasks[index]}`;
-                            const body =
-                                result.status === "fulfilled"
-                                    ? result.value
-                                    : formatSubagentFailure(
-                                          String(result.reason ?? "Unknown error"),
-                                      );
-                            return `${header}\n\n${body}`;
-                        })
-                        .join("\n\n---\n\n");
-                    resolveParent(
-                        `${combined}\n\nSynthesize using every Status: complete result. For declined/cancelled/error results, continue yourself or note the gap — do not invent what those subagents would have said.`,
-                    );
-                });
-            });
-        },
-        [],
-    );
-
-    const approve = useCallback(
-        (id: string) => {
-            if (settledRef.current.has(id)) return;
-            patchSession(id, { status: "running" });
-        },
-        [patchSession],
-    );
-
-    const deny = useCallback(
-        (id: string) => {
-            resolveOnce(id, SUBAGENT_DECLINED_MESSAGE);
-            patchSession(id, { status: "declined" });
-        },
-        [patchSession, resolveOnce],
-    );
-
-    const approveAll = useCallback(() => {
-        setSessions((current) =>
-            current.map((session) =>
-                session.status === "awaiting-approval" &&
-                !settledRef.current.has(session.id)
-                    ? { ...session, status: "running" }
-                    : session,
-            ),
+      setSessions((current) => {
+        const withoutStale = current.filter(
+          (session) => !session.id.startsWith(`${parentToolCallId}:`),
         );
-    }, []);
+        return [
+          ...withoutStale,
+          ...limitedTasks.map((task, index) => ({
+            id: `${parentToolCallId}:${index}`,
+            task,
+            status: "awaiting-approval" as const,
+          })),
+        ];
+      });
 
-    const denyAll = useCallback(() => {
-        setSessions((current) => {
-            for (const session of current) {
-                if (session.status !== "awaiting-approval") continue;
-                resolveOnce(session.id, SUBAGENT_DECLINED_MESSAGE);
-            }
-            return current.map((session) =>
-                session.status === "awaiting-approval"
-                    ? { ...session, status: "declined" }
-                    : session,
-            );
-        });
-    }, [resolveOnce]);
+      void Promise.allSettled(childPromises).then((results) => {
+        const combined = results
+          .map((result, index) => {
+            const header = `### Subagent ${index + 1}\nTask: ${limitedTasks[index]}`;
+            const body =
+              result.status === "fulfilled"
+                ? result.value
+                : formatSubagentFailure(String(result.reason ?? "Unknown error"));
+            return `${header}\n\n${body}`;
+          })
+          .join("\n\n---\n\n");
+        resolveParent(
+          `${combined}\n\nSynthesize using every Status: complete result. For declined/cancelled/error results, continue yourself or note the gap — do not invent what those subagents would have said.`,
+        );
+      });
+    });
+  }, []);
 
-    const complete = useCallback(
-        (id: string, output: string) => {
-            if (settledRef.current.has(id)) return;
-            resolveOnce(id, formatSubagentSuccess(output));
-            patchSession(id, {
-                status: "complete",
-                output: output.trim() || undefined,
-                error: undefined,
-            });
-        },
-        [patchSession, resolveOnce],
+  const approve = useCallback(
+    (id: string) => {
+      if (settledRef.current.has(id)) return;
+      patchSession(id, { status: "running" });
+    },
+    [patchSession],
+  );
+
+  const deny = useCallback(
+    (id: string) => {
+      resolveOnce(id, SUBAGENT_DECLINED_MESSAGE);
+      patchSession(id, { status: "declined" });
+    },
+    [patchSession, resolveOnce],
+  );
+
+  const approveAll = useCallback(() => {
+    setSessions((current) =>
+      current.map((session) =>
+        session.status === "awaiting-approval" && !settledRef.current.has(session.id)
+          ? { ...session, status: "running" }
+          : session,
+      ),
     );
+  }, []);
 
-    const fail = useCallback(
-        (id: string, error: string) => {
-            if (settledRef.current.has(id)) return;
-            const message = formatSubagentFailure(error);
-            resolveOnce(id, message);
-            patchSession(id, { status: "error", error: error.trim() || "Unknown error" });
-        },
-        [patchSession, resolveOnce],
-    );
+  const denyAll = useCallback(() => {
+    setSessions((current) => {
+      for (const session of current) {
+        if (session.status !== "awaiting-approval") continue;
+        resolveOnce(session.id, SUBAGENT_DECLINED_MESSAGE);
+      }
+      return current.map((session) =>
+        session.status === "awaiting-approval" ? { ...session, status: "declined" } : session,
+      );
+    });
+  }, [resolveOnce]);
 
-    const dismiss = useCallback(
-        (id: string) => {
-            // Never leave the main chat waiting on a dismissed session.
-            if (!settledRef.current.has(id)) {
-                resolveOnce(id, SUBAGENT_CANCELLED_MESSAGE);
-            }
-            setSessions((current) => current.filter((session) => session.id !== id));
-        },
-        [resolveOnce],
-    );
+  const complete = useCallback(
+    (id: string, output: string) => {
+      if (settledRef.current.has(id)) return;
+      resolveOnce(id, formatSubagentSuccess(output));
+      patchSession(id, {
+        status: "complete",
+        output: output.trim() || undefined,
+        error: undefined,
+      });
+    },
+    [patchSession, resolveOnce],
+  );
 
-    const abortAll = useCallback(() => {
-        setSessions((current) => {
-            for (const session of current) {
-                if (
-                    session.status !== "awaiting-approval" &&
-                    session.status !== "running"
-                ) {
-                    continue;
-                }
-                activeSubagentStops.get(session.id)?.();
-                resolveOnce(session.id, SUBAGENT_CANCELLED_MESSAGE);
-            }
-            return current.map((session) =>
-                session.status === "awaiting-approval" ||
-                session.status === "running"
-                    ? { ...session, status: "declined" as const }
-                    : session,
-            );
-        });
-    }, [resolveOnce]);
+  const fail = useCallback(
+    (id: string, error: string) => {
+      if (settledRef.current.has(id)) return;
+      const message = formatSubagentFailure(error);
+      resolveOnce(id, message);
+      patchSession(id, { status: "error", error: error.trim() || "Unknown error" });
+    },
+    [patchSession, resolveOnce],
+  );
 
-    useEffect(() => {
-        latestSessions = sessions;
-        notifySubagentListeners();
-    }, [sessions]);
+  const dismiss = useCallback(
+    (id: string) => {
+      // Never leave the main chat waiting on a dismissed session.
+      if (!settledRef.current.has(id)) {
+        resolveOnce(id, SUBAGENT_CANCELLED_MESSAGE);
+      }
+      setSessions((current) => current.filter((session) => session.id !== id));
+    },
+    [resolveOnce],
+  );
 
-    useEffect(() => {
-        abortActiveSubagentsImpl = abortAll;
-        return () => {
-            if (abortActiveSubagentsImpl === abortAll) {
-                abortActiveSubagentsImpl = null;
-            }
-        };
-    }, [abortAll]);
+  const abortAll = useCallback(() => {
+    setSessions((current) => {
+      for (const session of current) {
+        if (session.status !== "awaiting-approval" && session.status !== "running") {
+          continue;
+        }
+        activeSubagentStops.get(session.id)?.();
+        resolveOnce(session.id, SUBAGENT_CANCELLED_MESSAGE);
+      }
+      return current.map((session) =>
+        session.status === "awaiting-approval" || session.status === "running"
+          ? { ...session, status: "declined" as const }
+          : session,
+      );
+    });
+  }, [resolveOnce]);
 
-    const value = useMemo<SubagentContextValue>(
-        () => ({
-            threadId,
-            sessions,
-            runSubagent,
-            runSubagentsBatch,
-            approve,
-            deny,
-            approveAll,
-            denyAll,
-            complete,
-            fail,
-            dismiss,
-            abortAll,
-        }),
-        [
-            abortAll,
-            approve,
-            approveAll,
-            complete,
-            deny,
-            denyAll,
-            dismiss,
-            fail,
-            runSubagent,
-            runSubagentsBatch,
-            sessions,
-            threadId,
-        ],
-    );
+  useEffect(() => {
+    latestSessions = sessions;
+    notifySubagentListeners();
+  }, [sessions]);
 
-    return (
-        <SubagentContext.Provider value={value}>
-            {children}
-        </SubagentContext.Provider>
-    );
+  useEffect(() => {
+    abortActiveSubagentsImpl = abortAll;
+    return () => {
+      if (abortActiveSubagentsImpl === abortAll) {
+        abortActiveSubagentsImpl = null;
+      }
+    };
+  }, [abortAll]);
+
+  const value = useMemo<SubagentContextValue>(
+    () => ({
+      threadId,
+      sessions,
+      runSubagent,
+      runSubagentsBatch,
+      approve,
+      deny,
+      approveAll,
+      denyAll,
+      complete,
+      fail,
+      dismiss,
+      abortAll,
+    }),
+    [
+      abortAll,
+      approve,
+      approveAll,
+      complete,
+      deny,
+      denyAll,
+      dismiss,
+      fail,
+      runSubagent,
+      runSubagentsBatch,
+      sessions,
+      threadId,
+    ],
+  );
+
+  return <SubagentContext.Provider value={value}>{children}</SubagentContext.Provider>;
 }
 
 export function useSubagent() {
-    const ctx = useContext(SubagentContext);
-    if (!ctx) throw new Error("useSubagent requires SubagentProvider");
-    return ctx;
+  const ctx = useContext(SubagentContext);
+  if (!ctx) throw new Error("useSubagent requires SubagentProvider");
+  return ctx;
 }
 
 export function useSubagentOptional() {
-    return useContext(SubagentContext);
+  return useContext(SubagentContext);
 }
 
 export function SubagentDock() {
-    const ctx = useSubagentOptional();
-    if (!ctx || ctx.sessions.length === 0) return null;
-    const { sessions, dismiss, approveAll, denyAll, threadId } = ctx;
-    const awaitingCount = sessions.filter(
-        (session) => session.status === "awaiting-approval",
-    ).length;
+  const ctx = useSubagentOptional();
+  if (!ctx || ctx.sessions.length === 0) return null;
+  const { sessions, dismiss, approveAll, denyAll, threadId } = ctx;
+  const awaitingCount = sessions.filter((session) => session.status === "awaiting-approval").length;
 
-    return (
-        <div className="flex w-full flex-col gap-3">
-            {awaitingCount > 1 ? (
-                <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/70 bg-card/80 px-4 py-3">
-                    <p className="text-sm text-muted-foreground">
-                        {awaitingCount} subagents need approval
-                    </p>
-                    <div className="flex gap-2">
-                        <button
-                            type="button"
-                            onClick={denyAll}
-                            className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
-                        >
-                            Deny all
-                        </button>
-                        <button
-                            type="button"
-                            onClick={approveAll}
-                            className="rounded-xl bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground outline-none hover:bg-primary/90"
-                        >
-                            Approve all
-                        </button>
-                    </div>
-                </div>
-            ) : null}
-            {sessions.map((session) => (
-                <SubagentSessionCard
-                    key={session.id}
-                    session={session}
-                    threadId={threadId}
-                    onDismiss={dismiss}
-                />
-            ))}
+  return (
+    <div className="flex w-full flex-col gap-3">
+      {awaitingCount > 1 ? (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/70 bg-card/80 px-4 py-3">
+          <p className="text-sm text-muted-foreground">{awaitingCount} subagents need approval</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={denyAll}
+              className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
+            >
+              Deny all
+            </button>
+            <button
+              type="button"
+              onClick={approveAll}
+              className="rounded-xl bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground outline-none hover:bg-primary/90"
+            >
+              Approve all
+            </button>
+          </div>
         </div>
-    );
+      ) : null}
+      {sessions.map((session) => (
+        <SubagentSessionCard
+          key={session.id}
+          session={session}
+          threadId={threadId}
+          onDismiss={dismiss}
+        />
+      ))}
+    </div>
+  );
 }
 
 function parseChatError(response: Response, fallback: string): Promise<string> {
-    return response.text().then((text) => {
-        try {
-            const parsed = JSON.parse(text) as { error?: string; message?: string };
-            return parsed.error || parsed.message || fallback;
-        } catch {
-            return text.trim() || fallback;
-        }
-    });
+  return response.text().then((text) => {
+    try {
+      const parsed = JSON.parse(text) as { error?: string; message?: string };
+      return parsed.error || parsed.message || fallback;
+    } catch {
+      return text.trim() || fallback;
+    }
+  });
 }
 
 function subagentResultText(messages: UIMessage[]): string {
-    return messages
-        .filter((message) => message.role === "assistant")
-        .flatMap((message) => message.parts)
-        .filter((part) => part.type === "text")
-        .map((part) => part.text)
-        .join("\n")
-        .trim()
-        .slice(0, 64_000);
+  return messages
+    .filter((message) => message.role === "assistant")
+    .flatMap((message) => message.parts)
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("\n")
+    .trim()
+    .slice(0, 64_000);
 }
 
 const STATUS_LABEL: Record<SubagentSessionStatus, string> = {
-    "awaiting-approval": "Needs approval",
-    running: "Running",
-    complete: "Done",
-    declined: "Declined",
-    error: "Failed",
+  "awaiting-approval": "Needs approval",
+  running: "Running",
+  complete: "Done",
+  declined: "Declined",
+  error: "Failed",
 };
 
 function SubagentSessionCard({
-    session,
-    threadId,
-    onDismiss,
+  session,
+  threadId,
+  onDismiss,
 }: {
-    session: SubagentSession;
-    threadId: string | null;
-    onDismiss: (id: string) => void;
+  session: SubagentSession;
+  threadId: string | null;
+  onDismiss: (id: string) => void;
 }) {
-    const { approve, deny, complete, fail, abortAll } = useSubagent();
-    const [expanded, setExpanded] = useState(
-        session.status === "awaiting-approval",
-    );
+  const { approve, deny, complete, fail, abortAll } = useSubagent();
+  const [expanded, setExpanded] = useState(session.status === "awaiting-approval");
 
-    useEffect(() => {
-        if (session.status === "awaiting-approval") {
-            setExpanded(true);
-        }
-    }, [session.status]);
+  useEffect(() => {
+    if (session.status === "awaiting-approval") {
+      setExpanded(true);
+    }
+  }, [session.status]);
 
-    const StatusIcon =
-        session.status === "running"
-            ? Loader2
-            : session.status === "complete"
-              ? Check
-              : session.status === "declined"
-                ? X
-                : session.status === "error"
-                  ? AlertCircle
-                  : ShieldCheck;
+  const StatusIcon =
+    session.status === "running"
+      ? Loader2
+      : session.status === "complete"
+        ? Check
+        : session.status === "declined"
+          ? X
+          : session.status === "error"
+            ? AlertCircle
+            : ShieldCheck;
 
-    const terminal = ["complete", "declined", "error"].includes(session.status);
+  const terminal = ["complete", "declined", "error"].includes(session.status);
 
-    return (
-        <div className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
-            <button
-                type="button"
-                onClick={() => setExpanded((current) => !current)}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left outline-none hover:bg-accent/40"
-                aria-expanded={expanded}
-            >
-                <StatusIcon
-                    size={16}
-                    className={`${cnStatus(session.status)}${session.status === "running" ? " animate-spin" : ""}`}
-                />
-                <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-                    Subagent
-                </span>
-                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                    {STATUS_LABEL[session.status]}
-                </span>
-                {expanded ? (
-                    <ChevronDown size={12} className="shrink-0 text-muted-foreground" />
-                ) : (
-                    <ChevronUp size={12} className="shrink-0 text-muted-foreground" />
-                )}
-            </button>
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
+      <button
+        type="button"
+        onClick={() => setExpanded((current) => !current)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left outline-none hover:bg-accent/40"
+        aria-expanded={expanded}
+      >
+        <StatusIcon
+          size={16}
+          className={`${cnStatus(session.status)}${session.status === "running" ? " animate-spin" : ""}`}
+        />
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold">Subagent</span>
+        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+          {STATUS_LABEL[session.status]}
+        </span>
+        {expanded ? (
+          <ChevronDown size={12} className="shrink-0 text-muted-foreground" />
+        ) : (
+          <ChevronUp size={12} className="shrink-0 text-muted-foreground" />
+        )}
+      </button>
 
-            {session.status === "running" ? (
-                <div
-                    className={
-                        expanded
-                            ? "border-t border-border/60 px-4 py-3"
-                            : "hidden"
-                    }
-                >
-                    <p className="mb-3 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                        {session.task}
-                    </p>
-                    <SubagentRun
-                        sessionId={session.id}
-                        task={session.task}
-                        threadId={threadId}
-                        onComplete={(output) => complete(session.id, output)}
-                        onError={(error) => fail(session.id, error)}
-                    />
-                    <button
-                        type="button"
-                        onClick={() => abortAll()}
-                        className="mt-3 w-full rounded-xl border border-border px-3 py-2 text-sm font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
-                    >
-                        Stop subagent
-                    </button>
-                </div>
-            ) : expanded ? (
-                <div className="border-t border-border/60 px-4 py-3">
-                    <p className="mb-3 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                        {session.task}
-                    </p>
-
-                    {session.status === "awaiting-approval" ? (
-                        <>
-                            <p className="mb-3 text-xs text-muted-foreground">
-                                Approve to run. The main chat waits until this
-                                subagent finishes or is denied.
-                            </p>
-                            <div className="flex gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => deny(session.id)}
-                                    className="flex-1 rounded-xl border border-border px-3 py-2 text-sm font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
-                                >
-                                    Deny
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => approve(session.id)}
-                                    className="flex-1 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground outline-none hover:bg-primary/90"
-                                >
-                                    Approve
-                                </button>
-                            </div>
-                        </>
-                    ) : null}
-
-                    {session.status === "complete" && session.output ? (
-                        <div className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-xl bg-muted/50 px-3 py-2.5 text-sm leading-relaxed text-foreground">
-                            {session.output}
-                        </div>
-                    ) : null}
-
-                    {session.status === "error" && session.error ? (
-                        <p className="text-sm leading-relaxed text-destructive">
-                            {session.error}
-                        </p>
-                    ) : null}
-
-                    {session.status === "declined" ? (
-                        <p className="text-sm text-muted-foreground">
-                            The main model was told the subagent was declined.
-                        </p>
-                    ) : null}
-
-                    {terminal ? (
-                        <button
-                            type="button"
-                            onClick={() => onDismiss(session.id)}
-                            className="mt-3 w-full rounded-xl border border-border px-3 py-2 text-sm font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
-                        >
-                            Dismiss
-                        </button>
-                    ) : null}
-                </div>
-            ) : null}
+      {session.status === "running" ? (
+        <div className={expanded ? "border-t border-border/60 px-4 py-3" : "hidden"}>
+          <p className="mb-3 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+            {session.task}
+          </p>
+          <SubagentRun
+            sessionId={session.id}
+            task={session.task}
+            threadId={threadId}
+            onComplete={(output) => complete(session.id, output)}
+            onError={(error) => fail(session.id, error)}
+          />
+          <button
+            type="button"
+            onClick={() => abortAll()}
+            className="mt-3 w-full rounded-xl border border-border px-3 py-2 text-sm font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
+          >
+            Stop subagent
+          </button>
         </div>
-    );
+      ) : expanded ? (
+        <div className="border-t border-border/60 px-4 py-3">
+          <p className="mb-3 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+            {session.task}
+          </p>
+
+          {session.status === "awaiting-approval" ? (
+            <>
+              <p className="mb-3 text-xs text-muted-foreground">
+                Approve to run. The main chat waits until this subagent finishes or is denied.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => deny(session.id)}
+                  className="flex-1 rounded-xl border border-border px-3 py-2 text-sm font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
+                >
+                  Deny
+                </button>
+                <button
+                  type="button"
+                  onClick={() => approve(session.id)}
+                  className="flex-1 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground outline-none hover:bg-primary/90"
+                >
+                  Approve
+                </button>
+              </div>
+            </>
+          ) : null}
+
+          {session.status === "complete" && session.output ? (
+            <div className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-xl bg-muted/50 px-3 py-2.5 text-sm leading-relaxed text-foreground">
+              {session.output}
+            </div>
+          ) : null}
+
+          {session.status === "error" && session.error ? (
+            <p className="text-sm leading-relaxed text-destructive">{session.error}</p>
+          ) : null}
+
+          {session.status === "declined" ? (
+            <p className="text-sm text-muted-foreground">
+              The main model was told the subagent was declined.
+            </p>
+          ) : null}
+
+          {terminal ? (
+            <button
+              type="button"
+              onClick={() => onDismiss(session.id)}
+              className="mt-3 w-full rounded-xl border border-border px-3 py-2 text-sm font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
+            >
+              Dismiss
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function cnStatus(status: SubagentSessionStatus): string {
-    switch (status) {
-        case "running":
-            return "text-primary";
-        case "complete":
-            return "text-success";
-        case "declined":
-            return "text-muted-foreground";
-        case "error":
-            return "text-destructive";
-        case "awaiting-approval":
-            return "text-warning";
-    }
+  switch (status) {
+    case "running":
+      return "text-primary";
+    case "complete":
+      return "text-success";
+    case "declined":
+      return "text-muted-foreground";
+    case "error":
+      return "text-destructive";
+    case "awaiting-approval":
+      return "text-warning";
+  }
 }
 
 function SubagentRun({
-    sessionId,
-    task,
-    threadId,
-    onComplete,
-    onError,
+  sessionId,
+  task,
+  threadId,
+  onComplete,
+  onError,
 }: {
-    sessionId: string;
-    task: string;
-    threadId: string | null;
-    onComplete: (output: string) => void;
-    onError: (error: string) => void;
+  sessionId: string;
+  task: string;
+  threadId: string | null;
+  onComplete: (output: string) => void;
+  onError: (error: string) => void;
 }) {
-    const { settings } = useSettings();
-    const { addArtifact } = useCanvas();
-    const settingsRef = useRef(settings);
-    settingsRef.current = settings;
-    const threadIdRef = useRef(threadId);
-    threadIdRef.current = threadId;
-    const callbacksRef = useRef({ onComplete, onError });
-    callbacksRef.current = { onComplete, onError };
-    const sentRef = useRef(false);
-    const settledRef = useRef(false);
-    const pendingClientCalls = useRef(0);
-    const chatRef = useRef<ReturnType<typeof useChat> | null>(null);
+  const { settings } = useSettings();
+  const { addArtifact } = useCanvas();
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  const threadIdRef = useRef(threadId);
+  threadIdRef.current = threadId;
+  const callbacksRef = useRef({ onComplete, onError });
+  callbacksRef.current = { onComplete, onError };
+  const sentRef = useRef(false);
+  const settledRef = useRef(false);
+  const pendingClientCalls = useRef(0);
+  const chatRef = useRef<ReturnType<typeof useChat> | null>(null);
 
-    const settleComplete = useCallback((output: string) => {
-        if (settledRef.current) return;
-        settledRef.current = true;
-        callbacksRef.current.onComplete(output);
-    }, []);
+  const settleComplete = useCallback((output: string) => {
+    if (settledRef.current) return;
+    settledRef.current = true;
+    callbacksRef.current.onComplete(output);
+  }, []);
 
-    const settleError = useCallback((error: string) => {
-        if (settledRef.current) return;
-        settledRef.current = true;
-        callbacksRef.current.onError(error);
-    }, []);
+  const settleError = useCallback((error: string) => {
+    if (settledRef.current) return;
+    settledRef.current = true;
+    callbacksRef.current.onError(error);
+  }, []);
 
-    const transport = useMemo(
-        () =>
-            new AssistantChatTransport({
-                api: "/api/chat",
-                fetch: async (input, init) => {
-                    const payload = captureSubagentRequestBody(input, init);
-                    const response = await globalThis.fetch(input, {
-                        ...init,
-                        credentials: "include",
-                    });
-                    if (response.ok) return response;
-                    const raw = await response.text();
-                    if (
-                        detectProviderCreditError(raw, response.status) &&
-                        payload
-                    ) {
-                        const s = settingsRef.current;
-                        const fallback = findCreditsFallbackTarget(
-                            s,
-                            s.chat.provider,
-                        );
-                        if (fallback) {
-                            try {
-                                const rerun = await globalThis.fetch(input, {
-                                    ...init,
-                                    credentials: "include",
-                                    body: JSON.stringify(
-                                        applyCreditsFallback(payload, fallback),
-                                    ),
-                                });
-                                if (rerun.ok) {
-                                    notifyCreditsFallback(
-                                        s.chat.provider,
-                                        fallback.provider,
-                                    );
-                                    return rerun;
-                                }
-                                throw new Error(
-                                    await parseChatError(rerun, "Subagent run failed"),
-                                );
-                            } catch (err) {
-                                console.error("[credits-fallback]", err);
-                            }
-                        }
-                    }
-                    throw new Error(
-                        await parseChatError(
-                            new Response(raw, { status: response.status }),
-                            "Subagent run failed",
-                        ),
-                    );
-                },
-                prepareSendMessagesRequest: async (options) => {
-                    const s = settingsRef.current;
-                    const provider = s.chat.provider;
-                    const providerConfig = s.providers[provider];
-                    const apiKey = providerConfig?.apiKey?.trim() || "";
-                    const baseUrl = providerConfig?.baseUrl?.trim() || undefined;
-                    const resolvedApiKey =
-                        provider === "chatgpt"
-                            ? localProviderKey("chatgpt")
-                            : provider === "custom" &&
-                                providerConfig?.openAICompatible?.authMode &&
-                                providerConfig.openAICompatible.authMode !== "bearer"
-                              ? ""
-                              : apiKey || localProviderKey(provider);
-
-                    await assertClientUsageAllowed(s, provider, resolvedApiKey);
-
-                    const access = normalizeToolAccess(s.toolAccess, {
-                        webSearch: s.webSearchEnabled !== false,
-                        calculator: s.calculatorEnabled !== false,
-                        python: s.pythonEnabled !== false,
-                        linux: s.linuxEnvironment !== false,
-                        skills: s.skillsEnabled !== false,
-                        memory: s.memoryEnabled !== false,
-                        knowledge: s.knowledgeEnabled !== false,
-                        subagents: false,
-                    });
-                    const memoryEnabled = access.memory && s.memoryEnabled !== false;
-                    return {
-                        body: {
-                            ...options.body,
-                            messages: options.messages,
-                            chatId: threadIdRef.current ?? "draft",
-                            model: s.chat.model,
-                            provider,
-                            apiKey: provider === "chatgpt" ? "" : resolvedApiKey,
-                            baseUrl,
-                            openAICompatible: providerConfig?.openAICompatible,
-                            systemPrompt: s.chat.systemPrompt,
-                            advancedSystemPrompt: s.chat.advancedSystemPrompt,
-                            temperature: s.chat.temperature,
-                            maxTokens: s.chat.maxTokens,
-                            topP: s.chat.topP,
-                            reasoningEffort: s.chat.reasoningEffort,
-                            mcpServers: access.mcp
-                                ? s.mcpServers.filter((server) => server.enabled)
-                                : [],
-                            memoryContext: memoryEnabled && s.memoryAutoAttach
-                                ? await buildLocalMemoryContext()
-                                : "",
-                            toolSettings: {
-                                webSearchEnabled: access.webSearch && s.webSearchEnabled,
-                                calculatorEnabled: access.calculator && s.calculatorEnabled,
-                                pythonEnabled: access.python && s.pythonEnabled,
-                                linuxEnvironment: access.linux && s.linuxEnvironment,
-                                webSearchEngine: s.webSearchEngine,
-                                searxngUrl: s.searxngUrl,
-                                skillsEnabled: access.skills && s.skillsEnabled,
-                                connectors: access.connectors ? s.connectors : [],
-                                memoryAvailable:
-                                    memoryEnabled && (await hasLocalMemoryEntries()),
-                                subagentsEnabled: false,
-                                tokenMode: s.tokenMode ?? "balanced",
-                                toolAccess: access,
-                            },
-                            subagentMode: true,
-                        },
-                    };
-                },
-            }),
-        [],
-    );
-
-    const chat = useChat({
-        id: `subagent-${sessionId}`,
-        transport,
-        onToolCall: ({ toolCall }) => {
-            if (
-                ![
-                    "run_python",
-                    "run_code",
-                    "run_command",
-                    "read_file",
-                    "linux_run_command",
-                    "linux_read_file",
-                    "linux_background_start",
-                    "linux_list_processes",
-                    "linux_kill_process",
-                    "memory",
-                    "ask_user",
-                ].includes(toolCall.toolName)
-            ) {
-                return;
-            }
-            if (!toolAccessAllows(settingsRef.current.toolAccess, toolCall.toolName)) {
-                pendingClientCalls.current += 1;
-                const addToolOutput = chatRef.current
-                    ?.addToolOutput as unknown as
-                    | ((args: {
-                          tool: string;
-                          toolCallId: string;
-                          state: "output-available";
-                          output: string;
-                      }) => void)
-                    | undefined;
-                addToolOutput?.({
-                    tool: toolCall.toolName,
-                    toolCallId: toolCall.toolCallId,
-                    state: "output-available",
-                    output: `Tool access is disabled in Settings: ${toolCall.toolName}. Continue without it.`,
+  const transport = useMemo(
+    () =>
+      new AssistantChatTransport({
+        api: "/api/chat",
+        fetch: async (input, init) => {
+          const payload = captureSubagentRequestBody(input, init);
+          const response = await globalThis.fetch(input, {
+            ...init,
+            credentials: "include",
+          });
+          if (response.ok) return response;
+          const raw = await response.text();
+          if (detectProviderCreditError(raw, response.status) && payload) {
+            const s = settingsRef.current;
+            const fallback = findCreditsFallbackTarget(s, s.chat.provider);
+            if (fallback) {
+              try {
+                const rerun = await globalThis.fetch(input, {
+                  ...init,
+                  credentials: "include",
+                  body: JSON.stringify(applyCreditsFallback(payload, fallback)),
                 });
-                return;
+                if (rerun.ok) {
+                  notifyCreditsFallback(s.chat.provider, fallback.provider);
+                  return rerun;
+                }
+                throw new Error(await parseChatError(rerun, "Subagent run failed"));
+              } catch (err) {
+                console.error("[credits-fallback]", err);
+              }
             }
-            pendingClientCalls.current += 1;
-            const input = toolCall.input as {
-                code?: string;
-                command?: string;
-                cwd?: string;
-                path?: string;
-                maxBytes?: number;
-                query?: string;
-            };
-            const linuxScopeId = `subagent-${sessionId}`;
-            const taskPromise =
-                toolCall.toolName === "ask_user"
-                    ? Promise.resolve(
-                          "Subagents cannot ask the user questions. State your assumption and proceed.",
-                      )
-                    : toolCall.toolName === "memory"
-                      ? settingsRef.current.memoryEnabled !== false
-                          ? readLocalMemory(input.query)
-                          : Promise.resolve("Memory is disabled for this subagent.")
-                      : isLinuxClientTool(toolCall.toolName)
-                        ? executeLinuxClientTool(
-                              toolCall.toolName,
-                              input,
-                              linuxScopeId,
-                          )
-                      : runBrowserPython(
-                            input.code ?? "",
-                            collectPythonInputFiles(
-                                ((chatRef.current as unknown as { messages?: unknown[] } | null)
-                                    ?.messages ?? []),
-                            ),
-                        );
-            void taskPromise.then(
-                (result) => {
-                    const output =
-                        typeof result === "string" ? result : result.output;
-                    const pythonResult =
-                        typeof result === "string" ? null : result;
-                    if (pythonResult) {
-                        const sourcePrefix = isLinuxClientTool(toolCall.toolName)
-                            ? "linux"
-                            : "python";
-                        for (const artifact of pythonResult.artifacts) {
-                            const mimeType = inferArtifactMimeType(artifact.filename);
-                            const sourceKey = `${sourcePrefix}:${artifact.filename}:${artifact.contentEncoding}:${artifact.content.length}:${artifactContentHash(artifact.content)}`;
-                            const kind =
-                                /\.html?$/i.test(artifact.filename) || /text\/html/i.test(mimeType)
-                                    ? ("html" as const)
-                                    : ("file" as const);
-                            const scopeId = threadIdRef.current;
-                            const artifactId = addArtifact(
-                                {
-                                    kind,
-                                    title: artifact.filename,
-                                    filename: artifact.filename,
-                                    content: artifact.content,
-                                    contentEncoding: artifact.contentEncoding,
-                                    mimeType,
-                                    sourceKey,
-                                },
-                                { scopeId },
-                            );
-                            persistArtifactForScope(scopeId, {
-                                id: artifactId,
-                                kind,
-                                title: artifact.filename,
-                                filename: artifact.filename,
-                                content: artifact.content,
-                                contentEncoding: artifact.contentEncoding,
-                                mimeType,
-                                sourceKey,
-                                scopeId: scopeId ?? null,
-                                createdAt: Date.now(),
-                            });
-                        }
-                    }
-                    const addToolOutput = chatRef.current
-                        ?.addToolOutput as unknown as
-                        | ((args: {
-                              tool: string;
-                              toolCallId: string;
-                              state: "output-available";
-                              output: string;
-                          }) => void)
-                        | undefined;
-                    addToolOutput?.({
-                        tool: toolCall.toolName,
-                        toolCallId: toolCall.toolCallId,
-                        state: "output-available",
-                        output,
-                    });
-                },
-                (error) => {
-                    pendingClientCalls.current = Math.max(
-                        0,
-                        pendingClientCalls.current - 1,
-                    );
-                    const addToolOutput = chatRef.current
-                        ?.addToolOutput as unknown as
-                        | ((args: {
-                              tool: string;
-                              toolCallId: string;
-                              state: "output-error";
-                              errorText: string;
-                          }) => void)
-                        | undefined;
-                    addToolOutput?.({
-                        tool: toolCall.toolName,
-                        toolCallId: toolCall.toolCallId,
-                        state: "output-error",
-                        errorText:
-                            error instanceof Error
-                                ? error.message
-                                : isLinuxClientTool(toolCall.toolName)
-                                  ? "Linux environment execution failed"
-                                : "Pyodide execution failed",
-                    });
-                },
-            );
+          }
+          throw new Error(
+            await parseChatError(
+              new Response(raw, { status: response.status }),
+              "Subagent run failed",
+            ),
+          );
         },
-        sendAutomaticallyWhen: ({ messages }) => {
-            if (linuxGenerationAborted()) {
-                pendingClientCalls.current = 0;
-                return false;
-            }
-            if (pendingClientCalls.current === 0) return false;
-            if (!lastAssistantMessageIsCompleteWithToolCalls({ messages })) {
-                return false;
-            }
-            pendingClientCalls.current = 0;
-            return true;
-        },
-        onFinish: ({ messages, isError, isAbort, isDisconnect }) => {
-            if (isAbort) {
-                settleError("The subagent run was aborted.");
-                return;
-            }
-            if (isDisconnect) {
-                settleError("The subagent lost its network connection.");
-                return;
-            }
-            if (isError) {
-                settleError(
-                    chat.error?.message ||
-                        "The subagent finished with an error.",
-                );
-                return;
-            }
-            settleComplete(subagentResultText(messages));
-        },
-        onError: (error) => {
-            settleError(
-                error instanceof Error ? error.message : String(error),
-            );
-        },
-    });
-    chatRef.current = chat;
+        prepareSendMessagesRequest: async (options) => {
+          const s = settingsRef.current;
+          const provider = s.chat.provider;
+          const providerConfig = s.providers[provider];
+          const apiKey = providerConfig?.apiKey?.trim() || "";
+          const baseUrl = providerConfig?.baseUrl?.trim() || undefined;
+          const resolvedApiKey =
+            provider === "chatgpt"
+              ? localProviderKey("chatgpt")
+              : provider === "custom" &&
+                  providerConfig?.openAICompatible?.authMode &&
+                  providerConfig.openAICompatible.authMode !== "bearer"
+                ? ""
+                : apiKey || localProviderKey(provider);
 
-    useEffect(() => {
-        if (sentRef.current) return;
-        sentRef.current = true;
-        const current = chatRef.current;
-        if (!current) return;
-        void current.sendMessage({ text: task }).catch((error) => {
-            settleError(
-                error instanceof Error
-                    ? error.message
-                    : "Failed to start the subagent run.",
-            );
+          await assertClientUsageAllowed(s, provider, resolvedApiKey);
+
+          const access = normalizeToolAccess(s.toolAccess, {
+            webSearch: s.webSearchEnabled !== false,
+            calculator: s.calculatorEnabled !== false,
+            python: s.pythonEnabled !== false,
+            linux: s.linuxEnvironment !== false,
+            skills: s.skillsEnabled !== false,
+            memory: s.memoryEnabled !== false,
+            knowledge: s.knowledgeEnabled !== false,
+            subagents: false,
+          });
+          const memoryEnabled = access.memory && s.memoryEnabled !== false;
+          return {
+            body: {
+              ...options.body,
+              messages: options.messages,
+              chatId: threadIdRef.current ?? "draft",
+              model: s.chat.model,
+              provider,
+              apiKey: provider === "chatgpt" ? "" : resolvedApiKey,
+              baseUrl,
+              openAICompatible: providerConfig?.openAICompatible,
+              systemPrompt: s.chat.systemPrompt,
+              advancedSystemPrompt: s.chat.advancedSystemPrompt,
+              temperature: s.chat.temperature,
+              maxTokens: s.chat.maxTokens,
+              topP: s.chat.topP,
+              reasoningEffort: s.chat.reasoningEffort,
+              mcpServers: mcpServersForRequest(s.mcpServers, access, s.webSearchEnabled),
+              memoryContext:
+                memoryEnabled && s.memoryAutoAttach ? await buildLocalMemoryContext() : "",
+              toolSettings: {
+                webSearchEnabled: access.webSearch && s.webSearchEnabled,
+                calculatorEnabled: access.calculator && s.calculatorEnabled,
+                pythonEnabled: access.python && s.pythonEnabled,
+                linuxEnvironment: access.linux && s.linuxEnvironment,
+                webSearchEngine: s.webSearchEngine,
+                searxngUrl: s.searxngUrl,
+                skillsEnabled: access.skills && s.skillsEnabled,
+                connectors: access.connectors ? s.connectors : [],
+                memoryAvailable: memoryEnabled && (await hasLocalMemoryEntries()),
+                subagentsEnabled: false,
+                tokenMode: s.tokenMode ?? "balanced",
+                toolAccess: access,
+              },
+              subagentMode: true,
+            },
+          };
+        },
+      }),
+    [],
+  );
+
+  const chat = useChat({
+    id: `subagent-${sessionId}`,
+    transport,
+    onToolCall: ({ toolCall }) => {
+      if (
+        ![
+          "run_python",
+          "run_code",
+          "run_command",
+          "read_file",
+          "linux_run_command",
+          "linux_read_file",
+          "linux_background_start",
+          "linux_list_processes",
+          "linux_kill_process",
+          "memory",
+          "ask_user",
+        ].includes(toolCall.toolName)
+      ) {
+        return;
+      }
+      if (!toolAccessAllows(settingsRef.current.toolAccess, toolCall.toolName)) {
+        pendingClientCalls.current += 1;
+        const addToolOutput = chatRef.current?.addToolOutput as unknown as
+          | ((args: {
+              tool: string;
+              toolCallId: string;
+              state: "output-available";
+              output: string;
+            }) => void)
+          | undefined;
+        addToolOutput?.({
+          tool: toolCall.toolName,
+          toolCallId: toolCall.toolCallId,
+          state: "output-available",
+          output: `Tool access is disabled in Settings: ${toolCall.toolName}. Continue without it.`,
         });
-    }, [settleError, task]);
-
-    useEffect(() => {
-        const stop = () => {
-            void chatRef.current?.stop();
-        };
-        activeSubagentStops.set(sessionId, stop);
-        return () => {
-            if (activeSubagentStops.get(sessionId) === stop) {
-                activeSubagentStops.delete(sessionId);
+        return;
+      }
+      pendingClientCalls.current += 1;
+      const input = toolCall.input as {
+        code?: string;
+        command?: string;
+        cwd?: string;
+        path?: string;
+        maxBytes?: number;
+        query?: string;
+      };
+      const linuxScopeId = `subagent-${sessionId}`;
+      const taskPromise =
+        toolCall.toolName === "ask_user"
+          ? Promise.resolve(
+              "Subagents cannot ask the user questions. State your assumption and proceed.",
+            )
+          : toolCall.toolName === "memory"
+            ? settingsRef.current.memoryEnabled !== false
+              ? readLocalMemory(input.query)
+              : Promise.resolve("Memory is disabled for this subagent.")
+            : isLinuxClientTool(toolCall.toolName)
+              ? executeLinuxClientTool(toolCall.toolName, input, linuxScopeId)
+              : runBrowserPython(
+                  input.code ?? "",
+                  collectPythonInputFiles(
+                    (chatRef.current as unknown as { messages?: unknown[] } | null)?.messages ?? [],
+                  ),
+                );
+      void taskPromise.then(
+        (result) => {
+          const output = typeof result === "string" ? result : result.output;
+          const pythonResult = typeof result === "string" ? null : result;
+          if (pythonResult) {
+            const sourcePrefix = isLinuxClientTool(toolCall.toolName) ? "linux" : "python";
+            for (const artifact of pythonResult.artifacts) {
+              const mimeType = inferArtifactMimeType(artifact.filename);
+              const sourceKey = `${sourcePrefix}:${artifact.filename}:${artifact.contentEncoding}:${artifact.content.length}:${artifactContentHash(artifact.content)}`;
+              const kind =
+                /\.html?$/i.test(artifact.filename) || /text\/html/i.test(mimeType)
+                  ? ("html" as const)
+                  : ("file" as const);
+              const scopeId = threadIdRef.current;
+              const artifactId = addArtifact(
+                {
+                  kind,
+                  title: artifact.filename,
+                  filename: artifact.filename,
+                  content: artifact.content,
+                  contentEncoding: artifact.contentEncoding,
+                  mimeType,
+                  sourceKey,
+                },
+                { scopeId },
+              );
+              persistArtifactForScope(scopeId, {
+                id: artifactId,
+                kind,
+                title: artifact.filename,
+                filename: artifact.filename,
+                content: artifact.content,
+                contentEncoding: artifact.contentEncoding,
+                mimeType,
+                sourceKey,
+                scopeId: scopeId ?? null,
+                createdAt: Date.now(),
+              });
             }
-        };
-    }, [sessionId]);
+          }
+          const addToolOutput = chatRef.current?.addToolOutput as unknown as
+            | ((args: {
+                tool: string;
+                toolCallId: string;
+                state: "output-available";
+                output: string;
+              }) => void)
+            | undefined;
+          addToolOutput?.({
+            tool: toolCall.toolName,
+            toolCallId: toolCall.toolCallId,
+            state: "output-available",
+            output,
+          });
+        },
+        (error) => {
+          pendingClientCalls.current = Math.max(0, pendingClientCalls.current - 1);
+          const addToolOutput = chatRef.current?.addToolOutput as unknown as
+            | ((args: {
+                tool: string;
+                toolCallId: string;
+                state: "output-error";
+                errorText: string;
+              }) => void)
+            | undefined;
+          addToolOutput?.({
+            tool: toolCall.toolName,
+            toolCallId: toolCall.toolCallId,
+            state: "output-error",
+            errorText:
+              error instanceof Error
+                ? error.message
+                : isLinuxClientTool(toolCall.toolName)
+                  ? "Linux environment execution failed"
+                  : "Pyodide execution failed",
+          });
+        },
+      );
+    },
+    sendAutomaticallyWhen: ({ messages }) => {
+      if (linuxGenerationAborted()) {
+        pendingClientCalls.current = 0;
+        return false;
+      }
+      if (pendingClientCalls.current === 0) return false;
+      if (!lastAssistantMessageIsCompleteWithToolCalls({ messages })) {
+        return false;
+      }
+      pendingClientCalls.current = 0;
+      return true;
+    },
+    onFinish: ({ messages, isError, isAbort, isDisconnect }) => {
+      if (isAbort) {
+        settleError("The subagent run was aborted.");
+        return;
+      }
+      if (isDisconnect) {
+        settleError("The subagent lost its network connection.");
+        return;
+      }
+      if (isError) {
+        settleError(chat.error?.message || "The subagent finished with an error.");
+        return;
+      }
+      settleComplete(subagentResultText(messages));
+    },
+    onError: (error) => {
+      settleError(error instanceof Error ? error.message : String(error));
+    },
+  });
+  chatRef.current = chat;
 
-    return <SubagentActivity chat={chat} />;
+  useEffect(() => {
+    if (sentRef.current) return;
+    sentRef.current = true;
+    const current = chatRef.current;
+    if (!current) return;
+    void current.sendMessage({ text: task }).catch((error) => {
+      settleError(error instanceof Error ? error.message : "Failed to start the subagent run.");
+    });
+  }, [settleError, task]);
+
+  useEffect(() => {
+    const stop = () => {
+      void chatRef.current?.stop();
+    };
+    activeSubagentStops.set(sessionId, stop);
+    return () => {
+      if (activeSubagentStops.get(sessionId) === stop) {
+        activeSubagentStops.delete(sessionId);
+      }
+    };
+  }, [sessionId]);
+
+  return <SubagentActivity chat={chat} />;
 }
 
-function SubagentActivity({
-    chat,
-}: {
-    chat: ReturnType<typeof useChat>;
-}) {
-    const isRunning =
-        chat.status === "submitted" || chat.status === "streaming";
-    const parts = chat.messages.flatMap((message) =>
-        message.role === "assistant" ? message.parts : [],
-    );
+function SubagentActivity({ chat }: { chat: ReturnType<typeof useChat> }) {
+  const isRunning = chat.status === "submitted" || chat.status === "streaming";
+  const parts = chat.messages.flatMap((message) =>
+    message.role === "assistant" ? message.parts : [],
+  );
 
-    const liveTool = [...parts].reverse().find((part) => {
-        if (part.type === "dynamic-tool") {
-            return (
-                part.state === "input-streaming" ||
-                part.state === "input-available"
-            );
-        }
-        if (typeof part.type === "string" && part.type.startsWith("tool-")) {
-            const tool = part as unknown as { state?: string };
-            return (
-                tool.state === "input-streaming" ||
-                tool.state === "input-available"
-            );
-        }
-        return false;
-    }) as { toolName?: string; type?: string } | undefined;
-    const liveLabel = liveTool
-        ? toolHumanLabel(
-              liveTool.toolName ||
-                  String(liveTool.type ?? "").replace(/^tool-/, ""),
-          ).live
-        : isRunning
-          ? "Working…"
-          : null;
+  const liveTool = [...parts].reverse().find((part) => {
+    if (part.type === "dynamic-tool") {
+      return part.state === "input-streaming" || part.state === "input-available";
+    }
+    if (typeof part.type === "string" && part.type.startsWith("tool-")) {
+      const tool = part as unknown as { state?: string };
+      return tool.state === "input-streaming" || tool.state === "input-available";
+    }
+    return false;
+  }) as { toolName?: string; type?: string } | undefined;
+  const liveLabel = liveTool
+    ? toolHumanLabel(liveTool.toolName || String(liveTool.type ?? "").replace(/^tool-/, "")).live
+    : isRunning
+      ? "Working…"
+      : null;
 
-    return (
-        <div className="flex max-h-72 flex-col gap-2 overflow-y-auto pr-1">
-            {liveLabel ? (
-                <p className="flex items-center gap-2 text-sm font-medium text-foreground">
-                    <Loader2 size={14} className="animate-spin text-primary" />
-                    {liveLabel}
-                </p>
-            ) : null}
-            {parts.map((part, index) => {
-                switch (part.type) {
-                    case "reasoning":
-                        return part.text ? (
-                            <div
-                                key={`reasoning-${index}`}
-                                className="rounded-xl bg-muted/60 px-3 py-2 text-xs italic leading-relaxed text-muted-foreground"
-                            >
-                                {part.text}
-                            </div>
-                        ) : null;
-                    case "text":
-                        return part.text ? (
-                            <div
-                                key={`text-${index}`}
-                                className="whitespace-pre-wrap text-sm leading-relaxed text-foreground"
-                            >
-                                {part.text}
-                            </div>
-                        ) : null;
-                    case "dynamic-tool": {
-                        const isActive =
-                            part.state === "input-streaming" ||
-                            part.state === "input-available";
-                        const label = toolHumanLabel(
-                            part.toolName || part.type,
-                        );
-                        return (
-                            <div
-                                key={`tool-${index}`}
-                                className="flex items-start gap-2 rounded-xl border border-border/60 bg-background px-3 py-2"
-                            >
-                                {isActive ? (
-                                    <Loader2
-                                        size={14}
-                                        className="mt-0.5 shrink-0 animate-spin text-primary"
-                                    />
-                                ) : (
-                                    <Check
-                                        size={14}
-                                        className="mt-0.5 shrink-0 text-success"
-                                    />
-                                )}
-                                <div className="min-w-0">
-                                    <span className="text-sm font-medium">
-                                        {isActive ? label.live : label.past}
-                                    </span>
-                                </div>
-                            </div>
-                        );
-                    }
-                    case "file":
-                        return (
-                            <div
-                                key={`file-${index}`}
-                                className="flex items-center gap-1.5 text-[10px] text-muted-foreground"
-                            >
-                                <FileText size={11} className="shrink-0" />
-                                <span className="truncate">{part.filename}</span>
-                            </div>
-                        );
-                    default: {
-                        // Static tool parts arrive with a `tool-<name>` type;
-                        // they share the dynamic-tool shape.
-                        if (
-                            typeof part.type === "string" &&
-                            part.type.startsWith("tool-")
-                        ) {
-                            const tool = part as unknown as {
-                                toolName?: string;
-                                type?: string;
-                                input?: unknown;
-                                state?: string;
-                            };
-                            const isActive =
-                                tool.state === "input-streaming" ||
-                                tool.state === "input-available";
-                            const label = toolHumanLabel(
-                                tool.toolName ||
-                                    String(tool.type ?? "").replace(/^tool-/, ""),
-                            );
-                            return (
-                                <div
-                                    key={`tool-${index}`}
-                                    className="flex items-start gap-2 rounded-xl border border-border/60 bg-background px-3 py-2"
-                                >
-                                    {isActive ? (
-                                        <Loader2
-                                            size={14}
-                                            className="mt-0.5 shrink-0 animate-spin text-primary"
-                                        />
-                                    ) : (
-                                        <Check
-                                            size={14}
-                                            className="mt-0.5 shrink-0 text-success"
-                                        />
-                                    )}
-                                    <div className="min-w-0">
-                                        <span className="text-sm font-medium">
-                                            {isActive ? label.live : label.past}
-                                        </span>
-                                    </div>
-                                </div>
-                            );
-                        }
-                        return null;
-                    }
-                }
-            })}
-            {isRunning && !liveLabel ? (
-                <div className="flex items-center gap-2 px-1 py-1 text-sm text-muted-foreground">
-                    <Loader2 size={14} className="animate-spin" />
-                    Working…
+  return (
+    <div className="flex max-h-72 flex-col gap-2 overflow-y-auto pr-1">
+      {liveLabel ? (
+        <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <Loader2 size={14} className="animate-spin text-primary" />
+          {liveLabel}
+        </p>
+      ) : null}
+      {parts.map((part, index) => {
+        switch (part.type) {
+          case "reasoning":
+            return part.text ? (
+              <div
+                key={`reasoning-${index}`}
+                className="rounded-xl bg-muted/60 px-3 py-2 text-xs italic leading-relaxed text-muted-foreground"
+              >
+                {part.text}
+              </div>
+            ) : null;
+          case "text":
+            return part.text ? (
+              <div
+                key={`text-${index}`}
+                className="whitespace-pre-wrap text-sm leading-relaxed text-foreground"
+              >
+                {part.text}
+              </div>
+            ) : null;
+          case "dynamic-tool": {
+            const isActive = part.state === "input-streaming" || part.state === "input-available";
+            const label = toolHumanLabel(part.toolName || part.type);
+            return (
+              <div
+                key={`tool-${index}`}
+                className="flex items-start gap-2 rounded-xl border border-border/60 bg-background px-3 py-2"
+              >
+                {isActive ? (
+                  <Loader2 size={14} className="mt-0.5 shrink-0 animate-spin text-primary" />
+                ) : (
+                  <Check size={14} className="mt-0.5 shrink-0 text-success" />
+                )}
+                <div className="min-w-0">
+                  <span className="text-sm font-medium">{isActive ? label.live : label.past}</span>
                 </div>
-            ) : null}
-            {chat.status === "error" && chat.error ? (
-                <p className="text-[10px] text-destructive">
-                    {chat.error instanceof Error
-                        ? chat.error.message
-                        : String(chat.error)}
-                </p>
-            ) : null}
+              </div>
+            );
+          }
+          case "file":
+            return (
+              <div
+                key={`file-${index}`}
+                className="flex items-center gap-1.5 text-[10px] text-muted-foreground"
+              >
+                <FileText size={11} className="shrink-0" />
+                <span className="truncate">{part.filename}</span>
+              </div>
+            );
+          default: {
+            // Static tool parts arrive with a `tool-<name>` type;
+            // they share the dynamic-tool shape.
+            if (typeof part.type === "string" && part.type.startsWith("tool-")) {
+              const tool = part as unknown as {
+                toolName?: string;
+                type?: string;
+                input?: unknown;
+                state?: string;
+              };
+              const isActive = tool.state === "input-streaming" || tool.state === "input-available";
+              const label = toolHumanLabel(
+                tool.toolName || String(tool.type ?? "").replace(/^tool-/, ""),
+              );
+              return (
+                <div
+                  key={`tool-${index}`}
+                  className="flex items-start gap-2 rounded-xl border border-border/60 bg-background px-3 py-2"
+                >
+                  {isActive ? (
+                    <Loader2 size={14} className="mt-0.5 shrink-0 animate-spin text-primary" />
+                  ) : (
+                    <Check size={14} className="mt-0.5 shrink-0 text-success" />
+                  )}
+                  <div className="min-w-0">
+                    <span className="text-sm font-medium">
+                      {isActive ? label.live : label.past}
+                    </span>
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          }
+        }
+      })}
+      {isRunning && !liveLabel ? (
+        <div className="flex items-center gap-2 px-1 py-1 text-sm text-muted-foreground">
+          <Loader2 size={14} className="animate-spin" />
+          Working…
         </div>
-    );
+      ) : null}
+      {chat.status === "error" && chat.error ? (
+        <p className="text-[10px] text-destructive">
+          {chat.error instanceof Error ? chat.error.message : String(chat.error)}
+        </p>
+      ) : null}
+    </div>
+  );
 }

@@ -3,7 +3,7 @@
  * models, tools, and theme).
  */
 
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { SectionBoundary } from "~/components/ui/SectionBoundary";
 import { StorageHealthPanel } from "~/components/ui/StorageNotices";
@@ -32,7 +32,9 @@ import {
     type ConnectConnectorEntryLite,
 } from "~/lib/connect-api";
 import { testProviderKey } from "~/lib/key-test";
+import { findEnabledSearchConnector, isSearchConnectorKind } from "~/lib/search/connectors";
 import { useChatGenerating } from "~/components/assistant-ui/ChatSessionContext";
+import { useDraftSetting } from "~/lib/hooks/useDraftSetting";
 import { useSettings } from "~/lib/providers/SettingsProvider";
 import { setSidebarPanel, useSidebarPanel } from "~/lib/sidebar-panel";
 import { isLocalProvider, isProviderReady } from "~/lib/setup";
@@ -42,6 +44,7 @@ import {
     FREE_SEARCH_MCP_PRESETS,
     PROJECT_COLORS,
     PROVIDER_DEFAULTS,
+    type AppSettings,
     type CustomSkill,
     type McpServerConfig,
     type ConnectorConfig,
@@ -1350,125 +1353,7 @@ function SettingsPanel({
                                     value={settings.toolAccess}
                                     onChange={updateToolAccess}
                                 />
-                                {(() => {
-                                    const activeSearchConnector = settings.connectors.find(
-                                        (connector) =>
-                                            connector.enabled &&
-                                            Boolean(connector.apiKey?.trim()) &&
-                                            ["tavily", "brave", "exa", "parallel"].includes(
-                                                connector.kind,
-                                            ),
-                                    );
-                                    const searchConnectorKinds = [
-                                        "tavily",
-                                        "brave",
-                                        "exa",
-                                        "parallel",
-                                    ];
-                                    return (
-                                        <>
-                                            {settings.toolAccess.webSearch &&
-                                            settings.webSearchEnabled ? (
-                                                <div className="flex flex-col gap-1.5 rounded-xl border border-border/70 p-2.5">
-                                                    <label className="text-[11px] font-medium text-muted-foreground">
-                                                        Search engine
-                                                    </label>
-                                                    <select
-                                                        value={
-                                                            activeSearchConnector?.kind ||
-                                                            settings.webSearchEngine
-                                                        }
-                                                        onChange={(e) => {
-                                                            const value = e.target.value;
-                                                            if (
-                                                                searchConnectorKinds.includes(value)
-                                                            ) {
-                                                                updateSettings({
-                                                                    webSearchEnabled: true,
-                                                                    connectors:
-                                                                        settings.connectors.map(
-                                                                            (connector) =>
-                                                                                searchConnectorKinds.includes(
-                                                                                    connector.kind,
-                                                                                )
-                                                                                    ? {
-                                                                                          ...connector,
-                                                                                          enabled:
-                                                                                              connector.kind ===
-                                                                                              value,
-                                                                                      }
-                                                                                    : connector,
-                                                                        ),
-                                                                });
-                                                            } else {
-                                                                updateSettings({
-                                                                    webSearchEngine: value as
-                                                                        "duckduckgo" | "searxng",
-                                                                    connectors:
-                                                                        settings.connectors.map(
-                                                                            (connector) =>
-                                                                                searchConnectorKinds.includes(
-                                                                                    connector.kind,
-                                                                                )
-                                                                                    ? {
-                                                                                          ...connector,
-                                                                                          enabled: false,
-                                                                                      }
-                                                                                    : connector,
-                                                                        ),
-                                                                });
-                                                            }
-                                                        }}
-                                                        className="h-8 w-full rounded-lg border border-border bg-background px-2 text-xs outline-none"
-                                                    >
-                                                        <option value="duckduckgo">
-                                                            DuckDuckGo
-                                                        </option>
-                                                        <option value="searxng">SearXNG</option>
-                                                        {settings.connectors
-                                                            .filter(
-                                                                (connector) =>
-                                                                    searchConnectorKinds.includes(
-                                                                        connector.kind,
-                                                                    ) &&
-                                                                    Boolean(
-                                                                        connector.apiKey?.trim(),
-                                                                    ),
-                                                            )
-                                                            .map((connector) => (
-                                                                <option
-                                                                    key={connector.kind}
-                                                                    value={connector.kind}
-                                                                >
-                                                                    {connector.name}
-                                                                </option>
-                                                            ))}
-                                                    </select>
-                                                    {settings.webSearchEngine === "searxng" ? (
-                                                        <Input
-                                                            value={settings.searxngUrl}
-                                                            onChange={(e) =>
-                                                                updateSettings({
-                                                                    searxngUrl: e.target.value,
-                                                                })
-                                                            }
-                                                            placeholder="https://searx.example.com"
-                                                            className="h-8 rounded-lg text-xs"
-                                                        />
-                                                    ) : null}
-                                                    <p className="text-[10px] leading-relaxed text-muted-foreground">
-                                                        DuckDuckGo Instant Answers are included by
-                                                        default as a fast research overview. This
-                                                        free service is intended for non-commercial
-                                                        use; review DuckDuckGo&apos;s current terms
-                                                        before commercial deployment. Verify
-                                                        important claims with fetched sources.
-                                                    </p>
-                                                </div>
-                                            ) : null}
-                                        </>
-                                    );
-                                })()}
+                                <SearchProviderSettings />
                                 <CustomSkillsSection />
                             </div>
                         )}
@@ -1727,42 +1612,82 @@ function SettingsPanel({
     );
 }
 
+/** Tool names shown in the effective-prompt preview for the current tool access. */
+function previewToolNames(
+    toolAccess: AppSettings["toolAccess"],
+    searchConnector: ConnectorConfig | undefined,
+): string[] {
+    const search = searchConnector
+        ? [`${searchConnector.kind}_search`, "fetch_url"]
+        : [
+              "mcp_parallel_search_mcp_web_search",
+              "mcp_parallel_search_mcp_web_fetch",
+              "mcp_firecrawl_keyless_firecrawl_search",
+              "mcp_firecrawl_keyless_firecrawl_scrape",
+          ];
+    return [
+        ...(toolAccess.webSearch ? search : []),
+        ...(toolAccess.calculator ? ["calculator"] : []),
+        ...(toolAccess.python ? ["run_python"] : []),
+        ...(toolAccess.linux ? ["linux_run_command", "linux_read_file"] : []),
+        ...(toolAccess.npmProject ? ["npm_project"] : []),
+        ...(toolAccess.fileCreation ? ["create_file"] : []),
+        ...(toolAccess.skills ? ["html_craft"] : []),
+        ...(toolAccess.memory ? ["memory"] : []),
+        ...(toolAccess.knowledge ? ["knowledge_search", "knowledge_list"] : []),
+        ...(toolAccess.connectors ? ["list_connections"] : []),
+        ...(toolAccess.mcp ? ["mcp_* tools"] : []),
+        ...(toolAccess.subagents ? ["spawn_subagents"] : []),
+        ...(toolAccess.currentTime ? ["get_current_time"] : []),
+        ...(toolAccess.askUser ? ["ask_user"] : []),
+        ...(toolAccess.compaction ? ["compaction_skill"] : []),
+    ];
+}
+
 function CustomInstructionsSection() {
     const { settings, updateChat } = useSettings();
-    const value = settings.chat.systemPrompt ?? "";
-    const advancedValue = settings.chat.advancedSystemPrompt ?? "";
-    const [dangerOpen, setDangerOpen] = useState(Boolean(advancedValue));
+    const committed = settings.chat.systemPrompt ?? "";
+    const committedAdvanced = settings.chat.advancedSystemPrompt ?? "";
+    const [dangerOpen, setDangerOpen] = useState(Boolean(committedAdvanced));
     const maxChars = 4_000;
     const maxAdvancedChars = 32_000;
-    const previewToolNames = [
-        ...(settings.toolAccess.webSearch ? ["web_search", "fetch_url"] : []),
-        ...(settings.toolAccess.calculator ? ["calculator"] : []),
-        ...(settings.toolAccess.python ? ["run_python"] : []),
-        ...(settings.toolAccess.linux ? ["linux_run_command", "linux_read_file"] : []),
-        ...(settings.toolAccess.npmProject ? ["npm_project"] : []),
-        ...(settings.toolAccess.fileCreation ? ["create_file"] : []),
-        ...(settings.toolAccess.skills ? ["html_craft"] : []),
-        ...(settings.toolAccess.memory ? ["memory"] : []),
-        ...(settings.toolAccess.knowledge ? ["knowledge_search", "knowledge_list"] : []),
-        ...(settings.toolAccess.connectors ? ["list_connections"] : []),
-        ...(settings.toolAccess.mcp ? ["mcp_* tools"] : []),
-        ...(settings.toolAccess.subagents ? ["spawn_subagents"] : []),
-        ...(settings.toolAccess.currentTime ? ["get_current_time"] : []),
-        ...(settings.toolAccess.askUser ? ["ask_user"] : []),
-        ...(settings.toolAccess.compaction ? ["compaction_skill"] : []),
-    ];
-    const promptPreview = buildChatSystemPromptParts(
-        advancedValue.trim() || undefined,
-        "",
-        [],
-        "main",
-        "",
-        settings.agentModeEnabled,
-        settings.tokenMode,
-        previewToolNames,
-        settings.toolAccess,
-        value,
-    ).full;
+    // Typing stays in these local drafts and is saved once the user pauses, so
+    // every keystroke does not re-render the workspace or queue an encrypted save.
+    const prompt = useDraftSetting(committed, (systemPrompt) => updateChat({ systemPrompt }));
+    const advanced = useDraftSetting(committedAdvanced, (advancedSystemPrompt) =>
+        updateChat({ advancedSystemPrompt }),
+    );
+    const value = prompt.value;
+    const advancedValue = advanced.value;
+    const toolAccess = settings.toolAccess;
+    const { agentModeEnabled, tokenMode, connectors } = settings;
+    // The preview is only on screen inside the danger zone; do not build it otherwise.
+    const promptPreview = useMemo(
+        () =>
+            dangerOpen
+                ? buildChatSystemPromptParts(
+                      committedAdvanced.trim() || undefined,
+                      "",
+                      [],
+                      "main",
+                      "",
+                      agentModeEnabled,
+                      tokenMode,
+                      previewToolNames(toolAccess, findEnabledSearchConnector(connectors)),
+                      toolAccess,
+                      committed,
+                  ).full
+                : "",
+        [
+            dangerOpen,
+            committedAdvanced,
+            committed,
+            agentModeEnabled,
+            tokenMode,
+            toolAccess,
+            connectors,
+        ],
+    );
 
     return (
         <div className="flex flex-col gap-3">
@@ -1775,11 +1700,8 @@ function CustomInstructionsSection() {
             </div>
             <textarea
                 value={value}
-                onChange={(event) =>
-                    updateChat({
-                        systemPrompt: event.target.value.slice(0, maxChars),
-                    })
-                }
+                onChange={(event) => prompt.onChange(event.target.value.slice(0, maxChars))}
+                onBlur={prompt.flush}
                 placeholder="e.g. Prefer concise answers. Always cite retrieved URLs. Address me as Nirneet."
                 rows={8}
                 maxLength={maxChars}
@@ -1795,7 +1717,7 @@ function CustomInstructionsSection() {
                     size="sm"
                     variant="outline"
                     disabled={!value.trim()}
-                    onClick={() => updateChat({ systemPrompt: "" })}
+                    onClick={() => prompt.commitNow("")}
                     className="rounded-lg"
                 >
                     Clear
@@ -1836,13 +1758,9 @@ function CustomInstructionsSection() {
                         <textarea
                             value={advancedValue}
                             onChange={(event) =>
-                                updateChat({
-                                    advancedSystemPrompt: event.target.value.slice(
-                                        0,
-                                        maxAdvancedChars,
-                                    ),
-                                })
+                                advanced.onChange(event.target.value.slice(0, maxAdvancedChars))
                             }
+                            onBlur={advanced.flush}
                             placeholder="Leave empty to use ai.diy's built-in system prompt."
                             rows={12}
                             maxLength={maxAdvancedChars}
@@ -1859,7 +1777,7 @@ function CustomInstructionsSection() {
                                 size="sm"
                                 variant="outline"
                                 disabled={!advancedValue}
-                                onClick={() => updateChat({ advancedSystemPrompt: "" })}
+                                onClick={() => advanced.commitNow("")}
                                 className="rounded-lg"
                             >
                                 Restore built-in prompt
@@ -2563,8 +2481,9 @@ function FreeSearchMcpSection() {
         <div className="flex flex-col gap-2 rounded-xl border border-primary/20 bg-primary/5 p-2.5">
             <span className="text-[11px] font-semibold">Free search MCPs</span>
             <p className="text-[10px] leading-relaxed text-muted-foreground">
-                Free hosted web search for the model, no API key. When enabled, these are preferred
-                over the built-in DuckDuckGo search.
+                The model&apos;s web search: free hosted Parallel Search and Firecrawl, no API key.
+                ai.diy has no built-in web_search tool, so keep at least one of these enabled unless
+                you use a search connector.
             </p>
             {FREE_SEARCH_MCP_PRESETS.map((preset) => {
                 const added = settings.mcpServers.some((server) => server.url === preset.url);
@@ -2623,6 +2542,51 @@ const SEARCH_CONNECTOR_OPTIONS: Array<{
     { kind: "exa", label: "Exa", placeholder: "Exa API key" },
     { kind: "parallel", label: "Parallel", placeholder: "Parallel API key" },
 ];
+
+/** API key field plus Test button; the key is saved after a pause, not per keystroke. */
+function ConnectorKeyRow({
+    connector,
+    placeholder,
+    onSave,
+    onTest,
+}: {
+    connector: ConnectorConfig;
+    placeholder: string;
+    onSave: (connector: ConnectorConfig) => void;
+    onTest: (connector: ConnectorConfig) => Promise<void>;
+}) {
+    const connectorRef = useRef(connector);
+    connectorRef.current = connector;
+    // Save against the latest connector so a toggle made while typing is not undone.
+    const draft = useDraftSetting(connector.apiKey ?? "", (apiKey) =>
+        onSave({ ...connectorRef.current, apiKey }),
+    );
+    return (
+        <div className="flex gap-1.5">
+            <Input
+                type="password"
+                value={draft.value}
+                onChange={(event) => draft.onChange(event.target.value)}
+                onBlur={draft.flush}
+                placeholder={placeholder}
+                className="h-8 min-w-0 flex-1 rounded-lg text-xs"
+            />
+            <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                    // Test what is in the field, not the last saved value.
+                    draft.flush();
+                    void onTest({ ...connector, apiKey: draft.value });
+                }}
+                className="h-8 rounded-lg px-2 text-[11px]"
+            >
+                Test
+            </Button>
+        </div>
+    );
+}
 
 function ConnectorsSection() {
     const { settings, updateSettings } = useSettings();
@@ -2685,7 +2649,7 @@ function ConnectorsSection() {
                 </h3>
                 <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
                     Search connectors are BYOK and sent only for the current request. An enabled
-                    connector is used instead of Firecrawl or Parallel MCP search.
+                    connector is used instead of Parallel Search and Firecrawl.
                 </p>
             </div>
             {SEARCH_CONNECTOR_OPTIONS.map((option) => {
@@ -2727,26 +2691,12 @@ function ConnectorsSection() {
                                 </button>
                             </div>
                         </div>
-                        <div className="flex gap-1.5">
-                            <Input
-                                type="password"
-                                value={connector.apiKey ?? ""}
-                                onChange={(event) =>
-                                    saveConnector({ ...connector, apiKey: event.target.value })
-                                }
-                                placeholder={option.placeholder}
-                                className="h-8 min-w-0 flex-1 rounded-lg text-xs"
-                            />
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() => void testConnector(connector)}
-                                className="h-8 rounded-lg px-2 text-[11px]"
-                            >
-                                Test
-                            </Button>
-                        </div>
+                        <ConnectorKeyRow
+                            connector={connector}
+                            placeholder={option.placeholder}
+                            onSave={saveConnector}
+                            onTest={testConnector}
+                        />
                         {status[option.kind] ? (
                             <p className="text-[10px] text-muted-foreground">
                                 {status[option.kind]}
@@ -3598,6 +3548,63 @@ function downloadLocalBackup() {
         anchor.click();
         URL.revokeObjectURL(url);
     })();
+}
+
+/**
+ * Where live web search comes from. The model has no built-in web_search tool:
+ * by default it searches with Parallel and Firecrawl (free, no key), and a
+ * search connector with the user's own key replaces them.
+ */
+function SearchProviderSettings() {
+    const { settings, updateSettings } = useSettings();
+    if (!settings.toolAccess.webSearch || !settings.webSearchEnabled) return null;
+
+    const keyedConnectors = settings.connectors.filter(
+        (connector) => isSearchConnectorKind(connector.kind) && Boolean(connector.apiKey?.trim()),
+    );
+    const active = keyedConnectors.find((connector) => connector.enabled);
+
+    const choose = (value: string) => {
+        const isConnector = isSearchConnectorKind(value);
+        updateSettings({
+            webSearchEnabled: true,
+            connectors: settings.connectors.map((connector) =>
+                isSearchConnectorKind(connector.kind)
+                    ? { ...connector, enabled: isConnector && connector.kind === value }
+                    : connector,
+            ),
+        });
+    };
+
+    return (
+        <div className="flex flex-col gap-1.5 rounded-xl border border-border/70 p-2.5">
+            <label
+                htmlFor="settings-search-provider"
+                className="text-[11px] font-medium text-muted-foreground"
+            >
+                Search provider
+            </label>
+            <select
+                id="settings-search-provider"
+                value={active?.kind ?? "free"}
+                onChange={(event) => choose(event.target.value)}
+                className="h-8 w-full rounded-lg border border-border bg-background px-2 text-xs outline-none"
+            >
+                <option value="free">Parallel &amp; Firecrawl (free, no key)</option>
+                {keyedConnectors.map((connector) => (
+                    <option key={connector.kind} value={connector.kind}>
+                        {connector.name}
+                    </option>
+                ))}
+            </select>
+            <p className="text-[10px] leading-relaxed text-muted-foreground">
+                {active
+                    ? `Search uses ${active.name} with your key. Parallel and Firecrawl are not loaded while a search connector is on.`
+                    : "Search uses Parallel Search and Firecrawl, free and without an API key. Add a search connector key below to use your own provider instead."}{" "}
+                Verify important claims against fetched sources.
+            </p>
+        </div>
+    );
 }
 
 function CustomSkillsSection() {
