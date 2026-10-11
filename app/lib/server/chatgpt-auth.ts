@@ -16,6 +16,10 @@ import {
     type ChatGPTHandler,
 } from "@opencoredev/loginwithchatgpt-server";
 import { CHATGPT_SAFE_DEFAULT } from "~/lib/chatgpt-models";
+import {
+    DEFAULT_LWC_CLIENT_VERSION,
+    resolveClientVersion,
+} from "~/lib/server/chatgpt-client-version";
 import { createChatGPTFetch } from "~/lib/server/chatgpt-fetch";
 import { createChatGPTGuard, type ChatGPTGuard } from "~/lib/server/chatgpt-guard";
 import {
@@ -24,17 +28,9 @@ import {
     resolveChatGPTSessionStore,
 } from "~/lib/server/local-persist";
 
-/**
- * Codex CLI version reported to ChatGPT. The account's model catalog is gated
- * on it: clients that report an old version are silently denied newer models
- * (GPT-6 / GPT-6.1 Sol and Luna are only listed for recent releases), so a stale
- * value is indistinguishable from "this plan has no new models". 0.162.1 was the
- * current stable release on 2026-10-09. Raise it when new models stop appearing,
- * or override per deployment with LWC_CLIENT_VERSION.
- */
-export const DEFAULT_LWC_CLIENT_VERSION = "0.162.1";
 const DEFAULT_LWC_SESSION_DAYS = 180;
 export const CHATGPT_COOKIE_NAME = "lwc_session";
+export { DEFAULT_LWC_CLIENT_VERSION };
 
 function resolveSessionTtlMs(): number {
     const configured = Number(process.env.LWC_SESSION_DAYS);
@@ -71,7 +67,7 @@ function getRawHandler(): ChatGPTHandler {
         .map((origin) => origin.trim())
         .filter(Boolean);
 
-    const clientVersion = process.env.LWC_CLIENT_VERSION?.trim() || DEFAULT_LWC_CLIENT_VERSION;
+    const clientVersion = resolveClientVersion();
 
     rawHandler = createChatGPTHandler({
         secret,
