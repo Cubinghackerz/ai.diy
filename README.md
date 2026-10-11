@@ -129,6 +129,12 @@ Enable Agent Mode under **Settings → Experimental**. The model plans, selects 
 
 26 integrations: OpenAI, ChatGPT subscription, Grok subscription, Kimi subscription, GLM, MiniMax, Anthropic, Gemini, Groq, Cerebras, Fireworks, Perplexity, Cohere, OpenRouter, xAI, DeepSeek, Bedrock, Azure, Vertex, Vercel Gateway, Together, Mistral, Hugging Face, Ollama, LM Studio, and custom OpenAI-compatible endpoints.
 
+Sign-in: Continue with ChatGPT (plan usage through a server-held session) or Continue with OpenRouter (OAuth PKCE in your browser; the key never touches the ai.diy server). Or paste any provider's API key.
+
+### Interface
+
+Two interfaces, switchable in Settings → Appearance: **Simple** (one sign-in screen, a single input bar, chat list tucked away; the default for new installs) and **Full** (the complete workspace; kept for anyone who set ai.diy up before Simple existed).
+
 ### Tools
 
 Web search (Parallel + Firecrawl keyless MCP, or BYOK connectors; no built-in `web_search` tool), URL fetch, calculator, browser Python, in-browser Linux (`linux_run_command` / `linux_read_file`), files/artifacts, research and design skills, local time, memory, knowledge search, ask user, remote MCP (Firecrawl + Parallel bundled keyless), subagents.

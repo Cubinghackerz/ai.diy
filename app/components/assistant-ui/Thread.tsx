@@ -7,6 +7,7 @@ import {
 } from "~/components/assistant-ui/attachment";
 import { ComposerPlusMenu } from "~/components/assistant-ui/ComposerPlusMenu";
 import { ComposerModelControls } from "~/components/assistant-ui/ComposerModelControls";
+import { ModelPicker } from "~/components/ui/ModelPicker";
 import { SubagentDock, useSubagentOptional } from "~/components/assistant-ui/subagents";
 import { BorderBeam } from "~/components/ui/border-beam";
 import { ThreadFollowupSuggestions } from "~/components/assistant-ui/follow-up-suggestions";
@@ -49,6 +50,7 @@ import {
   DownloadIcon,
   MicIcon,
   MoreHorizontalIcon,
+  PaperclipIcon,
   PencilIcon,
   RefreshCwIcon,
   SparklesIcon,
@@ -72,7 +74,8 @@ import {
   useChatGenerating,
   useChatSession,
 } from "~/components/assistant-ui/ChatSessionContext";
-import { useSettings } from "~/lib/providers/SettingsProvider";
+import { useInterfaceMode, useSettings } from "~/lib/providers/SettingsProvider";
+import { isProviderReady } from "~/lib/setup";
 import {
   BUILTIN_FORCED_SKILLS,
   dedupeForcedSkills,
@@ -138,6 +141,7 @@ const ThreadRoot: FC<{
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext);
   const { compact } = useContext(ThreadLayoutContext);
   const composerEmpty = useAuiState((s) => s.composer.isEmpty);
+  const simple = useInterfaceMode() === "simple";
   const hasAssistant = useAuiState((s) =>
     s.thread.messages.some((message) => message.role === "assistant"),
   );
@@ -189,7 +193,7 @@ const ThreadRoot: FC<{
               <ThreadFollowupSuggestions />
               <SubagentDock />
               <Composer />
-              {isEmpty && composerEmpty ? <ThreadSuggestions /> : null}
+              {isEmpty && composerEmpty && !simple ? <ThreadSuggestions /> : null}
             </ThreadPrimitive.ViewportFooter>
           ) : null}
         </div>
@@ -258,11 +262,22 @@ const ThreadScrollToBottom: FC = () => {
   );
 };
 
+const SimpleWelcome: FC = () => (
+  <div className="aui-thread-welcome-root mb-6 flex flex-col items-center px-4 text-center">
+    <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-medium tracking-tight duration-200 sm:text-3xl">
+      What can I help with?
+    </h1>
+  </div>
+);
+
 const ThreadWelcome: FC = () => {
   const { settings, updateSettings } = useSettings();
+  const simple = useInterfaceMode() === "simple";
   const composio = settings.composio;
   const showAppsTip = composio?.tipDismissed !== true;
   const appsReady = Boolean(composio?.enabled && composio.apiKey && composio.mcpUrl);
+
+  if (simple) return <SimpleWelcome />;
 
   return (
     <div className="aui-thread-welcome-root mb-8 flex flex-col items-center gap-3 px-4 text-center">
@@ -365,7 +380,7 @@ const useComposerDraft = () => {
   return ctx;
 };
 
-const ComposerInput: FC = () => {
+const ComposerInput: FC<{ simple?: boolean }> = ({ simple = false }) => {
   const { value, setText, send, isRunning, appliedSkills, setAppliedSkills } = useComposerDraft();
   const { settings } = useSettings();
   const disabled = useAuiState(
@@ -452,9 +467,14 @@ const ComposerInput: FC = () => {
         placeholder={
           isRunning
             ? "Wait until the current reply finishes…"
-            : "Send a message... (type / to use a command or a skill)"
+            : simple
+              ? "Ask anything"
+              : "Send a message... (type / to use a command or a skill)"
         }
-        className="aui-composer-input caret-foreground placeholder:text-muted-foreground/70 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none ring-0 shadow-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+        className={cn(
+          "aui-composer-input caret-foreground placeholder:text-muted-foreground/70 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none ring-0 shadow-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
+          simple && "py-2",
+        )}
         autoFocus
         enterKeyHint="send"
         aria-label="Message input"
@@ -532,6 +552,7 @@ const Composer: FC = () => {
   );
   const isRunning = streamRunning || chatGenerating || subagentBusy;
   const [appliedSkills, setAppliedSkills] = useState<ForcedSkill[]>([]);
+  const simple = useInterfaceMode() === "simple";
 
   const canSend = storeCanSend && !isRunning;
 
@@ -568,23 +589,109 @@ const Composer: FC = () => {
           disabled={isRunning}
           className="aidiy-composer-dropzone relative w-full"
         >
-          <div
-            data-slot="aui_composer-shell"
-            className="relative flex w-full flex-col gap-2 rounded-(--composer-radius) border border-border/70 bg-(--composer-bg) p-(--composer-padding) shadow-sm transition-[border-color,box-shadow] focus-within:border-primary/35 focus-within:shadow-md"
-          >
-            <BorderBeam active={isRunning} className="aidiy-border-beam-on-composer" duration={5} />
-            <ComposerAttachments />
-            <ComposerAttachmentGuard />
-            <ComposerInput />
-            <ComposerAction />
-          </div>
+          {simple ? (
+            <div
+              data-slot="aui_composer-shell"
+              data-variant="simple"
+              className="relative flex w-full flex-col rounded-[1.75rem] border border-border/60 bg-(--composer-bg) px-2 py-1.5 shadow-sm transition-[border-color,box-shadow] focus-within:border-foreground/25 focus-within:shadow-md"
+            >
+              <BorderBeam
+                active={isRunning}
+                className="aidiy-border-beam-on-composer"
+                duration={5}
+              />
+              <ComposerAttachments />
+              <ComposerAttachmentGuard />
+              <div className="flex items-end gap-1">
+                <SimpleAttachButton />
+                <div className="min-w-0 flex-1">
+                  <ComposerInput simple />
+                </div>
+                <div className="flex h-10 shrink-0 items-center">
+                  <ComposerSendButton large />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div
+              data-slot="aui_composer-shell"
+              className="relative flex w-full flex-col gap-2 rounded-(--composer-radius) border border-border/70 bg-(--composer-bg) p-(--composer-padding) shadow-sm transition-[border-color,box-shadow] focus-within:border-primary/35 focus-within:shadow-md"
+            >
+              <BorderBeam
+                active={isRunning}
+                className="aidiy-border-beam-on-composer"
+                duration={5}
+              />
+              <ComposerAttachments />
+              <ComposerAttachmentGuard />
+              <ComposerInput />
+              <ComposerAction />
+            </div>
+          )}
         </ComposerPrimitive.AttachmentDropzone>
       </ComposerPrimitive.Root>
+      {simple ? <SimpleComposerFooter /> : null}
     </ComposerDraftContext.Provider>
   );
 };
 
-const ComposerSendButton: FC = () => {
+/** The simple input bar's only extra: attach. Everything else lives in Settings. */
+const SimpleAttachButton: FC = () => {
+  const { isRunning } = useComposerDraft();
+  return (
+    <div className="flex h-10 shrink-0 items-center">
+      <ComposerPrimitive.AddAttachment
+        multiple
+        render={
+          <TooltipIconButton
+            tooltip="Attach files"
+            side="bottom"
+            type="button"
+            variant="ghost"
+            size="icon"
+            disabled={isRunning}
+            className="size-8 rounded-full text-muted-foreground hover:text-foreground"
+            aria-label="Attach files"
+          />
+        }
+      >
+        <PaperclipIcon className="size-4.5" />
+      </ComposerPrimitive.AddAttachment>
+    </div>
+  );
+};
+
+/** Quiet line under the simple input bar: which model answers, and the way back to the full view. */
+const SimpleComposerFooter: FC = () => {
+  const { settings, updateChat, updateSettings } = useSettings();
+  const providerReady = isProviderReady(settings);
+  return (
+    <div className="-mt-2 flex items-center justify-between gap-2 px-2 text-xs text-muted-foreground">
+      <div className="min-w-0">
+        {providerReady ? (
+          <ModelPicker
+            provider={settings.chat.provider}
+            value={settings.chat.model}
+            onChange={(modelId) => updateChat({ model: modelId })}
+            enabled={providerReady}
+            align="left"
+            compact
+            className="max-w-[14rem]"
+          />
+        ) : null}
+      </div>
+      <button
+        type="button"
+        onClick={() => updateSettings({ interfaceMode: "full" })}
+        className="shrink-0 rounded-md px-2 py-1 outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+      >
+        Full view
+      </button>
+    </div>
+  );
+};
+
+const ComposerSendButton: FC<{ large?: boolean }> = ({ large = false }) => {
   const { canSend, send, isRunning, stop } = useComposerDraft();
 
   if (isRunning) {
@@ -593,7 +700,7 @@ const ComposerSendButton: FC = () => {
         type="button"
         variant="default"
         size="icon"
-        className="aui-composer-cancel relative z-10 size-7 rounded-full"
+        className={cn("aui-composer-cancel relative z-10 size-7 rounded-full", large && "size-8")}
         aria-label="Stop generating"
         title="Stop generating"
         onClick={(event) => {
@@ -614,7 +721,7 @@ const ComposerSendButton: FC = () => {
       type="button"
       variant="default"
       size="icon"
-      className="aui-composer-send size-7 rounded-full"
+      className={cn("aui-composer-send size-7 rounded-full", large && "size-8")}
       aria-label="Send message"
       disabled={!canSend}
       onClick={send}
@@ -862,6 +969,7 @@ const AssistantMessage: FC = () => {
 };
 
 const AssistantActionBar: FC = () => {
+  const simple = useInterfaceMode() === "simple";
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
@@ -901,13 +1009,15 @@ const AssistantActionBar: FC = () => {
           </ActionBarPrimitive.ExportMarkdown>
         </ActionBarMorePrimitive.Content>
       </ActionBarMorePrimitive.Root>
-      <span
-        data-slot="aui_assistant-message-meta"
-        className="ms-1 inline-flex shrink-0 items-center gap-1.5"
-      >
-        <MessageModelBadge />
-        <MessageUsageStats />
-      </span>
+      {simple ? null : (
+        <span
+          data-slot="aui_assistant-message-meta"
+          className="ms-1 inline-flex shrink-0 items-center gap-1.5"
+        >
+          <MessageModelBadge />
+          <MessageUsageStats />
+        </span>
+      )}
     </ActionBarPrimitive.Root>
   );
 };

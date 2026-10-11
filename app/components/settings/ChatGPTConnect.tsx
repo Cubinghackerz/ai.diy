@@ -191,7 +191,7 @@ export function ChatGPTConnect({ className }: { className?: string }) {
     );
 }
 
-function DeviceCodePanel() {
+export function DeviceCodePanel() {
     const session = useChatGPTSession();
     const now = useNow(1000);
     const remaining = secondsUntil(session.expiresAt, now);
@@ -288,6 +288,89 @@ function DeviceCodePanel() {
                     Code copied. Paste it on OpenAI.
                 </p>
             ) : null}
+        </div>
+    );
+}
+
+/**
+ * The simple setup's sign-in: one big button, no confirmation dialog. What the dialog
+ * said stays on screen next to the button, so choosing to continue is still informed.
+ */
+export function ChatGPTHeroConnect({ className }: { className?: string }) {
+    const session = useChatGPTSession();
+    const { status } = session;
+
+    return (
+        <div className={cn("flex flex-col gap-3", className)}>
+            {status === "pending" ? (
+                <div className="rounded-xl border border-border/70 bg-muted/20 p-4">
+                    <DeviceCodePanel />
+                </div>
+            ) : status === "authenticated" ? (
+                <div
+                    role="status"
+                    className="flex items-center justify-center gap-2 rounded-xl border border-border/70 bg-muted/20 px-4 py-3.5 text-sm"
+                >
+                    <Spinner />
+                    {session.user?.email ? `Signed in as ${session.user.email}` : "Signed in"}
+                    <span className="text-muted-foreground">· opening your chat…</span>
+                </div>
+            ) : (
+                <>
+                    <PillButton
+                        className="h-12 w-full rounded-xl text-[15px] font-semibold"
+                        disabled={status === "loading" || status === "starting"}
+                        onClick={() =>
+                            status === "error" ? void session.refresh() : session.login()
+                        }
+                    >
+                        {status === "loading" || status === "starting" ? (
+                            <Spinner />
+                        ) : (
+                            <ChatGPTMark width={18} height={18} />
+                        )}
+                        {status === "loading"
+                            ? "Checking your session…"
+                            : status === "starting"
+                              ? "Opening OpenAI…"
+                              : status === "error"
+                                ? "Try again"
+                                : status === "expired"
+                                  ? "Sign in with ChatGPT again"
+                                  : "Continue with ChatGPT"}
+                    </PillButton>
+                    {status === "starting" ? (
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className={cn("self-center rounded-xl", FOCUS)}
+                            onClick={session.cancel}
+                        >
+                            Cancel
+                        </Button>
+                    ) : null}
+                    {session.error && status !== "starting" ? (
+                        <p
+                            role="alert"
+                            className="text-center text-xs leading-relaxed text-destructive"
+                        >
+                            {session.error}
+                        </p>
+                    ) : null}
+                    {status === "expired" ? (
+                        <p className="text-center text-xs text-amber-600 dark:text-amber-400">
+                            Your ChatGPT session ended. Sign in again to keep going.
+                        </p>
+                    ) : null}
+                    <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
+                        <LockKey size={12} className="mr-1 inline -translate-y-px" />
+                        You sign in on openai.com, so your password is never shared. Chats use your
+                        ChatGPT plan and are relayed through this server to OpenAI. Not an official
+                        OpenAI product.
+                    </p>
+                </>
+            )}
         </div>
     );
 }

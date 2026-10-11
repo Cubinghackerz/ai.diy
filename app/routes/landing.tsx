@@ -19,6 +19,7 @@ import { Providers } from "~/components/landing/Providers";
 import { SiteNav } from "~/components/landing/SiteNav";
 import { PROVIDER_INTEGRATION_COUNT } from "~/components/landing/constants";
 import { versionedAsset } from "~/lib/build";
+import { RETURNING_VISITOR_REDIRECT } from "~/lib/landing-redirect";
 import { PUBLIC_DOCUMENT_HEADERS } from "~/lib/http-headers";
 import { pageMeta } from "~/lib/seo";
 import {
@@ -189,6 +190,7 @@ function Band({ children }: { children: ReactNode }) {
 export default function LandingPage() {
     return (
         <LandingShell>
+            <script dangerouslySetInnerHTML={{ __html: RETURNING_VISITOR_REDIRECT }} />
             <SiteNav />
             <main id="main-content">
                 <Hero />

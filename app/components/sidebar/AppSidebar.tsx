@@ -24,6 +24,7 @@ import { GrokSubscriptionSettings } from "~/components/settings/GrokSubscription
 import { ComposioSettings } from "~/components/settings/ComposioSettings";
 import { KimiSubscriptionSettings } from "~/components/settings/KimiSubscriptionSettings";
 import { ToolAccessPicker } from "~/components/settings/ToolAccessPicker";
+import { OpenRouterConnectButton } from "~/components/setup/OpenRouterConnect";
 import { haptic, hapticConfirm, hapticSelect } from "~/lib/haptics";
 import {
     connectAuthorize,
@@ -293,7 +294,8 @@ const SETTINGS_GROUPS: { label: string; items: SettingsNavItem[] }[] = [
                 id: "appearance",
                 label: "Appearance",
                 icon: Sun,
-                description: "Choose light, dark, system, or OLED presentation.",
+                description:
+                    "Choose the simple or full interface, and light, dark, system, or OLED.",
             },
         ],
     },
@@ -1500,6 +1502,7 @@ function SettingsPanel({
 
                         {section === "appearance" && (
                             <div className="flex flex-col gap-3">
+                                <InterfaceModePicker />
                                 <p className="text-[11px] leading-relaxed text-muted-foreground">
                                     Choose the workspace surface. Onboarding always uses its own
                                     dark presentation.
@@ -1642,6 +1645,60 @@ function previewToolNames(
         ...(toolAccess.askUser ? ["ask_user"] : []),
         ...(toolAccess.compaction ? ["compaction_skill"] : []),
     ];
+}
+
+const INTERFACE_MODES = [
+    {
+        id: "simple",
+        label: "Simple",
+        description: "A clean input bar. Model, tools, and extras stay out of the way.",
+    },
+    {
+        id: "full",
+        label: "Full",
+        description: "Provider and model pickers, presets, and every control in the input bar.",
+    },
+] as const;
+
+/** Simple or full interface. Both read the same chats and settings. */
+function InterfaceModePicker() {
+    const { settings, updateSettings } = useSettings();
+    return (
+        <div role="radiogroup" aria-label="Interface" className="flex flex-col gap-2">
+            <h3 className="text-xs font-semibold">Interface</h3>
+            <div className="grid grid-cols-2 gap-2">
+                {INTERFACE_MODES.map((mode) => {
+                    const selected = settings.interfaceMode === mode.id;
+                    return (
+                        <button
+                            key={mode.id}
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            onClick={() => {
+                                hapticSelect();
+                                updateSettings({ interfaceMode: mode.id });
+                            }}
+                            className={cn(
+                                "flex min-w-0 flex-col gap-1 rounded-2xl border p-3 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50",
+                                selected
+                                    ? "border-primary/40 bg-primary/10 text-foreground"
+                                    : "border-border/70 text-muted-foreground hover:bg-accent hover:text-foreground",
+                            )}
+                        >
+                            <span className="flex items-center gap-1.5 text-sm font-medium">
+                                {mode.label}
+                                {selected ? (
+                                    <CheckCircle size={14} weight="fill" className="text-primary" />
+                                ) : null}
+                            </span>
+                            <span className="text-[11px] leading-relaxed">{mode.description}</span>
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    );
 }
 
 function CustomInstructionsSection() {
@@ -4433,6 +4490,15 @@ function KeysSection() {
                         }
                         className="h-9 rounded-xl font-mono text-xs"
                     />
+                    {active === "openrouter" ? (
+                        <div className="flex flex-col gap-1.5 pt-1">
+                            <OpenRouterConnectButton className="h-9 w-full rounded-xl text-xs" />
+                            <p className="text-[10px] leading-relaxed text-muted-foreground">
+                                Skip the copy and paste: approve ai.diy on openrouter.ai and the key
+                                comes back to this browser. You return here when it&apos;s done.
+                            </p>
+                        </div>
+                    ) : null}
                 </div>
             ) : null}
 

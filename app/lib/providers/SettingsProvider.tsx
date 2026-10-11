@@ -36,12 +36,14 @@ import {
     type ProviderId,
     type ProviderConfig,
     type ChatSettings,
+    type InterfaceMode,
     type McpServerConfig,
 } from "~/lib/types";
 import {
     SETTINGS_STORAGE_KEY,
     SETTINGS_ENC_KEY,
     SETTINGS_ENC_BACKUP_KEY,
+    SETTINGS_SETUP_DONE_KEY,
     SETTINGS_THEME_KEY,
     settingsCryptoAvailable,
     encryptSettingsPayload,
@@ -116,6 +118,11 @@ const SettingsActionsContext = createContext<SettingsActions | null>(null);
 /** Whether stored settings have finished loading. Changes once; never on a settings write. */
 export function useSettingsLoaded(): boolean {
     return useContext(SettingsLoadedContext);
+}
+
+/** The interface the user chose ("simple" for new users, "full" for existing ones). */
+export function useInterfaceMode(): InterfaceMode {
+    return useSettingsSelector((settings) => settings.interfaceMode);
 }
 
 /** The settings updaters. Their identities never change, so using them never re-renders. */
@@ -235,6 +242,13 @@ function mergeLoadedSettings(parsed: Partial<AppSettings>): AppSettings {
             tipDismissed: parsed.composio?.tipDismissed === true,
         },
         customSkills: parsed.customSkills ?? [],
+        // Someone who already finished setup keeps the interface they know.
+        interfaceMode:
+            parsed.interfaceMode === "simple" || parsed.interfaceMode === "full"
+                ? parsed.interfaceMode
+                : parsed.setupComplete
+                  ? "full"
+                  : "simple",
         agentModeEnabled: parsed.agentModeEnabled ?? false,
         webSearchEnabled: toolAccess.webSearch,
         calculatorEnabled: toolAccess.calculator,
@@ -371,6 +385,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         } catch (error) {
             // Storage unavailable — keep going in memory only.
             reportStorageFailure("settings-theme", "Settings", error);
+        }
+        try {
+            if (value.setupComplete) localStorage.setItem(SETTINGS_SETUP_DONE_KEY, "1");
+        } catch {
+            // Only a convenience for the landing page; never worth a warning.
         }
         if (recoveryRef.current) {
             reportStorageFailure("settings-recovery", "Settings", {
@@ -536,6 +555,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             localStorage.removeItem(SETTINGS_ENC_BACKUP_KEY);
             localStorage.removeItem(SETTINGS_STORAGE_KEY);
             localStorage.removeItem(SETTINGS_THEME_KEY);
+            localStorage.removeItem(SETTINGS_SETUP_DONE_KEY);
             for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
                 const key = sessionStorage.key(index);
                 if (key?.startsWith("aidiy.composio.catalog.")) {

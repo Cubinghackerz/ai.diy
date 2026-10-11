@@ -17,17 +17,15 @@
  *   never overwritten.
  */
 
-import {
-    deleteSettingsCryptoKey,
-    getSettingsCryptoKey,
-    saveSettingsCryptoKey,
-} from "~/lib/db";
+import { deleteSettingsCryptoKey, getSettingsCryptoKey, saveSettingsCryptoKey } from "~/lib/db";
 
 export const SETTINGS_STORAGE_KEY = "prismium-lite:settings";
 export const SETTINGS_ENC_KEY = "prismium-lite:settings.enc";
 export const SETTINGS_ENC_BACKUP_KEY = "prismium-lite:settings.enc.bak";
 /** Plaintext theme mirror so the pre-hydration script can apply dark mode. */
 export const SETTINGS_THEME_KEY = "prismium-lite:theme";
+/** Plaintext "this browser finished setup" flag, so the landing page can skip itself. No settings in it. */
+export const SETTINGS_SETUP_DONE_KEY = "prismium-lite:setup-complete";
 
 const PAYLOAD_VERSION = "v1";
 const IV_LENGTH = 12;
@@ -64,11 +62,10 @@ async function getOrCreateKey(): Promise<CryptoKey | null> {
     if (existing) return existing;
     try {
         // extractable so structured clone can persist it to IndexedDB.
-        const key = await crypto.subtle.generateKey(
-            { name: "AES-GCM", length: 256 },
-            true,
-            ["encrypt", "decrypt"],
-        );
+        const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, [
+            "encrypt",
+            "decrypt",
+        ]);
         const saved = await saveSettingsCryptoKey(key);
         return saved ? key : null;
     } catch {
@@ -77,20 +74,14 @@ async function getOrCreateKey(): Promise<CryptoKey | null> {
 }
 
 /** Encrypt a settings object into the "v1." payload string, or null on failure. */
-export async function encryptSettingsPayload(
-    value: unknown,
-): Promise<string | null> {
+export async function encryptSettingsPayload(value: unknown): Promise<string | null> {
     if (!settingsCryptoAvailable()) return null;
     const key = await getOrCreateKey();
     if (!key) return null;
     try {
         const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
         const data = new TextEncoder().encode(JSON.stringify(value));
-        const ciphertext = await crypto.subtle.encrypt(
-            { name: "AES-GCM", iv },
-            key,
-            data,
-        );
+        const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, data);
         return `${PAYLOAD_VERSION}.${bytesToBase64(iv)}.${bytesToBase64(
             new Uint8Array(ciphertext),
         )}`;
@@ -100,9 +91,7 @@ export async function encryptSettingsPayload(
 }
 
 /** Decrypt a payload string back to the original object, or null on any failure. */
-export async function decryptSettingsPayload(
-    payload: string,
-): Promise<unknown | null> {
+export async function decryptSettingsPayload(payload: string): Promise<unknown | null> {
     if (!settingsCryptoAvailable()) return null;
     const separator = payload.indexOf(".");
     if (separator <= 0) return null;
@@ -116,11 +105,7 @@ export async function decryptSettingsPayload(
     const key = await getSettingsCryptoKey();
     if (!key) return null;
     try {
-        const plaintext = await crypto.subtle.decrypt(
-            { name: "AES-GCM", iv },
-            key,
-            ciphertext,
-        );
+        const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
         return JSON.parse(new TextDecoder().decode(plaintext)) as unknown;
     } catch {
         return null;

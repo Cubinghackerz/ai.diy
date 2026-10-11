@@ -19,11 +19,13 @@ import { SectionBoundary } from "~/components/ui/SectionBoundary";
 import { PersistenceBanner } from "~/components/ui/StorageNotices";
 import { ArtifactLauncher } from "~/components/canvas/ArtifactLauncher";
 import { AppSidebar, SettingsDialog } from "~/components/sidebar/AppSidebar";
+import { OpenRouterReturn } from "~/components/setup/OpenRouterConnect";
 import { SetupGate, useNeedsSetup } from "~/components/setup/SetupGate";
 import { CanvasProvider } from "~/lib/canvas";
 import { haptic, hapticSelect } from "~/lib/haptics";
 import { WORKSPACE_DOCUMENT_HEADERS } from "~/lib/http-headers";
 import {
+    useInterfaceMode,
     useSettingsActions,
     useSettingsGetter,
     useSettingsLoaded,
@@ -32,7 +34,7 @@ import {
 import { useThreads } from "~/lib/hooks/useThreads";
 import { useProjects } from "~/lib/hooks/useProjects";
 import { setSidebarPanel } from "~/lib/sidebar-panel";
-import { Sidebar as SidebarIcon } from "@phosphor-icons/react";
+import { GearSix, Sidebar as SidebarIcon } from "@phosphor-icons/react";
 import { cn } from "~/lib/utils";
 import { reportStorageFailure } from "~/lib/storage-notices";
 
@@ -56,6 +58,7 @@ export default function Home() {
         <CanvasProvider>
             <HomeInner />
             <ArtifactLauncher />
+            <OpenRouterReturn />
         </CanvasProvider>
     );
 }
@@ -80,8 +83,12 @@ function HomeInner() {
     const { projects, createProject, updateProject, deleteProject } = useProjects();
     const needsSetup = useNeedsSetup();
 
+    const simple = useInterfaceMode() === "simple";
+
     // All local UI state must stay above any early returns (Rules of Hooks).
-    const [sidebarOpen, setSidebarOpen] = useState(true);
+    // The simple interface starts with the chat list tucked away; the toggle still opens it.
+    const [sidebarChoice, setSidebarChoice] = useState<boolean | null>(null);
+    const sidebarOpen = sidebarChoice ?? !simple;
     const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
     const handleTitleChange = useCallback(
         (threadId: string, title: string) => {
@@ -212,7 +219,7 @@ function HomeInner() {
                                 if (window.innerWidth < 768) {
                                     setMobileSidebarOpen(true);
                                 } else {
-                                    setSidebarOpen((v) => !v);
+                                    setSidebarChoice(!sidebarOpen);
                                 }
                             }}
                             className="flex size-8 items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground"
@@ -236,6 +243,20 @@ function HomeInner() {
                             className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground"
                         >
                             Exit preview
+                        </button>
+                    ) : null}
+                    {simple ? (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                haptic();
+                                openSettings();
+                            }}
+                            aria-label="Settings"
+                            title="Settings"
+                            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+                        >
+                            <GearSix size={18} />
                         </button>
                     ) : null}
                 </header>

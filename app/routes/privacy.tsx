@@ -5,17 +5,14 @@ import { pageMeta } from "~/lib/seo";
 import { SITE_URL } from "~/lib/site";
 
 const PAGE_TITLE = "Privacy - ai.diy";
-const PAGE_DESCRIPTION =
-    "How ai.diy handles browser data, provider keys, and hosted requests.";
+const PAGE_DESCRIPTION = "How ai.diy handles browser data, provider keys, and hosted requests.";
 
 export const headers: HeadersFunction = () => PUBLIC_DOCUMENT_HEADERS;
 
 export const meta: MetaFunction = () =>
     pageMeta({ title: PAGE_TITLE, description: PAGE_DESCRIPTION, url: `${SITE_URL}/privacy` });
 
-export const links: LinksFunction = () => [
-    { rel: "canonical", href: `${SITE_URL}/privacy` },
-];
+export const links: LinksFunction = () => [{ rel: "canonical", href: `${SITE_URL}/privacy` }];
 
 export default function PrivacyPage() {
     return (
@@ -26,10 +23,15 @@ export default function PrivacyPage() {
         >
             <LegalSection title="The short version">
                 <p>
-                    The default app has no user account, marketing list, or product analytics service. Chats, settings, provider keys, files, Canvas artifacts, memory, knowledge-base chunks, and usage events are stored in your browser.
+                    The default app has no user account, marketing list, or product analytics
+                    service. Chats, settings, provider keys, files, Canvas artifacts, memory,
+                    knowledge-base chunks, and usage events are stored in your browser.
                 </p>
                 <p>
-                    When you send a message, the selected provider key and request pass through the ai.diy server route to the provider you chose. A hosted instance operator can observe traffic in transit. The app does not require server-side LLM credentials and is not designed to persist provider keys.
+                    When you send a message, the selected provider key and request pass through the
+                    ai.diy server route to the provider you chose. A hosted instance operator can
+                    observe traffic in transit. The app does not require server-side LLM credentials
+                    and is not designed to persist provider keys.
                 </p>
             </LegalSection>
 
@@ -42,39 +44,73 @@ export default function PrivacyPage() {
                         AES-GCM; the envelope key is stored separately in IndexedDB. Fallback
                         environments may use plaintext storage.
                     </li>
-                    <li>Chats, attachments, threads, Canvas artifacts, memory, knowledge-base indexes, usage events, and preview sessions in browser storage.</li>
-                    <li>Optional cloud-backup credentials in the browser so the client can talk to your chosen storage endpoint.</li>
+                    <li>
+                        Chats, attachments, threads, Canvas artifacts, memory, knowledge-base
+                        indexes, usage events, and preview sessions in browser storage.
+                    </li>
+                    <li>
+                        Optional cloud-backup credentials in the browser so the client can talk to
+                        your chosen storage endpoint.
+                    </li>
                 </LegalList>
                 <p>
-                    You can delete local data through the browser or the relevant workspace settings. Export and backup tools are client-side features; review the destination before sending anything there.
+                    You can delete local data through the browser or the relevant workspace
+                    settings. Export and backup tools are client-side features; review the
+                    destination before sending anything there.
                 </p>
             </LegalSection>
 
             <LegalSection title="Provider and tool requests">
                 <p>
-                    Your selected LLM provider receives the prompts, files, and tool context needed for the request. Web search, URL fetch, remote MCP, cloud backup, and other connectors may send data to the service you enable. Those services have their own privacy policies and retention rules.
+                    Your selected LLM provider receives the prompts, files, and tool context needed
+                    for the request. Web search, URL fetch, remote MCP, cloud backup, and other
+                    connectors may send data to the service you enable. Those services have their
+                    own privacy policies and retention rules. If you use Continue with OpenRouter,
+                    your browser talks to openrouter.ai directly to approve ai.diy and receive your
+                    key; the ai.diy server is not involved in that exchange.
                 </p>
                 <p>
-                    Do not use a shared deployment for secrets or regulated data unless you have reviewed and trust its operator. For maximum control, self-host ai.diy and configure production logging, rate limits, and access controls yourself.
+                    Do not use a shared deployment for secrets or regulated data unless you have
+                    reviewed and trust its operator. For maximum control, self-host ai.diy and
+                    configure production logging, rate limits, and access controls yourself.
                 </p>
             </LegalSection>
 
             <LegalSection title="Optional integrations">
                 <LegalList>
-                    <li>The landing page reads public GitHub profile and repository statistics from the GitHub API. It does not request a GitHub token.</li>
-                    <li>Login with ChatGPT is an experimental beta integration. It uses a session cookie and third-party community SDK; enable it only after reviewing its consent flow.</li>
-                    <li>Grok subscription is an experimental browser-login integration. OAuth tokens are kept in an encrypted server session and sent only to the Grok Build chat proxy for the request you make.</li>
-                    <li>Hosting providers may process normal operational data such as IP addresses, request timing, and server logs according to their policies.</li>
+                    <li>
+                        The landing page reads public GitHub profile and repository statistics from
+                        the GitHub API. It does not request a GitHub token.
+                    </li>
+                    <li>
+                        Login with ChatGPT is an experimental beta integration. It uses a session
+                        cookie and third-party community SDK; enable it only after reviewing its
+                        consent flow.
+                    </li>
+                    <li>
+                        Grok subscription is an experimental browser-login integration. OAuth tokens
+                        are kept in an encrypted server session and sent only to the Grok Build chat
+                        proxy for the request you make.
+                    </li>
+                    <li>
+                        Hosting providers may process normal operational data such as IP addresses,
+                        request timing, and server logs according to their policies.
+                    </li>
                 </LegalList>
             </LegalSection>
 
             <LegalSection title="Contact">
                 <p>
                     Questions or corrections can be sent to{" "}
-                    <a href="mailto:support@tryaidiy.com" className="text-zinc-200 underline decoration-white/20 underline-offset-4 hover:decoration-white/60">
+                    <a
+                        href="mailto:support@tryaidiy.com"
+                        className="text-zinc-200 underline decoration-white/20 underline-offset-4 hover:decoration-white/60"
+                    >
                         support@tryaidiy.com
                     </a>
-                    , or raised through the project repository or the official X account linked in the footer. ai.diy is open source, so you can also inspect the implementation and deploy it on infrastructure you control.
+                    , or raised through the project repository or the official X account linked in
+                    the footer. ai.diy is open source, so you can also inspect the implementation
+                    and deploy it on infrastructure you control.
                 </p>
             </LegalSection>
         </LegalPage>

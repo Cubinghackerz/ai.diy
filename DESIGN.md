@@ -73,3 +73,12 @@ Persuade. Understand BYOK local-first ownership, then open `/workspace` or deplo
 - THESIS: Say what it is, show it working, get out of the way
 - FORM: Vercel-style flat bar, full-width hairline sections, one column
 - SHAPE: 6px radii on landing surfaces; the workspace chat surface keeps its soft radii
+
+## Simple interface
+
+The workspace has two interfaces (Settings → Appearance; `settings.interfaceMode`). **Full** is the original and stays as it was. **Simple** is for people who want to type and get an answer:
+
+- First run is one screen: a white "Continue with ChatGPT" button marked Recommended, a quiet "Continue with OpenRouter" outline button, and one text link for an API key. No steps, no dialogs.
+- The input bar is a single rounded pill: attach on the left, "Ask anything", send on the right. Below it, small and muted: the model name (opens the picker) and "Full view".
+- Absent on purpose: provider picker, presets, voice input, token chips, the chat list (collapsed until the toggle is used), and any new decoration. Settings stays one gear click away.
+- Same tokens as the rest of the workspace: squared surfaces stay squared, the chat surface keeps `.legacy-round`, and the pill uses `--composer-bg`.

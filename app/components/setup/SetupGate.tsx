@@ -7,7 +7,8 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { SearchableModelSelect } from "~/components/ui/ModelPicker";
 import { ProviderPicker } from "~/components/ui/ProviderPicker";
-import { ChatGPTConnect } from "~/components/settings/ChatGPTConnect";
+import { ChatGPTConnect, ChatGPTHeroConnect } from "~/components/settings/ChatGPTConnect";
+import { OpenRouterConnectButton } from "~/components/setup/OpenRouterConnect";
 import { useChatGPTSession, useOnChatGPTConnected } from "~/lib/providers/ChatGPTSessionProvider";
 import {
     GrokSubscriptionSettings,
@@ -26,7 +27,14 @@ import {
 } from "~/lib/providers/SettingsProvider";
 import { isLocalProvider, isProviderReady } from "~/lib/setup";
 import { DEFAULT_MODELS, PROVIDER_DEFAULTS, type ModelInfo, type ProviderId } from "~/lib/types";
-import { ArrowRight, CheckCircle, Key, ShieldCheck, XCircle } from "@phosphor-icons/react";
+import {
+    ArrowLeft,
+    ArrowRight,
+    CheckCircle,
+    Key,
+    ShieldCheck,
+    XCircle,
+} from "@phosphor-icons/react";
 import { LoaderIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { setThemeOverride } from "~/lib/theme-override";
@@ -43,7 +51,7 @@ const CREDENTIAL_HINTS: Partial<Record<ProviderId, string>> = {
 export function SetupGate() {
     const { settings, loaded, updateProvider, updateChat, updateSettings, updateToolAccess } =
         useSettings();
-    const { isAuthenticated } = useChatGPTSession();
+    const { isAuthenticated, status: chatgptStatus } = useChatGPTSession();
     const { session: grokSession } = useGrokBuildSession();
     const { session: kimiSession } = useKimiSession();
 
@@ -61,6 +69,10 @@ export function SetupGate() {
     const [discovering, setDiscovering] = useState(false);
     const [modelsNote, setModelsNote] = useState<string | null>(null);
     const [discoverTick, setDiscoverTick] = useState(0);
+    // Simple interface: one sign-in screen. "Use an API key" opens the full steps below.
+    const [showAllOptions, setShowAllOptions] = useState(false);
+    const simple = settings.interfaceMode === "simple";
+    const simpleFlow = simple && !showAllOptions;
     const chatRef = useRef(settings.chat);
     chatRef.current = settings.chat;
 
@@ -280,6 +292,20 @@ export function SetupGate() {
         updateSettings,
     ]);
 
+    // The simple screen has no model or tools step: once the account's models are known, go.
+    useEffect(() => {
+        if (!simpleFlow || provider !== "chatgpt" || !isAuthenticated) return;
+        if (settings.setupComplete || !canContinue) return;
+        handleContinue();
+    }, [
+        simpleFlow,
+        provider,
+        isAuthenticated,
+        settings.setupComplete,
+        canContinue,
+        handleContinue,
+    ]);
+
     const handleChatGPTAuthenticated = useCallback(() => {
         // The real model is chosen from the account's live catalog once it loads.
         const current = chatRef.current;
@@ -325,6 +351,72 @@ export function SetupGate() {
         );
     }
 
+    if (simpleFlow) {
+        const signingIn = chatgptStatus === "pending" || isAuthenticated;
+        return (
+            <div
+                data-setup-gate
+                data-setup-variant="simple"
+                className="relative flex h-dvh min-h-0 w-screen max-w-[100vw] shrink-0 items-center justify-center overflow-x-hidden overflow-y-auto overscroll-contain bg-[#070708] px-4 py-8 text-zinc-100"
+            >
+                <main className="relative z-10 flex w-full max-w-sm flex-col gap-7 animate-slide-up">
+                    <header className="flex flex-col items-center gap-3 text-center">
+                        <img
+                            src="/ai-diy.png"
+                            alt="ai.diy"
+                            className="size-12 rounded-[3px] object-cover ring-1 ring-white/15"
+                        />
+                        <h1 className="text-2xl font-semibold tracking-[-0.03em] text-white">
+                            Welcome to ai.diy
+                        </h1>
+                        <p className="text-sm leading-relaxed text-zinc-400">
+                            Chat with the AI you already pay for. Your chats stay in this browser.
+                        </p>
+                    </header>
+
+                    <section aria-label="Sign in" className="flex flex-col gap-3">
+                        <span className="inline-flex items-center gap-1.5 self-center rounded-[2px] border border-emerald-400/25 bg-emerald-400/10 px-2 py-0.5 font-mono text-[10px] text-emerald-300">
+                            <ShieldCheck weight="fill" className="size-3" />
+                            Recommended · no API key to copy
+                        </span>
+                        <ChatGPTHeroConnect />
+                    </section>
+
+                    {!signingIn ? (
+                        <>
+                            <div
+                                aria-hidden
+                                className="flex items-center gap-3 text-[11px] text-zinc-600"
+                            >
+                                <span className="h-px flex-1 bg-white/10" />
+                                or
+                                <span className="h-px flex-1 bg-white/10" />
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                <OpenRouterConnectButton className="h-11 w-full rounded-xl border-white/12 bg-white/[0.04] text-zinc-100 hover:border-white/25 hover:bg-white/[0.08] hover:text-white" />
+                                <p className="text-center text-[11px] leading-relaxed text-zinc-500">
+                                    OpenRouter: one sign-in, pay-as-you-go credits, hundreds of
+                                    models. The key goes straight to this browser.
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAllOptions(true)}
+                                    className="mt-1 self-center rounded-md px-2 py-1 text-xs text-zinc-400 underline underline-offset-4 outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-white/40"
+                                >
+                                    Use an API key or another provider
+                                </button>
+                            </div>
+                        </>
+                    ) : null}
+
+                    <p className="text-center font-mono text-[10px] tracking-wide text-zinc-600">
+                        No server-side LLM credentials · MIT open source
+                    </p>
+                </main>
+            </div>
+        );
+    }
+
     return (
         <div
             data-setup-gate
@@ -344,6 +436,16 @@ export function SetupGate() {
             />
 
             <div className="relative z-10 flex w-full max-w-xl flex-col gap-7 py-2 animate-slide-up sm:gap-8">
+                {simple ? (
+                    <button
+                        type="button"
+                        onClick={() => setShowAllOptions(false)}
+                        className="inline-flex items-center gap-1.5 self-start rounded-md px-1 py-0.5 text-xs text-zinc-400 outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-white/40"
+                    >
+                        <ArrowLeft size={12} weight="bold" />
+                        Back to simple sign-in
+                    </button>
+                ) : null}
                 <header className="flex flex-col items-center gap-4 text-center">
                     <div className="relative">
                         <div

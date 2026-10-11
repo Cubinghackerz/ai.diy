@@ -176,12 +176,19 @@ export interface UsageLimitsConfig {
 
 // ─── Settings Types ──────────────────────────────────────────────
 
+export type InterfaceMode = "simple" | "full";
+
 export interface AppSettings {
     providers: Record<ProviderId, ProviderConfig>;
     chat: ChatSettings;
     theme: "light" | "dark" | "system" | "oled";
     /** Set true after the user finishes first-run key / model setup. */
     setupComplete: boolean;
+    /**
+     * Which interface to show. "simple" is a clean input bar and one-step sign-in;
+     * "full" is the complete workspace. Settings saved before this existed stay "full".
+     */
+    interfaceMode: InterfaceMode;
     encryptionEnabled: boolean;
     encryptionPassphrase: string | null;
     // Tool settings
@@ -576,6 +583,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     },
     theme: "system",
     setupComplete: false,
+    interfaceMode: "simple",
     encryptionEnabled: false,
     encryptionPassphrase: null,
     webSearchEnabled: true,
