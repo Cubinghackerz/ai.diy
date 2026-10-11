@@ -60,17 +60,54 @@ const READ_ACTIONS = new Set([
     "retrieve",
 ]);
 
-export function isMutatingComposioTool(name: string): boolean {
-    const n = name.toLowerCase();
-    if (!n.startsWith("mcp_composio_")) return false;
-    const tokens = n
-        .slice("mcp_composio_".length)
+const COMPOSIO_PREFIX = "mcp_composio_";
+/** Composio's session meta-tools that only look things up or hand back a sign-in link. */
+const READ_ONLY_META_TOOLS = new Set([
+    "composio_search_tools",
+    "composio_get_tool_schemas",
+    "composio_manage_connections",
+]);
+/** The meta-tool that runs the actual app actions; its risk depends on the actions inside. */
+const EXECUTE_META_TOOL = "composio_multi_execute_tool";
+
+function actionTokens(text: string): string[] {
+    return text
+        .toLowerCase()
         .split(/[^a-z0-9]+/)
         .filter(Boolean);
-    if (tokens.some((token) => WRITE_ACTIONS.has(token))) return true;
-    if (tokens.some((token) => READ_ACTIONS.has(token))) return false;
+}
+
+function classifyActionTokens(tokens: string[]): "read" | "write" {
+    if (tokens.some((token) => WRITE_ACTIONS.has(token))) return "write";
+    if (tokens.some((token) => READ_ACTIONS.has(token))) return "read";
     // Unknown and mixed operations fail closed.
-    return true;
+    return "write";
+}
+
+export function isMutatingComposioTool(name: string): boolean {
+    const n = name.toLowerCase();
+    if (!n.startsWith(COMPOSIO_PREFIX)) return false;
+    const suffix = n.slice(COMPOSIO_PREFIX.length);
+    if (READ_ONLY_META_TOOLS.has(suffix)) return false;
+    return classifyActionTokens(actionTokens(suffix)) === "write";
+}
+
+/**
+ * Whether one concrete call changes data. Composio runs every app action
+ * through `COMPOSIO_MULTI_EXECUTE_TOOL`, so the verdict comes from the action
+ * slugs in the arguments (DISCORD_LIST_MY_GUILDS reads, DISCORD_SEND_MESSAGE
+ * writes) instead of treating every execution as a write. Anything the guard
+ * cannot read as plainly read-only still counts as a write.
+ */
+export function isMutatingComposioCall(name: string, args: unknown): boolean {
+    if (!isMutatingComposioTool(name)) return false;
+    if (name.toLowerCase() !== `${COMPOSIO_PREFIX}${EXECUTE_META_TOOL}`) return true;
+    const tools = (args as { tools?: unknown } | null | undefined)?.tools;
+    if (!Array.isArray(tools) || tools.length === 0) return true;
+    return tools.some((entry) => {
+        const slug = (entry as { tool_slug?: unknown } | null | undefined)?.tool_slug;
+        return typeof slug !== "string" || classifyActionTokens(actionTokens(slug)) === "write";
+    });
 }
 
 function stringifyOutput(value: unknown): string {
@@ -135,8 +172,7 @@ function latestComposioApproval(messages: UIMessage[] | undefined): ComposioAppr
             /COMPOSIO_CONFIRMATION\s+tool=([a-zA-Z0-9_-]+)\s+fingerprint=([a-f0-9]{8})/,
         );
         const partIsNamedTool = (toolName: string) =>
-            type === `tool-${toolName}` ||
-            (type === "dynamic-tool" && part.toolName === toolName);
+            type === `tool-${toolName}` || (type === "dynamic-tool" && part.toolName === toolName);
         if (match && partIsNamedTool(match[1]!)) {
             marker = { toolName: match[1]!, fingerprint: match[2]! };
             continue;
@@ -177,7 +213,7 @@ function confirmationOutput(toolName: string, fingerprint: string): string {
         `COMPOSIO_CONFIRMATION tool=${toolName} fingerprint=${fingerprint}`,
         `This action modifies data (${action}).`,
         "Call ask_user now with:",
-        '- question: a one-line summary of the exact action',
+        "- question: a one-line summary of the exact action",
         '- questionType: "single"',
         '- options: ["Yes", "No"]',
         "Do not invent a result. After the user answers, re-call this same tool with the same arguments.",
@@ -202,7 +238,7 @@ function markApprovalConsumed(
         return {
             ...(value as object),
             content: [
-                ...((value as { content: Array<{ type: "text"; text: string }> }).content),
+                ...(value as { content: Array<{ type: "text"; text: string }> }).content,
                 { type: "text", text: marker },
             ],
         };
@@ -213,6 +249,39 @@ function markApprovalConsumed(
             { type: "text", text: marker },
         ],
     };
+}
+
+const WRITES_OFF_MESSAGE =
+    "Write actions are turned off, so this was not run. Only read-only app actions are available. Tell the user to turn on Ask User or auto-approve writes in Settings → Apps if they want this done.";
+
+/**
+ * Without a way to ask the user (Ask User off, auto-approve off), write actions
+ * cannot run. Tools that are writes by nature are removed. The execute
+ * meta-tool stays, because most of what people ask for through it (listing,
+ * reading, searching) is read-only: it runs those and declines the writes.
+ */
+export function restrictComposioToolsToReads(tools: ToolSet): ToolSet {
+    const next: ToolSet = {};
+    for (const [name, tool] of Object.entries(tools)) {
+        if (!isMutatingComposioTool(name)) {
+            next[name] = tool;
+            continue;
+        }
+        const original = tool as ToolSet[string] & {
+            execute?: (...args: unknown[]) => unknown;
+        };
+        if (name.toLowerCase() !== `${COMPOSIO_PREFIX}${EXECUTE_META_TOOL}`) continue;
+        if (typeof original.execute !== "function") continue;
+        const execute = original.execute.bind(original);
+        next[name] = {
+            ...original,
+            execute: async (...callArgs: unknown[]) =>
+                isMutatingComposioCall(name, callArgs[0])
+                    ? mcpTextResult(WRITES_OFF_MESSAGE)
+                    : execute(...callArgs),
+        } as ToolSet[string];
+    }
+    return next;
 }
 
 export function wrapComposioToolsForConfirmation(
@@ -233,7 +302,9 @@ export function wrapComposioToolsForConfirmation(
         next[name] = {
             ...original,
             execute: async (...callArgs: unknown[]) => {
-                if (autoApproveWrites) return execute(...callArgs);
+                if (autoApproveWrites || !isMutatingComposioCall(name, callArgs[0])) {
+                    return execute(...callArgs);
+                }
                 const fingerprint = composioCallFingerprint(name, callArgs[0]);
                 const matchesApproval =
                     !approvalConsumed &&
@@ -241,17 +312,11 @@ export function wrapComposioToolsForConfirmation(
                     approval.fingerprint === fingerprint;
                 if (matchesApproval && approval.decision === "deny") {
                     approvalConsumed = true;
-                    return mcpTextResult(
-                        "Canceled by the user. Do not retry this write.",
-                    );
+                    return mcpTextResult("Canceled by the user. Do not retry this write.");
                 }
                 if (matchesApproval && approval.decision === "allow") {
                     approvalConsumed = true;
-                    return markApprovalConsumed(
-                        await execute(...callArgs),
-                        name,
-                        fingerprint,
-                    );
+                    return markApprovalConsumed(await execute(...callArgs), name, fingerprint);
                 }
                 return mcpTextResult(confirmationOutput(name, fingerprint));
             },

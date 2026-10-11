@@ -14,7 +14,12 @@ import {
   isGenerationStopRequested,
 } from "~/components/assistant-ui/ChatSessionContext";
 import { ChatThreadSync } from "~/components/assistant-ui/ChatThreadSync";
-import { useSettingsGetter, useSettingsSelector } from "~/lib/providers/SettingsProvider";
+import {
+  useSettingsActions,
+  useSettingsGetter,
+  useSettingsSelector,
+} from "~/lib/providers/SettingsProvider";
+import { markComposioNeedsResync, resyncComposioSession } from "~/lib/composio-session.client";
 import { createAttachmentAdapter } from "~/lib/attachments";
 import { getAttachmentPolicy } from "~/lib/attachment-policy";
 import { getModelModalities } from "~/lib/model-modalities";
@@ -101,6 +106,9 @@ export function AssistantRuntimeProvider({
   // `useSettings()`: that context re-rendered the whole chat runtime on every
   // settings write, including each keystroke in a settings text field.
   const getSettings = useSettingsGetter();
+  const { updateSettings } = useSettingsActions();
+  const updateSettingsRef = useRef(updateSettings);
+  updateSettingsRef.current = updateSettings;
   const settingsRef = useMemo(
     () => ({
       get current() {
@@ -146,7 +154,11 @@ export function AssistantRuntimeProvider({
             ...init,
             credentials: "include",
           });
-          if (res.ok) return res;
+          if (res.ok) {
+            // The server could not reach the connected apps: re-check the saved session next time.
+            if (res.headers.get("X-Aidiy-Apps") === "unavailable") markComposioNeedsResync();
+            return res;
+          }
           const raw = await res.text();
           const creditExhausted = detectProviderCreditError(raw, res.status);
           if (creditExhausted && payload) {
@@ -188,6 +200,14 @@ export function AssistantRuntimeProvider({
                 : apiKey || localProviderKey(provider);
 
           await assertClientUsageAllowed(s, provider, resolvedApiKey);
+
+          // Never let an expired Composio session silently drop the user's apps.
+          let composio = s.composio;
+          const resynced = await resyncComposioSession(composio);
+          if (resynced) {
+            composio = resynced;
+            updateSettingsRef.current({ composio: resynced });
+          }
 
           const access = normalizeToolAccess(s.toolAccess, {
             webSearch: s.webSearchEnabled !== false,
@@ -269,9 +289,9 @@ export function AssistantRuntimeProvider({
                 connectors: access.connectors ? s.connectors : [],
                 composioEnabled:
                   access.composio &&
-                  s.composio?.enabled === true &&
-                  Boolean(s.composio.apiKey && s.composio.mcpUrl),
-                composioAutoApproveWrites: s.composio?.autoApproveWrites === true,
+                  composio?.enabled === true &&
+                  Boolean(composio.apiKey && composio.mcpUrl),
+                composioAutoApproveWrites: composio?.autoApproveWrites === true,
                 memoryAvailable,
                 knowledgeEnabled,
                 subagentsEnabled:
@@ -281,14 +301,14 @@ export function AssistantRuntimeProvider({
               },
               mcpServers: [
                 ...mcpServersForRequest(s.mcpServers, access, s.webSearchEnabled),
-                ...(access.composio && s.composio?.enabled && s.composio.apiKey && s.composio.mcpUrl
+                ...(access.composio && composio?.enabled && composio.apiKey && composio.mcpUrl
                   ? [
                       {
                         id: "composio",
                         name: "Composio",
                         kind: "http" as const,
-                        url: s.composio.mcpUrl,
-                        headers: s.composio.mcpHeaders,
+                        url: composio.mcpUrl,
+                        headers: composio.mcpHeaders,
                         enabled: true,
                       },
                     ]

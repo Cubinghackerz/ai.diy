@@ -137,7 +137,7 @@ Two interfaces, switchable in Settings → Appearance: **Simple** (one sign-in s
 
 ### Tools
 
-Web search (Parallel + Firecrawl keyless MCP, or BYOK connectors; no built-in `web_search` tool), URL fetch, calculator, browser Python, in-browser Linux (`linux_run_command` / `linux_read_file`), files/artifacts, research and design skills, local time, memory, knowledge search, ask user, remote MCP (Firecrawl + Parallel bundled keyless), subagents.
+Web search (Parallel + Firecrawl keyless MCP, or BYOK connectors; no built-in `web_search` tool), URL fetch, calculator plus numeric calculus (`math_analyze`) and function graphing (`graph_function`), browser Python (sympy, numpy, matplotlib), in-browser Linux (`linux_run_command` / `linux_read_file`), files/artifacts, research and design skills, local time, memory, knowledge search, ask user, remote MCP (Firecrawl + Parallel bundled keyless), subagents.
 
 Python saves generated files in the working directory; the browser captures up to four files (≤2 MiB each) into Canvas and persists them with the chat when under the client size cap.
 

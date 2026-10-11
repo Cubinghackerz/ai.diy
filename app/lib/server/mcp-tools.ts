@@ -106,9 +106,10 @@ export async function loadMcpTools(
         | "maxSnippetChars"
     >,
     signal?: AbortSignal,
-): Promise<{ tools: ToolSet; clients: McpClientHandle[] }> {
+): Promise<{ tools: ToolSet; clients: McpClientHandle[]; failed: McpLoadFailure[] }> {
     const tools: ToolSet = {};
     const clients: McpClientHandle[] = [];
+    const failed: McpLoadFailure[] = [];
     const enabled = (servers ?? []).filter((s) => s.enabled !== false);
 
     // Connect to every server at once (two bundled search servers would otherwise
@@ -116,34 +117,52 @@ export async function loadMcpTools(
     const connected = await Promise.all(
         enabled.map(async (server) => {
             const bundled = isBundledSearchMcpServer(server);
+            const kind: McpLoadFailure = bundled
+                ? "search"
+                : isComposioMcpServer(server)
+                  ? "composio"
+                  : "mcp";
             const failedAt = bundled
                 ? bundledSearchFailures.get(bundledSearchKey(server))
                 : undefined;
             if (failedAt !== undefined && Date.now() - failedAt < BUNDLED_SEARCH_RETRY_AFTER_MS) {
+                failed.push(kind);
                 return null;
             }
-            let client: (McpClientHandle & { tools: () => Promise<ToolSet> }) | null = null;
-            try {
-                const timeoutMs = bundled
-                    ? BUNDLED_SEARCH_CONNECT_TIMEOUT_MS
-                    : MCP_CONNECT_TIMEOUT_MS;
-                client = await connectMcpServer(server, signal, timeoutMs);
-                if (!client) return null;
-                const serverTools = await listToolsWithin(client, timeoutMs);
-                if (bundled) bundledSearchFailures.delete(bundledSearchKey(server));
-                return { server, client, serverTools };
-            } catch (err) {
-                if (client) await client.close().catch(() => undefined);
-                // A cancelled request says nothing about the server's health.
-                if (bundled && !signal?.aborted) {
-                    bundledSearchFailures.set(bundledSearchKey(server), Date.now());
+            const timeoutMs = bundled ? BUNDLED_SEARCH_CONNECT_TIMEOUT_MS : MCP_CONNECT_TIMEOUT_MS;
+            // The user's own connected apps are worth a second try: a dropped
+            // connection or a cold start on the first attempt should not silently
+            // remove their tools for the whole message. Search servers have the
+            // circuit breaker instead, so a dead one never costs a retry.
+            const attempts = kind === "composio" ? CONNECT_ATTEMPTS_PERSONAL : 1;
+            for (let attempt = 1; attempt <= attempts; attempt++) {
+                let client: (McpClientHandle & { tools: () => Promise<ToolSet> }) | null = null;
+                try {
+                    client = await connectMcpServer(server, signal, timeoutMs);
+                    if (!client) return null;
+                    const serverTools = await listToolsWithin(client, timeoutMs);
+                    if (bundled) bundledSearchFailures.delete(bundledSearchKey(server));
+                    return { server, client, serverTools };
+                } catch (err) {
+                    if (client) await client.close().catch(() => undefined);
+                    const cancelled = signal?.aborted === true;
+                    // A cancelled request says nothing about the server's health.
+                    if (bundled && !cancelled) {
+                        bundledSearchFailures.set(bundledSearchKey(server), Date.now());
+                    }
+                    const final = attempt === attempts || cancelled || !isRetryableMcpError(err);
+                    console.warn(
+                        `[mcp] Failed to initialize ${kind === "composio" ? "Composio" : "an MCP server"} (attempt ${attempt}/${attempts}):`,
+                        err instanceof Error ? err.name : "UnknownError",
+                    );
+                    if (final) {
+                        if (!cancelled) failed.push(kind);
+                        return null;
+                    }
+                    await sleep(CONNECT_RETRY_DELAY_MS * attempt, signal);
                 }
-                console.warn(
-                    `[mcp] Failed to initialize ${isComposioMcpServer(server) ? "Composio" : "an MCP server"}:`,
-                    err instanceof Error ? err.name : "UnknownError",
-                );
-                return null;
             }
+            return null;
         }),
     );
 
@@ -165,7 +184,45 @@ export async function loadMcpTools(
         }
     }
 
-    return { tools, clients };
+    return { tools, clients, failed };
+}
+
+/** Which kind of MCP server failed to load for a request. */
+export type McpLoadFailure = "composio" | "search" | "mcp";
+
+const CONNECT_ATTEMPTS_PERSONAL = 2;
+const CONNECT_RETRY_DELAY_MS = 600;
+
+/**
+ * Configuration problems (a blocked private address, a disabled transport,
+ * rejected credentials) will not fix themselves on a retry; timeouts, resets
+ * and 5xx responses might.
+ */
+function isRetryableMcpError(err: unknown): boolean {
+    const text = `${err instanceof Error ? `${err.name} ${err.message}` : String(err)}`;
+    if (
+        /\b(401|403|404)\b|unauthor|forbidden|not found|disabled|private|blocked|invalid url/i.test(
+            text,
+        )
+    ) {
+        return false;
+    }
+    return true;
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve) => {
+        if (signal?.aborted) return resolve();
+        const timer = setTimeout(resolve, ms);
+        signal?.addEventListener(
+            "abort",
+            () => {
+                clearTimeout(timer);
+                resolve();
+            },
+            { once: true },
+        );
+    });
 }
 
 export async function closeMcpClients(clients: McpClientHandle[]) {

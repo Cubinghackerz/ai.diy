@@ -189,6 +189,77 @@ test.describe("simple interface", () => {
     });
 });
 
+test.describe("math graphs", () => {
+    for (const mode of ["simple", "full"] as const) {
+        test(`a graph is drawn in the message in the ${mode} interface`, async ({ page }) => {
+            await seed(page, { ...MOCK_PROVIDER_SETTINGS, interfaceMode: mode });
+            await page.route(/https:\/\//, (route) => route.abort());
+            await page.goto("/workspace");
+            await expect(input(page)).toBeVisible({ timeout: 30_000 });
+
+            await input(page).fill("mock-graph y = x^2 - 4");
+            await input(page).press("Enter");
+
+            const figure = page.locator('figure[data-slot="inline-graph"]');
+            await expect(figure.getByRole("img", { name: "Mock parabola" })).toBeVisible({
+                timeout: 30_000,
+            });
+            // The picture, not the tool's raw output, and not folded behind a disclosure.
+            await expect(page.locator("body")).not.toContainText("__aidiy_graph");
+            await expect(page.getByText(/Tool calls/)).toHaveCount(0);
+            await expect(
+                page.getByText("Mock reply: your message arrived and streamed successfully.", {
+                    exact: true,
+                }),
+            ).toBeVisible();
+            // It is a real image of the function: it decoded and has size.
+            const size = await figure.getByRole("img").evaluate((img: HTMLImageElement) => ({
+                w: img.naturalWidth,
+                h: img.naturalHeight,
+            }));
+            expect(size.w).toBeGreaterThan(100);
+            expect(size.h).toBeGreaterThan(100);
+        });
+    }
+});
+
+test.describe("tool calls", () => {
+    test("the simple interface shows one plain line, the full interface keeps the raw call", async ({
+        browser,
+    }) => {
+        const run = async (mode: "simple" | "full") => {
+            const context = await browser.newContext();
+            const page = await context.newPage();
+            await seed(page, { ...MOCK_PROVIDER_SETTINGS, interfaceMode: mode });
+            await page.route(/https:\/\//, (route) => route.abort());
+            await page.goto("/workspace");
+            await expect(input(page)).toBeVisible({ timeout: 30_000 });
+            await input(page).fill("mock-calc what is 2x + 1 at x = 4");
+            await input(page).press("Enter");
+            await expect(
+                page.getByText("Mock reply: your message arrived and streamed successfully.", {
+                    exact: true,
+                }),
+            ).toBeVisible({ timeout: 30_000 });
+            return { page, context };
+        };
+
+        const simple = await run("simple");
+        await expect(simple.page.getByText("Calculated", { exact: true })).toBeVisible();
+        await expect(simple.page.getByText(/Tool calls/)).toHaveCount(0);
+        // Nothing technical until someone asks for it.
+        await expect(simple.page.locator("body")).not.toContainText("expression");
+        await simple.page.getByText("Calculated", { exact: true }).click();
+        await simple.page.getByRole("button", { name: "Details" }).click();
+        await expect(simple.page.getByText("Result: 9", { exact: true })).toBeVisible();
+        await simple.context.close();
+
+        const full = await run("full");
+        await expect(full.page.getByText(/Tool calls/)).toBeVisible();
+        await full.context.close();
+    });
+});
+
 test("people who set ai.diy up before keep the full interface", async ({ page }) => {
     // Stored settings from before the simple interface existed: no interfaceMode at all.
     await seed(page, MOCK_PROVIDER_SETTINGS);

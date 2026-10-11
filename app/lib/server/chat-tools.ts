@@ -29,6 +29,8 @@ import {
 } from "~/lib/server/connect";
 import { assertConfiguredHttpUrlResolved } from "~/lib/server/provider-url";
 import { formatMathResult } from "~/lib/math-evaluator";
+import { analyzeMath } from "~/lib/math-analysis";
+import { buildGraph, GRAPH_MARKER, type GraphToolResult } from "~/lib/math-graph";
 import { compactMcpToolResult } from "~/lib/server/mcp-tools";
 import { formatUrlDoctorReport, runUrlDoctor } from "~/lib/server/url-doctor";
 import { fetchYoutubeTranscript } from "~/lib/server/youtube";
@@ -1471,13 +1473,87 @@ export async function buildChatTools(
     if (enableCalc) {
         tools.calculator = tool({
             description:
-                "Evaluate mathematical expressions accurately (sqrt, sin, cos, pow, etc.).",
+                'Evaluate a math expression exactly as written. Supports + - * / % ^ and !, implicit products (2x, 3(x+1)), constants pi/e/tau/phi, trig (sin cos tan sec csc cot, asin acos atan atan2, sinh cosh tanh, degree versions sind cosd tand, radians/degrees), exponentials and logs (exp ln log log2 log10 logb), roots (sqrt cbrt root(x,n)), rounding, abs sign min max hypot mod gcd lcm, factorial/gamma, combinations ncr(n,k) and permutations npr(n,k), and statistics (sum mean median stdev variance). Pass `variables` to bind names, e.g. expression "2*x^2-3" with variables {"x": 4}.',
             inputSchema: z.object({
                 expression: z.string(),
+                variables: z.record(z.string(), z.number()).optional(),
             }),
-            execute: async ({ expression }) => formatMathResult(expression),
+            execute: async ({ expression, variables }) => formatMathResult(expression, variables),
         });
         if (exposeLegacyAlias("calculate")) tools.calculate = tools.calculator;
+
+        tools.math_analyze = tool({
+            description:
+                'Numeric calculus and algebra on a one-variable function, instantly and without Python: derivative at a point (order 1 or 2), definite integral, zeros (roots) on an interval, local minima/maxima, limit at a point, series sum, or a table of values. Use "x" as the variable ("n" for sum). Results are numerical approximations; for exact symbolic answers (antiderivatives, simplification, solving for a variable, matrices) use sympy in run_python.',
+            inputSchema: z.object({
+                operation: z.enum([
+                    "derivative",
+                    "integral",
+                    "roots",
+                    "extrema",
+                    "limit",
+                    "sum",
+                    "table",
+                ]),
+                expression: z.string().describe("The function, e.g. x^3 - 2*x + 1 or sin(x)/x"),
+                variable: z.string().optional(),
+                at: z.number().optional().describe("Point for derivative or limit"),
+                order: z.number().optional().describe("Derivative order, 1 or 2"),
+                from: z.number().optional().describe("Start of the interval / first term"),
+                to: z.number().optional().describe("End of the interval / last term"),
+                step: z.number().optional().describe("Table step"),
+                constants: z.record(z.string(), z.number()).optional(),
+            }),
+            execute: async (input) => {
+                try {
+                    return analyzeMath(input);
+                } catch (error) {
+                    return `Error: ${error instanceof Error ? error.message : String(error)}`;
+                }
+            },
+        });
+
+        tools.graph_function = tool({
+            description:
+                "Draw a graph of one to six functions y = f(x) (use x as the variable) and show it in the message. Handles asymptotes, picks a sensible y-range, and reports intercepts and turning points in the result. Optionally mark points (e.g. intersections). Prefer this over Python for plotting ordinary functions: it is instant. Use run_python with matplotlib for data plots, 3D, or parametric/polar curves.",
+            inputSchema: z.object({
+                functions: z
+                    .array(
+                        z.object({
+                            expression: z.string().describe("Right-hand side in x, e.g. x^2 - 4"),
+                            label: z.string().optional(),
+                        }),
+                    )
+                    .min(1)
+                    .max(6),
+                xMin: z.number().optional(),
+                xMax: z.number().optional(),
+                yMin: z.number().optional(),
+                yMax: z.number().optional(),
+                title: z.string().optional(),
+                points: z
+                    .array(z.object({ x: z.number(), y: z.number(), label: z.string().optional() }))
+                    .max(20)
+                    .optional(),
+            }),
+            execute: async (input) => {
+                try {
+                    // Validates the expressions and computes the facts for the model. The
+                    // browser draws the picture from this same spec, so no SVG enters the
+                    // model's context or the saved history.
+                    const { summary } = buildGraph(input);
+                    const result: GraphToolResult = {
+                        [GRAPH_MARKER]: true,
+                        title: input.title?.trim() || "Graph",
+                        input,
+                        summary,
+                    };
+                    return JSON.stringify(result);
+                } catch (error) {
+                    return `Error: ${error instanceof Error ? error.message : String(error)}`;
+                }
+            },
+        });
     }
 
     if (enablePython) {

@@ -23,7 +23,7 @@ import {
     selectMcpServersForRequest,
 } from "~/lib/server/mcp-tools";
 import {
-    isMutatingComposioTool,
+    restrictComposioToolsToReads,
     wrapComposioToolsForConfirmation,
 } from "~/lib/server/composio-guard";
 import { buildChatSystemPromptParts } from "~/lib/server/prompt";
@@ -606,6 +606,7 @@ export async function action({ request }: ActionFunctionArgs) {
     let mcpTools: ToolSet = {};
     let mcpClients: Awaited<ReturnType<typeof loadMcpTools>>["clients"] = [];
     let mcpClosed = false;
+    let appsUnavailable = false;
     const closeLoadedMcp = async () => {
         if (mcpClosed) return;
         mcpClosed = true;
@@ -653,6 +654,10 @@ export async function action({ request }: ActionFunctionArgs) {
             const loadedMcp = await loadMcpTools(selectedMcpServers, policy, request.signal);
             mcpTools = loadedMcp.tools;
             mcpClients = loadedMcp.clients;
+            // Connected apps are on and were requested, but nothing loaded.
+            appsUnavailable =
+                loadedMcp.failed.includes("composio") &&
+                !Object.keys(mcpTools).some((name) => name.startsWith("mcp_composio_"));
         }
         const modelInstance = createChatModel({ ...body, request });
         if (!toolAccess.composio || body.toolSettings?.composioEnabled === false) {
@@ -662,9 +667,7 @@ export async function action({ request }: ActionFunctionArgs) {
                 }
             }
         } else if (!toolAccess.askUser && body.toolSettings?.composioAutoApproveWrites !== true) {
-            for (const name of Object.keys(mcpTools)) {
-                if (isMutatingComposioTool(name)) delete mcpTools[name];
-            }
+            mcpTools = restrictComposioToolsToReads(mcpTools);
         } else {
             mcpTools = wrapComposioToolsForConfirmation(
                 mcpTools,
@@ -792,6 +795,7 @@ export async function action({ request }: ActionFunctionArgs) {
             Object.keys(tools),
             toolAccess,
             body.systemPrompt,
+            { appsUnavailable },
         );
         // Client-tool instructions are static per build — append to the stable
         // block so provider prompt caching still applies.
@@ -989,6 +993,8 @@ export async function action({ request }: ActionFunctionArgs) {
             attachStreamCleanup(
                 result.toUIMessageStreamResponse({
                     sendReasoning: true,
+                    // Lets the browser re-sync an expired Composio session before the next message.
+                    ...(appsUnavailable ? { headers: { "X-Aidiy-Apps": "unavailable" } } : {}),
                     onError: (error) => publicChatError(error, body.provider),
                     // Attach real provider-reported usage plus the model/provider
                     // used for this request to the assistant message metadata so

@@ -18,15 +18,16 @@ import {
   type ToolCallMessagePartStatus,
   type ToolCallMessagePartComponent,
 } from "@assistant-ui/react";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "~/components/ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "~/components/ui/collapsible";
 import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
-import { ARTIFACT_MARKER, decodeArtifactContent, type ArtifactContentEncoding } from "~/lib/artifacts";
+import {
+  ARTIFACT_MARKER,
+  decodeArtifactContent,
+  type ArtifactContentEncoding,
+} from "~/lib/artifacts";
 import { useCanvas, type ArtifactKind } from "~/lib/canvas";
+import { composioToolLabel, isComposioToolName } from "~/lib/composio-labels";
 import { skillLabelForTool } from "~/lib/skill-command";
 import { isLinuxClientTool } from "~/lib/cheerpx";
 import { LinuxProcessCard } from "~/components/assistant-ui/linux-process-card";
@@ -58,6 +59,11 @@ const AUTO_EXECUTED_CLIENT_TOOL_NAMES = new Set([
   "spawn_subagent",
   "spawn_subagents",
 ]);
+
+/** True for tools the browser runs by itself (no approval needed from the user). */
+export function isAutoExecutedClientTool(toolName: string): boolean {
+  return AUTO_EXECUTED_CLIENT_TOOL_NAMES.has(toolName);
+}
 
 function isArtifactPayload(result: unknown): boolean {
   if (typeof result !== "string") return false;
@@ -153,10 +159,7 @@ function ToolFallbackRoot({
       data-slot="tool-fallback-root"
       open={isOpen}
       onOpenChange={handleOpenChange}
-      className={cn(
-        "aui-tool-fallback-root group/tool-fallback-root w-full",
-        className,
-      )}
+      className={cn("aui-tool-fallback-root group/tool-fallback-root w-full", className)}
       style={
         {
           "--animation-duration": `${ANIMATION_DURATION}ms`,
@@ -186,10 +189,7 @@ const formatToolDuration = (ms: number) => {
   return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`;
 };
 
-function ToolFallbackDuration({
-  className,
-  ...props
-}: React.ComponentProps<"span">) {
+function ToolFallbackDuration({ className, ...props }: React.ComponentProps<"span">) {
   const elapsedMs = useToolCallElapsed();
   if (elapsedMs === undefined) return null;
 
@@ -227,16 +227,14 @@ function linuxCardTitle(toolName: string, args: Record<string, unknown> | null):
     return `NPM ${action}: ${project}`;
   }
   if (!isLinuxClientTool(toolName)) return null;
-  const description =
-    typeof args?.description === "string" ? args.description.trim() : "";
+  const description = typeof args?.description === "string" ? args.description.trim() : "";
   if (description) return description;
   if (toolName === "linux_read_file" || toolName === "read_file") {
     const path = typeof args?.path === "string" ? args.path.trim() : "";
     return path ? `Read ${path}` : "Read VM file";
   }
   if (toolName === "linux_background_start") {
-    const command =
-      typeof args?.command === "string" ? args.command.trim() : "";
+    const command = typeof args?.command === "string" ? args.command.trim() : "";
     return command ? `Background: ${command}` : "Start background process";
   }
   if (toolName === "linux_list_processes") return "List processes";
@@ -260,8 +258,7 @@ function ToolFallbackTrigger({
 }) {
   const statusType = status?.type ?? "complete";
   const isRunning = statusType === "running";
-  const isCancelled =
-    status?.type === "incomplete" && status.reason === "cancelled";
+  const isCancelled = status?.type === "incomplete" && status.reason === "cancelled";
 
   const Icon = statusIconMap[statusType];
   const skillLabel = skillLabelForTool(toolName);
@@ -441,7 +438,9 @@ function ToolFallbackResult({
       if (!artifact) return;
       const binary = decodeArtifactContent(artifact.content, artifact.contentEncoding);
       if (artifact.contentEncoding && !binary) {
-        setDownloadError("The artifact bytes are invalid. Regenerate the file before downloading it.");
+        setDownloadError(
+          "The artifact bytes are invalid. Regenerate the file before downloading it.",
+        );
         return;
       }
       setDownloadError(null);
@@ -465,10 +464,7 @@ function ToolFallbackResult({
           Result:
         </p>
         <p className="aui-tool-fallback-result-content mt-1 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-          Created{" "}
-          <span className="font-mono text-foreground">
-            {info?.filename ?? "artifact"}
-          </span>
+          Created <span className="font-mono text-foreground">{info?.filename ?? "artifact"}</span>
           {info?.title && info.title !== info.filename ? (
             <span className="text-muted-foreground"> — {info.title}</span>
           ) : null}
@@ -525,11 +521,7 @@ function ToolFallbackError({
   if (status?.type !== "incomplete") return null;
 
   const error = status.error;
-  const errorText = error
-    ? typeof error === "string"
-      ? error
-      : JSON.stringify(error)
-    : null;
+  const errorText = error ? (typeof error === "string" ? error : JSON.stringify(error)) : null;
 
   if (!errorText) return null;
 
@@ -545,9 +537,7 @@ function ToolFallbackError({
       <p className="aui-tool-fallback-error-header text-muted-foreground font-semibold">
         {headerText}
       </p>
-      <p className="aui-tool-fallback-error-reason text-muted-foreground">
-        {errorText}
-      </p>
+      <p className="aui-tool-fallback-error-reason text-muted-foreground">{errorText}</p>
     </div>
   );
 }
@@ -562,8 +552,7 @@ const APPROVAL_OPTION_DEFAULT_LABELS: Record<string, string> = {
   "reject-always": "Always deny",
 };
 
-const isAllowKind = (kind: string) =>
-  kind === "allow-once" || kind === "allow-always";
+const isAllowKind = (kind: string) => kind === "allow-once" || kind === "allow-always";
 
 const approvalOptionLabel = (option: ToolApprovalOption) =>
   option.label ??
@@ -581,19 +570,14 @@ function ToolFallbackApproval({
   respondToApproval,
   ...props
 }: React.ComponentProps<"div"> &
-  Partial<
-    Pick<ToolCallMessagePartProps, "addResult" | "resume" | "respondToApproval">
-  > & {
+  Partial<Pick<ToolCallMessagePartProps, "addResult" | "resume" | "respondToApproval">> & {
     interrupt?: ToolCallMessagePart["interrupt"];
     approval?: ToolCallMessagePart["approval"];
   }) {
   const [submitted, setSubmitted] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
-  if (
-    approval != null &&
-    (approval.approved !== undefined || approval.resolution !== undefined)
-  )
+  if (approval != null && (approval.approved !== undefined || approval.resolution !== undefined))
     return null;
 
   // Custom (`_`-prefixed) kinds cannot be resolved to a boolean by the kit;
@@ -607,11 +591,7 @@ function ToolFallbackApproval({
 
   const respond = (approved: boolean) => {
     if (submitted) return;
-    if (
-      approval != null &&
-      approval.approved === undefined &&
-      respondToApproval
-    ) {
+    if (approval != null && approval.approved === undefined && respondToApproval) {
       respondToApproval({ approved });
     } else if (interrupt) {
       resume?.({ approved });
@@ -636,23 +616,15 @@ function ToolFallbackApproval({
     }
   };
 
-  const confirming =
-    confirmingId != null
-      ? options?.find((o) => o.id === confirmingId)
-      : undefined;
+  const confirming = confirmingId != null ? options?.find((o) => o.id === confirmingId) : undefined;
 
   if (confirming) {
-    const confirmMeta =
-      typeof confirming.confirm === "object" ? confirming.confirm : undefined;
-    const confirmDescription =
-      confirmMeta?.description ?? confirming.description;
+    const confirmMeta = typeof confirming.confirm === "object" ? confirming.confirm : undefined;
+    const confirmDescription = confirmMeta?.description ?? confirming.description;
     return (
       <div
         data-slot="tool-fallback-approval-confirm"
-        className={cn(
-          "aui-tool-fallback-approval-confirm flex flex-col gap-2 pt-1",
-          className,
-        )}
+        className={cn("aui-tool-fallback-approval-confirm flex flex-col gap-2 pt-1", className)}
         {...props}
       >
         <p className="aui-tool-fallback-approval-confirm-title font-semibold">
@@ -739,18 +711,10 @@ function ToolFallbackApproval({
   return (
     <div
       data-slot="tool-fallback-approval"
-      className={cn(
-        "aui-tool-fallback-approval flex items-center gap-2 pt-1",
-        className,
-      )}
+      className={cn("aui-tool-fallback-approval flex items-center gap-2 pt-1", className)}
       {...props}
     >
-      <Button
-        size="sm"
-        className={pressable}
-        onClick={() => respond(true)}
-        disabled={submitted}
-      >
+      <Button size="sm" className={pressable} onClick={() => respond(true)} disabled={submitted}>
         Allow
       </Button>
       <Button
@@ -778,26 +742,26 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   approval,
   respondToApproval,
 }) => {
-  const isCancelled =
-    status?.type === "incomplete" && status.reason === "cancelled";
+  const isCancelled = status?.type === "incomplete" && status.reason === "cancelled";
   const isRequiresAction =
-    status?.type === "requires-action" &&
-    !AUTO_EXECUTED_CLIENT_TOOL_NAMES.has(toolName);
+    status?.type === "requires-action" && !AUTO_EXECUTED_CLIENT_TOOL_NAMES.has(toolName);
   const isWaiting =
     status?.type === "running" ||
-    (status?.type === "requires-action" &&
-      AUTO_EXECUTED_CLIENT_TOOL_NAMES.has(toolName));
+    (status?.type === "requires-action" && AUTO_EXECUTED_CLIENT_TOOL_NAMES.has(toolName));
 
-  const [open, setOpen] = useState(
-    isRequiresAction || toolName === "ask_user",
-  );
-  const [prevRequiresAction, setPrevRequiresAction] =
-    useState(isRequiresAction);
+  const [open, setOpen] = useState(isRequiresAction || toolName === "ask_user");
+  const [prevRequiresAction, setPrevRequiresAction] = useState(isRequiresAction);
   if (isRequiresAction !== prevRequiresAction) {
     setPrevRequiresAction(isRequiresAction);
     if (isRequiresAction) setOpen(true);
   }
   const linuxTitle = linuxCardTitle(toolName, parseToolArgs(argsText));
+  // "Used Discord" reads better than "Used tool: mcp_composio_COMPOSIO_MULTI_EXECUTE_TOOL".
+  const composioTitle = isComposioToolName(toolName)
+    ? status?.type === "running"
+      ? composioToolLabel(toolName, argsText).live
+      : composioToolLabel(toolName, argsText).past
+    : null;
   const waitingLabel = isLinuxClientTool(toolName)
     ? "Waiting for Linux VM…"
     : toolName === "linux_environment_skill"
@@ -809,12 +773,10 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
       <ToolFallbackTrigger
         toolName={toolName}
         status={status}
-        title={linuxTitle ?? undefined}
+        title={linuxTitle ?? composioTitle ?? undefined}
       />
       <ToolFallbackContent>
-        {toolName === "ask_user" && toolCallId ? (
-          <AskUserCard toolCallId={toolCallId} />
-        ) : null}
+        {toolName === "ask_user" && toolCallId ? <AskUserCard toolCallId={toolCallId} /> : null}
         {isWaiting && toolName !== "ask_user" ? (
           <p className="flex items-center gap-2 text-xs text-muted-foreground">
             <LoaderIcon className="size-3.5 animate-spin [animation-duration:0.6s]" />
@@ -836,17 +798,13 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
             respondToApproval={respondToApproval}
           />
         )}
-        {!isCancelled && (
-          <ToolFallbackResult result={result} toolName={toolName} />
-        )}
+        {!isCancelled && <ToolFallbackResult result={result} toolName={toolName} />}
       </ToolFallbackContent>
     </ToolFallbackRoot>
   );
 };
 
-const ToolFallback = memo(
-  ToolFallbackImpl,
-) as unknown as ToolCallMessagePartComponent & {
+const ToolFallback = memo(ToolFallbackImpl) as unknown as ToolCallMessagePartComponent & {
   Root: typeof ToolFallbackRoot;
   Trigger: typeof ToolFallbackTrigger;
   Content: typeof ToolFallbackContent;

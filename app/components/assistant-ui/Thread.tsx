@@ -15,6 +15,8 @@ import { ThreadFollowupSuggestions } from "~/components/assistant-ui/follow-up-s
 import { MarkdownText } from "~/components/assistant-ui/markdown-text";
 
 import { ToolFallback } from "~/components/assistant-ui/tool-fallback";
+import { SimpleToolRow } from "~/components/assistant-ui/simple-tool-row";
+import { INLINE_GRAPH_TOOL, InlineGraph } from "~/components/assistant-ui/inline-graph";
 import { MessageModelBadge, MessageUsageStats } from "~/components/assistant-ui/MessageUsageStats";
 import { ThinkingIndicator } from "~/components/assistant-ui/thinking-state";
 import { ToolGroup } from "~/components/assistant-ui/tool-group";
@@ -876,23 +878,27 @@ const ToolCallAtIndex: FC<{
   ToolFallback: NonNullable<ThreadComponents["ToolFallback"]>;
 }> = ({ index, ToolFallback: ToolFallbackComponent }) => {
   const part = useAuiState((state) => state.message.parts[index]) as EnrichedPartState | undefined;
+  const simple = useInterfaceMode() === "simple";
   if (!part || part.type !== "tool-call") return null;
+  const Row = simple ? SimpleToolRow : ToolFallbackComponent;
   return (
-    <PartByIndexProvider index={index}>
-      {part.toolUI ?? <ToolFallbackComponent {...part} />}
-    </PartByIndexProvider>
+    <PartByIndexProvider index={index}>{part.toolUI ?? <Row {...part} />}</PartByIndexProvider>
   );
 };
 
 // Rendered inline in the message instead of the collapsed "Tool calls" disclosure.
 const isGenerativeUiTool = (toolName: string | undefined) =>
   toolName !== undefined &&
-  (toolAccessKeyForTool(toolName) === "generativeUi" || toolName === "save_skill");
+  (toolAccessKeyForTool(toolName) === "generativeUi" ||
+    toolName === "save_skill" ||
+    // A graph is the answer, not a tool detail: drawn in the message, not folded away.
+    toolName === INLINE_GRAPH_TOOL);
 
 const AssistantMessage: FC = () => {
   const { ToolFallback: ToolFallbackComponent = ToolFallback, ReasoningGroup } =
     useContext(ThreadComponentsContext);
   const { compact } = useContext(ThreadLayoutContext);
+  const simple = useInterfaceMode() === "simple";
 
   const ACTION_BAR_PT = "pt-1.5";
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
@@ -934,7 +940,7 @@ const AssistantMessage: FC = () => {
         className="text-foreground px-2 leading-relaxed wrap-break-word"
       >
         <ReasoningWorkSummary indices={reasoningIndices} />
-        <ToolCallsWorkSummary indices={toolIndices}>
+        <ToolCallsWorkSummary indices={toolIndices} simple={simple}>
           {toolIndices.map((index) => (
             <ToolCallAtIndex key={index} index={index} ToolFallback={ToolFallbackComponent} />
           ))}
@@ -951,7 +957,10 @@ const AssistantMessage: FC = () => {
               case "group-chainOfThought":
                 return <div data-slot="aui_chain-of-thought">{children}</div>;
               case "group-tool":
-                return null;
+                // Ordinary tool calls live in the collapsed summary above; the
+                // leaf renderer below returns null for them and only draws
+                // inline results (graphs, generative UI).
+                return <>{children}</>;
               case "group-reasoning":
                 if (ReasoningGroup) {
                   return <ReasoningGroup group={part}>{children}</ReasoningGroup>;
@@ -965,6 +974,9 @@ const AssistantMessage: FC = () => {
                 // not render the raw reasoning part as normal answer text.
                 return null;
               case "tool-call":
+                if (part.toolName === INLINE_GRAPH_TOOL) {
+                  return part.toolUI ?? <InlineGraph {...part} />;
+                }
                 return isGenerativeUiTool(part.toolName) ? (part.toolUI ?? null) : null;
               case "file":
                 return part.mimeType.startsWith("image/") ? (

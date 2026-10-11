@@ -207,21 +207,28 @@ const server = createServer(async (request, response) => {
     };
     send({ role: "assistant", content: "" });
     const promptText = JSON.stringify(prompt);
-    const richCall = promptText.includes("mock-rich-links")
-        ? { name: "present_openui", args: { ui: RICH_LINKS_PROGRAM } }
-        : promptText.includes("mock-rich")
-          ? { name: "present_openui", args: { ui: RICH_PROGRAM } }
-          : promptText.includes("mock-json")
-            ? { name: "present_jsonrender", args: { patches: JSON_PATCHES } }
-            : promptText.includes("mock-explain")
-              ? { name: "present_jsonrender", args: { patches: EXPLAIN_PATCHES } }
-              : promptText.includes("mock-skill-save")
-                ? { name: "save_skill", args: MOCK_SKILL }
-                : promptText.includes("mock-skill-use")
-                  ? { name: "use_skill", args: { name: "status-digest" } }
-                  : promptText.includes("mock-skill-find")
-                    ? { name: "find_skill", args: { query: "code review" } }
-                    : null;
+    const richCall = promptText.includes("mock-calc")
+        ? { name: "calculator", args: { expression: "2x + 1", variables: { x: 4 } } }
+        : promptText.includes("mock-graph")
+          ? {
+                name: "graph_function",
+                args: { functions: [{ expression: "x^2 - 4" }], title: "Mock parabola" },
+            }
+          : promptText.includes("mock-rich-links")
+            ? { name: "present_openui", args: { ui: RICH_LINKS_PROGRAM } }
+            : promptText.includes("mock-rich")
+              ? { name: "present_openui", args: { ui: RICH_PROGRAM } }
+              : promptText.includes("mock-json")
+                ? { name: "present_jsonrender", args: { patches: JSON_PATCHES } }
+                : promptText.includes("mock-explain")
+                  ? { name: "present_jsonrender", args: { patches: EXPLAIN_PATCHES } }
+                  : promptText.includes("mock-skill-save")
+                    ? { name: "save_skill", args: MOCK_SKILL }
+                    : promptText.includes("mock-skill-use")
+                      ? { name: "use_skill", args: { name: "status-digest" } }
+                      : promptText.includes("mock-skill-find")
+                        ? { name: "find_skill", args: { query: "code review" } }
+                        : null;
     // mock-json-slow streams in small, slow chunks so tests can see partial UI.
     const chunkDelay = promptText.includes("mock-json-slow") ? 120 : 10;
     const offeredTools = new Set((body.tools ?? []).map((tool) => tool.function?.name));

@@ -129,7 +129,7 @@ const SKILL_TOOL_NAME_NOTE =
 /** Per-turn reminder of tools actually registered (prevents “forgotten tools”). */
 export function formatActiveToolsReminder(
     toolNames: string[],
-    options: { searchExpected?: boolean } = {},
+    options: { searchExpected?: boolean; appsUnavailable?: boolean } = {},
 ): string {
     const names = [...new Set(toolNames)].filter(Boolean).sort();
     // Search is on in settings but nothing that can search loaded (for example
@@ -139,13 +139,20 @@ export function formatActiveToolsReminder(
         options.searchExpected && !names.some(isLiveSearchToolName)
             ? `\nLive web search is unavailable this turn (the Parallel and Firecrawl search services did not load). Do not call or invent a search tool. If the user needs current information, say plainly that you cannot look it up right now${names.some((name) => name === "fetch_url" || name === "read_url") ? "; you can still read a URL they give you with fetch_url" : ""}.`
             : "";
+    // The user's connected apps are switched on but did not load this turn.
+    const appsGap = options.appsUnavailable
+        ? "\nThe user's connected apps (Composio) are switched on but could not be reached this turn, so none of their tools are available. Do not call or invent app tools and do not claim to have read or changed anything in an app. Tell the user briefly that their connected apps did not load and to try again, or to open Settings → Apps and choose Re-sync session if it keeps happening."
+        : "";
     if (!names.length) {
-        return `\n\nACTIVE TOOLS THIS TURN: none. Answer from conversation only; do not invent tool results.${searchGap}`;
+        return `\n\nACTIVE TOOLS THIS TURN: none. Answer from conversation only; do not invent tool results.${searchGap}${appsGap}`;
     }
     const composio = names.some((name) => name.startsWith("mcp_composio_"))
         ? "\nComposio apps: mcp_composio_* tools act in the user's connected SaaS apps. Use read/list/search/get tools for browsing and do not invent tools that are not active. Facebook and Instagram require the supported connected Page or Business/Creator account. Use youtube_transcript for public YouTube video summaries. Facebook Marketplace has no Composio connector; use web research only for public listings and state when sign-in or access limits block the result. Read tools may run immediately. Before send/create/update/delete/post/share, call ask_user with options Yes / No. If a tool returns CONFIRMATION_REQUIRED, ask first, then re-call that same tool with unchanged arguments."
         : "";
-    return `\n\nACTIVE TOOLS THIS TURN (exact names only; do not invent others): ${names.join(", ")}\nUse a tool only when needed for a correct answer; prefer zero or one focused call.${composio}${searchGap}`;
+    const math = names.some((name) => name === "graph_function" || name === "math_analyze")
+        ? "\nMath: calculator for exact arithmetic (it accepts variables). math_analyze for numeric derivatives, definite integrals, zeros, extrema, limits, series sums, and value tables of one-variable functions. graph_function to plot y = f(x); the picture appears in the message, so describe it from the returned summary and do not claim features that are not listed. Use sympy in run_python for symbolic work (solve, simplify, factor, expand, exact derivatives and integrals, limits, matrices, differential equations) and matplotlib for data plots, 3D, parametric or polar curves. Numeric results are approximations; say so when it matters. Write math in LaTeX ($...$ inline, $$...$$ display). For homework-style questions give the key steps briefly, then a clearly stated answer, and check numbers with a tool."
+        : "";
+    return `\n\nACTIVE TOOLS THIS TURN (exact names only; do not invent others): ${names.join(", ")}\nUse a tool only when needed for a correct answer; prefer zero or one focused call.${composio}${math}${searchGap}${appsGap}`;
 }
 
 const SUBAGENT_PROMPT = `
@@ -207,6 +214,7 @@ export function buildChatSystemPromptParts(
     availableToolNames?: string[],
     toolAccess?: Partial<ToolAccessSettings>,
     supplementalInstructions?: string,
+    toolLoad: { appsUnavailable?: boolean } = {},
 ): SystemPromptParts {
     const mode = normalizeTokenMode(tokenMode);
     const policy = tokenModePolicy(mode);
@@ -273,6 +281,7 @@ export function buildChatSystemPromptParts(
 
     const toolsReminder = formatActiveToolsReminder(availableToolNames ?? [], {
         searchExpected: availableToolNames !== undefined && toolAccess?.webSearch !== false,
+        appsUnavailable: toolLoad.appsUnavailable === true,
     });
 
     const volatile = `${dateLine}${project}${agent}${supplemental}${memory}${skill}${skillToolNote}${subagent}${toolsReminder}`;

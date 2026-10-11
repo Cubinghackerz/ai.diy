@@ -203,7 +203,14 @@ export function toolAccessKeyForTool(toolName: string): ToolAccessKey | null {
     if (name.startsWith("knowledge_")) return "knowledge";
     if (/search|fetch_url|read_url|youtube|url_doctor|research_skill|duckduckgo/.test(name))
         return "webSearch";
-    if (name === "calculator" || name === "calculate") return "calculator";
+    if (
+        name === "calculator" ||
+        name === "calculate" ||
+        name === "graph_function" ||
+        name === "math_analyze"
+    ) {
+        return "calculator";
+    }
     if (name === "run_python" || name === "run_code" || name === "python_file_creation_skill") {
         return "python";
     }

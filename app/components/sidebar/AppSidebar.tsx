@@ -1687,7 +1687,7 @@ function previewToolNames(
           ];
     return [
         ...(toolAccess.webSearch ? search : []),
-        ...(toolAccess.calculator ? ["calculator"] : []),
+        ...(toolAccess.calculator ? ["calculator", "math_analyze", "graph_function"] : []),
         ...(toolAccess.python ? ["run_python"] : []),
         ...(toolAccess.linux ? ["linux_run_command", "linux_read_file"] : []),
         ...(toolAccess.npmProject ? ["npm_project"] : []),
