@@ -208,6 +208,16 @@ export interface AppSettings {
     knowledgeEnabled: boolean;
     skillsEnabled: boolean;
     /**
+     * Lexical skill router: preload top matching skill bodies on send.
+     * Default on; tests rely on this being true unless explicitly disabled.
+     */
+    skillRouterEnabled: boolean;
+    /**
+     * Prefetch compact web snippets into the volatile prompt when the turn
+     * needs fresh facts. Default on in tests.
+     */
+    webPrefetchEnabled: boolean;
+    /**
      * Controls system-prompt size, tool suite, and step budget.
      * Default balanced — full suite matches the previous always-on behavior.
      */
@@ -596,6 +606,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     memoryAutoAttach: false,
     knowledgeEnabled: true,
     skillsEnabled: true,
+    skillRouterEnabled: true,
+    webPrefetchEnabled: true,
     tokenMode: "balanced",
     subagentsEnabled: false,
     toolAccess: {

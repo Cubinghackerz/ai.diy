@@ -27,6 +27,7 @@ import {
     wrapComposioToolsForConfirmation,
 } from "~/lib/server/composio-guard";
 import { buildChatSystemPromptParts } from "~/lib/server/prompt";
+import { attachRoutedSkills, selectRoutedSkills } from "~/lib/skills/router";
 import {
     frontendToolsFromBody,
     sanitizeModelInstructions,
@@ -39,6 +40,7 @@ import {
     ensureLinuxSkill,
     ensureNpmProjectSkill,
     ensureResearchSkill,
+    detectResearchIntent,
     ensureUrlDoctorSkill,
     lastUserTextFromMessages,
     resolveRequiredSkillTools,
@@ -86,6 +88,11 @@ import {
     normalizeProviderBaseUrl,
 } from "~/lib/server/provider-url";
 import { findEnabledSearchConnector } from "~/lib/search/connectors";
+import {
+    formatPrefetchSnippetBlock,
+    shouldPrefetchWeb,
+    startWebPrefetch,
+} from "~/lib/search/prefetch";
 import {
     formatProviderError,
     httpStatusForProviderError,
@@ -149,6 +156,8 @@ interface ChatRequestBody {
         subagentsEnabled?: boolean;
         tokenMode?: TokenMode;
         toolAccess?: Partial<ToolAccessSettings>;
+        skillRouterEnabled?: boolean;
+        webPrefetchEnabled?: boolean;
     };
     mcpServers?: McpServerConfig[];
     imageSettings?: {
@@ -157,6 +166,10 @@ interface ChatRequestBody {
     };
     memoryContext?: string;
     customSkills?: { name: string; content: string }[];
+    /** Client-routed skill bodies (not slash-forced). Merged after forced skills. */
+    routedSkills?: { name: string; content: string }[];
+    /** Client router marked this turn as needing live web facts. */
+    needsFreshFacts?: boolean;
     /** When true the request runs as a delegated subagent (no ask_user/spawn_subagent). */
     subagentMode?: boolean;
     /** Multi-model Preview uses only web, Python, and artifact tools. */
@@ -632,6 +645,23 @@ export async function action({ request }: ActionFunctionArgs) {
             : undefined;
         const invokedToolNames = toolNamesInvokedInThread(body.messages).all;
         const searchEnabled = toolAccess.webSearch && body.toolSettings?.webSearchEnabled !== false;
+        const searchIntent =
+            detectResearchIntent(userText) ||
+            /\b(search|browse|look\s*up|find\s+(?:sources?|pages?|results?))\b/i.test(userText);
+        const prefetchOn = shouldPrefetchWeb({
+            userText,
+            webSearchEnabled: searchEnabled,
+            enabled: body.toolSettings?.webPrefetchEnabled !== false,
+            needsFreshFacts: body.needsFreshFacts === true,
+            searchIntent,
+        });
+        const prefetchPromise = prefetchOn
+            ? startWebPrefetch(userText, {
+                  connectors: body.toolSettings?.connectors,
+                  toolAccessConnectors: toolAccess.connectors,
+                  tokenMode: mode,
+              })
+            : null;
 
         // Parallel Search and Firecrawl are the model's web search (there is no
         // built-in web_search tool), so they ride on web search access rather
@@ -803,6 +833,25 @@ export async function action({ request }: ActionFunctionArgs) {
             const block = `\n\n<CLIENT-TOOLKIT-INSTRUCTIONS>\n${modelInstructions}\n</CLIENT-TOOLKIT-INSTRUCTIONS>`;
             promptParts.stable += block;
             promptParts.full += block;
+        }
+        const routerOn = body.toolSettings?.skillRouterEnabled !== false && toolAccess.skills;
+        const routedSelected = routerOn
+            ? selectRoutedSkills(activeSkills, body.routedSkills ?? [], policy)
+            : [];
+        const routedParts = attachRoutedSkills(promptParts, routedSelected, policy.skillChars);
+        let volatileSuffix = routedParts.volatile;
+        let volatileChanged = routedParts.volatile !== promptParts.volatile;
+        if (prefetchPromise) {
+            const snippets = await prefetchPromise;
+            const snippetBlock = formatPrefetchSnippetBlock(userText, snippets, policy);
+            if (snippetBlock) {
+                volatileSuffix = `${volatileSuffix}${snippetBlock}`;
+                volatileChanged = true;
+            }
+        }
+        if (volatileChanged) {
+            promptParts.volatile = volatileSuffix;
+            promptParts.full = `${promptParts.stable}\n\n${volatileSuffix}`;
         }
         // Auto-compact once estimated context usage reaches 85% of the window.
         // Forced /Compaction must call compaction_skill instead of silently

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { searchSkills } from "~/lib/skills/assistant-skills";
 import { searchBundledSkills } from "~/lib/skills/catalog";
-import { scoreRetriever, loadQueries } from "./harness";
+import { scoreRetriever } from "./harness";
 
 describe("skill-router baseline (current find_skill)", () => {
     it("scores searchSkills over the catalog (no installed skills)", () => {

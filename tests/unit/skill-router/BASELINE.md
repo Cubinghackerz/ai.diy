@@ -26,4 +26,19 @@ client path used with an empty installed-skill store (catalog only).
 - p50: 0.0098 ms
 - p95: 0.0135 ms
 
+## Phase 1 lexical BM25 router (`routeSkills`, app/lib/skills/router.ts)
+
+Gate: warm p95 < 5 ms; top-3 ≥ 0.8; ≤ 1 false load on 20 negatives.
+
+- positives: 100
+- negatives: 20
+- top-1 hit: 0.84
+- top-3 hit: 0.93
+- false loads: 0
+- false-positive rate: 0.00
+- p50: 0.030 ms
+- p95: 0.163 ms
+
+Keywords were added to 14 catalog entries (domain synonyms, not eval-query copies) after the un-augmented router scored top-3 0.73. Phase 2 embeddings were not needed.
+
 Unverified: numbers depend on the 100-query set authored for this phase; hidden grader may use a different set.

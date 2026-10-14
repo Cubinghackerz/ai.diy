@@ -254,6 +254,8 @@ function mergeLoadedSettings(parsed: Partial<AppSettings>): AppSettings {
         calculatorEnabled: toolAccess.calculator,
         pythonEnabled: toolAccess.python,
         skillsEnabled: toolAccess.skills,
+        skillRouterEnabled: parsed.skillRouterEnabled !== false,
+        webPrefetchEnabled: parsed.webPrefetchEnabled !== false,
         memoryEnabled: toolAccess.memory,
         memoryAutoAttach: parsed.memoryAutoAttach ?? false,
         knowledgeEnabled: toolAccess.knowledge,

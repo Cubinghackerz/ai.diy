@@ -48,7 +48,9 @@ export function formatCompactSearchResults(
 }
 
 export function clipSearchText(value: string | undefined | null, maxChars: number): string {
-    const text = String(value ?? "").replace(/\s+/g, " ").trim();
+    const text = String(value ?? "")
+        .replace(/\s+/g, " ")
+        .trim();
     if (!text) return "";
     if (text.length <= maxChars) return text;
     return `${text.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
@@ -94,6 +96,7 @@ export async function webSearch(
 export async function duckDuckGoInstantAnswer(
     query: string,
     maxRelatedTopics: number = 5,
+    timeoutMs: number = 8_000,
 ): Promise<DuckDuckGoInstantAnswer> {
     const normalizedQuery = query.trim().slice(0, 500);
     if (!normalizedQuery) throw new Error("Query required");
@@ -110,7 +113,7 @@ export async function duckDuckGoInstantAnswer(
             ...ddgHeaders(),
             Accept: "application/json",
         },
-        signal: AbortSignal.timeout(8_000),
+        signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) {
         throw new Error(`DuckDuckGo Instant Answer API returned HTTP ${response.status}`);
@@ -172,8 +175,7 @@ function ddgHeaders(cookie = false): Record<string, string> {
     return headers;
 }
 
-const DDG_COOKIES =
-    "cf_clearance=; lmt=; __cf_bm=; exp=; dcl=; p=-1; _ga=GA1.2.; _gid=GA1.2.";
+const DDG_COOKIES = "cf_clearance=; lmt=; __cf_bm=; exp=; dcl=; p=-1; _ga=GA1.2.; _gid=GA1.2.";
 
 function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -237,9 +239,7 @@ function publicHttpUrl(value: unknown): string | undefined {
     if (typeof value !== "string" || !value.trim()) return undefined;
     try {
         const url = new URL(value.trim());
-        return url.protocol === "http:" || url.protocol === "https:"
-            ? url.toString()
-            : undefined;
+        return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : undefined;
     } catch {
         return undefined;
     }
@@ -279,43 +279,86 @@ export async function duckDuckGoSearch(
     const normalizedQuery = normalizeSearchQuery(query);
     if (!normalizedQuery) return [];
     const limit = Math.max(1, Math.min(maxResults, 10));
-    const strategies: Array<() => Promise<SearchResult[]>> = [
-        () => searchDuckDuckGoHtml(normalizedQuery, limit),
-        () => searchDuckDuckGoLite(normalizedQuery, limit),
-        () => searchBingRss(normalizedQuery, limit),
-        () => searchDuckDuckGoInstantAnswerApi(normalizedQuery, limit),
-    ];
+    return runSearchStrategyChain(createKeylessSearchStrategies(normalizedQuery, limit, 10_000), {
+        query: normalizedQuery,
+        limit,
+        perStrategyMs: 10_000,
+    });
+}
 
+export function createKeylessSearchStrategies(
+    query: string,
+    maxResults: number,
+    timeoutMs: number,
+): Array<() => Promise<SearchResult[]>> {
+    return [
+        () => searchDuckDuckGoHtml(query, maxResults, timeoutMs),
+        () => searchDuckDuckGoLite(query, maxResults, timeoutMs),
+        () => searchBingRss(query, maxResults, timeoutMs),
+        () => searchDuckDuckGoInstantAnswerApi(query, maxResults, timeoutMs),
+    ];
+}
+
+export async function runSearchStrategyChain(
+    strategies: Array<() => Promise<SearchResult[]>>,
+    options: {
+        query: string;
+        limit: number;
+        perStrategyMs: number;
+        totalMs?: number;
+    },
+): Promise<SearchResult[]> {
+    const started = Date.now();
     for (const strategy of strategies) {
+        if (options.totalMs != null && Date.now() - started >= options.totalMs) break;
+        const remaining =
+            options.totalMs != null
+                ? Math.max(0, options.totalMs - (Date.now() - started))
+                : options.perStrategyMs;
+        const budget = Math.min(options.perStrategyMs, remaining || options.perStrategyMs);
+        if (budget <= 0) break;
         try {
+            const raw = await withBudget(strategy(), budget);
             const results = rankSearchResults(
-                normalizedQuery,
-                deduplicateResults(await strategy()),
-                limit,
+                options.query,
+                deduplicateResults(raw ?? []),
+                options.limit,
             );
             if (results.length > 0) return results;
         } catch {
             // Fall through to the next strategy
         }
     }
-
     return [];
+}
+
+function withBudget<T>(promise: Promise<T>, ms: number): Promise<T> {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("search-strategy-timeout")), ms);
+        promise.then(
+            (value) => {
+                clearTimeout(timer);
+                resolve(value);
+            },
+            (error) => {
+                clearTimeout(timer);
+                reject(error);
+            },
+        );
+    });
 }
 
 async function searchDuckDuckGoHtml(
     query: string,
     maxResults: number,
+    timeoutMs: number = 10_000,
 ): Promise<SearchResult[]> {
     const params = new URLSearchParams({
         q: query,
         kl: "us-en",
     });
     const url = `https://html.duckduckgo.com/html/?${params.toString()}`;
-    const response = await robustFetch(
-        url,
-        { Referer: "https://duckduckgo.com/" },
-        10_000,
-    );
+    const response = await robustFetch(url, { Referer: "https://duckduckgo.com/" }, timeoutMs);
     if (!response) return [];
     const html = await response.text();
     return parseDdggHtmlResults(html, maxResults);
@@ -324,17 +367,14 @@ async function searchDuckDuckGoHtml(
 async function searchDuckDuckGoLite(
     query: string,
     maxResults: number,
+    timeoutMs: number = 10_000,
 ): Promise<SearchResult[]> {
     const params = new URLSearchParams({
         q: query,
         kl: "us-en",
     });
     const url = `https://lite.duckduckgo.com/lite/?${params.toString()}`;
-    const response = await robustFetch(
-        url,
-        { Referer: "https://duckduckgo.com/" },
-        10_000,
-    );
+    const response = await robustFetch(url, { Referer: "https://duckduckgo.com/" }, timeoutMs);
     if (!response) return [];
     const html = await response.text();
     return parseDuckDuckGoResults(html, maxResults);
@@ -343,17 +383,14 @@ async function searchDuckDuckGoLite(
 async function searchBingRss(
     query: string,
     maxResults: number,
+    timeoutMs: number = 10_000,
 ): Promise<SearchResult[]> {
     const params = new URLSearchParams({
         q: query,
         format: "rss",
     });
     const url = `https://www.bing.com/search?${params.toString()}`;
-    const response = await robustFetch(
-        url,
-        { Referer: "https://www.bing.com/" },
-        10_000,
-    );
+    const response = await robustFetch(url, { Referer: "https://www.bing.com/" }, timeoutMs);
     if (!response) return [];
     const xml = await response.text();
     return parseRssFeed(xml, maxResults);
@@ -362,8 +399,9 @@ async function searchBingRss(
 async function searchDuckDuckGoInstantAnswerApi(
     query: string,
     maxResults: number,
+    timeoutMs: number = 8_000,
 ): Promise<SearchResult[]> {
-    const answer = await duckDuckGoInstantAnswer(query, maxResults);
+    const answer = await duckDuckGoInstantAnswer(query, maxResults, timeoutMs);
     const results: SearchResult[] = [];
     if (answer.abstractText && answer.abstractUrl) {
         results.push({
@@ -481,7 +519,9 @@ const QUERY_FLUFF_PATTERNS: RegExp[] = [
  * Keeps accuracy high (engines rank short queries better) and cuts tokens.
  */
 export function focusSearchQuery(query: string, maxChars = MAX_SEARCH_QUERY_CHARS): string {
-    let text = String(query ?? "").replace(/\s+/g, " ").trim();
+    let text = String(query ?? "")
+        .replace(/\s+/g, " ")
+        .trim();
     if (!text) return "";
 
     // Preserve quoted phrases; strip common instruction fluff around them.
@@ -520,19 +560,19 @@ function normalizeSearchQuery(query: string): string {
 }
 
 function searchTerms(query: string): string[] {
-    return [...new Set(
-        query
-            .toLocaleLowerCase()
-            .normalize("NFKD")
-            .replace(/[\u0300-\u036f]/g, "")
-            .match(/[a-z0-9]+/g) ?? [],
-    )].filter((term) => term.length > 1 && !SEARCH_STOPWORDS.has(term));
+    return [
+        ...new Set(
+            query
+                .toLocaleLowerCase()
+                .normalize("NFKD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .match(/[a-z0-9]+/g) ?? [],
+        ),
+    ].filter((term) => term.length > 1 && !SEARCH_STOPWORDS.has(term));
 }
 
 function containsSearchTerm(text: string, term: string): boolean {
-    return new RegExp(`(?:^|[^a-z0-9])${escapeRegExp(term)}(?:$|[^a-z0-9])`, "i").test(
-        text,
-    );
+    return new RegExp(`(?:^|[^a-z0-9])${escapeRegExp(term)}(?:$|[^a-z0-9])`, "i").test(text);
 }
 
 function escapeRegExp(value: string): string {
@@ -599,10 +639,7 @@ export function rankSearchResults(
     const terms = searchTerms(query);
     if (terms.length === 0) {
         return [...results]
-            .sort(
-                (left, right) =>
-                    authorityScore(right.url) - authorityScore(left.url),
-            )
+            .sort((left, right) => authorityScore(right.url) - authorityScore(left.url))
             .slice(0, maxResults);
     }
 
@@ -630,7 +667,11 @@ export function rankSearchResults(
         // Weather queries need both weather language and the requested place.
         // This prevents unrelated entity results such as "The Flash" from
         // being returned merely because the provider produced parseable HTML.
-        if (weatherQuery && (matchedWeather.length === 0 || (locationTerms.length > 0 && matchedLocations.length === 0))) {
+        if (
+            weatherQuery &&
+            (matchedWeather.length === 0 ||
+                (locationTerms.length > 0 && matchedLocations.length === 0))
+        ) {
             return [];
         }
 
@@ -660,10 +701,7 @@ export function rankSearchResults(
         .map((entry) => entry.result);
 }
 
-function parseDdggHtmlResults(
-    html: string,
-    maxResults: number,
-): SearchResult[] {
+function parseDdggHtmlResults(html: string, maxResults: number): SearchResult[] {
     const results: SearchResult[] = [];
 
     // HTML front-end: <a class="result__a" href="...">Title</a> followed by
@@ -671,10 +709,7 @@ function parseDdggHtmlResults(
     const resultRegex =
         /<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi;
     let match: RegExpExecArray | null;
-    while (
-        (match = resultRegex.exec(html)) !== null &&
-        results.length < maxResults
-    ) {
+    while ((match = resultRegex.exec(html)) !== null && results.length < maxResults) {
         const url = decodeDdgcUddg(match[1] || "");
         const title = stripHtml(match[2] || "");
         const snippet = stripHtml(match[3] || "");
@@ -683,12 +718,8 @@ function parseDdggHtmlResults(
 
     // Fallback: title-only links when snippets aren't present
     if (results.length === 0) {
-        const fallbackRegex =
-            /<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
-        while (
-            (match = fallbackRegex.exec(html)) !== null &&
-            results.length < maxResults
-        ) {
+        const fallbackRegex = /<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
+        while ((match = fallbackRegex.exec(html)) !== null && results.length < maxResults) {
             const url = decodeDdgcUddg(match[1] || "");
             const title = stripHtml(match[2] || "");
             if (title && url) results.push({ title, url, snippet: "" });
@@ -743,10 +774,7 @@ export async function searxngSearch(
     return rankSearchResults(normalizedQuery, results, maxResults);
 }
 
-function parseDuckDuckGoResults(
-    html: string,
-    maxResults: number,
-): SearchResult[] {
+function parseDuckDuckGoResults(html: string, maxResults: number): SearchResult[] {
     const results: SearchResult[] = [];
 
     // DuckDuckGo lite uses <a class="result-link" href="...">Title</a>
@@ -755,10 +783,7 @@ function parseDuckDuckGoResults(
         /<a[^>]*class="result-link"[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>[\s\S]*?<td[^>]*class="result-snippet"[^>]*>(.*?)<\/td>/gi;
 
     let match: RegExpExecArray | null;
-    while (
-        (match = resultRegex.exec(html)) !== null &&
-        results.length < maxResults
-    ) {
+    while ((match = resultRegex.exec(html)) !== null && results.length < maxResults) {
         let url = match[1] || "";
         const title = stripHtml(match[2] || "");
         const snippet = stripHtml(match[3] || "");
@@ -772,12 +797,8 @@ function parseDuckDuckGoResults(
 
     // Fallback: any <a class="result-link"> without a paired snippet cell
     if (results.length === 0) {
-        const fallbackRegex =
-            /<a[^>]*class="result-link"[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi;
-        while (
-            (match = fallbackRegex.exec(html)) !== null &&
-            results.length < maxResults
-        ) {
+        const fallbackRegex = /<a[^>]*class="result-link"[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi;
+        while ((match = fallbackRegex.exec(html)) !== null && results.length < maxResults) {
             let url = match[1] || "";
             const title = stripHtml(match[2] || "");
             url = decodeDdgcUddg(url);
@@ -814,10 +835,7 @@ function parseRssFeed(xml: string, maxResults: number): SearchResult[] {
     const itemRegex = /<item[^>]*>([\s\S]*?)<\/item>/gi;
     let match: RegExpExecArray | null;
 
-    while (
-        (match = itemRegex.exec(xml)) !== null &&
-        results.length < maxResults
-    ) {
+    while ((match = itemRegex.exec(xml)) !== null && results.length < maxResults) {
         const itemXml = match[1];
         const titleMatch = itemXml.match(/<title[^>]*>([^<]*)<\/title>/i);
         const linkMatch = itemXml.match(/<link[^>]*>([^<]*)<\/link>/i);

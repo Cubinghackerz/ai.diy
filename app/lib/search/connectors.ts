@@ -1,12 +1,7 @@
 import type { ConnectorConfig, ConnectorKind } from "~/lib/types";
 import { clipSearchText, type SearchResult } from "~/lib/search";
 
-export const SEARCH_CONNECTOR_KINDS = [
-    "tavily",
-    "brave",
-    "exa",
-    "parallel",
-] as const;
+export const SEARCH_CONNECTOR_KINDS = ["tavily", "brave", "exa", "parallel"] as const;
 
 export function isSearchConnectorKind(
     kind: ConnectorKind | string,
@@ -35,8 +30,7 @@ function parseDomainList(raw?: string): string[] {
 
 function recencyStartIso(recency?: string): string | undefined {
     if (!recency || recency === "any") return undefined;
-    const days =
-        recency === "day" ? 1 : recency === "week" ? 7 : recency === "month" ? 30 : 365;
+    const days = recency === "day" ? 1 : recency === "week" ? 7 : recency === "month" ? 30 : 365;
     return new Date(Date.now() - days * 86_400_000).toISOString();
 }
 
@@ -65,8 +59,15 @@ export async function connectorSearch(
     connector: ConnectorConfig,
     query: string,
     maxResults = 5,
+    signal?: AbortSignal,
 ): Promise<SearchResult[]> {
     const key = keyFor(connector);
+    // A caller-supplied signal (e.g. the prefetch deadline) aborts the fetch
+    // early; otherwise each connector keeps its own provider timeout.
+    const fetchSignal = (timeoutMs: number) =>
+        signal
+            ? AbortSignal.any([AbortSignal.timeout(timeoutMs), signal])
+            : AbortSignal.timeout(timeoutMs);
     if (connector.kind === "tavily") {
         const response = await fetch("https://api.tavily.com/search", {
             method: "POST",
@@ -75,7 +76,7 @@ export async function connectorSearch(
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({ query, search_depth: "basic", max_results: maxResults }),
-            signal: AbortSignal.timeout(15_000),
+            signal: fetchSignal(15_000),
         });
         if (!response.ok) throw new Error(`Tavily returned HTTP ${response.status}`);
         const data = (await response.json()) as ConnectorResponse;
@@ -91,14 +92,20 @@ export async function connectorSearch(
                 Accept: "application/json",
                 "X-Subscription-Token": key,
             },
-            signal: AbortSignal.timeout(15_000),
+            signal: fetchSignal(15_000),
         });
         if (!response.ok) throw new Error(`Brave Search returned HTTP ${response.status}`);
         const data = (await response.json()) as ConnectorResponse;
         return normalizeConnectorResults(
             (data.web?.results ?? []).flatMap((result) =>
                 result.title && result.url
-                    ? [{ title: result.title, url: result.url, snippet: result.description || result.age || "" }]
+                    ? [
+                          {
+                              title: result.title,
+                              url: result.url,
+                              snippet: result.description || result.age || "",
+                          },
+                      ]
                     : [],
             ),
         );
@@ -119,14 +126,12 @@ export async function connectorSearch(
                 type: connector.options?.searchType || "auto",
                 numResults: Math.min(maxResults, 20),
                 contents: { highlights: { maxCharacters: CONNECTOR_SNIPPET_CHARS } },
-                ...(connector.options?.category
-                    ? { category: connector.options.category }
-                    : {}),
+                ...(connector.options?.category ? { category: connector.options.category } : {}),
                 ...(includeDomains.length ? { includeDomains } : {}),
                 ...(excludeDomains.length ? { excludeDomains } : {}),
                 ...(publishedAfter ? { startPublishedDate: publishedAfter } : {}),
             }),
-            signal: AbortSignal.timeout(15_000),
+            signal: fetchSignal(15_000),
         });
         if (!response.ok) throw new Error(`Exa returned HTTP ${response.status}`);
         const data = (await response.json()) as {
@@ -162,7 +167,7 @@ export async function connectorSearch(
                 mode: connector.options?.mode || "advanced",
                 advanced_settings: {
                     max_results: Math.min(maxResults, 20),
-                    ...((includeDomains.length || excludeDomains.length || publishedAfter)
+                    ...(includeDomains.length || excludeDomains.length || publishedAfter
                         ? {
                               source_policy: {
                                   ...(includeDomains.length
@@ -179,7 +184,7 @@ export async function connectorSearch(
                         : {}),
                 },
             }),
-            signal: AbortSignal.timeout(20_000),
+            signal: fetchSignal(20_000),
         });
         if (!response.ok) throw new Error(`Parallel Search returned HTTP ${response.status}`);
         const data = (await response.json()) as {
@@ -188,7 +193,13 @@ export async function connectorSearch(
         return normalizeConnectorResults(
             (data.results ?? []).flatMap((result) =>
                 result.title && result.url
-                    ? [{ title: result.title, url: result.url, snippet: result.excerpts?.join(" ") || "" }]
+                    ? [
+                          {
+                              title: result.title,
+                              url: result.url,
+                              snippet: result.excerpts?.join(" ") || "",
+                          },
+                      ]
                     : [],
             ),
         );

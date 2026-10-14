@@ -40,6 +40,7 @@ import { useCanvas } from "~/lib/canvas";
 import { buildLocalMemoryContext, hasLocalMemoryEntries, readLocalMemory } from "~/lib/memory";
 import { askUserInChat } from "~/lib/ask-user";
 import { forcedSkillStore, toolNameForForcedSkill } from "~/lib/skill-command";
+import { corpusForSkills, loadRoutedPayload, routeSkills } from "~/lib/skills/router";
 import {
   applyCreditsFallback,
   findCreditsFallbackTarget,
@@ -240,6 +241,13 @@ export function AssistantRuntimeProvider({
           const memoryAvailable = memoryEnabled && (await hasLocalMemoryEntries());
           const forcedSkills = forcedSkillStore.current;
           forcedSkillStore.current = [];
+          const skillRouterOn =
+            access.skills && s.skillsEnabled !== false && s.skillRouterEnabled !== false;
+          const routed =
+            skillRouterOn && lastUserText.trim()
+              ? routeSkills(lastUserText, corpusForSkills(s.customSkills))
+              : { skills: [], needsFreshFacts: false };
+          const routedSkills = loadRoutedPayload(routed.skills, s.customSkills);
           const forceSubagents =
             access.subagents &&
             forcedSkills.some((skill) => toolNameForForcedSkill(skill.name) === "spawn_subagents");
@@ -298,6 +306,8 @@ export function AssistantRuntimeProvider({
                   access.subagents && (s.subagentsEnabled === true || forceSubagents),
                 tokenMode: s.tokenMode ?? "balanced",
                 toolAccess: access,
+                skillRouterEnabled: s.skillRouterEnabled !== false,
+                webPrefetchEnabled: s.webPrefetchEnabled !== false,
               },
               mcpServers: [
                 ...mcpServersForRequest(s.mcpServers, access, s.webSearchEnabled),
@@ -317,6 +327,8 @@ export function AssistantRuntimeProvider({
               memoryContext: combinedContext,
               agentMode: s.agentModeEnabled === true,
               ...(forcedSkills.length ? { customSkills: forcedSkills } : {}),
+              ...(routedSkills.length ? { routedSkills } : {}),
+              ...(routed.needsFreshFacts ? { needsFreshFacts: true } : {}),
             },
           };
         },

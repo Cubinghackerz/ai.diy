@@ -4,13 +4,7 @@
  */
 
 export type SkillCategory =
-    | "developer"
-    | "research"
-    | "data"
-    | "security"
-    | "devops"
-    | "business"
-    | "general";
+    "developer" | "research" | "data" | "security" | "devops" | "business" | "general";
 
 export type SkillToolId =
     | "web_search"
@@ -54,6 +48,11 @@ export interface SkillCatalogEntry {
     path: string;
     popular?: boolean;
     tools?: string[];
+    /**
+     * Retrieval synonyms for the lexical router. Domain terms only — not copied
+     * from eval query wording. Optional; BM25 still runs over name/description/category.
+     */
+    keywords?: string[];
 }
 
 export interface SkillCatalog {
@@ -74,20 +73,14 @@ function parseScalar(raw: string): string | boolean | number {
     if (v === "true") return true;
     if (v === "false") return false;
     if (/^-?\d+(\.\d+)?$/.test(v)) return Number(v);
-    if (
-        (v.startsWith('"') && v.endsWith('"')) ||
-        (v.startsWith("'") && v.endsWith("'"))
-    ) {
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
         return v.slice(1, -1);
     }
     return v;
 }
 
 /** Minimal YAML-ish frontmatter parser for skill manifests (no nested objects beyond lists). */
-export function parseSkillMarkdown(
-    raw: string,
-    path = "",
-): PortableSkill | null {
+export function parseSkillMarkdown(raw: string, path = ""): PortableSkill | null {
     const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
     if (!match) return null;
     const [, fm, body] = match;
@@ -142,9 +135,7 @@ export function parseSkillMarkdown(
                 objectAccum = null;
             } else if (val.startsWith("[") && val.endsWith("]")) {
                 const inner = val.slice(1, -1).trim();
-                data[key] = inner
-                    ? inner.split(",").map((s) => parseScalar(s.trim()))
-                    : [];
+                data[key] = inner ? inner.split(",").map((s) => parseScalar(s.trim())) : [];
             } else {
                 data[key] = parseScalar(val);
             }
@@ -155,9 +146,7 @@ export function parseSkillMarkdown(
     const name = String(data.name ?? "").trim();
     if (!name) return null;
 
-    const tools = Array.isArray(data.tools)
-        ? (data.tools as unknown[]).map(String)
-        : [];
+    const tools = Array.isArray(data.tools) ? (data.tools as unknown[]).map(String) : [];
     const permissions = Array.isArray(data.permissions)
         ? (data.permissions as unknown[]).map(String)
         : [];
@@ -179,7 +168,7 @@ export function parseSkillMarkdown(
         name,
         version: String(data.version ?? "1.0.0"),
         description: String(data.description ?? ""),
-        category: (String(data.category ?? "general") as SkillCategory),
+        category: String(data.category ?? "general") as SkillCategory,
         tools: tools as SkillToolId[],
         permissions: permissions as SkillPermission[],
         popular: data.popular === true,
@@ -193,15 +182,10 @@ export function parseSkillMarkdown(
 
 /** Build installable custom-skill content: full instructions with charter header. */
 export function skillToForcedContent(skill: PortableSkill): string {
-    return `# ${skill.title}\n\n${skill.description}\n\n${skill.content}`.slice(
-        0,
-        16_000,
-    );
+    return `# ${skill.title}\n\n${skill.description}\n\n${skill.content}`.slice(0, 16_000);
 }
 
-export function catalogEntryFromSkill(
-    skill: PortableSkill,
-): SkillCatalogEntry {
+export function catalogEntryFromSkill(skill: PortableSkill): SkillCatalogEntry {
     return {
         id: skill.name,
         name: skill.title,
